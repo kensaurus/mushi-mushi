@@ -3,7 +3,7 @@ title: Bugs
 description: The Bugs page is the Mushi Mushi bug list. Filter by status, severity, category and component, and start with the recommended action at the top.
 ---
 
-<AdminDocHero page="reports" preferGif />
+<Walkthrough id="bug-to-fix" />
 
 
 # Bugs
@@ -29,7 +29,7 @@ diagnosis + a paste-ready fix* — as a single block:
    references the report. It works pasted into any agent (Claude Code, Cursor,
    Codex, Windsurf) with no MCP setup. **Use with Claude Code**, **Use with
    Cursor** (IDE deeplink or cloud agent) and **Use MCP** (the tool-driven
-   prompt for agents with Mushi MCP connected) sit underneath.
+   prompt for agents with Mushi Mushi MCP connected) sit underneath.
 
 **Fail-graceful, by design.** Accuracy matters most for this audience: a
 confident-but-wrong diagnosis is worse than none. So when classifier
@@ -66,6 +66,38 @@ Selecting a report opens the full detail view:
   the active attempt, CI badge, and merge controls.
 - **Related links**: other reports for this component, this reporter's history,
   the knowledge graph, the dispatched PR and the auto-fix pipeline.
+
+---
+
+## Pipeline strip on report detail
+
+Below **The story so far**, the **Pipeline** strip shows where this report is:
+**Reported → Quick check → Diagnosis → Fix → PR → CI → Merged → Live**. Each stage has
+its state (✓ passed, ● running, ◷ waiting, ⧗ slow, ✕ failed, ○ not started), a bar for
+how long it took against the longest stage, and the time itself. A stage still open
+shows the time so far. A stage that did not need to run reads **not needed**: a
+confident quick check skips the full diagnosis, and a report you sorted by hand skips
+triage.
+
+When a stage failed or is stuck, the strip names it with the reason in one plain line
+("The AI key or the internal worker token was refused.") and the try count. The raw
+error, with keys removed, is behind **Details**, with the triage job's history. The
+button next to it retries that stage:
+
+| Stage | Button | What it does |
+| --- | --- | --- |
+| Quick check, Diagnosis | **Retry triage** / **Re-run diagnosis** | Runs triage again for this report. A job the worker already has answers "already running" and starts nothing. A report that is already triaged or diagnosed is refused: it would spend AI budget again and could overwrite a severity set by hand. Members only, at most 30 an hour per person. |
+| Fix | **Retry fix** | The page's own dispatch, with the same checks. Disabled with the reason when a fix PR is still open, or when a retry would reach the same answer (the agent found nothing to change, for example). |
+| CI | **CI repair ↑** | Jumps to the fix actions bar at the top of the page, which holds CI repair and the other PR actions. |
+
+While triage runs, the strip checks again every few seconds and the page updates when
+it finishes. The unified timeline also lists the triage job: when it was queued, and
+when it finished, failed or gave up.
+
+In **All apps**, the list groups its rows by app: the app with the most urgent open bug
+first (critical, then high, then untriaged), the counts per state in its header and
+**Open →** to that app alone. Rows inside an app keep your sort. Grouping covers the
+page you are on.
 
 ---
 

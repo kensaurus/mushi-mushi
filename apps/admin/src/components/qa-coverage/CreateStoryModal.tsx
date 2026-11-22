@@ -4,6 +4,7 @@
  */
 
 import { useState } from 'react'
+import { renderInlineCode } from './QaProviderGuideCard'
 import { Btn, Input, SelectField, Textarea } from '../ui'
 import { Modal } from '../Modal'
 import { apiFetch } from '../../lib/supabase'
@@ -22,7 +23,7 @@ const SCHEDULE_PRESETS = [
 const PROVIDER_EXPLAINERS: Record<string, string> = {
   firecrawl_actions: 'Runs in Firecrawl cloud — no browser setup needed. Add a Firecrawl key under Settings → Web tools.',
   browserbase: 'Runs in a Browserbase cloud Chromium instance — add a Browserbase key under Settings → Web tools.',
-  local: 'Runs on your machine via the Mushi CLI (`mushi qa run`). Not schedulable from the cloud — use for local dev only.',
+  local: 'Runs on your machine via the Mushi Mushi CLI (`mushi qa run`). Not schedulable from the cloud — use for local dev only.',
 }
 
 export interface CreateStoryModalProps {
@@ -79,7 +80,7 @@ export function CreateStoryModal({ projectId, onClose, onCreated }: CreateStoryM
     })
     setSaving(false)
     if (res.ok) {
-      toastSuccess('QA story created')
+      toastSuccess('Scheduled test created')
       onCreated()
       onClose()
     } else {
@@ -91,13 +92,13 @@ export function CreateStoryModal({ projectId, onClose, onCreated }: CreateStoryM
     <Modal
       open
       onClose={onClose}
-      title="New QA story"
+      title="New scheduled test"
       size="sm"
       footer={
         <div className="flex justify-end gap-2">
           <Btn variant="cancel" size="sm" onClick={onClose}>Cancel</Btn>
           <Btn size="sm" onClick={handleCreate} disabled={saving || !name.trim()}>
-            {saving ? 'Creating…' : 'Create story'}
+            {saving ? 'Creating…' : 'Create test'}
           </Btn>
         </div>
       }
@@ -153,7 +154,7 @@ export function CreateStoryModal({ projectId, onClose, onCreated }: CreateStoryM
             <option value="local">Local Playwright (CLI only)</option>
           </SelectField>
           {PROVIDER_EXPLAINERS[provider] && (
-            <p className="mt-1 text-2xs text-fg-faint">{PROVIDER_EXPLAINERS[provider]}</p>
+            <p className="mt-1 text-2xs text-fg-faint">{renderInlineCode(PROVIDER_EXPLAINERS[provider])}</p>
           )}
         </div>
 

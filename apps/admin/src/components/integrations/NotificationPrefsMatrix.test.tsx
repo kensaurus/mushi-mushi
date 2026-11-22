@@ -50,9 +50,9 @@ describe('NotificationPrefsMatrix', () => {
     container.remove()
   })
 
-  async function render(): Promise<void> {
+  async function render(extra: { channelConnected?: boolean; onEventsOnChange?: (n: number | null) => void } = {}): Promise<void> {
     await act(async () => {
-      root.render(createElement(NotificationPrefsMatrix, { projectId: PROJECT }))
+      root.render(createElement(NotificationPrefsMatrix, { projectId: PROJECT, ...extra }))
       await flush()
     })
   }
@@ -65,6 +65,8 @@ describe('NotificationPrefsMatrix', () => {
     expect(toggles).toHaveLength(8)
     expect(toggles.every((t) => t.getAttribute('aria-checked') === 'true')).toBe(true)
     expect(container.textContent).not.toContain("Couldn't load")
+    // The Alert events panel is the card: the rows draw no second bordered box.
+    expect(container.querySelector('[data-testid="notification-prefs-rows"]')!.className).not.toMatch(/\bborder\b|rounded/)
   })
 
   it('reflects saved prefs, defaulting the keys a project never set', async () => {
@@ -114,5 +116,30 @@ describe('NotificationPrefsMatrix', () => {
     const body = JSON.parse((patch![1] as { body: string }).body) as { notification_prefs: Record<string, unknown> }
     expect(body.notification_prefs['fix.merged']).toBe(false)
     expect(body.notification_prefs.report_severity_min).toBe('high')
+  })
+
+  // Round-2 review 2026-11-18: eight toggles ON with no channel connected.
+  it('disables the toggles and Save until a channel exists, and shows them unset', async () => {
+    api.apiFetch.mockResolvedValue({ ok: true, data: { notification_prefs: null } })
+    await render({ channelConnected: false })
+    expect(switches(container).every((t) => t.disabled)).toBe(true)
+    // 2026-11-19: not eight dimmed ONs, and no second "connect a channel" sentence (the page's top row says it).
+    expect(switches(container).every((t) => t.getAttribute('aria-checked') === 'false')).toBe(true)
+    expect(container.querySelector('[data-testid="notification-prefs-no-channel"]')).toBeNull()
+    const save = Array.from(container.querySelectorAll('button')).find((b) => /Save preferences/.test(b.textContent ?? ''))!
+    expect(save.disabled).toBe(true)
+  })
+
+  it('reports how many events are on once loaded, and null when the load fails', async () => {
+    const onEventsOnChange = vi.fn()
+    api.apiFetch.mockResolvedValue({ ok: true, data: { notification_prefs: { 'fix.failed': false } } })
+    await render({ onEventsOnChange })
+    expect(onEventsOnChange).toHaveBeenLastCalledWith(7)
+    expect(container.querySelector('[data-testid="notification-prefs-no-channel"]')).toBeNull()
+    api.apiFetch.mockResolvedValue({ ok: false, error: { code: 'INTERNAL' } })
+    act(() => root.unmount())
+    root = createRoot(container)
+    await render({ onEventsOnChange })
+    expect(onEventsOnChange).toHaveBeenLastCalledWith(null)
   })
 })

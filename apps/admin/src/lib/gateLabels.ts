@@ -47,7 +47,7 @@ const GATE_LABELS: Record<GateId, string> = {
   ci_drift: 'CI differs from the recipe',
   deploy_drift: 'Merged but not deployed',
   env_drift: 'Env vars differ from the recipe',
-  radar: 'Mushi setup checks',
+  radar: 'Mushi Mushi setup checks',
   portfolio_radar: 'App hole checks',
   portfolio_radar_ci: 'App hole checks (from your CI)',
   portfolio_radar_vulns: 'Known holes in dependencies',
@@ -63,6 +63,14 @@ interface GateInfo {
 
 const INVENTORY_PAGE = { label: 'Open the app map', to: '/inventory' }
 
+/**
+ * The schema_drift check's own findings on Full-stack audit. It linked to
+ * Health → Schema changes, which reads a different scan (the API/DB contract
+ * walker, drift_findings) and said "No baseline scan yet" right after this
+ * check listed changed tables (console audit 2026-11-21).
+ */
+export const SCHEMA_DRIFT_FINDINGS = '/fullstack-audit#check-schema_drift'
+
 const GATE_INFO: Record<GateId, GateInfo> = {
   dead_handler: { checks: 'Buttons and links whose handler does nothing. Runs with "Run audit".', page: INVENTORY_PAGE },
   mock_leak: { checks: 'Mock or sample data that reaches production code. Runs with "Run audit".', page: INVENTORY_PAGE },
@@ -72,13 +80,13 @@ const GATE_INFO: Record<GateId, GateInfo> = {
   spec_drift: { checks: 'The OpenAPI spec compared with the routes in code. Runs with "Run audit".', page: INVENTORY_PAGE },
   orphan_endpoint: { checks: 'Backend endpoints nothing calls. Runs with "Run audit".', page: INVENTORY_PAGE },
   unknown_call: { checks: 'Frontend calls to endpoints the backend does not have. Runs with "Run audit".', page: INVENTORY_PAGE },
-  schema_drift: { checks: 'Your Supabase schema, read daily (03:05 UTC) and compared with the previous read: each changed table is listed to check against the frontend.', page: { label: 'Open schema changes', to: '/health?view=schema' } },
+  schema_drift: { checks: 'Your Supabase schema, read daily (03:05 UTC) and compared with the previous read: each changed table is listed to check against the frontend.', page: { label: 'Open the schema findings', to: SCHEMA_DRIFT_FINDINGS } },
   code_health: { checks: 'Bundle size and very large files, pushed from your CI.', page: { label: 'Open code size', to: '/health?view=code' } },
   design_drift: { checks: 'Hard-coded colours, spacing and type that bypass your design tokens, scanned daily (03:35 UTC) from the repo.', page: { label: 'Open the design system', to: '/design' } },
   ci_drift: { checks: 'Your CI workflows compared with mushi.recipe.json.', page: { label: 'Open the app blueprint', to: '/recipe' } },
   deploy_drift: { checks: 'Merged commits that never reached a declared deploy target.', page: { label: 'Open releases', to: '/releases' } },
   env_drift: { checks: 'Env var names in GitHub compared with mushi.recipe.json.', page: { label: 'Open the app blueprint', to: '/recipe' } },
-  radar: { checks: 'Mushi setup: spend caps, keys and connections for this project.', page: { label: 'Open settings', to: '/settings' } },
+  radar: { checks: 'Mushi Mushi setup: spend caps, keys and connections for this project.', page: { label: 'Open settings', to: '/settings' } },
   portfolio_radar: { checks: 'App hole checks, daily (04:05 UTC): store listings, domains, certificates, security headers, provider keys.', page: { label: 'Open the portfolio', to: '/portfolio' } },
   portfolio_radar_ci: { checks: 'App hole checks pushed from your CI (mushi radar scan --push).', page: { label: 'Open the portfolio', to: '/portfolio' } },
   portfolio_radar_vulns: { checks: 'Lockfiles and pinned runtimes checked against OSV.dev, CISA KEV and EPSS, daily (05:25 UTC).', page: { label: 'Open dependency holes', to: '/fullstack-audit#dependency-holes' } },

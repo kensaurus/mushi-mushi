@@ -33,9 +33,14 @@ interface Props {
     | 'topPriorityLabel'
     | 'topPriorityTo'
   >
+  /**
+   * Inside the "How a fix starts" card (round-2 review): a plain disclosure
+   * under its Autofix step, not a second bordered panel repeating it.
+   */
+  flat?: boolean
 }
 
-export function FixesPipelineGuide({ topPriority, stats }: Props) {
+export function FixesPipelineGuide({ topPriority, stats, flat = false }: Props) {
   const live = stats ?? {
     failed: 0,
     inProgress: 0,
@@ -46,13 +51,7 @@ export function FixesPipelineGuide({ topPriority, stats }: Props) {
     topPriorityTo: null,
   }
 
-  return (
-    <FeatureExplainPanel
-      title="Fix lifecycle — dispatch to merge"
-      summary={FIXES_EXPLAINER_SUMMARY}
-      category="workflow"
-      defaultOpen={isFixesGuideExpanded(topPriority ?? live.topPriority)}
-    >
+  const stages = (
       <div className="space-y-1">
         {FIX_LIFECYCLE_STAGES.map((stage) => {
           const overlay = fixesStageOverlay(stage.id, live)
@@ -73,6 +72,28 @@ export function FixesPipelineGuide({ topPriority, stats }: Props) {
           )
         })}
       </div>
+  )
+
+  if (flat) {
+    return (
+      <details className="group text-xs" open={isFixesGuideExpanded(topPriority ?? live.topPriority)} data-testid="fixes-autofix-how">
+        <summary className="cursor-pointer select-none text-2xs font-medium text-fg-muted hover:text-fg">How Autofix works</summary>
+        <div className="mt-2 space-y-2">
+          <p className="text-2xs leading-relaxed text-fg-muted">{FIXES_EXPLAINER_SUMMARY}</p>
+          {stages}
+        </div>
+      </details>
+    )
+  }
+
+  return (
+    <FeatureExplainPanel
+      title="How Autofix works (optional)"
+      summary={FIXES_EXPLAINER_SUMMARY}
+      category="workflow"
+      defaultOpen={isFixesGuideExpanded(topPriority ?? live.topPriority)}
+    >
+      {stages}
       <p className="text-2xs text-fg-faint">
         Failed runs? Open the row for the error head, then retry or use{' '}
         <Link to="/mcp" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">

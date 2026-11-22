@@ -1,9 +1,10 @@
 'use client'
 
 /**
- * The hero's install box: pick your editor (Claude Code, Cursor, other), then
+ * The hero's install box, its second action (ADR 0056): pick what you build
+ * with (Lovable or Bolt, Claude Code, Cursor, other), then
  * three numbered steps — connect the editor, paste one prompt that has the AI
- * set Mushi up and send a test report, ask it to fix a real bug. The steps are
+ * set Mushi Mushi up and send a test report, ask it to fix a real bug. The steps are
  * the cycle of ADR 0027 (connect, bugs come in, a fix you review), and each one
  * ends in what you should see.
  *
@@ -12,7 +13,7 @@
  * read the diagnosis (LANDING_INSTALL_LOVABLE).
  *
  * Every editor install is URL-only (`buildOAuthInstall`): the editor runs the
- * Mushi OAuth sign-in on first use, so the page needs no key. The Cursor
+ * Mushi Mushi OAuth sign-in on first use, so the page needs no key. The Cursor
  * badges are Cursor's official artwork, bundled under public/badges because
  * the docs CSP does not allow images from cursor.com.
  */
@@ -94,6 +95,37 @@ function ConnectAction({ tab }: { tab: TabId }) {
   )
 }
 
+/**
+ * The Lovable or Bolt example line. Same look as <CopyCommand prompt>, but the
+ * button says "Copy example": the line carries placeholders, and the person's
+ * real one (project ID and key filled in) is on their setup page.
+ */
+function ExamplePrompt({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+  function copy() {
+    void navigator.clipboard?.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+  return (
+    <div className="landing-oneclick__cmd">
+      <div className="landing-oneclick__cmd-row landing-oneclick__cmd-row--prompt">
+        <code>{text}</code>
+        <button
+          type="button"
+          onClick={copy}
+          className="landing-oneclick__copy"
+          data-mushi-cta="landing-copy-lovable-prompt"
+          data-mushi-location="hero-install"
+        >
+          <span aria-live="polite">{copied ? 'Copied' : L.copyLabel}</span>
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function Check({ children }: { children: string }) {
   return (
     <p className="landing-install-box__check">
@@ -106,7 +138,8 @@ function Check({ children }: { children: string }) {
 }
 
 export function LandingInstallStrip() {
-  const [tab, setTab] = useState<TabId>('claude-code')
+  // The first tab is open on load: Lovable or Bolt (ADR 0056).
+  const [tab, setTab] = useState<TabId>(LANDING_INSTALL.tabs[0].id)
   const baseId = useId()
   const tabs = LANDING_INSTALL.tabs
   const current = tabs.find((t) => t.id === tab) ?? tabs[0]
@@ -165,12 +198,11 @@ export function LandingInstallStrip() {
           <div className="landing-install-box__body">
             <h3 className="landing-install-box__title">{lovable ? L.steps.setup : LANDING_INSTALL.steps.setup}</h3>
             {lovable ? <p className="landing-install-box__desc">{L.setupLead}</p> : null}
-            <CopyCommand
-              cmd={lovable ? L.prompt : LANDING_SETUP_PROMPT}
-              prompt
-              ctaId={lovable ? 'landing-copy-lovable-prompt' : 'landing-copy-setup-prompt'}
-              location="hero-install"
-            />
+            {lovable ? (
+              <ExamplePrompt text={L.prompt} />
+            ) : (
+              <CopyCommand cmd={LANDING_SETUP_PROMPT} prompt ctaId="landing-copy-setup-prompt" location="hero-install" />
+            )}
             <Check>{lovable ? L.setupCheck : LANDING_INSTALL.setupCheck}</Check>
           </div>
         </li>

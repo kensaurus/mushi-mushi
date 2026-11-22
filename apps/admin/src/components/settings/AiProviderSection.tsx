@@ -16,7 +16,8 @@ import { useState } from 'react';
 import { apiFetch } from '../../lib/supabase';
 import { usePageData } from '../../lib/usePageData';
 import { describeByokError } from '../../lib/byokErrors';
-import { ResultChip, SegmentedControl } from '../ui';
+import { Btn, InfoHint, ResultChip, SegmentedControl } from '../ui';
+import { StatusPill } from '../signal/StatusMark';
 
 type AiProvider = 'anthropic' | 'openai';
 
@@ -32,11 +33,18 @@ const OPTIONS: Array<{ id: AiProvider; label: string }> = [
   { id: 'openai', label: 'OpenAI' },
 ];
 
-/** The sentence under the switch: what runs where, in the user's words. */
-function aiProviderLine(provider: AiProvider): string {
+/**
+ * The line under the switch: one short sentence, with the model names behind
+ * the (i). At 390 px the full sentence ran to six lines of model ids
+ * (round-2 review 2026-11-18).
+ */
+function aiProviderLine(provider: AiProvider): { line: string; models: string | null } {
   return provider === 'openai'
-    ? 'On OpenAI: bug triage, fix judging and pull request reviews use your OpenAI keys (GPT-6.1 Sol). No Claude key is used.'
-    : 'On Claude: Mushi uses your Claude keys first and your OpenAI keys only when Claude has no working key.';
+    ? {
+        line: 'Every AI step runs on your OpenAI keys. No Claude key is used.',
+        models: 'Fixes and pull request reviews: GPT-6.1 Sol. Bug triage and fix judging: GPT-6.1 Terra. Chat and summaries: GPT-6 Luna.',
+      }
+    : { line: 'Your Claude keys first; OpenAI only when Claude has no working key.', models: null };
 }
 
 interface Props {
@@ -51,8 +59,30 @@ export function AiProviderSection({ keysToken, onNeedOpenAiKey }: Props) {
   const [notice, setNotice] = useState<{ tone: 'success' | 'error' | 'info'; message: string } | null>(null);
 
   const data = status.data;
-  if (status.loading || !data) return null;
+  // Never vanish: at 1440 the switch was missing while 390 showed it, because
+  // a slow or failed read rendered nothing (round-2 review 2026-11-18).
+  if (status.loading && !data) {
+    return (
+      <section id="ai-provider" aria-label="Run AI on" aria-busy="true" className="py-3 scroll-mt-20" data-testid="ai-provider-loading">
+        <p className="text-sm text-fg-muted">
+          <span className="font-medium text-fg">Run AI on</span> · reading the setting…
+        </p>
+      </section>
+    );
+  }
+  if (!data) {
+    return (
+      <section id="ai-provider" aria-label="Run AI on" className="flex flex-wrap items-center gap-2 py-3 scroll-mt-20" data-testid="ai-provider-error">
+        <h4 className="text-sm font-medium text-fg">Run AI on</h4>
+        <StatusPill status="failed" label="Could not load" />
+        <Btn size="sm" variant="ghost" onClick={() => status.reload()}>
+          Retry
+        </Btn>
+      </section>
+    );
+  }
   const disabled = saving || !data.canManage;
+  const copy = aiProviderLine(data.aiProvider);
 
   async function choose(next: AiProvider) {
     if (!data || next === data.aiProvider) return;
@@ -90,7 +120,10 @@ export function AiProviderSection({ keysToken, onNeedOpenAiKey }: Props) {
         />
         {notice && <ResultChip tone={notice.tone}>{notice.message}</ResultChip>}
       </div>
-      <p className="text-xs text-fg-muted">{aiProviderLine(data.aiProvider)}</p>
+      <p className="flex items-center gap-1.5 text-xs text-fg-muted">
+        <span>{copy.line}</span>
+        {copy.models ? <InfoHint content={copy.models} /> : null}
+      </p>
       {!data.canManage && <p className="text-xs text-fg-muted">An organization owner or admin can change this.</p>}
     </section>
   );

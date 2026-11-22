@@ -20,11 +20,12 @@
 //       sync routing across files unnecessarily.
 // ============================================================
 
-import type { Hono } from 'npm:hono@4'
+import type { Context, Hono } from 'npm:hono@4'
 import type { Variables } from '../types.ts'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
-import { apiKeyAuth, requireApiKeyScope } from '../../_shared/auth.ts'
+import { adminOrApiKey, apiKeyAuth, requireApiKeyScope } from '../../_shared/auth.ts'
+import { callerCanAccessProject } from '../shared.ts'
 import { notifyReportStatusTransition } from '../../_shared/report-status-notify.ts'
 import {
   CANONICAL_REPORT_STATUSES,
@@ -66,17 +67,28 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
     const projectId = c.get('projectId') as string
     const projectName = c.get('projectName') as string
 
-    // Fetch a lightweight stats snapshot alongside the identity info.
-    const [totalResult, openResult] = await Promise.all([
+    // Fetch a lightweight stats snapshot alongside the identity info, and the
+    // repos the project is linked to (primary first): `mushi work` refuses a
+    // clone that is none of them, so one project's reports never get "fixed"
+    // in another app's repo (found 2026-11-11).
+    const [totalResult, openResult, reposResult] = await Promise.all([
       db.from('reports').select('id', { count: 'exact', head: true }).eq('project_id', projectId),
       db.from('reports').select('id', { count: 'exact', head: true })
         .eq('project_id', projectId)
         .in('status', ['new', 'triaged', 'in_progress']),
+      db.from('project_repos').select('repo_url, is_primary, created_at')
+        .eq('project_id', projectId)
+        .order('is_primary', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: true })
+        .limit(50),
     ])
-    const countErr = totalResult.error ?? openResult.error
+    const countErr = totalResult.error ?? openResult.error ?? reposResult.error
     if (countErr) {
       return c.json({ ok: false, error: { code: 'DB_ERROR', message: countErr.message } }, 500)
     }
+    const repoUrls = ((reposResult.data ?? []) as Array<{ repo_url: string | null }>)
+      .map((r) => (typeof r.repo_url === 'string' ? r.repo_url.trim() : ''))
+      .filter((u) => u.length > 0)
 
     return c.json({
       ok: true,
@@ -86,6 +98,8 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
         // The key's own scopes, so a client can tell an SDK key (report:write)
         // from an MCP/CLI key before calling a route that needs mcp:read.
         scopes: (c.get('apiKeyScopes') as string[] | undefined) ?? [],
+        // The project's linked repos, primary first; empty when none is linked.
+        repo_urls: repoUrls,
         stats: {
           total_reports: totalResult.count ?? 0,
           open_reports: openResult.count ?? 0,
@@ -517,12 +531,16 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
 
     const { chunk, shouldIndex, sha256Hex } = await import('../../_shared/code-indexer.ts')
     const { createEmbedding } = await import('../../_shared/embeddings.ts')
+    const { upsertCodebaseChunks } = await import('../../_shared/codebase-chunk-upsert.ts')
+    const { extractRelativeImports } = await import('../../_shared/codebase-graph-build.ts')
 
     if (!shouldIndex(filePath)) {
       return c.json({ ok: true, data: { chunks: 0, file_path: filePath, skipped: 'unsupported_extension' } })
     }
 
-    const chunks = chunk(filePath, pgSafeText(source))
+    const safeSource = pgSafeText(source)
+    const chunks = chunk(filePath, safeSource)
+    const imports = extractRelativeImports(safeSource)
     let inserted = 0
     const chunkErrors: string[] = []
     for (const ch of chunks) {
@@ -530,7 +548,10 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
         const text = `${filePath}::${ch.symbolName ?? 'whole'}\n${ch.body}`
         const embedding = await createEmbedding(text, { projectId, functionName: 'codebase-sync' })
         const contentHash = await sha256Hex(ch.body)
-        const { error } = await db.from('project_codebase_files').upsert(
+        // Through upsert_codebase_chunks like the GitHub indexer: it stores
+        // only the 768-d search vector (embedding_768), never the legacy
+        // 1536-d `embedding` column (2026-11-11 cost audit).
+        const { error } = await upsertCodebaseChunks(db, [
           {
             project_id: projectId,
             file_path: filePath,
@@ -541,11 +562,12 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
             language: ch.language,
             content_hash: contentHash,
             content_preview: pgSafeSlice(ch.body, 500),
+            imports,
             embedding,
+            last_modified: new Date().toISOString(),
             tombstoned_at: null,
           },
-          { onConflict: 'project_id,file_path,symbol_name', ignoreDuplicates: false },
-        )
+        ])
         if (error) {
           chunkErrors.push(`${filePath}#${ch.symbolName ?? 'whole'}: ${error.message}`)
         } else {
@@ -575,10 +597,41 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
   // first report). Distinct from GET /v1/admin/projects/:id/preflight which
   // covers dispatch readiness (GitHub, codebase, BYOK, autofix). Powers
   // `mushi connect --wait`, `mushi doctor --ingest`, and MCP diagnose_setup (mode=ingest).
-  app.get('/v1/sync/ingest-setup', apiKeyAuth, async (c) => {
+  app.get('/v1/sync/ingest-setup', apiKeyAuth, (c) =>
+    ingestSetup(c, c.get('projectId') as string, c.get('projectName') as string))
+
+  // ── GET /v1/admin/projects/:id/ingest-setup ───────────────────────────────
+  // The same view for an account key or a console session, which names the
+  // project instead of being one. The SDK route above refuses account keys
+  // (they cannot ingest), so MCP diagnose_setup on an account key used to fail
+  // outright with ORG_KEY_NOT_ALLOWED instead of diagnosing.
+  app.get('/v1/admin/projects/:id/ingest-setup', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
+    const projectId = c.req.param('id')!
+    if (!UUID_RE.test(projectId)) {
+      return c.json({ ok: false, error: { code: 'INVALID_PROJECT_ID', message: 'Project id must be a UUID' } }, 400)
+    }
+    const db = getServiceClient()
+    const access = await callerCanAccessProject(c, db, c.get('userId') as string, projectId)
+    if (!access.allowed) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404)
+    }
+    const { data: project } = await db.from('projects').select('name').eq('id', projectId).maybeSingle()
+    return ingestSetup(c, projectId, (project as { name?: string } | null)?.name ?? '')
+  })
+
+  // ── GET /v1/sync/two-way-health ───────────────────────────────────────────
+  app.get('/v1/sync/two-way-health', apiKeyAuth, requireApiKeyScope('mcp:read'), async (c) => {
     const db = getServiceClient()
     const projectId = c.get('projectId') as string
-    const projectName = c.get('projectName') as string
+    return c.json({ ok: true, data: await computeTwoWayHealth(db, projectId) })
+  })
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** The four required ingest steps for one project (key, SDK heartbeat, first report). */
+async function ingestSetup(c: Context<{ Variables: Variables }>, projectId: string, projectName: string) {
+    const db = getServiceClient()
 
     const adminHost = (() => {
       try {
@@ -699,12 +752,4 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
         },
       },
     })
-  })
-
-  // ── GET /v1/sync/two-way-health ───────────────────────────────────────────
-  app.get('/v1/sync/two-way-health', apiKeyAuth, requireApiKeyScope('mcp:read'), async (c) => {
-    const db = getServiceClient()
-    const projectId = c.get('projectId') as string
-    return c.json({ ok: true, data: await computeTwoWayHealth(db, projectId) })
-  })
 }

@@ -8,7 +8,7 @@
 // Changesets), groups every per-package entry by SDK release version, and
 // emits two artefacts:
 //
-//   1. CHANGELOG.md at the repo root — a human-friendly, marketing-grade
+//   1. docs/CHANGELOG.md — a human-friendly, marketing-grade
 //      changelog grouped by date (newest first), with one section per release.
 //
 //   2. apps/docs/data/changelog.json — a structured JSON feed the public
@@ -20,7 +20,7 @@
 // regenerated file or fail if the working tree drifts.
 //
 // Inputs:  packages/*/CHANGELOG.md  (Changesets-managed)
-// Outputs: CHANGELOG.md + apps/docs/data/changelog.json
+// Outputs: docs/CHANGELOG.md + apps/docs/data/changelog.json
 //
 // Conventions (set by the `.changeset/v0_*.md` files):
 //   * The first line of every changeset bullet that begins a release is an
@@ -41,7 +41,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '..')
 const PACKAGES_DIR = join(ROOT, 'packages')
 const CHANGESETS_DIR = join(ROOT, '.changeset')
-const OUT_MD = join(ROOT, 'CHANGELOG.md')
+const OUT_MD = join(ROOT, 'docs/CHANGELOG.md')
 const OUT_JSON = join(ROOT, 'apps', 'docs', 'data', 'changelog.json')
 
 const checkMode = process.argv.includes('--check')

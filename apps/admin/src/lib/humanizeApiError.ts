@@ -36,7 +36,7 @@ const GENERIC_SERVER_TITLE = 'The server returned an error.'
  * lower case; lookups are case-insensitive.
  */
 const ACTION_ERROR_COPY: Record<string, string> = {
-  region_not_supported: "Mushi Bounties isn't available in your country yet, so this can't go ahead.",
+  region_not_supported: "Mushi Mushi Bounties isn't available in your country yet, so this can't go ahead.",
   reputation_too_low: 'Your tester reputation is below what this app asks for. Get a few reports accepted on other apps first.',
   kyc_unavailable: 'Tax details can’t be submitted right now. Nothing was saved — try again later.',
   kyc_required: 'Verify your tax details in Settings before redeeming gift cards.',
@@ -224,7 +224,7 @@ export function humanizeApiError(
       }
     case 'NETWORK_ERROR':
       return {
-        title: 'Could not reach the Mushi API.',
+        title: 'Could not reach the Mushi Mushi API.',
         hint: 'Check your network connection. If you are online, the API may be briefly down — retry in a moment.',
         severity: 'soft',
         action: { label: 'Retry', target: { kind: 'retry' } },
@@ -631,7 +631,7 @@ const MUTATION_CODE_TEXT: Record<string, string> = {
   FORBIDDEN: 'Only organization owners and admins can change this. Ask one of them to make the change.',
   MISSING_AUTH: 'Your session expired. Sign in again, then retry.',
   INVALID_TOKEN: 'Your session expired. Sign in again, then retry.',
-  NETWORK_ERROR: 'Could not reach Mushi. Check your connection and retry.',
+  NETWORK_ERROR: 'Could not reach Mushi Mushi. Check your connection and retry.',
   RATE_LIMITED: 'Too many requests. Wait a minute, then retry.',
   QUOTA_EXCEEDED: 'This needs a plan that includes it. Open Billing to upgrade.',
   FEATURE_NOT_IN_PLAN: 'This needs a plan that includes it. Open Billing to upgrade.',

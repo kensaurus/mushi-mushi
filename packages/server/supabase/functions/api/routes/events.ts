@@ -41,6 +41,7 @@ import { readBodyCapped } from '../../_shared/read-body-capped.ts';
 import { resolveEndUser } from '../../_shared/end-user-resolver.ts';
 import { reporterKeyOrNull } from '../../_shared/reporter-token.ts';
 import { isAutomatedUserAgent } from '../../_shared/automated-agent.ts';
+import { isSpamReferrerUrl } from '../../_shared/landing-visits.ts';
 import {
   EVENT_NAME_RE,
   EVENT_PROPERTY_LIMITS,
@@ -189,6 +190,32 @@ export const batchSchema = z.object({
 type EventBatch = z.infer<typeof batchSchema>;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/**
+ * Mushi Mushi's own visit events (the docs site under the self project) whose
+ * `$referrer` is a known referrer-spam host (_shared/landing-visits.ts
+ * SPAM_REFERRER_HOSTS) are dropped, so the weekly funnel's visits never count
+ * them. Only the self project: a customer's app may get real visitors from
+ * the same site, and their analytics are theirs to filter. Exported for tests.
+ */
+export const VISIT_EVENT_NAMES: ReadonlySet<string> = new Set(['landing_view', 'docs_page_view']);
+
+export function isSelfVisitReferrerSpam(
+  eventName: string,
+  properties: Record<string, unknown>,
+  isSelfProject: boolean,
+): boolean {
+  return isSelfProject && VISIT_EVENT_NAMES.has(eventName) && isSpamReferrerUrl(properties.$referrer);
+}
+
+/** MUSHI_SELF_PROJECT_ID, read per request (never at module load: Deno tests run without --allow-env). */
+function selfProjectIdOrNull(): string | null {
+  try {
+    return Deno.env.get('MUSHI_SELF_PROJECT_ID') ?? null;
+  } catch {
+    return null;
+  }
+}
 
 /** SDK-owned keys that may travel on the wire; every other `$key` is dropped. */
 const SDK_RESERVED_ALLOW = new Set([
@@ -393,6 +420,8 @@ export function registerEventRoutes(app: Hono<{ Variables: Variables }>): void {
     if (overCap > 0) log.warn('events: event-name cap reached', { projectId, overCap });
     identifyRequested = storable.length !== batch.events.length;
 
+    const selfProjectId = selfProjectIdOrNull();
+    const isSelfProject = !!selfProjectId && selfProjectId.toLowerCase() === projectId.toLowerCase();
     for (const ev of admitted) {
       // ('identify' is a pseudo-event: stitching only, never stored — filtered above.)
       // Server milestones (first_report_received, project_created, …) are
@@ -400,6 +429,7 @@ export function registerEventRoutes(app: Hono<{ Variables: Variables }>): void {
       if (SERVER_OWNED_EVENTS.has(ev.name)) { dropped += 1; continue; }
       const { properties } = sanitizeProperties(ev.properties);
       if (JSON.stringify(properties).length > EVENT_PROPERTY_LIMITS.maxBytes) { dropped += 1; continue; }
+      if (isSelfVisitReferrerSpam(ev.name, properties, isSelfProject)) { dropped += 1; continue; }
       const surface = batch.surface ?? (typeof properties.$surface === 'string' ? properties.$surface : 'web');
       // Unknown surfaces would violate the DB CHECK and 500 the whole batch.
       if (!PUBLIC_SURFACES.has(surface)) { dropped += 1; continue; }

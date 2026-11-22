@@ -108,13 +108,15 @@ export interface StripeCustomer {
 
 export const createCustomer = (
   cfg: StripeConfig,
-  args: { email: string; name?: string; projectId: string },
+  args: { email: string; name?: string; projectId: string; organizationId: string },
 ): Promise<StripeCustomer> =>
   stripeFetch(cfg, '/customers', {
     method: 'POST',
     body: form({
       email: args.email,
       name: args.name,
+      // One customer per team; project_id is the app it was created from.
+      'metadata[organization_id]': args.organizationId,
       'metadata[project_id]': args.projectId,
       'metadata[source]': 'mushi-mushi',
     }),
@@ -138,7 +140,13 @@ export interface CheckoutLineItem {
 
 export interface CreateCheckoutSessionArgs {
   customer: string
+  /** The app the plan was bought from (an anchor; the plan is the team's). */
   projectId: string
+  /**
+   * The team the plan belongs to. Copied to the subscription through
+   * `subscription_data[metadata]`, so every subscription event carries it.
+   */
+  organizationId: string
   /**
    * Plan we're upgrading the customer to. Persisted as `metadata.plan_id` on
    * both the Checkout Session and the resulting Subscription so the webhook
@@ -168,8 +176,10 @@ export const createCheckoutSession = (
     customer: args.customer,
     success_url: cfg.successUrl,
     cancel_url: cfg.cancelUrl,
+    'metadata[organization_id]': args.organizationId,
     'metadata[project_id]': args.projectId,
     'metadata[plan_id]': args.planId,
+    'subscription_data[metadata][organization_id]': args.organizationId,
     'subscription_data[metadata][project_id]': args.projectId,
     'subscription_data[metadata][plan_id]': args.planId,
     'subscription_data[metadata][source]': 'mushi-mushi',

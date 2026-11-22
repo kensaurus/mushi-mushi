@@ -25,6 +25,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import { MushiCliError } from '../errors.js'
+import { LOCAL_AGENTS, type LocalAgent } from '../commands/work-agents.js'
 
 /** fix and followups (ADR 0048); conflicts (ADR 0049), audit (ADR 0050) and skill (ADR 0042 amendment). */
 const LANE_MODES = ['fix', 'followups', 'conflicts', 'audit', 'skill'] as const
@@ -199,7 +200,7 @@ export interface FreshEyesTarget {
 type ParsedClaim =
   | { kind: 'fix'; id: string; model: string | null; raw: Record<string, unknown> }
   | { kind: 'conflict'; id: string; model: string | null; conflict: ConflictTarget }
-  | { kind: 'audit'; id: string; model: string | null; audit: { reviewModel: string | null; findingsLeft: number } }
+  | { kind: 'audit'; id: string; model: string | null; audit: { reviewModel: string | null; findingsLeft: number; recheck: boolean; propose: boolean } }
   | { kind: 'fresh_eyes'; id: string; model: string | null; freshEyes: FreshEyesTarget }
 
 const RUN_ID_RE = /^[0-9]{8}-[0-9]{6}-[a-z0-9]{4}$/
@@ -240,7 +241,7 @@ function parseFreshEyesTarget(raw: unknown): Parsed<FreshEyesTarget> {
 }
 
 /**
- * @internal Exported for tests. A claim answer, checked by kind. A fix claim's
+ * A claim answer, checked by kind. A fix claim's
  * report goes on to `workOne` as it always did (a claim without `kind` is a fix
  * claim from a server that predates P3). A conflict claim names a PR of the
  * lane's repository and the head Mushi saw; its branch is checked so it can
@@ -273,7 +274,10 @@ export function parseClaim(raw: unknown): Parsed<ParsedClaim> {
     const reviewModel = a.reviewModel == null ? null : typeof a.reviewModel === 'string' && MODEL_RE.test(a.reviewModel) ? a.reviewModel : undefined
     if (reviewModel === undefined) return { ok: false, message: 'the audit claim\'s review model is not a model id' }
     const left = typeof a.findingsLeft === 'number' && Number.isInteger(a.findingsLeft) && a.findingsLeft >= 0 ? a.findingsLeft : 0
-    return { ok: true, value: { kind: 'audit', id: c.id, model, audit: { reviewModel, findingsLeft: left } } }
+    // ADR 0063: a server older than the open cap sends neither: no recheck, propose as before.
+    const recheck = a.recheck === true
+    const propose = a.propose !== false
+    return { ok: true, value: { kind: 'audit', id: c.id, model, audit: { reviewModel, findingsLeft: left, recheck, propose } } }
   }
   if (kind === 'fresh_eyes') {
     const t = parseFreshEyesTarget(c.freshEyes)
@@ -304,6 +308,12 @@ export interface WorkerConfig {
    * out, so another account's credits are never spent. Local only.
    */
   cursorAccount?: string
+  /**
+   * The coding agent every lane runs: `cursor` (default) or `claude` (Claude
+   * Code). Local only: the server never sends or stores it. With `claude`,
+   * the Cursor account settings and "Switch account" do not apply.
+   */
+  agent?: LocalAgent
   lanes: LocalLane[]
 }
 
@@ -320,6 +330,7 @@ export function validateWorkerConfig(raw: unknown): WorkerConfig {
   if (c.version !== 1) fail('version must be 1')
   if (c.endpoint !== undefined && (typeof c.endpoint !== 'string' || !/^https?:\/\//.test(c.endpoint))) fail('endpoint must be an http(s) URL')
   if (c.cursorAccount !== undefined && (typeof c.cursorAccount !== 'string' || !/^[^\s@]{1,100}@[^\s@]{1,100}$/.test(c.cursorAccount))) fail('cursorAccount must be the account\'s email address')
+  if (c.agent !== undefined && (typeof c.agent !== 'string' || !(LOCAL_AGENTS as readonly string[]).includes(c.agent))) fail(`agent must be one of ${LOCAL_AGENTS.join(', ')}`)
   if (!Array.isArray(c.lanes) || c.lanes.length === 0) fail('list at least one lane')
   if ((c.lanes as unknown[]).length > 20) fail('at most 20 lanes')
   const names = new Set<string>()
@@ -348,6 +359,7 @@ export function validateWorkerConfig(raw: unknown): WorkerConfig {
     version: 1,
     ...(typeof c.endpoint === 'string' ? { endpoint: c.endpoint } : {}),
     ...(typeof c.cursorAccount === 'string' ? { cursorAccount: c.cursorAccount } : {}),
+    ...(typeof c.agent === 'string' ? { agent: c.agent as LocalAgent } : {}),
     lanes,
   }
 }

@@ -5,7 +5,7 @@ description: Turn Sentry, Datadog, Bugsnag and other monitoring webhooks into Mu
 
 # `@mushi-mushi/adapters`
 
-Already send errors to Sentry, Crashlytics, Bugsnag or Rollbar? These webhook handlers forward them into Mushi Mushi, so a crash lands in the same queue as your users' bug reports and gets the same plain-English diagnosis and ready fix. You do not need any of these tools to use Mushi; this package is only for when you already have one.
+Already send errors to Sentry, Crashlytics, Bugsnag or Rollbar? These webhook handlers forward them into Mushi Mushi, so a crash lands in the same queue as your users' bug reports and gets the same plain-English diagnosis and ready fix. You do not need any of these tools to use Mushi Mushi; this package is only for when you already have one.
 
 ## Install
 
@@ -29,14 +29,14 @@ pnpm add @mushi-mushi/adapters
 | AWS CloudWatch (via SNS)      | `translateCloudWatch`        | `createCloudWatchAdapter`         |
 | Opsgenie                      | `translateOpsGenie`          | `createOpsGenieAdapter`           |
 
-Every translator returns a `MushiCaptureEventInput` (from `@mushi-mushi/core`) so you can route the result to any sink: the hosted Mushi Mushi API, a queue, your own database, a fan-out of several. Subpath imports are supported, e.g. `@mushi-mushi/adapters/cloudwatch`.
+Every translator returns a `MushiCaptureEventInput` (from `mushi-mushi/core`) so you can route the result to any sink: the hosted Mushi Mushi API, a queue, your own database, a fan-out of several. Subpath imports are supported, e.g. `@mushi-mushi/adapters/cloudwatch`.
 
 ## Quick start: Datadog → Hono
 
 ```ts
 import { Hono } from 'hono';
 import { createDatadogWebhookHandler } from '@mushi-mushi/adapters';
-import { MushiNodeClient } from '@mushi-mushi/node';
+import { MushiNodeClient } from 'mushi-mushi/node';
 
 const mushi = new MushiNodeClient({
   apiKey: process.env.MUSHI_API_KEY!,
@@ -68,9 +68,9 @@ app.post('/webhooks/datadog', async (c) => {
 
 ## Severity mapping
 
-Each adapter normalises the source's native severity onto Mushi's four-level scale.
+Each adapter normalises the source's native severity onto Mushi Mushi's four-level scale.
 
-| Mushi      | Sentry (`level`) | Datadog | New Relic (`priority`) | Honeycomb (contains) | Grafana / AM   |
+| Mushi Mushi      | Sentry (`level`) | Datadog | New Relic (`priority`) | Honeycomb (contains) | Grafana / AM   |
 | ---------- | ---------------- | ------- | ---------------------- | -------------------- | -------------- |
 | `critical` | fatal            | P1      | critical               | critical             | critical, page |
 | `high`     | error            | P2      | high                   | high, error          | high, error    |

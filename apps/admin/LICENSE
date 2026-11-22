@@ -34,9 +34,9 @@ licensed only under this license. Why: docs/adr/0036-licensing-posture.md.
 The Mushi Mushi name, logo, bug mark and app icons in this directory (for
 example public/favicon.svg and anything under public/icons/ that shows the
 Mushi mark) are not licensed under this license. All rights reserved; see
-TRADEMARK.md for how you may use them. Third-party logos keep their owners'
+docs/legal/TRADEMARK.md for how you may use them. Third-party logos keep their owners'
 terms.
 
 For a commercial license that removes copyleft obligations when offering a
-modified console as a hosted service to third parties, see COMMERCIAL-LICENSE.md
+modified console as a hosted service to third parties, see docs/legal/COMMERCIAL-LICENSE.md
 at the repo root.

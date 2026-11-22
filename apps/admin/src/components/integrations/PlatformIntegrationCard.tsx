@@ -154,6 +154,8 @@ interface Props {
   dependencyLabel?: string
   /** Scroll-target ID to jump to the dependency card on the same page. */
   dependencyAnchorId?: string
+  /** Go to the dependency when its card is not on screen (Integrations opens it in a drawer). */
+  onDependencyJump?: () => void
   /** When provided, the overflow menu shows "Apply to all projects in org". */
   onApplyToAll?: () => void
   /** Whether the apply-to-all is in progress. */
@@ -192,6 +194,7 @@ export function PlatformIntegrationCard({
   dependencyOk = true,
   dependencyLabel,
   dependencyAnchorId,
+  onDependencyJump,
   onApplyToAll,
   applyingToAll,
   onRemoveKey,
@@ -297,10 +300,11 @@ export function PlatformIntegrationCard({
                   className="font-semibold underline hover:no-underline"
                   onClick={(e) => {
                     e.preventDefault()
-                    document.getElementById(dependencyAnchorId)?.scrollIntoView({ behavior: 'smooth' })
+                    if (onDependencyJump) onDependencyJump()
+                    else document.getElementById(dependencyAnchorId)?.scrollIntoView({ behavior: 'smooth' })
                   }}
                 >
-                  Go to {dependencyLabel ?? 'GitHub'} card ↑
+                  {onDependencyJump ? `Open ${dependencyLabel ?? 'GitHub'} settings` : `Go to ${dependencyLabel ?? 'GitHub'} card ↑`}
                 </a>
               ) : null}
             </span>
@@ -333,9 +337,9 @@ export function PlatformIntegrationCard({
               {/* Only once it works: "Via environment" beside "Not connected" read
                   as a contradiction (first-time user test, 2026-10-28). */}
               {envFields > 0 && projectFields === 0 && orgFields === 0 && requiredOk && (
-                <Tooltip content="This card uses a key from Mushi's server. Add your own to replace it.">
+                <Tooltip content="This card uses a key from Mushi Mushi's server. Add your own to replace it.">
                   <Badge className="bg-fg-faint/20 text-fg-muted border border-edge cursor-default">
-                    Mushi's default
+                    Mushi Mushi's default
                   </Badge>
                 </Tooltip>
               )}

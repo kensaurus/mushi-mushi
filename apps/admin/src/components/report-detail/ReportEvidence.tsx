@@ -2,7 +2,6 @@ import { useEffect, useState, type ReactNode } from 'react'
 import {
   CodeValue,
   DefinitionChips,
-  DetailRows,
   InfoHint,
 } from '../ui'
 import { EmptySectionMessage } from './ReportClassification'
@@ -18,6 +17,7 @@ import {
   PERF_TONE_CLASS,
   PERF_VITAL_POOR_THRESHOLD,
   perfVitalTone,
+  platformLabel,
   platformPillClass,
   type ConsoleLevel,
 } from './reportLogFormat'
@@ -70,7 +70,11 @@ export function EnvironmentFields({ environment, sessionId }: {
       ? {
           label: 'Viewport',
           hint: 'Browser inner width × height at report time.',
-          value: (
+          // A 0 x 0 viewport is the SDK not measuring (a Sentry import, a
+          // server event), not a window with no size (sweep 2026-11-18).
+          value: !(viewport.width > 0 && viewport.height > 0) ? (
+            <span className="text-2xs text-fg-muted" data-testid="env-viewport-missing">not captured</span>
+          ) : (
             <span className="inline-flex items-center gap-1 rounded-sm border border-edge-subtle bg-surface-overlay/45 px-1.5 py-0.5 font-mono tabular-nums text-fg">
               <span className="text-info">{viewport.width.toLocaleString()}</span>
               <span className="text-fg-faint">×</span>
@@ -84,7 +88,7 @@ export function EnvironmentFields({ environment, sessionId }: {
           label: 'Platform',
           hint: 'navigator.platform from the reporter device.',
           value: (
-            <span className={platformPillClass(platform)}>{platform}</span>
+            <span className={platformPillClass(platform)}>{platformLabel(platform)}</span>
           ),
         }
       : null,
@@ -164,9 +168,9 @@ export function EnvironmentFields({ environment, sessionId }: {
               {uaChips.map((chip) => (
                 <span
                   key={chip.label}
-                  className={`inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-2xs ${BROWSER_CHIP[chip.tone]}`}
+                  className={`inline-flex items-center gap-1 rounded-sm px-1.5 py-px text-2xs ${BROWSER_CHIP[chip.tone]}`}
                 >
-                  <span className="text-3xs font-medium uppercase tracking-wider opacity-70">{chip.label}</span>
+                  <span className="text-3xs font-semibold opacity-70">{chip.label}</span>
                   <span className="font-mono">{chip.value}</span>
                 </span>
               ))}
@@ -186,21 +190,22 @@ export function EnvironmentFields({ environment, sessionId }: {
         </div>
       )}
 
+      {/* Plain rows under a rule, not a bordered list inside the card
+          (round-3 sweep 2026-11-19: one level of card). */}
       {metaRows.length > 0 && (
-        <DetailRows
-          dense
-          items={metaRows.map((row) => ({
-            label: row.label,
-            hint: row.hint,
-            value: row.value,
-            wrap: row.wrap,
-          }))}
-        />
+        <dl className="divide-y divide-edge-subtle border-t border-edge-subtle text-2xs" data-testid="env-meta-rows">
+          {metaRows.map((row) => (
+            <div key={row.label} className={`py-1 ${row.wrap ? 'flex flex-col gap-0.5' : 'flex items-start justify-between gap-3'}`}>
+              <dt className="shrink-0 text-3xs font-semibold text-fg-secondary" title={row.hint}>
+                {row.label}
+              </dt>
+              <dd className={`min-w-0 leading-snug wrap-break-word ${row.wrap ? '' : 'text-right'}`}>{row.value}</dd>
+            </div>
+          ))}
+        </dl>
       )}
 
-      {!sessionId && metaRows.length > 0 && (
-        <p className="text-2xs text-fg-faint">Session ID was not captured.</p>
-      )}
+      {/* A missing session ID is on the page's one "Not captured" line. */}
     </div>
   )
 }
@@ -361,14 +366,14 @@ export function ConsoleLogs({ logs }: { logs: ReportDetail['console_logs'] }) {
               </time>
             ) : null}
             <span
-              className={`mt-0.5 inline-flex min-w-11 shrink-0 items-center justify-center rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wide ${badge}`}
+              className={`mt-0.5 inline-flex min-w-11 shrink-0 items-center justify-center rounded-sm px-1.5 py-0.5 text-3xs font-semibold ${badge}`}
             >
               {level}
             </span>
             {/* Phase 4c: row-level provenance badge — "SDK" or "Sentry" */}
             <span
-              className="mt-0.5 shrink-0 inline-flex items-center rounded-sm px-1 py-0.5 text-3xs font-medium bg-surface-overlay text-fg-faint border border-edge-subtle"
-              title={entry.correlationId ? `Captured by Mushi SDK (correlationId: ${entry.correlationId})` : 'Captured by Mushi SDK — console-wrap instrumentation'}
+              className="mt-0.5 shrink-0 inline-flex items-center rounded-sm px-1 py-px text-3xs font-medium bg-surface-overlay text-fg-faint"
+              title={entry.correlationId ? `Captured by Mushi Mushi SDK (correlationId: ${entry.correlationId})` : 'Captured by Mushi Mushi SDK — console-wrap instrumentation'}
             >
               SDK
             </span>
@@ -459,7 +464,7 @@ function BackendSpanCorrelation({
             key={span.id}
             className="flex items-center gap-1.5 rounded-sm border border-edge-subtle/40 bg-editorial-paper-wash px-2 py-1"
           >
-            <span className="shrink-0 rounded-sm px-1 py-0.5 font-mono text-3xs font-semibold bg-accent-muted/55 text-accent-foreground border border-accent/30">
+            <span className="shrink-0 rounded-sm px-1 py-px font-mono text-3xs font-semibold bg-accent-muted/55 text-accent-foreground">
               backend
             </span>
             <code
@@ -547,7 +552,7 @@ export function NetworkLogs({
               </span>
               {/* Phase 4c: capture method provenance badge ("fetch" | "xhr" | "SDK") */}
               <span
-                className="shrink-0 inline-flex items-center rounded-sm px-1 py-0.5 text-3xs font-medium bg-surface-overlay text-fg-faint border border-edge-subtle"
+                className="shrink-0 inline-flex items-center rounded-sm px-1 py-px text-3xs font-medium bg-surface-overlay text-fg-faint"
                 title={
                   captureMethod === 'xhr'
                     ? 'Captured via XMLHttpRequest patch'
@@ -560,7 +565,7 @@ export function NetworkLogs({
               </span>
               {hasTrace && (
                 <span
-                  className="shrink-0 rounded-sm px-1 py-0.5 font-mono text-3xs font-semibold bg-accent-muted/55 text-accent-foreground border border-accent/30"
+                  className="shrink-0 rounded-sm px-1 py-px font-mono text-3xs font-semibold bg-accent-muted/55 text-accent-foreground"
                   title={`W3C trace: ${traceId}`}
                 >
                   {isExpanded ? '▲ trace' : '▼ trace'}

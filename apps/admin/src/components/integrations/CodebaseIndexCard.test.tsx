@@ -19,7 +19,7 @@ const api = vi.hoisted(() => ({ apiFetch: vi.fn() }))
 
 vi.mock('../../lib/supabase', () => api)
 
-import { CodebaseIndexCard } from './CodebaseIndexCard'
+import { CodebaseIndexCard, buildStatsRows } from './CodebaseIndexCard'
 
 const PROJECT = '11111111-1111-4111-8111-111111111111'
 
@@ -178,5 +178,25 @@ describe('CodebaseIndexCard', () => {
     const rotate = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Rotate secret')!
     expect(rotate.disabled).toBe(true)
     expect(rotate.getAttribute('title')).toMatch(/Owners and admins/)
+  })
+})
+
+describe('the last index error, in plain English', () => {
+  // Owner, 2026-11-17: the card showed the raw `no_token: neither
+  // github_app_installation_id nor …`, and kept it after access was given.
+  const NO_TOKEN = 'no_token: neither github_app_installation_id nor project_settings.github_installation_token_ref resolved'
+  const withError = { ...STATS, last_index_error: NO_TOKEN } as unknown as Parameters<typeof buildStatsRows>[0]
+  const row = (rows: ReturnType<typeof buildStatsRows>, label: string) => rows.find((r) => r.label === label)
+
+  it('says what to do, and keeps the raw code for support in the hint', () => {
+    const err = row(buildStatsRows(withError, true, { state: 'repo_no_access', repo: 'acme/shop' }), 'Last error')!
+    expect(err.value).toBe("Mushi Mushi can't read this repo yet: give the Mushi Mushi GitHub App access to acme/shop.")
+    expect(err.hint).toContain(NO_TOKEN)
+  })
+
+  it('reads as fixed, not as a live error, once GitHub access is ready', () => {
+    const rows = buildStatsRows(withError, true, { state: 'connected', repo: 'acme/shop' })
+    expect(row(rows, 'Last error')).toBeUndefined()
+    expect(row(rows, 'Last sweep said')).toMatchObject({ tone: 'info' })
   })
 })

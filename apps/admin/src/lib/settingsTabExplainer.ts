@@ -22,6 +22,6 @@ export const SETTINGS_TAB_DESCRIPTIONS: Record<SettingsTabId, string> = {
   tools:
     'Firecrawl reads public web pages while diagnosing; Browserbase runs scheduled tests in a cloud browser',
   voice: 'Report bugs by voice from your phone, Telegram or Slack',
-  sdk: 'Install the bug widget, check it can reach Mushi, send a test bug, and turn on debug logging',
+  sdk: 'Install the bug widget, check it can reach Mushi Mushi, send a test bug, and turn on debug logging',
   display: 'Theme, density and focus mode in this browser, and which extra pages your sidebar keeps',
 }

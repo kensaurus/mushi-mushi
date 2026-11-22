@@ -21,6 +21,8 @@
  * (audience 'platform') are not here: they are in the super-admin doctor.
  */
 
+import { loadAgentCredits } from '../../_shared/agent-credits-load.ts'
+import type { AgentCreditsState } from '../../_shared/agent-credits.ts'
 import type { Context, Hono } from 'npm:hono@4'
 import type { Variables } from '../types.ts'
 import { getServiceClient } from '../../_shared/db.ts'
@@ -36,6 +38,7 @@ import {
   abilitiesFromInstallation,
   abilitiesFromReadProbes,
   autofixKeyGap,
+  withFollowupCredits,
   clearRepoAbilities,
   countByStatus,
   createTtlCache,
@@ -270,9 +273,9 @@ function followupGap(db: Db, project: DispatcherProject): Promise<SetupGap> {
   return readFollowupKeyGap(db as never, project, { within: (p, what) => within(p, what), why })
 }
 
-async function dispatchGap(db: Db, project: DispatcherProject, now: Date, deps: SetupGapsDeps): Promise<SetupGap> {
+async function dispatchGap(db: Db, project: DispatcherProject, now: Date, deps: SetupGapsDeps, credits: AgentCreditsState | null): Promise<SetupGap> {
   const list = await within(deps.readDispatchers(db, [project.id], [project], now), 'auto-fix setting').catch(() => null)
-  return autofixKeyGap({ projectId: project.id, dispatcher: list?.find((d) => d.projectId === project.id) ?? null })
+  return autofixKeyGap({ projectId: project.id, dispatcher: list?.find((d) => d.projectId === project.id) ?? null, credits })
 }
 
 async function deployEventsGap(db: Db, projectId: string, now: Date): Promise<SetupGap> {
@@ -334,14 +337,18 @@ async function budgetGap(db: Db, projectId: string, now: Date): Promise<SetupGap
 /** Every app-owner check for one app. Each check settles on its own. */
 export async function checkProject(db: Db, project: DispatcherProject, deps: SetupGapsDeps): Promise<ProjectGaps> {
   const now = deps.now()
-  const [github, followup, dispatch, deploy, slack, budget] = await Promise.all([
+  // Out of credits is its own answer (agent-credits.ts); a failed read is "not out".
+  const credits = await within(loadAgentCredits(db as never, null, [project.id], now), 'fix agent credits').catch(() => null)
+  const [github, followupRead, dispatch, deploy, slack, budget] = await Promise.all([
     githubGaps(db, project.id, deps),
     followupGap(db, project),
-    dispatchGap(db, project, now, deps),
+    dispatchGap(db, project, now, deps, credits),
     deployEventsGap(db, project.id, now),
     slackTokenGap(db, project.id, now),
     budgetGap(db, project.id, now),
   ])
+  // "Their Cursor key is active" is not the whole truth while the agents are out of credits.
+  const followup = withFollowupCredits(followupRead, credits)
   return {
     projectId: project.id,
     name: project.name,

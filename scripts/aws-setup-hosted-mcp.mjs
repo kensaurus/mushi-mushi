@@ -1,23 +1,24 @@
 /**
  * FILE: scripts/aws-setup-hosted-mcp.mjs
- * PURPOSE: Idempotently wire kensaur.us/mushi-mushi/hosted-mcp → Supabase MCP
- *          + origin RFC 9728 PRM and RFC 8414 AS metadata (path-inserted
- *          well-known URIs) for MCP client and Smithery OAuth discovery.
+ * PURPOSE: Idempotently publish the code of the two hosted-MCP CloudFront
+ *          Functions: kensaur.us/mushi-mushi/hosted-mcp → Supabase MCP, and the
+ *          origin RFC 9728 PRM + RFC 8414 AS metadata (path-inserted well-known
+ *          URIs) for MCP client and Smithery OAuth discovery.
+ *
+ *          Code only. It never reads or writes the kensaur.us distribution
+ *          (E246VQ1C9QYZVB): the behaviours, the Supabase origin and the
+ *          function associations are owned by kensaurus/kensaur.us `infra/edge/`.
  *
  * RUN: node scripts/aws-setup-hosted-mcp.mjs
- * ENV: AWS credentials (OIDC role locally or AWS_ACCESS_KEY_ID), optional
- *      CLOUDFRONT_DISTRIBUTION_ID (default E246VQ1C9QYZVB)
+ * ENV: AWS credentials (OIDC role locally or AWS_ACCESS_KEY_ID)
  */
 
 import { execSync } from 'node:child_process'
-import { writeFileSync, mkdirSync } from 'node:fs'
+import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
-const DIST_ID = process.env.CLOUDFRONT_DISTRIBUTION_ID || process.env.CF_DIST_ID || 'E246VQ1C9QYZVB'
-const SUPABASE_HOST = 'dxptnwrhwsqckaftyymj.supabase.co'
 const SUPABASE_ORIGIN_ID = 'supabase-hosted-mcp'
-const S3_ORIGIN_ID = 'kensaur.us/mushi-mushi'
 const HOSTED_MCP_PATTERN = '/mushi-mushi/hosted-mcp*'
 const WELLKNOWN_PATTERN = '/.well-known/oauth-protected-resource/mushi-mushi/hosted-mcp*'
 // The MCP SDK fetches this URL first when discovering the authorization
@@ -25,14 +26,6 @@ const WELLKNOWN_PATTERN = '/.well-known/oauth-protected-resource/mushi-mushi/hos
 const AS_WELLKNOWN_PATTERN = '/.well-known/oauth-authorization-server/mushi-mushi/hosted-mcp*'
 const ROUTER_FN = 'mushi-mushi-hosted-mcp-router'
 const WELLKNOWN_FN = 'mushi-mushi-hosted-mcp-wellknown'
-
-function aws(cmd) {
-  return JSON.parse(execSync(`aws ${cmd} --output json 2>&1`, { encoding: 'utf8' }))
-}
-
-function awsRaw(cmd) {
-  return execSync(`aws ${cmd} 2>&1`, { encoding: 'utf8' })
-}
 
 function publishFunction(name, comment, file) {
   const configPath = join(tmpdir(), `${name}-config.json`)
@@ -72,13 +65,6 @@ function publishFunction(name, comment, file) {
   ).trim()
 }
 
-function fnAssoc(arn) {
-  return {
-    Quantity: 1,
-    Items: [{ FunctionARN: arn, EventType: 'viewer-request' }],
-  }
-}
-
 console.log('Publishing CloudFront Functions…')
 const routerArn = publishFunction(
   ROUTER_FN,
@@ -93,124 +79,10 @@ const wellknownArn = publishFunction(
 console.log(`  ${ROUTER_FN}: ${routerArn}`)
 console.log(`  ${WELLKNOWN_FN}: ${wellknownArn}`)
 
-console.log(`Fetching distribution ${DIST_ID}…`)
-const distResp = aws(`cloudfront get-distribution-config --id ${DIST_ID} --region us-east-1`)
-const etag = distResp.ETag
-const config = distResp.DistributionConfig
-
-const origins = config.Origins?.Items ?? []
-if (!origins.some((o) => o.Id === SUPABASE_ORIGIN_ID)) {
-  console.log(`Adding custom origin ${SUPABASE_ORIGIN_ID}…`)
-  origins.push({
-    Id: SUPABASE_ORIGIN_ID,
-    DomainName: SUPABASE_HOST,
-    OriginPath: '/functions/v1/mcp',
-    CustomHeaders: { Quantity: 0 },
-    CustomOriginConfig: {
-      HTTPPort: 80,
-      HTTPSPort: 443,
-      OriginProtocolPolicy: 'https-only',
-      OriginSslProtocols: { Quantity: 1, Items: ['TLSv1.2'] },
-      OriginReadTimeout: 30,
-      OriginKeepaliveTimeout: 5,
-    },
-    ConnectionAttempts: 3,
-    ConnectionTimeout: 10,
-    OriginShield: { Enabled: false },
-  })
-  config.Origins = { Quantity: origins.length, Items: origins }
-}
-
-const mushiBehavior = config.CacheBehaviors.Items.find((cb) => cb.PathPattern === '/mushi-mushi/*')
-if (!mushiBehavior) {
-  console.error('ERROR: missing /mushi-mushi/* cache behavior to clone')
-  process.exit(1)
-}
-
-const CACHING_DISABLED = '4135ea2d-6df8-44a3-9df3-4b5a84be39ad'
-/** Forwards query strings + headers except Host (OAuth authorize needs querystring at origin). */
-// Managed-AllViewerExceptHostHeader (aws cloudfront list-origin-request-policies --type managed).
-const ALL_VIEWER_EXCEPT_HOST_ORP = 'b689b0a8-53d0-40ab-baf2-68738e2966ac'
-// The hosted-MCP route used the User-Agent/Referer policy until 2026-10-04. It
-// forwards no query string, so ?features= and ?read_only=1 were dropped and a
-// read-only connection got write tools.
-
-/** Clone a behavior without legacy TTL fields (distribution uses cache policies). */
-function cloneBehavior(source) {
-  const b = JSON.parse(JSON.stringify(source))
-  delete b.MinTTL
-  delete b.DefaultTTL
-  delete b.MaxTTL
-  delete b.ForwardedValues
-  return b
-}
-
-function hostedMcpBehavior(base, pathPattern, originId, fnArn, originRequestPolicyId) {
-  return {
-    ...cloneBehavior(base),
-    PathPattern: pathPattern,
-    TargetOriginId: originId,
-    CachePolicyId: CACHING_DISABLED,
-    OriginRequestPolicyId: originRequestPolicyId,
-    AllowedMethods: {
-      Quantity: 7,
-      Items: ['GET', 'HEAD', 'OPTIONS', 'PUT', 'POST', 'PATCH', 'DELETE'],
-      CachedMethods: { Quantity: 2, Items: ['GET', 'HEAD'] },
-    },
-    FunctionAssociations: fnAssoc(fnArn),
-  }
-}
-
-const s3Orp = mushiBehavior.OriginRequestPolicyId
-
-const existing = new Set(config.CacheBehaviors.Items.map((cb) => cb.PathPattern))
-const toAdd = []
-let needsUpdate = false
-
-for (const pattern of [WELLKNOWN_PATTERN, AS_WELLKNOWN_PATTERN]) {
-  if (!existing.has(pattern)) {
-    toAdd.push(hostedMcpBehavior(mushiBehavior, pattern, S3_ORIGIN_ID, wellknownArn, s3Orp))
-  }
-}
-
-if (!existing.has(HOSTED_MCP_PATTERN)) {
-  toAdd.push(
-    hostedMcpBehavior(mushiBehavior, HOSTED_MCP_PATTERN, SUPABASE_ORIGIN_ID, routerArn, ALL_VIEWER_EXCEPT_HOST_ORP),
-  )
-} else {
-  const row = config.CacheBehaviors.Items.find((cb) => cb.PathPattern === HOSTED_MCP_PATTERN)
-  if (row?.OriginRequestPolicyId !== ALL_VIEWER_EXCEPT_HOST_ORP) {
-    row.OriginRequestPolicyId = ALL_VIEWER_EXCEPT_HOST_ORP
-    row.CachePolicyId = CACHING_DISABLED
-    needsUpdate = true
-    console.log(`Patching ${HOSTED_MCP_PATTERN} → AllViewerExceptHostHeader origin request policy (forwards query strings)`)
-  }
-}
-
-if (toAdd.length === 0 && !needsUpdate) {
-  console.log('Hosted MCP cache behaviors already present. Done.')
-  process.exit(0)
-}
-
-console.log(`Adding behaviors: ${toAdd.map((b) => b.PathPattern).join(', ')}`)
-config.CacheBehaviors.Items = [...toAdd, ...config.CacheBehaviors.Items]
-config.CacheBehaviors.Quantity = config.CacheBehaviors.Items.length
-
-const tmpDir = join(tmpdir(), 'mushi-cf-hosted-mcp')
-mkdirSync(tmpDir, { recursive: true })
-const tmpFile = join(tmpDir, 'cf-update-config.json')
-writeFileSync(tmpFile, JSON.stringify(config))
-
-console.log('Updating CloudFront distribution…')
-const result = JSON.parse(
-  awsRaw(
-    `cloudfront update-distribution --id ${DIST_ID} --if-match ${etag} --distribution-config file://${tmpFile.replace(/\\/g, '/')} --region us-east-1`,
-  ),
-)
-console.log(`SUCCESS — status ${result.Distribution?.Status ?? 'InProgress'}`)
-console.log('Invalidate + verify (~5 min propagation):')
-console.log('  aws cloudfront create-invalidation --distribution-id', DIST_ID, '--paths "/mushi-mushi/hosted-mcp*" "/.well-known/oauth-protected-resource/mushi-mushi/hosted-mcp*" "/.well-known/oauth-authorization-server/mushi-mushi/hosted-mcp*" --region us-east-1')
-console.log('  curl -sS https://kensaur.us/.well-known/oauth-protected-resource/mushi-mushi/hosted-mcp')
-console.log('  curl -sS https://kensaur.us/.well-known/oauth-authorization-server/mushi-mushi/hosted-mcp')
-console.log('  curl -sS https://kensaur.us/mushi-mushi/hosted-mcp/')
+console.log('Done. Code only: this script never writes the distribution config.')
+console.log('The behaviours that run these functions are owned by kensaurus/kensaur.us infra/edge/:')
+console.log(`  ${HOSTED_MCP_PATTERN} (origin ${SUPABASE_ORIGIN_ID}) → ${ROUTER_FN}`)
+console.log(`  ${WELLKNOWN_PATTERN} → ${WELLKNOWN_FN}`)
+console.log(`  ${AS_WELLKNOWN_PATTERN} → ${WELLKNOWN_FN}`)
+console.log('Verify (~5 min propagation): node scripts/verify-hosted-mcp.mjs')
 console.log('Smithery publish URL: https://kensaur.us/mushi-mushi/hosted-mcp/')

@@ -17,7 +17,7 @@ easy, paid path) and React Native CLI + GitHub Actions + Fastlane (the
 cost-sensitive path). Mushi Mushi bug reporting keeps working throughout.
 
   The full plan (ready-to-paste GitHub Actions YAML for Android and iOS,
-  the Fastlane match recipe, the Capacitor → RN plugin map, the Mushi SDK
+  the Fastlane match recipe, the Capacitor → RN plugin map, the Mushi Mushi SDK
   API mapping, the 6-week timeline, and the go/no-go checklist) lives in
   the repo at
   [`docs/migrations/capacitor-to-react-native.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/migrations/capacitor-to-react-native.md).
@@ -44,14 +44,14 @@ You have three options for the **web** experience after porting the native app:
 2. **RN Web for the app shell + Next.js for marketing.** One app, two surfaces.
 3. **Full RN Web.** Single codebase, with SEO trade-offs.
 
-Option 1 is usually the simplest. You can run `@mushi-mushi/web` on the
+Option 1 is usually the simplest. You can run `mushi-mushi` on the
 marketing site and `@mushi-mushi/react-native` in the new app against the
 same project ID and API key at the same time.
 
 ## Mushi Mushi during the migration
 
 The single most important property: **you do not change anything on the
-Mushi side.** Same project, same API key, same admin console. Reports from
+Mushi Mushi side.** Same project, same API key, same admin console. Reports from
 the Capacitor build and the React Native build land in the same inbox.
 
 ### API mapping at a glance
@@ -103,8 +103,8 @@ export default function App() {
 
 ### Get the snippet from the admin console
 
-The **Install SDK** card in the admin console (Onboarding, Projects → your
-project, Settings → SDK & connection) has **React Native**, **Expo**, and
+The **Install SDK** card in the admin console (**Set up**, **Manage apps** → your
+app, Settings → SDK & connection) has **React Native**, **Expo**, and
 **Capacitor** tabs alongside React / Vue / Svelte / Vanilla. The snippets
 are populated with your real project ID and (right after a key mint) your
 real API key.

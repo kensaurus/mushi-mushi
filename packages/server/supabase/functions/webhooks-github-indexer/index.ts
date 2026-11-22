@@ -28,7 +28,6 @@ import { createEmbedding, createEmbeddingBatch } from '../_shared/embeddings.ts'
 import { log as rootLog } from '../_shared/logger.ts';
 import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts';
 import { requireServiceRoleAuth } from '../_shared/auth.ts';
-import { unverifiedGithubInstallsAllowed } from '../_shared/github-install-trust.ts';
 import { finalizeFixClosedUnmerged, finalizeFixMerge } from '../_shared/fix-merge.ts';
 import { requeueReviewForNewHead } from '../_shared/fix-review-db.ts';
 import { canonicalPrUrl } from '../_shared/pr-substance.ts';
@@ -96,8 +95,9 @@ import {
   parseCloudAgentBranchRef,
 } from '../_shared/agent-adapters.ts';
 import { routeGithubShipEvent, type GithubShipPayload } from '../_shared/auto-release.ts';
+import { routeGithubDeployOps } from '../_shared/ops-sources.ts';
 import { pgSafeSlice, pgSafeText } from '../_shared/pg-text.ts';
-import { isTransientDbConnectionError, logDbFailure } from '../_shared/error-codes.ts';
+import { dbDiagnosticMessage, isTransientDbConnectionError, logDbFailure } from '../_shared/error-codes.ts';
 import { projectIdsForRepo, RepoLookupError } from './repo-projects.ts';
 
 ensureSentry('webhooks-github-indexer');
@@ -152,6 +152,27 @@ function timingSafeEqual(a: string, b: string): boolean {
   let mismatch = 0;
   for (let i = 0; i < a.length; i++) mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return mismatch === 0;
+}
+
+/**
+ * A commit's subject (its first line) through the App installation, for the
+ * Ops release post. Null on any failure: the post then goes out without one.
+ */
+async function githubCommitSubject(repo: string, sha: string, installationId: number): Promise<string | null> {
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || !/^[0-9a-f]{7,64}$/i.test(sha)) return null;
+  try {
+    const token = await mintInstallationToken(installationId);
+    const res = await fetch(`https://api.github.com/repos/${repo}/commits/${sha}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'User-Agent': 'mushi-mushi-ops' },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { commit?: { message?: string } };
+    const subject = (body.commit?.message ?? '').split('\n')[0].trim();
+    return subject || null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -1165,11 +1186,19 @@ async function handleSweep(
         continue;
       }
 
+      // The repo's GitHub App install first, then the project's or org's token.
+      // Every row's installation id is bound by a verified path: the
+      // "Connect GitHub" grant (api/routes/github-connect.ts), or an
+      // unverified binding only where a single-tenant self-host opted in
+      // (github-install-trust.ts gates those writes). The indexer alone
+      // used to skip the id, so an app connected through the App read
+      // "no_token" while its fixes, CI and secrets used the same install
+      // (owner, 2026-11-17, kensaur.us).
       let token: string | null = null;
+      const installationId = Number(repo.github_app_installation_id ?? 0);
       try {
-        // Stored installation ids are not verified yet (github-install-trust.ts).
-        token = repo.github_app_installation_id && unverifiedGithubInstallsAllowed()
-          ? await mintInstallationToken(Number(repo.github_app_installation_id))
+        token = installationId > 0
+          ? await mintInstallationToken(installationId)
           : await resolveProjectGithubToken(db, repo.project_id);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -1362,7 +1391,7 @@ async function loadStoredChunks(
       .select('file_path, symbol_name, content_hash, imports, tombstoned_at')
       .eq('project_id', projectId)
       .in('file_path', paths.slice(i, i + 50))
-      .not('embedding', 'is', null);
+      .not('embedding_768', 'is', null);
     if (error) throw new Error(`stored chunk lookup failed: ${error.message}`);
     for (const r of (data ?? []) as Array<StoredChunk & { file_path: string; symbol_name: string | null }>) {
       stored.set(chunkKey(r.file_path, r.symbol_name), r);
@@ -2010,11 +2039,13 @@ async function indexPushForProject(
       }]);
       if (error) {
         upsertFailures++;
-        log.error('chunk upsert failed', {
+        // An outage is a warn (the next push re-indexes the path); a coded
+        // failure, 57014 included, stays an error (Sentry 7772326346).
+        logDbFailure(log, 'chunk upsert failed', error, {
           projectId,
           path: c.path,
           symbolName: c.symbolName,
-          error: error.message,
+          error: dbDiagnosticMessage(error.message),
         });
         continue;
       }
@@ -2310,6 +2341,10 @@ app.post('/webhooks-github-indexer', async (c) => {
   // and published, which tells reporters their fix is live. The work runs
   // after the 202 (waitUntil); runAutoRelease re-checks the opt-in.
   if (event === 'release' || event === 'deployment_status') {
+    // The Ops hub (docs/execplans/ops-hub-slack.md §4): a production deploy, or a failed one, becomes
+    // a releases / alerts event for teams whose Slack bot is on. Runs after the answer; never throws.
+    // The release post carries the commit subject (tsumagoi has no release post of its own).
+    if (event === 'deployment_status') runInBackground(routeGithubDeployOps(getDb() as never, JSON.parse(raw), { commitSubject: githubCommitSubject }), 'ops-deploy');
     const routed = await routeGithubShipEvent(getDb(), event, JSON.parse(raw) as GithubShipPayload);
     if (routed.projectIds[0]) await auditRow.setProject(routed.projectIds[0]);
     return c.json(routed.body, routed.status);

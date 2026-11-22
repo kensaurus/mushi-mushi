@@ -29,6 +29,8 @@ import { log as rootLog } from './logger.ts';
 import { applyReportStatusTransition } from './report-transition.ts';
 import { extractFramePaths } from './sentry-frames.ts';
 import { reopenSentryLinks } from './sentry-resolve-back.ts';
+// Ops hub: forwarded to api-ext, so `api` (deploy size limit) never bundles the emitter.
+import { forwardSentryOps } from './ops-forward.ts';
 
 const log = rootLog.child('sentry-ingest');
 
@@ -144,6 +146,8 @@ export interface SentryIngestResult {
   /** `linked`: an import found the issue already linked to a report. */
   outcome: 'created' | 'deduped' | 'reopened' | 'resolved' | 'ignored' | 'linked';
   reportId?: string;
+  /** Why an issue was ignored, when the caller can act on it in Sentry. */
+  reason?: 'platform_outage';
 }
 
 /** Render `extra` as `key: value` lines for the report description, each
@@ -211,7 +215,7 @@ async function findLinkedReport(
   db: SupabaseClient,
   projectId: string,
   sentryIssueId: string,
-): Promise<{ reportId: string; status: string; regressionCount: number } | null> {
+): Promise<{ reportId: string; status: string; regressionCount: number; firstSeenAt: string | null } | null> {
   const { data: link } = await db
     .from('report_external_issues')
     .select('report_id')
@@ -222,7 +226,7 @@ async function findLinkedReport(
   if (!link?.report_id) return null;
   const { data: report } = await db
     .from('reports')
-    .select('id, status, regression_count')
+    .select('id, status, regression_count, created_at')
     .eq('id', link.report_id)
     .maybeSingle();
   if (!report) return null;
@@ -230,6 +234,7 @@ async function findLinkedReport(
     reportId: report.id as string,
     status: (report.status as string) ?? 'new',
     regressionCount: (report.regression_count as number) ?? 0,
+    firstSeenAt: (report.created_at as string | null) ?? null,
   };
 }
 
@@ -265,7 +270,7 @@ export async function ingestSentryError(
   // the auto-import poll are filtered.
   if (intake !== 'import' && isTransientInfraSentryError(event, issue)) {
     log.info('Sentry issue is a transient database outage — not filed', { sentryIssueId, intake });
-    return { outcome: 'ignored' };
+    return { outcome: 'ignored', reason: 'platform_outage' };
   }
 
   // ── Dedup / regression on the Sentry issue id ─────────────────────────────
@@ -286,12 +291,26 @@ export async function ingestSentryError(
           .eq('id', linked.reportId);
         // The issue is open in Sentry again: so is the link, so marking the
         // report fixed later resolves it instead of skipping it.
-        await reopenSentryLinks(db, projectId, linked.reportId).catch((e: unknown) =>
+        await reopenSentryLinks(db, projectId, linked.reportId, { inSentry: false }).catch((e: unknown) =>
           log.error('Reopening Sentry links failed', { reportId: linked.reportId, err: String(e) }),
         );
         log.info('Sentry alert reopened a fixed report', {
           reportId: linked.reportId,
           sentryIssueId,
+        });
+        // Ops hub: a regression goes to the team's #alerts (only when its Slack bot is on).
+        forwardSentryOps(projectId, {
+          outcome: 'reopened',
+          issueId: sentryIssueId,
+          title: event?.title ?? issue?.title ?? null,
+          culprit: event?.culprit ?? issue?.culprit ?? null,
+          level: event?.level ?? issue?.level ?? null,
+          environment: event?.environment ?? tagValue(event?.tags, 'environment'),
+          release: event?.release ?? tagValue(event?.tags, 'release'),
+          url: event?.web_url ?? issue?.permalink ?? null,
+          // "Regressed: …, first seen <date>": Sentry's own date, else when the report was filed.
+          firstSeen: issue?.firstSeen ?? linked.firstSeenAt,
+          regressionCount: linked.regressionCount + 1,
         });
         return { outcome: 'reopened', reportId: linked.reportId };
       }
@@ -405,6 +424,20 @@ export async function ingestSentryError(
   }
 
   input.triggerClassification(reportId, projectId);
+  // Ops hub: a new production error goes to the team's #alerts. A manual import is not news.
+  if (intake !== 'import') {
+    forwardSentryOps(projectId, {
+      outcome: 'created',
+      issueId: sentryIssueId,
+      title,
+      culprit,
+      level,
+      environment,
+      release,
+      url: sentryUrl,
+      firstSeen: issue?.firstSeen ?? new Date(sentryEventTimeMs(event, issue)).toISOString(),
+    });
+  }
   return { outcome: 'created', reportId };
 }
 
@@ -416,6 +449,7 @@ export async function resolveReportFromSentry(
   db: SupabaseClient,
   projectId: string,
   sentryIssueId: string,
+  actorId: 'sentry-webhook' | 'sentry-poll' = 'sentry-webhook',
 ): Promise<SentryIngestResult> {
   const linked = await findLinkedReport(db, projectId, sentryIssueId);
   if (!linked) return { outcome: 'ignored' };
@@ -423,11 +457,13 @@ export async function resolveReportFromSentry(
   const result = await applyReportStatusTransition(db, {
     reportId: linked.reportId,
     requestedStatus: 'resolved',
-    actor: { kind: 'system', id: 'sentry-webhook' },
+    actor: { kind: 'system', id: actorId },
   });
   if (!result.ok) {
     log.warn('Sentry-side resolve failed', { reportId: linked.reportId, err: result.message });
     return { outcome: 'ignored', reportId: linked.reportId };
   }
+  // Ops hub: close the #alerts thread, if one is open for this issue.
+  forwardSentryOps(projectId, { outcome: 'resolved', issueId: sentryIssueId, title: null, regressionCount: linked.regressionCount });
   return { outcome: 'resolved', reportId: linked.reportId };
 }

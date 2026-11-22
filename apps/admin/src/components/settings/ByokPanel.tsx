@@ -11,7 +11,7 @@
 
 import { useState } from 'react';
 import { apiFetch } from '../../lib/supabase';
-import { Input, SecretInput, Btn, ErrorAlert, ResultChip, SegmentedControl, Tooltip } from '../ui';
+import { Input, SecretInput, Btn, ErrorAlert, ResultChip, SegmentedControl, Tooltip, InfoHint } from '../ui';
 import { ConfigHelp } from '../ConfigHelp';
 import { BrandIcon } from '../ui/BrandIcon';
 import { IconPlay, IconTrash } from '../icons';
@@ -40,6 +40,8 @@ import { creditsLine, spendLine, type ByokCreditsResponse } from './byokCredits'
 import {
   isLegacyKey,
   keyStatusView,
+  isReplacedKeyView,
+  duplicateKeyCopies,
   providerStatusView,
   type KeyStatusView,
   type LegacyKey,
@@ -49,6 +51,7 @@ import { RowStatus, SettingsList, SettingsRow } from './SettingsRow';
 import { SpendDownSection } from './SpendDownSection';
 import { ReviewFollowupsSection } from './ReviewFollowupsSection';
 import { AiProviderSection } from './AiProviderSection';
+import { StatusPill } from '../signal/StatusMark';
 
 interface ProviderMeta {
   name: string;
@@ -68,14 +71,14 @@ const PROVIDER_META: Record<string, ProviderMeta> = {
     purpose: 'Reads each bug report, writes the diagnosis, and drafts the fix.',
     placeholder: 'sk-ant-api03-…',
     consoleUrl: 'https://console.anthropic.com/settings/keys',
-    emptyDetail: "Using Mushi's shared key. Add yours to bill your own Anthropic account.",
+    emptyDetail: "Using Mushi Mushi's shared key. Add yours to bill your own Anthropic account.",
   },
   openai: {
     name: 'OpenAI',
     purpose: 'Backup when Anthropic is unavailable, search embeddings, and speech-to-text for voice reports.',
     placeholder: 'sk-proj-…',
     consoleUrl: 'https://platform.openai.com/api-keys',
-    emptyDetail: "No backup key of your own. Mushi's shared backup is used when the server has one.",
+    emptyDetail: "No backup key of your own. Mushi Mushi's shared backup is used when the server has one.",
   },
   openrouter: {
     name: 'OpenRouter',
@@ -86,7 +89,7 @@ const PROVIDER_META: Record<string, ProviderMeta> = {
   },
   cursor: {
     name: 'Cursor cloud agent',
-    purpose: 'Lets Mushi hand a fix to a Cursor cloud agent, which opens a pull request.',
+    purpose: 'Lets Mushi Mushi hand a fix to a Cursor cloud agent, which opens a pull request.',
     placeholder: 'crsr_…',
     consoleUrl: 'https://cursor.com/dashboard/integrations',
     emptyDetail: 'Add a key to send fixes to Cursor.',
@@ -96,18 +99,18 @@ const PROVIDER_META: Record<string, ProviderMeta> = {
     purpose: 'Reads public web pages, such as library docs, while diagnosing and mapping your app.',
     placeholder: 'fc-…',
     consoleUrl: 'https://www.firecrawl.dev/app/api-keys',
-    emptyDetail: "No key of your own. Web tools use Mushi's shared key when the server has one.",
+    emptyDetail: "No key of your own. Web tools use Mushi Mushi's shared key when the server has one.",
   },
   browserbase: {
     name: 'Browserbase',
     purpose: 'Runs your scheduled browser tests in a cloud browser on your own account.',
     placeholder: 'bb-…',
     consoleUrl: 'https://www.browserbase.com/settings',
-    emptyDetail: "No key of your own. Scheduled browser tests use Mushi's shared account when the server has one.",
+    emptyDetail: "No key of your own. Scheduled browser tests use Mushi Mushi's shared account when the server has one.",
   },
   supabase: {
     name: 'Supabase (read-only)',
-    purpose: "Lets diagnoses read your app's database structure, advisors, functions and logs. Mushi never writes to it.",
+    purpose: "Lets diagnoses read your app's database structure, advisors, functions and logs. Mushi Mushi never writes to it.",
     placeholder: 'sbp_…',
     consoleUrl: 'https://supabase.com/dashboard/account/tokens',
     emptyDetail: 'Not linked. Diagnoses work without it, but miss your database.',
@@ -119,6 +122,8 @@ const PROVIDER_META: Record<string, ProviderMeta> = {
 // Kept on one line: byok-lifecycle-contract.test.ts asserts the provider order.
 // prettier-ignore
 const DISPLAY_PROVIDERS = ['anthropic', 'openai', 'openrouter', 'cursor', 'firecrawl', 'browserbase', 'supabase'] as const;
+/** Providers whose 30-day AI calls for this app the credits read reports (spend30d). */
+const SPEND_PROVIDERS: ReadonlySet<string> = new Set(['anthropic', 'openai', 'openrouter']);
 
 type ValidationReply =
   | {
@@ -184,7 +189,7 @@ function scopeReach(scope: KeyScope, sharing: KeySharing | null, universal: KeyU
 
 /** The one line under the scope picker: the order each app tries its keys in (ADR 0031). */
 const RESOLUTION_ORDER_HINT =
-  "Each app tries its own key first, then its organization's, then an all-apps key, then Mushi's own.";
+  "Each app tries its own key first, then its organization's, then an all-apps key, then Mushi Mushi's own.";
 
 /**
  * The scopes this user can pick for a key here: "All my apps" when they own
@@ -213,6 +218,18 @@ function formatDay(iso: string | null | undefined): string | null {
 }
 
 /** The provider row's main button, from what its status asks for. */
+/** True when a key row already shows exactly this provider status (same state, label and reason). */
+function sameAsAKey(
+  view: KeyStatusView,
+  keys: readonly ManagedKey[],
+  keyView: (k: ManagedKey) => KeyStatusView,
+): boolean {
+  return keys.some((k) => {
+    const v = keyView(k);
+    return v.state === view.state && v.label === view.label && v.detail === view.detail;
+  });
+}
+
 function providerActionLabel(view: KeyStatusView, keyCount: number): string {
   if (keyCount === 0) return 'Add key';
   if (view.action === 'replace') return 'Replace key';
@@ -254,6 +271,10 @@ export function ByokPanel() {
   // add one (ADR 0031), else "This organization", else this app.
   const [newScope, setNewScope] = useState<KeyScope | null>(null);
   const [scopePending, setScopePending] = useState<string | null>(null);
+  // The key whose "where is it used" picker is open. Nine keys each carried
+  // the same three-option control (round-3 review 2026-11-19); the scope chip
+  // now opens it for one key at a time.
+  const [scopeOpen, setScopeOpen] = useState<string | null>(null);
 
   const reload = pool.reload;
   const sharing = pool.data?.sharing ?? null;
@@ -321,7 +342,7 @@ export function ByokPanel() {
           : data?.legacySuperseded
             ? 'Key checked and in use. Your old key is no longer needed; remove it below.'
             : 'Key checked and in use.'
-        : quarantinedMessage(data, "Key saved, but the provider didn't accept it, so Mushi won't use it yet.");
+        : quarantinedMessage(data, "Key saved, but the provider didn't accept it, so Mushi Mushi won't use it yet.");
       const where = scope !== 'project' && validated ? ` ${scopeReach(scope, sharing, universal)}` : '';
       setNotice({
         scope: `provider:${provider}`,
@@ -414,7 +435,7 @@ export function ByokPanel() {
       setNotice({
         scope: key.id,
         ok: true,
-        message: value ? 'Expiry date saved. Mushi will warn you a week before.' : 'Expiry date removed.',
+        message: value ? 'Expiry date saved. Mushi Mushi will warn you a week before.' : 'Expiry date removed.',
       });
       reload();
     } else {
@@ -468,7 +489,7 @@ export function ByokPanel() {
         // A failed test takes the key out of rotation (auth_failed,
         // quota_exhausted or pending_validation), so say so.
         message: !described.ok
-          ? `${described.message} Mushi won't use this key until a test passes.`
+          ? `${described.message} Mushi Mushi won't use this key until a test passes.`
           : data?.legacySuperseded
             ? `${described.message} Your old key is no longer needed; remove it below.`
             : described.message,
@@ -500,6 +521,16 @@ export function ByokPanel() {
 
   const allKeys = pool.data?.keys ?? [];
   const legacyKeys = pool.data?.legacyKeys ?? [];
+  const duplicates = duplicateKeyCopies([...allKeys, ...legacyKeys]);
+  // Whether this app ran a call on its own keys for the provider in the last
+  // 30 days (the same numbers as the usage line). A shared key's "last used"
+  // is any app's, so without this the row said "last used 12h ago" beside
+  // "No AI calls from this app" (round-3 review 2026-11-19).
+  const usedHere = (provider: string): boolean | undefined => {
+    const spend = credits.data?.spend30d;
+    if (!Array.isArray(spend) || !SPEND_PROVIDERS.has(provider)) return undefined;
+    return (spend.find((s) => s.provider === provider)?.byokCalls ?? 0) > 0;
+  };
 
   const noticeHere = (scope: string) =>
     notice?.scope === scope ? (
@@ -510,7 +541,7 @@ export function ByokPanel() {
   // remount on every keystroke and drop focus from the expiry field.
   function keyLine(k: ManagedKey) {
     const meta = PROVIDER_META[k.provider_slug];
-    const view = keyStatusView(k, { pool: allKeys, providerName: meta?.name });
+    const view = keyStatusView(k, { pool: allKeys, providerName: meta?.name, usedHere: usedHere(k.provider_slug) });
     const legacy = isLegacyKey(k);
     const poolKey = legacy ? null : (k as PoolKey);
     const canEnable = poolKey?.status === 'disabled' && k.test_status === 'ok';
@@ -535,22 +566,45 @@ export function ByokPanel() {
         <div className="min-w-0 space-y-1">
           <p className="flex flex-wrap items-center gap-x-2 text-sm">
             <span className="font-mono text-fg-secondary">{hint}</span>
-            {poolKey && (
-              <span
-                className={`rounded-full px-2 py-0.5 text-2xs font-medium ${
-                  keyScope === 'universal' ? CHIP_TONE.accentSubtle : keyScope === 'organization' ? CHIP_TONE.infoSubtle : CHIP_TONE.neutral
-                }`}
-              >
-                {scopeChipLabel(poolKey, sharing)}
-              </span>
-            )}
+            {poolKey && (() => {
+              const chipClass = `rounded-full px-2 py-0.5 text-2xs font-medium ${
+                keyScope === 'universal' ? CHIP_TONE.accentSubtle : keyScope === 'organization' ? CHIP_TONE.infoSubtle : CHIP_TONE.neutral
+              }`;
+              if (rowScopes.length <= 1) return <span className={chipClass}>{scopeChipLabel(poolKey, sharing)}</span>;
+              const open = scopeOpen === poolKey.id;
+              return (
+                <button
+                  type="button"
+                  className={`${chipClass} inline-flex items-center gap-0.5 hover:underline`}
+                  aria-expanded={open}
+                  aria-label={`${scopeChipLabel(poolKey, sharing)}: change where ${name} is used`}
+                  data-testid="byok-scope-chip"
+                  onClick={() => setScopeOpen(open ? null : poolKey.id)}
+                >
+                  {scopeChipLabel(poolKey, sharing)}
+                  <span aria-hidden="true">{open ? '▴' : '▾'}</span>
+                </button>
+              );
+            })()}
             {legacy ? (
               <span className="text-fg-muted">legacy credential (saved before key pools)</span>
             ) : k.label ? (
               <span className="text-fg-muted">{k.label}</span>
             ) : null}
           </p>
-          <RowStatus status={view} />
+          <RowStatus status={isReplacedKeyView(view) ? { ...view, label: view.label ?? 'Replaced', mark: 'cancelled' } : view} />
+          {(() => {
+            const first = duplicates.get(k.id);
+            // A copy that is turned off asks for nothing, as summarizeKeys counts it.
+            if (!first || view.state === 'not_connected') return null;
+            const where = isLegacyKey(first) ? 'as an old single key' : `for ${scopeChipLabel(first as PoolKey, sharing)}`;
+            return (
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-secondary" data-testid="byok-duplicate-key">
+                <StatusPill status="slow" label="Same key twice" />
+                <span>This key is also saved {where}. One copy is enough: remove one.</span>
+              </p>
+            );
+          })()}
           {(() => {
             const kc = !legacy ? credits.data?.keys?.find((c) => c.id === k.id) : undefined;
             if (!kc) return null;
@@ -598,11 +652,12 @@ export function ByokPanel() {
               Not used in this app: your all-apps keys serve the organizations you own.
             </p>
           )}
-          {poolKey && rowScopes.length > 1 && (
+          {poolKey && rowScopes.length > 1 && scopeOpen === poolKey.id && (
+            // No visible "Used by" on every row (it repeated nine times, round-2
+            // review 2026-11-18): the options say where the key is used.
             <SegmentedControl
               size="sm"
               wrap
-              label="Used by"
               ariaLabel={`Where ${name} is used`}
               value={keyScope}
               options={rowScopes}
@@ -637,25 +692,21 @@ export function ByokPanel() {
               Test
             </Btn>
           </Tooltip>
-          {poolKey && (
+          {/* A key that can't be turned on yet shows no disabled "Test first"
+              button (a disabled button gave no reason): Test sits beside it. */}
+          {poolKey && (poolKey.status === 'active' || canEnable) && (
             <Btn
               size="sm"
               variant="ghost"
               type="button"
               loading={togglePending === poolKey.id}
-              disabled={poolKey.status !== 'active' && !canEnable}
-              title={
-                poolKey.status !== 'active' && !canEnable
-                  ? 'Test the key first; only a key the provider accepts can be turned on.'
-                  : undefined
-              }
               onClick={() =>
                 // Turning a working key off changes which key the pipeline
                 // uses, so it is confirmed; turning one on is not.
                 poolKey.status === 'active' ? setDisableTarget(poolKey) : void toggleKey(poolKey)
               }
             >
-              {poolKey.status === 'active' ? 'Turn off' : canEnable ? 'Turn on' : 'Test first'}
+              {poolKey.status === 'active' ? 'Turn off' : 'Turn on'}
             </Btn>
           )}
           {poolKey && !editingExpiry && (
@@ -693,13 +744,21 @@ export function ByokPanel() {
     <>
       <SettingsList
         title="AI keys"
-        description={`Keys for the AI and web services Mushi uses for this project. They are stored encrypted and billed to your own accounts. Add more than one key for a service and Mushi switches to the next when one runs out.${
-          universal?.canAdd
-            ? ' A key for "All my apps" is added once and used by every app you own.'
-            : sharing
-              ? ` A key marked "All apps" is shared by every app in ${sharing.organizationName}, so you add it once.`
-              : ''
-        }`}
+        // One line; the rest behind the (i). It ran to six lines at 390 px (round-2 review 2026-11-18).
+        description={
+          <span className="inline-flex items-center gap-1.5">
+            <span>Stored encrypted, billed to your own accounts.</span>
+            <InfoHint
+              content={`Add more than one key for a service and Mushi Mushi switches to the next when one runs out.${
+                universal?.canAdd
+                  ? ' A key for "All my apps" is added once and used by every app you own.'
+                  : sharing
+                    ? ` A key marked "All apps" is shared by every app in ${sharing.organizationName}, so you add it once.`
+                    : ''
+              }`}
+            />
+          </span>
+        }
       >
         <AiProviderSection
           keysToken={allKeys.filter((k) => k.provider_slug === 'openai').map((k) => k.id).join(',')}
@@ -719,7 +778,16 @@ export function ByokPanel() {
           const view = providerStatusView(provider, allKeys, legacyKeys, {
             providerName: meta.name,
             emptyDetail: meta.emptyDetail,
+            usedHere: usedHere(provider),
           });
+          // A provider status identical to one of its key rows says the same
+          // thing twice ("Working · Verified 7h ago" on both); show it only
+          // when it adds something (round-3 review 2026-11-19).
+          const providerStatus = sameAsAKey(view, [...providerKeys, ...providerLegacyKeys], (k) =>
+            keyStatusView(k, { pool: allKeys, providerName: meta.name, usedHere: usedHere(provider) }),
+          )
+            ? undefined
+            : view;
           const isOpen = addProvider === provider;
           // Live check of the draft key, with the server's own wording.
           const draft = isOpen
@@ -739,7 +807,7 @@ export function ByokPanel() {
               icon={<BrandIcon brand={provider} size={18} decorative />}
               title={meta.name}
               purpose={meta.purpose}
-              status={view}
+              status={providerStatus}
               action={
                 <>
                   <a
@@ -752,7 +820,7 @@ export function ByokPanel() {
                   </a>
                   <Btn
                     size="sm"
-                    variant={keyCount === 0 || view.state === 'attention' ? 'primary' : 'ghost'}
+                    variant={keyCount === 0 || view.state === 'attention' || view.action === 'add_backup' ? 'primary' : 'ghost'}
                     type="button"
                     aria-expanded={isOpen}
                     onClick={() => openAddForm(provider)}
@@ -763,7 +831,7 @@ export function ByokPanel() {
               }
             >
               {noticeHere(`provider:${provider}`)}
-              {Array.isArray(credits.data?.spend30d) && (provider === 'anthropic' || provider === 'openai' || provider === 'openrouter') && (
+              {Array.isArray(credits.data?.spend30d) && SPEND_PROVIDERS.has(provider) && (
                 <p className="text-xs text-fg-muted">
                   {spendLine(credits.data?.spend30d?.find((s) => s.provider === provider))}
                 </p>
@@ -825,7 +893,7 @@ export function ByokPanel() {
                       type="date"
                       value={newExpiry}
                       onChange={(e) => setNewExpiry(e.target.value)}
-                      tooltip="If the provider gave the key an expiry date, enter it and Mushi warns you a week before."
+                      tooltip="If the provider gave the key an expiry date, enter it and Mushi Mushi warns you a week before."
                     />
                     {provider === 'openai' && (
                       <div className="space-y-1">
@@ -872,7 +940,7 @@ export function ByokPanel() {
                     {formError && <ResultChip tone="error">{formError}</ResultChip>}
                   </div>
                   <p className="text-xs text-fg-muted">
-                    Mushi checks the key with {meta.name} before using it.
+                    Mushi Mushi checks the key with {meta.name} before using it.
                     {keyCount > 0 && ' A new key is tried after your existing ones.'}
                   </p>
                 </form>
@@ -896,7 +964,7 @@ export function ByokPanel() {
               ? `${myAppsPhrase(universal).replace(/^./, (c) => c.toUpperCase())} can use the key ending in ${moveTarget.key.key_hint ?? '****'}. An app's own key and its organization's key are still tried first. Only you can change or remove it.`
               : moveTarget.scope === 'organization'
                 ? `Every app in ${sharing?.organizationName ?? 'this organization'} can use the key ending in ${moveTarget.key.key_hint ?? '****'}. Apps with no key of their own for this service start billing to it; an app's own key is still tried first.${isUniversalKey(moveTarget.key) ? ' Your apps in other organizations stop using it.' : ''}`
-                : `Only this app keeps the key ending in ${moveTarget.key.key_hint ?? '****'}. ${isUniversalKey(moveTarget.key) ? 'Your other apps stop using it' : `The other apps in ${sharing?.organizationName ?? 'the organization'} stop using it`} and fall back to their own keys, or Mushi's own key where there is one.`
+                : `Only this app keeps the key ending in ${moveTarget.key.key_hint ?? '****'}. ${isUniversalKey(moveTarget.key) ? 'Your other apps stop using it' : `The other apps in ${sharing?.organizationName ?? 'the organization'} stop using it`} and fall back to their own keys, or Mushi Mushi's own key where there is one.`
           }
           confirmLabel={
             moveTarget.scope === 'universal'
@@ -910,6 +978,7 @@ export function ByokPanel() {
           onConfirm={async () => {
             await moveKey(moveTarget.key, moveTarget.scope)
             setMoveTarget(null)
+            setScopeOpen(null)
           }}
           onCancel={() => {
             if (scopePending !== moveTarget.key.id) setMoveTarget(null)
@@ -920,7 +989,7 @@ export function ByokPanel() {
       {disableTarget && (
         <ConfirmDialog
           title={`Turn off this ${PROVIDER_META[disableTarget.provider_slug]?.name ?? disableTarget.provider_slug} key?`}
-          body={`${isUniversalKey(disableTarget) ? 'This key is used by all your apps: every one stops using it. ' : isSharedKey(disableTarget) ? 'This key is shared: every app in your organization stops using it. ' : ''}Mushi stops using the key ending in ${disableTarget.key_hint ?? '****'} and switches to your next key for this service, or Mushi's own key where there is one. To turn it back on later, press Test and then Turn on.`}
+          body={`${isUniversalKey(disableTarget) ? 'This key is used by all your apps: every one stops using it. ' : isSharedKey(disableTarget) ? 'This key is shared: every app in your organization stops using it. ' : ''}Mushi Mushi stops using the key ending in ${disableTarget.key_hint ?? '****'} and switches to your next key for this service, or Mushi Mushi's own key where there is one. To turn it back on later, press Test and then Turn on.`}
           confirmLabel="Turn off key"
           cancelLabel="Keep it on"
           tone="danger"
@@ -938,7 +1007,7 @@ export function ByokPanel() {
       {removeTarget && (
         <ConfirmDialog
           title={`Remove this ${PROVIDER_META[removeTarget.provider_slug]?.name ?? removeTarget.provider_slug} key?`}
-          body={`${!isLegacyKey(removeTarget) && isUniversalKey(removeTarget as PoolKey) ? 'This key is used by all your apps: every one loses it. ' : !isLegacyKey(removeTarget) && isSharedKey(removeTarget as PoolKey) ? 'This key is shared: every app in your organization loses it. ' : ''}The ${isLegacyKey(removeTarget) ? 'old key' : 'key'} ending in ${removeTarget.key_hint ?? '****'} is deleted for good. Mushi then uses your other keys for this service, or Mushi's own key where there is one.`}
+          body={`${!isLegacyKey(removeTarget) && isUniversalKey(removeTarget as PoolKey) ? 'This key is used by all your apps: every one loses it. ' : !isLegacyKey(removeTarget) && isSharedKey(removeTarget as PoolKey) ? 'This key is shared: every app in your organization loses it. ' : ''}The ${isLegacyKey(removeTarget) ? 'old key' : 'key'} ending in ${removeTarget.key_hint ?? '****'} is deleted for good. Mushi Mushi then uses your other keys for this service, or Mushi Mushi's own key where there is one.`}
           confirmLabel="Remove key"
           cancelLabel="Keep key"
           tone="danger"

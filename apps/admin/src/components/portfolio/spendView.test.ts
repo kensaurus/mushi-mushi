@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { billsBreakdown, importSummary, ledgerCell, ledgerTotal, removalSummary, supabaseUsage } from './spendView'
+import type { LedgerApp, SpendLedgerResponse } from '../../lib/portfolioTypes'
+import { billsBreakdown, importSummary, ledgerCell, ledgerTotal, notConnectedCount, removalSummary, sortBySpend, spendSplit, supabaseUsage, withoutPublicDemo } from './spendView'
 import { ratingLabel, pullSummary } from './storeReviewsView'
 
 describe('ledgerCell', () => {
@@ -34,6 +35,24 @@ describe('ledgerCell', () => {
   })
 })
 
+describe('spend split and order', () => {
+  const ok = (usd: number) => ({ state: 'ok' as const, usd, detail: null })
+  const off = { state: 'not_connected' as const, usd: null, detail: null }
+  const bad = { state: 'error' as const, usd: null, detail: 'x' }
+
+  it('splits only what was read; cloud is Supabase plus imported bills', () => {
+    const parts = spendSplit({ mushiLlm: { ...ok(1), calls: 1 }, providerLlm: bad, ci: { ...off, minutes: null, runs: 0 }, supabase: { ...ok(4), usage: [] }, bills: { ...ok(6), byVendor: [] } })
+    expect(parts.map((p) => [p.key, p.usd])).toEqual([['mushi', 1], ['provider', 0], ['ci', 0], ['cloud', 10]])
+  })
+
+  it('sorts most spend first and counts the columns with nothing connected', () => {
+    expect(sortBySpend([{ name: 'b', totalUsd: 1 }, { name: 'a', totalUsd: 9 }, { name: 'c', totalUsd: 1 }]).map((a) => a.name)).toEqual(['a', 'b', 'c'])
+    const app = { providerLlm: off, ci: { ...ok(1), minutes: 1, runs: 1 }, supabase: { ...off, usage: [] }, bills: { ...bad, byVendor: [] } }
+    expect(notConnectedCount([app, app], 'providerLlm')).toBe(2)
+    expect(notConnectedCount([app], 'bills')).toBe(0)
+  })
+})
+
 describe('store review view helpers', () => {
   it('labels the star threshold', () => {
     expect([1, 2, 4, 5].map(ratingLabel)).toEqual(['1 star', '1–2 stars', '1–4 stars', 'any rating'])
@@ -49,5 +68,33 @@ describe('store review view helpers', () => {
       ],
     })).toBe('1 new report filed. · App Store: App Store Connect rejected the credential. · Google Play: 2 new reviews, 1 filed')
     expect(pullSummary({ status: 'not_connected', filed: 0, stores: [] })).toMatch(/No App Store Connect/)
+  })
+})
+
+describe('withoutPublicDemo', () => {
+  const ok = (usd: number) => ({ state: 'ok' as const, usd, detail: null })
+  const off = { state: 'not_connected' as const, usd: null, detail: null }
+  const app = (projectId: string, name: string, mushi: number, ci: number | null): LedgerApp => ({
+    projectId, name, mushiLlm: { ...ok(mushi), calls: 1 }, providerLlm: off, ci: { ...(ci == null ? off : ok(ci)), minutes: null, runs: 0 },
+    supabase: { ...off, usage: [] }, bills: { ...off, byVendor: [] }, totalUsd: mushi + (ci ?? 0), complete: true,
+  })
+  const data: SpendLedgerResponse = {
+    organizationId: 'o', from: '', to: '', days: 30, ciUsdPerLinuxMinute: 0.006,
+    apps: [app('glot', 'glot.it', 50, 1), app('demo', 'Mushi demo (sample data)', 3, null), app('yen', 'yen-yen', 10, 2)],
+    totals: { mushiLlmUsd: 63, providerLlmUsd: 0, ciUsd: 3, supabaseUsd: 0, billsUsd: 0, totalUsd: 66 },
+    unattributedProviderUsd: null, complete: true, imports: [],
+  }
+
+  it('drops the demo row and takes its amounts off the footer, so the footer is the sum of the rows', () => {
+    const out = withoutPublicDemo(data, new Set(['demo']))
+    expect(out.apps.map((a) => a.projectId)).toEqual(['glot', 'yen'])
+    expect(out.totals).toEqual({ mushiLlmUsd: 60, providerLlmUsd: 0, ciUsd: 3, supabaseUsd: 0, billsUsd: 0, totalUsd: 63 })
+    expect(out.totals.totalUsd).toBe(out.apps.reduce((n, a) => n + a.totalUsd, 0))
+  })
+
+  it('knows the demo by its name when its id is not known yet', () => {
+    expect(withoutPublicDemo(data, new Set()).apps.map((a) => a.projectId)).toEqual(['glot', 'yen'])
+    const mine = { ...data, apps: [data.apps[0]!] }
+    expect(withoutPublicDemo(mine, new Set())).toBe(mine)
   })
 })

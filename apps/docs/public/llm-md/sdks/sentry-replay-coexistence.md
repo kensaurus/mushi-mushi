@@ -4,16 +4,16 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/sentry-replay-coexistence
 
 ---
 title: Sentry Replay coexistence
-description: Run Mushi Mushi next to Sentry Session Replay. Initialise Sentry first so Mushi attaches the Sentry event and replay IDs to every bug report it sends.
+description: Run Mushi Mushi next to Sentry Session Replay. Initialise Sentry first so Mushi Mushi attaches the Sentry event and replay IDs to every bug report it sends.
 ---
 
 # Sentry Replay coexistence
 
-Initialize Sentry first, then Mushi Mushi. Mushi reads Sentry event and replay IDs when available and sends them with the report.
+Initialize Sentry first, then Mushi Mushi. Mushi Mushi reads Sentry event and replay IDs when available and sends them with the report.
 
 ```ts
 import * as Sentry from '@sentry/browser'
-import { Mushi } from '@mushi-mushi/web'
+import { Mushi } from 'mushi-mushi'
 
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
@@ -36,4 +36,4 @@ Mushi.init({
 })
 ```
 
-If Sentry or your host app patches `fetch`, Mushi still ignores its own config, report, notification, and version-check endpoints so proactive `api_cascade` prompts reflect your app, not Mushi itself.
+If Sentry or your host app patches `fetch`, Mushi Mushi still ignores its own config, report, notification, and version-check endpoints so proactive `api_cascade` prompts reflect your app, not Mushi Mushi itself.

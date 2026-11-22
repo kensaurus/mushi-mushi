@@ -60,6 +60,8 @@ import {
   shouldPollCodebaseStats,
   type CodebaseStats,
 } from '../../lib/codebaseCoverage'
+import { githubAccessMissingSentence, plainIndexError, type GithubAccess } from '../../lib/githubAccess'
+import { repoFullName } from '../../lib/githubConnect'
 
 const SUPPORTED_EXTENSIONS = ['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'py', 'pyi', 'go', 'rs']
 const PATH_GLOB_PRESETS = ['src/**', 'app/**', 'apps/*/src/**', 'packages/*/src/**']
@@ -86,9 +88,17 @@ interface Props {
   projectId: string
   /** False for members and viewers: enable, reconfigure and rotate are owner/admin only. */
   canManage?: boolean
+  /** The app's GitHub status (lib/githubAccess.ts), the same one the GitHub card shows. */
+  githubAccess?: GithubAccess | null
 }
 
-function buildStatsRows(stats: CodebaseStats, hasFiles: boolean): DetailRowItem[] {
+/**
+ * @internal Exported for unit tests only.
+ * The card's rows. The last error reads in plain English, its raw text kept in
+ * the hint for support; a "no token" error from before GitHub access was
+ * given reads as fixed, not as a live error.
+ */
+export function buildStatsRows(stats: CodebaseStats, hasFiles: boolean, access: GithubAccess | null = null): DetailRowItem[] {
   const rows: DetailRowItem[] = [
     {
       label: 'Repo',
@@ -96,7 +106,7 @@ function buildStatsRows(stats: CodebaseStats, hasFiles: boolean): DetailRowItem[
       mono: true,
       tone: 'info',
       copyable: !!stats.repo_url,
-      hint: 'GitHub repository indexed by the Mushi RAG sweeper.',
+      hint: 'GitHub repository indexed by the Mushi Mushi RAG sweeper.',
     },
     {
       label: 'Branch',
@@ -134,26 +144,27 @@ function buildStatsRows(stats: CodebaseStats, hasFiles: boolean): DetailRowItem[
   if (swept) {
     rows.push({
       label: 'Last sweep',
-      value: <RelativeTime value={swept} />,
+      value: stats.last_index_error ? <RelativeTime value={swept} /> : <><RelativeTime value={swept} />, OK</>,
       hint: stats.coverage && stats.coverage.state !== 'complete'
         ? 'When the most recent sweep finished. It covered part of the repo; see Coverage.'
         : 'When the most recent successful sweep finished.',
     })
   }
   if (stats.last_index_error) {
+    const plain = plainIndexError(stats.last_index_error, repoFullName(stats.repo_url))
+    const fixedSince = access?.state === 'connected' && /^no_token\b/i.test(stats.last_index_error.trim())
     rows.push({
-      label: 'Last error',
-      value: stats.last_index_error,
-      tone: 'danger',
-      mono: true,
+      label: fixedSince ? 'Last sweep said' : 'Last error',
+      value: fixedSince ? 'It could not read the repo then. GitHub access is ready now: the next sweep reads it.' : plain.text,
+      tone: fixedSince ? 'info' : 'danger',
       wrap: true,
-      hint: 'Upstream error from the most recent failed chunk during the sweep.',
+      hint: `For support, the sweep's own words: ${plain.code}`,
     })
   }
   return rows
 }
 
-export function CodebaseIndexCard({ projectId, canManage = true }: Props) {
+export function CodebaseIndexCard({ projectId, canManage = true, githubAccess = null }: Props) {
   const toast = useToast()
   const [stats, setStats] = useState<CodebaseStats | null>(null)
   const [loading, setLoading] = useState(true)
@@ -389,8 +400,18 @@ export function CodebaseIndexCard({ projectId, canManage = true }: Props) {
         </div>
       </details>
 
+      {githubAccess?.state === 'repo_no_access' && (
+        <p className="flex items-start gap-1.5 text-2xs text-warn-foreground" role="status" data-testid="codebase-access-missing">
+          <span aria-hidden="true">{WARNING_SIGN}</span>
+          <span>
+            {githubAccessMissingSentence(githubAccess.repo)}{' '}
+            <a href="#connect-github" className="font-medium underline underline-offset-2">Finish connecting</a>
+          </span>
+        </p>
+      )}
+
       {stats?.repo_url && (
-        <DetailRows items={buildStatsRows(stats, hasFiles)} />
+        <DetailRows items={buildStatsRows(stats, hasFiles, githubAccess)} />
       )}
 
       {enabled && hasFiles && coverageCallout && (
@@ -561,7 +582,7 @@ function AutofixToggleRow({
           </Badge>
         </div>
         <p className="text-2xs text-fg-secondary leading-snug mt-0.5">
-          Whether Mushi starts fixes for sorted bugs. Turn it off to pause every fix button without
+          Whether Mushi Mushi starts fixes for sorted bugs. Turn it off to pause every fix button without
           removing your GitHub or AI keys.
         </p>
         {enabled != null && !canToggle && (
@@ -601,7 +622,7 @@ function WebhookSecretReveal({ secret, onDismiss }: { secret: string; onDismiss:
   }
   return (
     <div className="mt-2 pt-2 border-t border-edge-subtle bg-warn-muted/20 -mx-3 px-3 py-2">
-      <div className="text-2xs text-warn font-medium uppercase tracking-wider mb-2">
+      <div className="text-2xs text-warn font-semibold mb-2">
         {WARNING_EMOJI} One-time webhook secret {EM_DASH} copy now, will not be shown again
       </div>
       <pre className="mushi-code-block mushi-code-body font-mono text-xs text-fg px-2 py-1 rounded-sm block whitespace-pre-wrap wrap-anywhere select-all">

@@ -19,13 +19,13 @@ already refreshed by your own package manager.
 
 ## How it works
 
-1. Mushi sees `.github/workflows/mushi-sdk-lockfile.yml` on your default branch.
+1. Mushi Mushi sees `.github/workflows/mushi-sdk-lockfile.yml` on your default branch.
 2. It pushes the bump as **one commit** to a `mushi/sdk-upgrade-*` branch and
    holds the PR back. The console shows **Refreshing lockfile…**.
 3. The push starts your workflow. It runs `npm install --package-lock-only`,
    `pnpm install --lockfile-only` or `yarn install --mode update-lockfile`, always
    with `--ignore-scripts`, and commits the lockfile as `github-actions[bot]`.
-4. Mushi checks the branch every 5 minutes. When the lockfile commit is there,
+4. Mushi Mushi checks the branch every 5 minutes. When the lockfile commit is there,
    it opens the PR, so your CI runs on the refreshed lockfile.
 5. If no lockfile commit arrives within 30 minutes, the PR opens anyway with a
    **Lockfile not refreshed** note. Check the workflow run on that branch.
@@ -114,14 +114,14 @@ token to `.npmrc`.
 `@master` follows the latest action. To pin, replace `master` with a commit
 SHA from this repository; the action has no release tags of its own.
 
-## Why Mushi does not write the lockfile or the workflow
+## Why Mushi Mushi does not write the lockfile or the workflow [#why-mushi-does-not-write-the-lockfile-or-the-workflow]
 
 - **The lockfile:** only the package manager can write it correctly. A
   hand-edited pnpm v9 lockfile breaks on peer-suffixed keys, and npm cannot run
-  inside Mushi's edge runtime.
+  inside Mushi Mushi's edge runtime.
 - **The workflow:** writing files under `.github/workflows` needs the GitHub
-  App's `workflows` permission, which Mushi does not request (least privilege,
-  ADR 0016). You add the file once; Mushi only reads it.
+  App's `workflows` permission, which Mushi Mushi does not request (least privilege,
+  ADR 0016). You add the file once; Mushi Mushi only reads it.
 
 ## Limits
 

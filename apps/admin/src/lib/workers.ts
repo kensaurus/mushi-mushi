@@ -39,6 +39,15 @@ export interface HostGuards {
   gh_floor: number
 }
 
+/**
+ * The coding agent a machine's lanes run, from its heartbeat (`mushi work --agent`); a daemon
+ * older than that field runs Cursor. A Claude Code worker read "Cursor account: not checked
+ * yet" and offered a Cursor account switch (2026-11-20).
+ */
+export function workerAgentLabel(status: Record<string, unknown> | null | undefined): 'Claude Code' | 'Cursor' {
+  return status?.agent === 'claude' ? 'Claude Code' : 'Cursor'
+}
+
 export interface WorkerHost {
   id: string
   hostname: string
@@ -91,6 +100,8 @@ export interface WorkerLane {
   config: LaneConfig
   /** Audit lanes: the model that may veto a reproduced finding; null = no veto pass. */
   reviewModel?: string | null
+  /** The lowest severity the lane claims on its own (a queued report always goes); null = all. */
+  minSeverity?: MinSeverity | null
   /** owner/name of the lane's clone, as the machine reports it. */
   repo?: string | null
   /** Numbers and words, plus `runs` (RunTelemetry) from a CLI that sends them. */
@@ -112,7 +123,7 @@ export interface WorkerLane {
     finishedAt: string | null
     autoRequeued: boolean
   }>
-  counts7d: { runs: number; prs: number; merges?: number; filed?: number; noChange: number; timeouts: number; errors: number; infra: number }
+  counts7d: { runs: number; prs: number; merges?: number; filed?: number; gone?: number; noChange: number; timeouts: number; errors: number; infra: number }
 }
 
 type ClaimKind = 'fix' | 'conflict' | 'audit'
@@ -223,7 +234,8 @@ export function laneCountsLine(lane: Pick<WorkerLane, 'config' | 'counts7d'>): s
   const errors = `${n.timeouts} timed out, ${n.errors} errors${n.infra > 0 ? ` (${n.infra} the machine's fault)` : ''}`
   if (lane.config.mode === 'conflicts') return `${n.runs} conflicts tried, ${n.merges ?? 0} merged in, ${errors} in 7 days`
   if (lane.config.mode === 'audit') return `${n.runs} screens read, ${n.filed ?? 0} with findings filed, ${errors} in 7 days`
-  return `${n.runs} runs, ${n.prs} PRs, ${errors} in 7 days`
+  // Reports found already fixed cost no agent run: say how many the lane saved.
+  return `${n.runs} runs, ${n.prs} PRs${n.gone ? `, ${n.gone} already fixed (no agent run)` : ''}, ${errors} in 7 days`
 }
 
 /** One sentence on how the workers stand, and the three numbers that matter. */
@@ -231,7 +243,9 @@ export function workersSummary(data: WorkLanesData, now: number = Date.now()) {
   const hosts = new Map(data.hosts.map((h) => [h.id, h]))
   const online = data.hosts.filter((h) => h.online && !h.revoked).length
   const taking = data.lanes.filter((l) => laneTaking(l, hosts.get(l.hostId), now)).length
-  const queued = data.lanes.reduce((n, l) => n + l.queue.length, 0)
+  // Each report once: a report queued on two lanes is one report waiting (the status said 119
+  // beside a lane's "Queue (117)", round-2 review 2026-11-18).
+  const queued = new Set(data.lanes.flatMap((l) => l.queue.map((q) => q.reportId))).size
   const offlineWithQueue = data.lanes.filter((l) => l.queue.length > 0 && !hosts.get(l.hostId)?.online).length
   let tone: 'ok' | 'warn' | 'neutral' = 'neutral'
   let sentence: string
@@ -270,6 +284,7 @@ export const OUTCOME_LABEL: Record<string, string> = {
   pushed: 'Merged the base in',
   refused: 'Refused by its checks',
   filed: 'Filed findings',
+  gone: 'Already fixed: closed without an agent run',
 }
 
 export interface WriteResult {
@@ -280,7 +295,16 @@ export interface WriteResult {
 const fail = (res: { error?: { message?: string } | null }) => ({ ok: false, message: res.error?.message ?? 'The request failed.' })
 
 /** What the console may change on a lane: the closed settings, plus an audit lane's veto model. */
-export type LaneSettings = Partial<LaneConfig> & { review_model?: string | null }
+export type LaneSettings = Partial<LaneConfig> & { review_model?: string | null; min_severity?: MinSeverity | null }
+
+/** A fix lane's floor (work_lanes.min_severity), worst first. */
+export type MinSeverity = 'critical' | 'high' | 'medium'
+export const MIN_SEVERITY_OPTIONS: ReadonlyArray<{ value: MinSeverity | ''; label: string }> = [
+  { value: '', label: 'Every severity' },
+  { value: 'medium', label: 'Medium and worse' },
+  { value: 'high', label: 'High and worse' },
+  { value: 'critical', label: 'Critical only' },
+]
 
 /** Change one lane setting (only the verbs that changed). */
 export async function patchLane(laneId: string, patch: LaneSettings): Promise<WriteResult> {
@@ -300,14 +324,46 @@ export function reportIdsIn(text: string): string[] {
   return [...new Set((text.match(REPORT_ID_RE) ?? []).map((id) => id.toLowerCase()))]
 }
 
-export async function putQueue(laneId: string, reportIds: string[], append = false): Promise<WriteResult> {
-  const res = await apiFetch<{ laneId: string; reportIds: string[] }>(`/v1/admin/work/lanes/${encodeURIComponent(laneId)}/queue`, {
+/** Where added reports go: `top` = fixed next (an already-queued one moves up), `end` = after the rest. */
+export type QueueAdd = 'top' | 'end'
+/** One queued report's move (POST …/queue/move). */
+export type QueueMove = 'top' | 'up' | 'down' | 'bottom' | 'remove'
+/** Report ids one queue request may carry (the server's QUEUE_REQUEST_MAX). */
+export const QUEUE_REQUEST_MAX = 50
+
+const reportsWord = (n: number) => (n === 1 ? 'the report' : `${n} reports`)
+
+/** Plain words for what an add did, from the server's counts (added, moved, skipped as already closed). */
+function queueAddMessage(add: QueueAdd, counts: { added?: number; moved?: number; skippedClosed?: number }): string {
+  const added = counts.added ?? 0
+  const moved = counts.moved ?? 0
+  const parts: string[] = []
+  if (added) parts.push(add === 'top' ? `Put ${reportsWord(added)} at the top of the queue.` : `Added ${reportsWord(added)} to the end of the queue.`)
+  if (moved) parts.push(add === 'top' ? `Moved ${moved === 1 ? 'one already queued' : `${moved} already queued`} to the top.` : `${moved === 1 ? 'One was' : `${moved} were`} already queued.`)
+  if (counts.skippedClosed) parts.push(`Skipped ${counts.skippedClosed} already fixed or dismissed.`)
+  return parts.join(' ') || 'Nothing changed.'
+}
+
+/** Add reports to a lane's queue (`add`), or replace the whole queue with this list (no `add`). */
+export async function putQueue(laneId: string, reportIds: string[], add?: QueueAdd): Promise<WriteResult> {
+  const res = await apiFetch<{ laneId: string; reportIds: string[]; added?: number; moved?: number; skippedClosed?: number }>(`/v1/admin/work/lanes/${encodeURIComponent(laneId)}/queue`, {
     method: 'PUT',
     scope: 'enumeration',
-    body: JSON.stringify(append ? { reportIds, append: true } : { reportIds }),
+    body: JSON.stringify(add === 'top' ? { reportIds, front: true } : add === 'end' ? { reportIds, append: true } : { reportIds }),
   })
   if (!res.ok) return fail(res)
-  return { ok: true, message: append ? `Sent ${reportIds.length === 1 ? 'the report' : `${reportIds.length} reports`} to the lane's queue.` : 'Queue saved.' }
+  return { ok: true, message: add ? queueAddMessage(add, res.data ?? {}) : 'Queue saved.' }
+}
+
+/** Move one queued report, or take it out. Writes one or two rows, so it works on a queue of any length. */
+export async function moveQueueItem(laneId: string, reportId: string, to: QueueMove): Promise<WriteResult> {
+  const res = await apiFetch<{ laneId: string; reportIds: string[] }>(`/v1/admin/work/lanes/${encodeURIComponent(laneId)}/queue/move`, {
+    method: 'POST',
+    scope: 'enumeration',
+    body: JSON.stringify({ reportId, to }),
+  })
+  if (!res.ok) return fail(res)
+  return { ok: true, message: to === 'remove' ? 'Removed from the queue.' : to === 'top' ? 'Moved to the top: the lane takes it next.' : 'Queue saved.' }
 }
 
 export async function patchHostGuards(hostId: string, guards: Partial<HostGuards>): Promise<WriteResult> {
@@ -361,14 +417,4 @@ export async function createWorkerKey(projectIds: string[], label: string): Prom
   })
   if (!res.ok || !res.data?.key) return { ok: false, message: res.error?.message ?? 'The key was not created.' }
   return { ok: true, key: res.data.key }
-}
-
-/** Move one item of a list up (-1) or down (+1); out of range leaves it as it is. */
-export function moveItem<T>(list: readonly T[], index: number, by: -1 | 1): T[] {
-  const to = index + by
-  if (to < 0 || to >= list.length) return [...list]
-  const next = [...list]
-  const [x] = next.splice(index, 1)
-  next.splice(to, 0, x!)
-  return next
 }

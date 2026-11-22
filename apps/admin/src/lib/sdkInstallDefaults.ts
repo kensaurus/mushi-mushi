@@ -15,6 +15,23 @@ const MOBILE_FRAMEWORKS = new Set<Framework>(['react-native', 'expo', 'capacitor
  * Slug wins for known Expo reporter projects; otherwise high-confidence
  * detection from package.json (expo / react-native / capacitor).
  */
+/**
+ * How a React app is built, which decides the env var names. `other` is the
+ * user saying "neither": the snippet then keeps its values inline.
+ */
+export type ReactSetup = 'next' | 'vite' | 'other'
+
+export const REACT_SETUP_OPTIONS: ReadonlyArray<{ id: ReactSetup; label: string }> = [
+  { id: 'next', label: 'Next.js' },
+  { id: 'vite', label: 'Vite' },
+  { id: 'other', label: 'Something else' },
+]
+
+/** The bundler a snippet is rendered for: only React has the choice, and only Next or Vite read env vars. */
+export function snippetBundler(framework: Framework, setup: ReactSetup | null): 'vite' | 'next' | null {
+  return framework === 'react' && (setup === 'next' || setup === 'vite') ? setup : null
+}
+
 /** The web bundler a package.json declares, for env-var snippets. */
 export function detectWebBundler(packageJsonText: string | null | undefined): 'vite' | 'next' | null {
   if (!packageJsonText?.trim()) return null
@@ -37,11 +54,15 @@ export function resolveDefaultSdkFramework(
     const detected = detectFromPackageJson(packageJsonText)
     // A confident read of the app's own package.json picks its tab (React,
     // Vue, Svelte, mobile…). `vanilla` is the detector's "unknown", so the
-    // React default stays for it.
+    // default below stays for it.
     if (detected.confidence >= 0.8 && (MOBILE_FRAMEWORKS.has(detected.framework) || detected.framework !== 'vanilla')) {
       return detected.framework
     }
   }
 
-  return 'react'
+  // Unknown stack: the Script tag (console audit 2026-11-11). It works on
+  // every web host with no build step, and it is the Lovable / Bolt path
+  // (ADR 0056 lists it first). The React default with an inlined key was the
+  // first thing a Lovable owner saw, with no word on where it goes.
+  return 'loader'
 }

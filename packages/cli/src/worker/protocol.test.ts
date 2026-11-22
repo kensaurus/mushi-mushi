@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { parseClaim, parseHeartbeatAnswer, parseHostGuards, parseLaneVerbs, validateWorkerConfig } from './protocol.js'
 import { hostGate, memAvailableGb, pastStop } from './guards.js'
-import { parseLanesConf, systemdUnit, windowsTaskArgs } from './install.js'
+import { parseLanesConf, systemdUnit, windowsStartupScript, windowsTaskArgs } from './install.js'
+import { stopHint } from './daemon.js'
 
 const P1 = '67a6453c-375d-41d7-833a-b33471159442'
 const LANE = '7000000a-0000-4000-8000-000000000000'
@@ -56,8 +57,13 @@ describe('the worker config', () => {
     expect(() => validateWorkerConfig({ version: 1, lanes: [lane('a', '/home/u/clone'), lane('b', '/home/u/clone/')] })).toThrow(/same clone/)
     expect(validateWorkerConfig({ version: 1, lanes: [lane('a', '/home/u/a'), lane('b', '/home/u/b')] }).lanes).toHaveLength(2)
   })
+  it('takes an optional agent, cursor or claude, and refuses any other', () => {
+    expect(validateWorkerConfig({ version: 1, agent: 'claude', lanes: [lane('a', '/home/u/a')] }).agent).toBe('claude')
+    expect(validateWorkerConfig({ version: 1, lanes: [lane('a', '/home/u/a')] }).agent).toBeUndefined()
+    expect(() => validateWorkerConfig({ version: 1, agent: 'codex', lanes: [lane('a', '/home/u/a')] })).toThrow(/agent must be one of cursor, claude/)
+  })
   it('takes an optional Cursor account (an email), kept local', () => {
-    expect(validateWorkerConfig({ version: 1, cursorAccount: 'spare@example.com', lanes: [lane('a', '/home/u/a')] }).cursorAccount).toBe('spare@example.com')
+    expect(validateWorkerConfig({ version: 1, cursorAccount: 'worker.account@example.com', lanes: [lane('a', '/home/u/a')] }).cursorAccount).toBe('worker.account@example.com')
     expect(() => validateWorkerConfig({ version: 1, cursorAccount: '$(id)', lanes: [lane('a', '/home/u/a')] })).toThrow(/cursorAccount/)
   })
   it('needs absolute clone paths and app ids', () => {
@@ -127,6 +133,22 @@ glot             glot      glot.it      542b34e0-019e-41fe-b900-7b637717bb86   c
       '/Create', '/TN', 'Mushi worker', '/SC', 'ONLOGON', '/RL', 'LIMITED', '/F', '/TR', '"C:\\Program Files\\nodejs\\node.exe" C:\\m\\index.js work --daemon',
     ])
   })
+
+  it('falls back to a hidden Startup-folder launcher that needs no administrator', () => {
+    // schtasks /SC ONLOGON answered "Access is denied" for an ordinary account.
+    const vbs = windowsStartupScript({ node: 'C:\\Program Files\\nodejs\\node.exe', cli: 'C:\\m\\index.js', log: 'C:\\Users\\me\\.cache\\mushi-work\\logs\\worker.log' })
+    expect(vbs).toContain(
+      'CreateObject("WScript.Shell").Run "cmd /c """"C:\\Program Files\\nodejs\\node.exe"" ""C:\\m\\index.js"" ""work"" ""--daemon"" >> ""C:\\Users\\me\\.cache\\mushi-work\\logs\\worker.log"" 2>&1""", 0, False',
+    )
+    expect(vbs).not.toMatch(/mushi_[A-Za-z0-9]/)
+  })
+
+  it('tells each platform how to stop the daemon (Windows has no systemctl)', () => {
+    expect(stopHint('linux')).toContain('systemctl')
+    expect(stopHint('win32')).not.toContain('systemctl')
+    expect(stopHint('win32')).toContain('Task Manager')
+    expect(stopHint('darwin')).toBe('Stop with Ctrl-C.')
+  })
 })
 
 describe('the claim a lane accepts (P3)', () => {
@@ -166,7 +188,10 @@ describe('the claim a lane accepts (P3)', () => {
 
   it('an audit claim carries only models and a count; an unknown kind is refused', () => {
     const r = parseClaim({ id: ID, kind: 'audit', model: 'grok-4.7-xhigh-fast', audit: { reviewModel: 'claude-opus-5-5-medium', findingsLeft: 12 } })
-    expect(r.ok && r.value.kind === 'audit' && r.value.audit).toEqual({ reviewModel: 'claude-opus-5-5-medium', findingsLeft: 12 })
+    // A server older than ADR 0063 sends no recheck or propose: no recheck, propose as before.
+    expect(r.ok && r.value.kind === 'audit' && r.value.audit).toEqual({ reviewModel: 'claude-opus-5-5-medium', findingsLeft: 12, recheck: false, propose: true })
+    const full = parseClaim({ id: ID, kind: 'audit', model: null, audit: { reviewModel: null, findingsLeft: 0, recheck: true, propose: false, backlog: { open: 25, cap: 25 } } })
+    expect(full.ok && full.value.kind === 'audit' && full.value.audit).toEqual({ reviewModel: null, findingsLeft: 0, recheck: true, propose: false })
     expect(parseClaim({ id: ID, kind: 'audit', model: null, audit: { reviewModel: '--x' } }).ok).toBe(false)
     expect(parseClaim({ id: ID, kind: 'shell', model: null }).ok).toBe(false)
     expect(parseClaim({ id: ID, kind: 'fix', model: '--yolo', report: { id: P1 } }).ok).toBe(false)

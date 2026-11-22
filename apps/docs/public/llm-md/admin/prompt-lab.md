@@ -5,6 +5,9 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/prompt-lab
 ---
 title: AI prompts
 description: The AI prompts page in the Mushi Mushi console lets you edit and A/B compare the prompts behind each AI step before you promote a new version.
+robots:
+  index: false
+  follow: true
 ---
 
 # AI prompts
@@ -14,10 +17,24 @@ description: The AI prompts page in the Mushi Mushi console lets you edit and A/
 AI prompts is a Lab: it is under **More pages** in the sidebar, and Settings → Display & sidebar can keep it in the sidebar. The page
 works by URL either way.
 
-**First on the page:** **Versions and their grades**, one row per AI step (Fast
-filter, Diagnosis, Grading, Fix writer, …) with the version in use, the best version
-being tested, their grades, and a verdict: ahead (consider promoting), behind, or
-waiting for grades. A row opens that step's editing table.
+**First on the page:** one recommendation in plain words and its button, picked from
+every step:
+
+| The line says | Button |
+|---|---|
+| "A newer Diagnosis prompt scores 72% vs 61% for the one in use. Switch to it." | **Switch to it** (asks first) |
+| "Fast filter has a test version that gets no reports … Start it on 1 in 10 reports." | **Start on 1 in 10 reports** |
+| "A newer Diagnosis prompt scores 49% vs no grade yet … Not enough grades yet: 6 more needed." | **Open grading** (points at Triage grading's Run button) |
+| "Each step runs one prompt; nothing is being tested." | none |
+
+Switching is suggested only when the nightly auto-promotion would do it too: 30 grades
+and more than 5% better than the version in use. Built-in versions are never switched
+to from here; clone them first.
+
+Under it, **Versions and their grades** has one row per AI step (Fast filter, Diagnosis,
+Grading, Fix writer, …) with the version in use, the version being tested, their grades,
+and a verdict ("Testing on half of reports, waiting for grades", "Not started: gets no
+reports"). A row opens that step's version table.
 
 > **Scenario:** Your fix-worker has been generating patches that touch the wrong file
 > 20% of the time. You suspect the Stage 1 classifier is mislabelling the component
@@ -39,19 +56,21 @@ The **How prompt tuning works** panel lists the steps:
 ```
 
 **Step 1 — Build eval dataset:** grades need classified reports. The **Eval dataset**
-card shows the recent classified reports the grader can use.
+card shows the recent classified reports the grader can use, one line each: a severity
+glyph and the report's title. **Details** shows its category, area and full text.
 
 **Step 2 — Clone a baseline:** click **Clone** (the copy icon) on the version in use. The
 copy starts at 0% traffic, so it serves no live requests yet. Click **Edit** to change
 its template. Steps marked **Built-in** cannot be cloned: no worker reads a project copy
 of that prompt yet.
 
-**Step 3 — A/B at low traffic:** use **Set A/B traffic share** to give the copy a small
-share (for example 10%). The judge runs nightly and grades both versions. Compare their
-**Judge score** columns once each has a fair number of **Evals**.
+**Step 3 — Test on a share of reports:** use the sliders icon (**Choose how many reports
+this version tests on**) to give the copy a small share (for example 10%, "1 in 10
+reports"). The judge runs nightly and grades both versions. Compare their **Grade** bars
+once each has a fair number of **Grades**.
 
-**Step 4 — Promote:** click **Make this the live prompt** and confirm **Activate at 100%**.
-This removes all A/B splits. The nightly judge run also promotes a candidate on its own
+**Step 4 — Switch:** click **Switch to this** and confirm **Switch to it**. Every new
+report in that step uses the version, and the step's tests stop. The nightly judge run also promotes a candidate on its own
 once it has at least 30 evaluations and scores more than 5% above the version in use.
 
 The judge runs once per night, so an A/B test needs a few nights of data. Don't promote
@@ -93,11 +112,11 @@ show up when they have prompt rows.
 
 | Column | What it tells you |
 |--------|------------------|
-| **Version** | The version name, with an **Auto** badge when the weekly prompt tuner drafted it |
-| **State** | **Active**, **Candidate** or **Idle**, plus **Global** for a built-in version |
-| **Traffic** | What share of live requests this version serves |
-| **Judge score** | Higher is better. Uses the rolling 7-day evaluation window |
-| **Evals** | How many evaluations the score is based on. A low count means an unreliable score |
+| **State** | A glyph and plain words: **In use**, **Testing on half of reports**, **Not started**, **Idle**; plus **Global** for a built-in version and **Auto** when the weekly prompt tuner drafted it |
+| **Version** | The raw version id, as small grey text |
+| **Grade** | A bar on 0–100%. Higher is better. Uses the rolling 7-day evaluation window |
+| **Grades** | How many grades the score is based on. A low count means an unreliable score |
+| **Share of reports** | A bar of what share of new reports this version diagnoses |
 | **Updated** | When the version last changed |
 
 ---
@@ -109,8 +128,8 @@ show up when they have prompt rows.
 | **Clone** | Starting point for any edit. Built-in versions are read-only; clone first |
 | **Edit** | Open the template editor for a project version |
 | **Diff** | Compare against the version it was cloned from. Use before promoting |
-| **Set A/B traffic share** | Raise a candidate's traffic share gradually |
-| **Make this the live prompt** | Activate at 100% and remove all A/B splits |
+| **Choose how many reports** (sliders) | Raise a test's share of reports gradually |
+| **Switch to this** | Use this version for every report in the step; tests stop |
 | **Delete** | Remove a candidate that didn't work out. Its past evaluations stay |
 
 ---
@@ -121,13 +140,13 @@ show up when they have prompt rows.
 1. Open the **Diagnosis** tab.
 2. **Clone** the version in use.
 3. **Edit** the template: add explicit examples of the component names your codebase uses.
-4. Give it a 10% traffic share.
-5. Wait a few nights. Is its **Judge score** above the version in use?
+4. Give it a 10% share of reports.
+5. Wait a few nights. Is its **Grade** above the version in use?
 6. If yes: **Diff**, then make it the live prompt. If not: edit and try again.
 
 ### Investigating a bad judge score
 1. Open the tab for the step with the low score.
-2. Check **Evals**. With fewer than 10, the score isn't meaningful yet: wait.
+2. Check **Grades**. With fewer than 10, the score isn't meaningful yet: wait.
 3. With more than 20 and a still-low score, the prompt is likely wrong. Clone and start fresh.
 
 ---
@@ -158,4 +177,4 @@ DELETE /v1/admin/prompt-lab/prompts/:id
 
 - [Triage grading](/admin/judge) — nightly judge scores
 - [Fine-tuning](/admin/fine-tuning) — train a small model from your classified reports
-- [Mushi health](/admin/health) — check Mushi's AI calls before testing prompt changes
+- [Mushi Mushi health](/admin/health) — check Mushi Mushi's AI calls before testing prompt changes

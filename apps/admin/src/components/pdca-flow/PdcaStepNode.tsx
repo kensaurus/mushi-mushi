@@ -225,7 +225,7 @@ function NodeBody({
         <div className="min-w-0 flex-1">
           <div className="text-xs font-semibold text-fg leading-tight truncate">{node.title}</div>
           {node.isFocus && isLive && (
-            <div className={`text-3xs font-mono uppercase tracking-wider ${meta.text}`}>Current focus</div>
+            <div className={`text-3xs font-mono ${meta.text} font-semibold`}>Current focus</div>
           )}
         </div>
         {hasHealth && (

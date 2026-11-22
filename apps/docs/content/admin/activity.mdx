@@ -49,6 +49,9 @@ Backed by the `project_activity_summary` RPC.
 
 If numbers are zero after a real install, confirm the SDK has `trackSessions`
 enabled (default on) and that ingest is healthy under [SDK health](/admin/sdk-health).
+With `trackSessions: 'on-demand'` visits are recorded only while a recording
+window is open on the [Journey optimizer](/admin/journeys) page, or in a tab
+opened with `?mushi_journeys=1`.
 
 ---
 
@@ -58,7 +61,7 @@ enabled (default on) and that ingest is healthy under [SDK health](/admin/sdk-he
 - [Tester rewards](/admin/rewards) — points and tiers that depend on identified users
 - [Bugs](/admin/reports) — triage the bugs counted under “Open reports”
 - Session tracking shipped in `@mushi-mushi/web` / `@mushi-mushi/core` **1.25.0**
-  (see root `CHANGELOG.md`)
+  (see `docs/CHANGELOG.md`)
 
 <Callout type="info">
   Anonymous traffic still produces sessions and page views. Rewards and

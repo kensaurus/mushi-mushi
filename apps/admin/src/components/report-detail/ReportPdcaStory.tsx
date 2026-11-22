@@ -25,15 +25,17 @@
  */
 
 import { PDCA_ORDER, PDCA_STAGES, type PdcaStageId } from '../../lib/pdca'
+import { CATEGORY_LABELS } from '../../lib/tokens'
 import { STAMP_VISUAL, type StageStamp } from '../../lib/pdcaStamp'
 import { ACT_BLOCKER_COPY, ACT_BLOCKER_LINK_LABEL, ACT_BLOCKER_STAMP, actBlocker } from '../../lib/pdcaAct'
-import { Card, RelativeTime } from '../ui'
+import { Card, InfoHint, RelativeTime } from '../ui'
 import { ActionPill, InlineProof } from './ReportSurface'
 import type { DispatchState } from '../../lib/dispatchFix'
 import { isReportClassified } from '../../lib/reportDiagnosis'
 import { humanizeFixError } from '../../lib/humanizeFixError'
 import { reportHasCodeLocation } from '../../lib/reportCodeLocation'
 import type { ReportDetail, ReportFixAttempt } from './types'
+import { isSampleModel, SAMPLE_EXPLANATION_LABEL } from '../../lib/reportInternals'
 
 type StoryState = StageStamp
 
@@ -55,20 +57,30 @@ interface StoryNode {
 interface Props {
   report: ReportDetail
   dispatchState: DispatchState
+  /** Operator accounts: show the model and its latency on the first step. */
+  showInternals?: boolean
 }
 
-export function ReportPdcaStory({ report, dispatchState }: Props) {
-  const nodes = buildStoryNodes(report, dispatchState)
+/**
+ * Plain step names (console audit 2026-11-11): "Plan / Do / Check / Act" is
+ * Mushi Mushi's inside vocabulary; a builder reads what happened to the bug.
+ */
+const STEP_NAME: Partial<Record<PdcaStageId, string>> = {
+  plan: 'Explained',
+  do: 'Fix written',
+  check: 'Fix checked',
+  act: 'Fix live',
+}
+
+export function ReportPdcaStory({ report, dispatchState, showInternals = false }: Props) {
+  const nodes = buildStoryNodes(report, dispatchState, showInternals)
   return (
     // The heading sits outside the list: an <ol> may only hold <li>, and a
     // <header> inside it broke the list for screen readers (REPORT A14).
     <Card className="relative mb-3 p-3 motion-safe:animate-mushi-fade-in">
-      <div className="mb-2 flex items-baseline justify-between">
-        <h3 className="text-2xs font-semibold text-fg-muted uppercase tracking-wider">
-          The story so far
-        </h3>
-        <span className="text-3xs text-fg-faint">Plan → Do → Check → Act</span>
-      </div>
+      {/* No "Explained → Fix written → …" chain beside the heading: the four
+          rows are that chain (round-3 sweep 2026-11-19). */}
+      <h3 className="mb-2 text-2xs font-semibold text-fg-secondary">The story so far</h3>
       <ol aria-label="Progress of this report">
         {PDCA_ORDER.map((id, idx) => {
           const node = nodes[id]
@@ -121,19 +133,21 @@ function StoryRow({ node, isLast }: { node: StoryNode; isLast: boolean }) {
           className={`inline-flex h-4 w-4 items-center justify-center rounded-sm font-semibold text-3xs ${meta.badgeBg} ${meta.badgeFg}`}
           aria-hidden="true"
         >
-          {meta.letter}
+          {PDCA_ORDER.indexOf(node.id) + 1}
         </span>
-        <span className={`text-xs font-semibold ${isIdle ? 'text-fg-muted' : 'text-fg'}`}>{meta.label}</span>
-        <span className={`text-2xs font-semibold ${v.copy}`} aria-label={`Status: ${v.label}`}>
-          {v.glyph} {v.label}
-        </span>
+        <span className={`text-xs font-semibold ${isIdle ? 'text-fg-muted' : 'text-fg'}`}>{STEP_NAME[node.id] ?? meta.label}</span>
+        {/* The circle shows the state; "✓ Done" / "○ Not yet" beside it said
+            it again (round-3 sweep 2026-11-19). Screen readers still hear it. */}
+        <span className="sr-only">Status: {v.label}</span>
+        {isIdle && <InfoHint content={node.headline} />}
         {node.at && (
           <span className="text-2xs text-fg-faint ml-auto">
             <RelativeTime value={node.at} />
           </span>
         )}
       </div>
-      <InlineProof className={`mt-0.5 ${isIdle ? 'text-fg-faint' : ''}`}>{node.headline}</InlineProof>
+      {/* A step that has not started says why behind its ⓘ, not in a grey sentence. */}
+      {!isIdle && <InlineProof className="mt-0.5">{node.headline}</InlineProof>}
       {(detailsClean.length > 0 || node.thumbnail || node.link) && (
         <div className="mt-1.5 flex items-center gap-2 flex-wrap">
           {node.thumbnail && (
@@ -155,7 +169,7 @@ function StoryRow({ node, isLast }: { node: StoryNode; isLast: boolean }) {
           {detailsClean.map((d, i) => (
             <span
               key={i}
-              className="inline-flex items-center rounded-sm border border-edge-subtle bg-surface-overlay/40 px-1.5 py-0.5 text-3xs font-mono text-fg-muted"
+              className="inline-flex items-center rounded-sm bg-surface-overlay/40 px-1.5 py-px text-3xs font-mono text-fg-muted"
             >
               {d}
             </span>
@@ -181,6 +195,7 @@ function StoryRow({ node, isLast }: { node: StoryNode; isLast: boolean }) {
 export function buildStoryNodes(
   report: ReportDetail,
   dispatchState: DispatchState,
+  showInternals = false,
 ): Record<PdcaStageId, StoryNode> {
   const fix: ReportFixAttempt | undefined = report.fix_attempts?.[0]
   const judge = report.judge_eval ?? null
@@ -199,21 +214,21 @@ export function buildStoryNodes(
       ? 'done'
       : 'pending'
   const planHeadline = classifyFailed
-    ? `Classification failed — ${report.processing_error}`
+    // The raw error lives once, screened, behind the Pipeline strip's Details (console 2026-11-19).
+    ? 'Classification failed. The Pipeline strip below says why and has a Retry button.'
     : classified
-      ? report.summary || `Classified as ${report.category}`
+      // The summary shows once, higher up (summaryPlace); the step says what was decided.
+      ? `Sorted as ${(CATEGORY_LABELS[report.category] ?? report.category ?? 'a report').toLowerCase()}`
       : 'Report received — the LLM is classifying it now'
   const plan: StoryNode = {
     id: 'plan',
     state: planState,
     headline: planHeadline,
     at: report.classified_at ?? report.created_at,
-    details: [
-      report.severity ? `severity: ${report.severity}` : null,
-      report.confidence != null ? `conf ${(report.confidence * 100).toFixed(0)}%` : null,
-      report.stage1_model || null,
-      report.stage1_latency_ms != null ? `${report.stage1_latency_ms}ms` : null,
-    ],
+    // Severity, confidence, model and latency live in the classification card
+    // and the triage bar; repeating them here made "Medium" ×5 and "97%" ×4
+    // (round-3 sweep 2026-11-19). Only the sample report is named here.
+    details: [isSampleModel(report.stage1_model) ? SAMPLE_EXPLANATION_LABEL : null],
   }
 
   // DO — dispatch metadata
@@ -241,7 +256,7 @@ export function buildStoryNodes(
         : 'Fix dispatched — draft PR opened'
     }
     if (liveStatus === 'completed' && dispatchState.prUrl) return 'Fix dispatched — PR opened just now'
-    if (inFlight) return 'Auto-fix agent is drafting the PR right now'
+    if (inFlight) return 'The fix agent is drafting the PR right now'
     if (fixStatus === 'failed') {
       return `Last attempt stopped — ${humanizeFixError(fix?.error)?.title ?? fix?.error ?? 'see fixes page'}`
     }
@@ -284,7 +299,9 @@ export function buildStoryNodes(
     }
     if (ciConclusion) return `Fix CI: ${ciConclusion.replace(/_/g, ' ')}`
     if (fix?.pr_url) return 'CI is running on the PR'
-    return 'No judge or CI signal yet — runs once a fix is dispatched'
+    return showInternals
+      ? 'No judge or CI signal yet — runs once a fix is dispatched'
+      : 'Not checked yet. The checks run once a fix is dispatched.'
   })()
   const check: StoryNode = {
     id: 'check',
@@ -312,7 +329,7 @@ export function buildStoryNodes(
     if (fixStatus === 'failed') return `Loop blocked — ${fix?.error ?? 'fix attempt failed'}`
     if (blocker) return ACT_BLOCKER_COPY[blocker]
     if (actState === 'pending') return 'Awaiting merge: press Merge at the top of this page'
-    return 'Not yet — needs Plan + Do + Check first'
+    return 'Not yet: the fix has to be written and checked first'
   })()
   const actLink = fix?.pr_url && actState !== 'done'
     ? { href: fix.pr_url, label: blocker ? ACT_BLOCKER_LINK_LABEL[blocker] : 'View PR on GitHub' }

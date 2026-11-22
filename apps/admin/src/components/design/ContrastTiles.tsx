@@ -41,7 +41,7 @@ export function ContrastTiles({ pairs }: { pairs: ContrastPairResult[] }) {
   if (pairs.length === 0) {
     return (
       <p className="text-xs text-fg-muted">
-        No contrast pairs declared. Add fg/bg pairs to mushi.recipe.json to have Mushi check them.
+        No contrast pairs declared. Add fg/bg pairs to mushi.recipe.json to have Mushi Mushi check them.
       </p>
     )
   }

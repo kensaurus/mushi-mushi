@@ -2,7 +2,8 @@
  * Optional Cloudflare Worker for mcp.kensaur.us — serves RFC 9728 PRM at the
  * Supabase-origin path Smithery probes, then proxies MCP to Supabase.
  *
- * Deploy: wrangler deploy (see docs/marketing/smithery-external-publish.json)
+ * Deploy: wrangler deploy (scripts/cloudflare/deploy-mcp-worker.mjs). Built for
+ * Smithery, which shut down its hosted services on 2026-10-31.
  * DNS: mcp.kensaur.us → Cloudflare Worker (not direct Supabase CNAME)
  *
  * Smithery upstream URL after deploy:

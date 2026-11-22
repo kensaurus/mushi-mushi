@@ -69,7 +69,9 @@ export function GraphStatusBanner({
       <StatusBannerShell
         tone="warn"
         title={plainBanner ? 'Bugs arrived but the map is still empty' : 'Graph empty despite ingest'}
-        subtitle={stats.topPriorityLabel}
+        // One message, not two: the server's own label ("classifier may still be
+        // indexing") repeated the title in other words (audit 2026-11-11).
+        subtitle="Mushi Mushi links each bug to the screens and parts of your app as it explains it. The map fills in after a few explained bugs."
         action={
           stats.topPriorityTo ? (
             <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.reports ?? 'Open Reports'}</Btn>
@@ -125,22 +127,19 @@ export function GraphStatusBanner({
     )
   }
 
+  // Nothing wrong is not the same as "all good": a map with no links yet has
+  // nothing to judge, so the banner states the map in neutral ink, once
+  // (fresh-eyes 2026-11-18: green "Bug map is current" over "… — map is current").
   return (
     <StatusBannerShell
-      tone="ok"
-      title={`Bug map is current on ${projectLabel}`}
+      tone="info"
+      title={graphClearTitle(stats, projectLabel)}
       subtitle={
-        stats.topPriorityLabel ?? (
+        stats.lastNodeAt ? (
           <>
-            {stats.reportNodes} bug group{stats.reportNodes === 1 ? '' : 's'} · {stats.edgeCount} link{stats.edgeCount === 1 ? '' : 's'} between them
-            {stats.lastNodeAt ? (
-              <>
-                {' '}
-                · last change <RelativeTime value={stats.lastNodeAt} />
-              </>
-            ) : null}
+            Last change <RelativeTime value={stats.lastNodeAt} />
           </>
-        )
+        ) : undefined
       }
       action={
         onRefresh ? (
@@ -157,4 +156,11 @@ export function GraphStatusBanner({
       }
     />
   )
+}
+
+/** One neutral sentence for the no-problem state; never repeats the server's label. @internal Exported for tests. */
+export function graphClearTitle(stats: Pick<GraphStats, 'reportNodes' | 'edgeCount'>, projectLabel: string): string {
+  const groups = `${stats.reportNodes} bug group${stats.reportNodes === 1 ? '' : 's'}`
+  if (stats.edgeCount === 0) return `${projectLabel}: ${groups}, no links between them yet`
+  return `${projectLabel}: ${groups} · ${stats.edgeCount} link${stats.edgeCount === 1 ? '' : 's'} · no hotspots or regressions`
 }

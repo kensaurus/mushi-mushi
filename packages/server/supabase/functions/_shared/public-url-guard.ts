@@ -43,26 +43,49 @@ const BLOCKED_SUFFIXES = [
   '.example',
 ]
 
-const NOT_PUBLIC = 'Enter the address of a public website. Local, private and internal addresses are not checked.'
+/**
+ * What a person reads when an address cannot be checked (2026-11-12). The
+ * codes are unchanged; only the words differ by case, and none says which
+ * rule refused the address:
+ *   - misspelled or incomplete ("myapp", "my app.com"): UNREACHABLE_ADDRESS;
+ *   - plainly local or private (localhost, 192.168.x.x, .local): NOT_PUBLIC;
+ *   - a port number in the address: WITH_PORT.
+ */
+export const UNREACHABLE_ADDRESS =
+  'We couldn\'t reach that address. Check the spelling, or paste the link you share with your users (for example https://my-app.lovable.app).'
+const NOT_PUBLIC =
+  'That is a private or local address, so only you can open it. Paste the public link you share with your users (for example https://my-app.lovable.app).'
+const WITH_PORT =
+  'That address has a port number in it (like :3000), which usually means it runs on your own computer. Paste the public link you share with your users (for example https://my-app.lovable.app).'
+const EMPTY = 'Enter your app\'s address, like https://my-app.lovable.app.'
+
+/** A one-word or malformed name ("myapp"): a typo, not a local or private address. */
+function looksMistyped(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/\.+$/, '')
+  if (!host || host === 'localhost' || host.startsWith('[') || parseIpv4(host)) return false
+  return !BLOCKED_SUFFIXES.some((s) => host.endsWith(s))
+}
 
 /** Parse a pasted address (scheme optional) and refuse anything non-public. */
 export function checkPublicUrl(raw: unknown): UrlCheck {
-  if (typeof raw !== 'string') return { ok: false, code: 'INVALID_URL', message: 'Enter your site\'s address, like https://example.com.' }
+  if (typeof raw !== 'string') return { ok: false, code: 'INVALID_URL', message: EMPTY }
   const text = raw.trim()
-  if (!text || text.length > 2048) return { ok: false, code: 'INVALID_URL', message: 'Enter your site\'s address, like https://example.com.' }
+  if (!text || text.length > 2048) return { ok: false, code: 'INVALID_URL', message: EMPTY }
   let url: URL
   try {
     url = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : `https://${text}`)
   } catch {
-    return { ok: false, code: 'INVALID_URL', message: 'That does not look like a web address.' }
+    return { ok: false, code: 'INVALID_URL', message: UNREACHABLE_ADDRESS }
   }
   if (url.protocol !== 'https:' && url.protocol !== 'http:') {
-    return { ok: false, code: 'INVALID_URL', message: 'Only http and https addresses can be checked.' }
+    return { ok: false, code: 'INVALID_URL', message: 'Only web addresses that start with http:// or https:// can be checked.' }
   }
-  if (url.username || url.password) return { ok: false, code: 'NOT_PUBLIC', message: NOT_PUBLIC }
+  if (url.username || url.password) return { ok: false, code: 'NOT_PUBLIC', message: UNREACHABLE_ADDRESS }
   // URL drops the port when it is the scheme's default, so any port left is not.
-  if (url.port !== '') return { ok: false, code: 'NOT_PUBLIC', message: NOT_PUBLIC }
-  if (!isPublicHostname(url.hostname)) return { ok: false, code: 'NOT_PUBLIC', message: NOT_PUBLIC }
+  if (url.port !== '') return { ok: false, code: 'NOT_PUBLIC', message: WITH_PORT }
+  if (!isPublicHostname(url.hostname)) {
+    return { ok: false, code: 'NOT_PUBLIC', message: looksMistyped(url.hostname) ? UNREACHABLE_ADDRESS : NOT_PUBLIC }
+  }
   url.hash = ''
   return { ok: true, url, origin: url.origin }
 }

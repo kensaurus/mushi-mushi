@@ -55,11 +55,11 @@ describe('gate status meta', () => {
 
 describe('auto-merge and regressions', () => {
   it('says each auto-merge state in words, with the server detail after', () => {
-    expect(autoMergeView('merged', null).word).toBe('Merged by Mushi')
+    expect(autoMergeView('merged', null).word).toBe('Merged by Mushi Mushi')
     expect(autoMergeView('skipped', 'Daily limit of 5 reached.').sentence).toBe(
-      'Every check passed, but Mushi did not merge it. Daily limit of 5 reached.',
+      'Every check passed, but Mushi Mushi did not merge it. Daily limit of 5 reached.',
     )
-    expect(autoMergeView('weird', null).word).toBe('Not merged by Mushi')
+    expect(autoMergeView('weird', null).word).toBe('Not merged by Mushi Mushi')
   })
 
   it('names signals and revert outcomes', () => {

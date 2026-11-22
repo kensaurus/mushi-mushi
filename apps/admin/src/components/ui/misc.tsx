@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
-import { Link } from 'react-router-dom';
 import { pctToneClass } from '../../lib/tokens';
 import { Btn } from './forms';
 import { Card } from './layout';
@@ -76,7 +75,7 @@ export function FilterChip({
   const sizeClasses =
     size === 'lg'
       ? 'min-h-[44px] rounded-lg px-3 py-2 text-xs'
-      : 'min-h-6 pointer-coarse:min-h-8 rounded-full px-2.5 py-1 text-2xs'
+      : 'min-h-6 pointer-coarse:min-h-8 rounded-sm px-2 py-0.5 text-2xs'
   const ariaProps =
     selectionRole === 'radio'
       ? { role: 'radio' as const, 'aria-checked': active }
@@ -96,7 +95,7 @@ export function FilterChip({
           chip does not widen and wrap the row when the number lands (Bugs
           quick filters, layout shift 0.244, 2026-10-24). */}
       {count === null && (
-        <span aria-hidden="true" className="inline-flex min-w-4 rounded-full px-1 font-mono text-3xs font-semibold leading-tight bg-surface-raised/40">
+        <span aria-hidden="true" className="inline-flex min-w-4 rounded-xs px-1 tabular-nums text-3xs font-semibold leading-tight bg-surface-raised/40">
           {/* As wide as a two-digit count, the common case: a 16px blank was
               2px narrower per chip and the row still wrapped (measured after
               PR 672, 2026-10-24). */}
@@ -105,13 +104,15 @@ export function FilterChip({
       )}
       {typeof count === 'number' && (
         <span
-          className={`inline-flex min-w-[1rem] justify-center rounded-full px-1 font-mono text-3xs font-semibold leading-tight ${
+          className={`inline-flex min-w-[1rem] justify-center rounded-xs px-1 tabular-nums text-3xs font-semibold leading-tight ${
             active ? 'bg-fg/10' : 'bg-surface-raised/70'
           }`}
           role="img"
           aria-label={`${count} results`}
         >
-          {count > 999 ? '999+' : count}
+          {/* The exact count up to 99,999: "All 999+" beside "2115 total" read as a
+              different number (2026-11-16). */}
+          {count > 99_999 ? '99k+' : count.toLocaleString('en-US')}
         </span>
       )}
     </button>
@@ -180,69 +181,6 @@ export function DisclosurePanel({
   )
 }
 
-/* ── Breadcrumbs ────────────────────────────────────────────────────────── */
-
-export interface BreadcrumbItem {
-  /** Display label. Kept short — a breadcrumb is a trail, not a sentence. */
-  label: string
-  /** Destination route. Omit for the current page (rendered plain text). */
-  to?: string
-  /** Optional tooltip shown on hover, e.g. the full report title when the
-   *  label is a truncated id. */
-  hint?: string
-}
-
-/**
- * Thin, single-line breadcrumb trail intended for detail pages. Sits above
- * the page title so users always know which list they came from and can
- * walk back one click at a time — important on deep links from Slack /
- * email where the browser back-button takes you out of the SPA.
- *
- * Design notes:
- *   - Uses `›` (U+203A) separator instead of `/` — reads faster and avoids
- *     visual collision with URL paths shown nearby (e.g. branch names).
- *   - Leaf item (current page) is rendered as plain text with aria-current
- *     so screen readers don't mis-read it as an active link.
- *   - Truncates each item independently with min-w-0 so a long title in
- *     one slot doesn't push the rest off-screen.
- */
-export function Breadcrumbs({ items }: { items: BreadcrumbItem[] }) {
-  if (!items.length) return null
-  return (
-    <nav aria-label="Breadcrumb" className="mb-2 flex items-center gap-1 text-2xs text-fg-muted">
-      <ol className="flex items-center gap-1 min-w-0 flex-wrap">
-        {items.map((item, i) => {
-          const isLast = i === items.length - 1
-          return (
-            <li key={`${item.label}-${i}`} className="flex items-center gap-1 min-w-0">
-              {item.to && !isLast ? (
-                <Link
-                  to={item.to}
-                  title={item.hint}
-                  className="truncate max-w-[16rem] hover:text-fg-secondary motion-safe:transition-opacity focus-visible:outline-none focus-visible:underline"
-                >
-                  {item.label}
-                </Link>
-              ) : (
-                <span
-                  className={`truncate max-w-[24rem] ${isLast ? 'text-fg-secondary' : ''}`}
-                  title={item.hint}
-                  aria-current={isLast ? 'page' : undefined}
-                >
-                  {item.label}
-                </span>
-              )}
-              {!isLast && (
-                <span aria-hidden className="text-fg-faint">›</span>
-              )}
-            </li>
-          )
-        })}
-      </ol>
-    </nav>
-  )
-}
-
 /* ── Skeleton placeholder ──────────────────────────────────────────────── */
 
 export function Skeleton({ className = '' }: { className?: string }) {
@@ -293,7 +231,7 @@ export function ResultChip({ tone, children, at, className = '' }: ResultChipPro
     <span
       role="status"
       aria-live={tone === 'error' ? 'assertive' : 'polite'}
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-2xs leading-tight motion-safe:animate-mushi-fade-in ${RESULT_CHIP_CLS[tone]} ${className}`}
+      className={`inline-flex items-center gap-1.5 rounded-sm px-2 py-px text-2xs leading-tight motion-safe:animate-mushi-fade-in ${RESULT_CHIP_CLS[tone]} ${className}`}
     >
       <span
         aria-hidden="true"
@@ -621,7 +559,7 @@ export function CodeChip({
   return (
     <code
       title={title}
-      className={`inline-block truncate rounded-sm border border-edge-subtle bg-surface-overlay/70 px-1.5 py-0.5 font-mono text-2xs leading-snug text-fg-secondary ${maxWidthClass} ${className}`}
+      className={`inline-block truncate rounded-sm bg-surface-overlay/70 px-1.5 py-px font-mono text-2xs leading-snug text-fg-secondary ${maxWidthClass} ${className}`}
     >
       {children}
     </code>
@@ -644,7 +582,7 @@ export function DataTableHead({
     align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'
   return (
     <th
-      className={`px-3 py-2 text-2xs font-medium uppercase tracking-wide text-fg-muted ${alignClass} ${className}`}
+      className={`px-3 py-2 text-2xs font-semibold text-fg-secondary ${alignClass} ${className}`}
     >
       {children}
     </th>
@@ -749,7 +687,7 @@ export function ErrorAlert({
           {title && <h4 className="text-sm font-semibold text-danger">{title}</h4>}
           <p className="text-sm text-danger leading-relaxed">{message}</p>
           {captionParts.length > 0 && (
-            <p className="font-mono text-3xs uppercase tracking-wider text-danger/70 break-all">
+            <p className="font-mono text-3xs text-danger/70 break-all font-semibold">
               {captionParts.join(' · ')}
             </p>
           )}

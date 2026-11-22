@@ -91,7 +91,7 @@ export function DiscoveryMetrics({ metrics }: Props) {
               {m.icon}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-2xs uppercase tracking-wider text-fg-faint">
+              <p className="text-2xs text-fg-secondary font-semibold">
                 {m.label}
               </p>
               <p

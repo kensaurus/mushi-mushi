@@ -16,6 +16,13 @@ export interface DispatchReadiness {
   hasGithub: boolean;
   hasAnthropic: boolean;
   anthropicSource: string | null;
+  /**
+   * The agent that runs the fix and whether its key is there (agent-credits.ts,
+   * 2026-11-11). When set, it decides the preflight step instead of the
+   * Anthropic key: a team on OpenAI never gets a Claude key, and Cursor fixes
+   * need Cursor credits.
+   */
+  agent?: { ready: boolean; label: string; hint: string } | null;
   hasCodebase: boolean;
   hasAutofix: boolean;
   /**
@@ -58,12 +65,16 @@ export function buildDryRunResult(r: DispatchReadiness): DryRunResult {
   const steps: DryRunStep[] = [
     {
       step: 'preflight',
-      status: r.hasAutofix && r.hasAnthropic ? 'pass' : 'fail',
+      status: r.hasAutofix && (r.agent ? r.agent.ready : r.hasAnthropic) ? 'pass' : 'fail',
       detail: !r.hasAutofix
         ? 'Autofix is off — turn it on in Project Settings.'
-        : !r.hasAnthropic
-          ? 'No Anthropic key resolves for this project (BYOK or platform).'
-          : `Autofix on · Anthropic key via ${r.anthropicSource ?? 'unknown'}.`,
+        : r.agent
+          ? r.agent.ready
+            ? `Autofix on · ${r.agent.label}.`
+            : `${r.agent.label}: ${r.agent.hint}`
+          : !r.hasAnthropic
+            ? 'No Anthropic key resolves for this project (BYOK or platform).'
+            : `Autofix on · Anthropic key via ${r.anthropicSource ?? 'unknown'}.`,
     },
     {
       step: 'repo_resolution',

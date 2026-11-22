@@ -42,7 +42,7 @@ you confirm, the bridge posts a short-lived token back, and the popup closes.
 
 | Status | Meaning |
 |--------|---------|
-| **Connecting your Mushi account to the docs…** | Reading the session |
+| **Connecting your Mushi Mushi account to the docs…** | Reading the session |
 | **Docs sign-in** | Waiting for you to click **Allow** or **Cancel** |
 | **Cancelled** | You clicked Cancel; the docs did not get your sign-in |
 | **Docs sync connected** | Token posted; your checklist progress will sync |

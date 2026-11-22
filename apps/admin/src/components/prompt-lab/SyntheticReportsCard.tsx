@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
-import { Card, Btn, Badge, RelativeTime, EmptyState } from '../ui'
+import { Btn, Badge, RelativeTime } from '../ui'
 import { PageLoadError } from '../PageLoadError'
 import { describeApiError } from '../../lib/humanizeApiError'
 import { TableSkeleton } from '../skeletons/TableSkeleton'
@@ -58,9 +58,10 @@ export function SyntheticReportsCard() {
   const scored = reports.filter((r) => r.match_score != null).length
 
   return (
-    <Card elevated className="p-3">
+    // A section of the Advanced panel with a hairline above it, not a card in a card.
+    <section className="border-t border-edge-subtle pt-4" data-testid="synthetic-reports">
       <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
-        <div>
+        <div className="min-w-0">
           <h3 className="text-xs font-semibold text-fg-secondary">Synthetic reports</h3>
           <p className="text-2xs text-fg-faint">
             LLM-generated bug reports with expected classifications. Use them to validate prompt changes without waiting for real users.
@@ -84,10 +85,9 @@ export function SyntheticReportsCard() {
       ) : error ? (
         <PageLoadError error={error} code={errorCode} resource="synthetic reports" onRetry={reload} />
       ) : reports.length === 0 ? (
-        <EmptyState
-          title="No synthetic reports yet"
-          description="Hit Generate to create LLM-authored test reports. Compare expected vs actual classification to spot prompt regressions."
-        />
+        <p className="text-xs text-fg-muted">
+          No synthetic reports yet. Generate some to check a prompt change against expected diagnoses.
+        </p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-2xs">
@@ -159,6 +159,6 @@ export function SyntheticReportsCard() {
           onCancel={() => setAskingCount(false)}
         />
       )}
-    </Card>
+    </section>
   )
 }

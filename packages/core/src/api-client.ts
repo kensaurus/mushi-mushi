@@ -165,6 +165,7 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
     retries = maxRetries,
     internalKind?: MushiInternalRequestKind,
     extraHeaders?: Record<string, string>,
+    cache?: RequestCache,
   ): Promise<MushiApiResponse<T>> {
     // Reporter-inbox reads/replies sit outside the breaker in both directions:
     // a flaky inbox route must never trip it and push real report submissions
@@ -205,6 +206,7 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
         body: serialized,
         keepalive: isPageUnloading(),
         signal: controller.signal,
+        ...(cache ? { cache } : {}),
         ...(internalKind ? { [MUSHI_INTERNAL_INIT_MARKER]: internalKind } : {}),
       } as RequestInit & { [MUSHI_INTERNAL_INIT_MARKER]?: MushiInternalRequestKind });
 
@@ -219,7 +221,7 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
           const targetBase = target.replace(/\/v1\/.*$/, '').replace(/\/$/, '');
           if (targetBase !== baseUrl) {
             baseUrl = targetBase;
-            return request<T>(method, path, body, retries - 1, internalKind, extraHeaders);
+            return request<T>(method, path, body, retries - 1, internalKind, extraHeaders, cache);
           }
         }
       }
@@ -366,8 +368,12 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
       return request<{ status: MushiReportStatus }>('GET', `/v1/reports/${reportId}/status`, undefined, maxRetries, 'report-status');
     },
 
-    async getSdkConfig() {
-      return request<MushiRuntimeSdkConfig>('GET', '/v1/sdk/config', undefined, maxRetries, 'sdk-config');
+    async getSdkConfig(opts?: { fresh?: boolean }) {
+      // fresh: skip the browser's HTTP cache (the route allows max-age=60 plus
+      // stale-while-revalidate=300). trackSessions 'on-demand' needs it: a
+      // stale copy kept a stopped Journeys recording window alive for up to
+      // ~6 minutes (live test, 2026-11-13).
+      return request<MushiRuntimeSdkConfig>('GET', '/v1/sdk/config', undefined, maxRetries, 'sdk-config', undefined, opts?.fresh ? 'no-store' : undefined);
     },
 
     async askAssistant(input: { message: string; threadId?: string | null; context?: MushiPageContext | null }) {

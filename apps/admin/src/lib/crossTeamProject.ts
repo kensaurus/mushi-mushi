@@ -73,7 +73,10 @@ export async function readProjectDirectory(): Promise<DirectoryRead> {
     }
     return { status: 'error' }
   }
-  rememberProjectTeams(res.data.projects)
+  // The directory is the server's answer for every project the user can
+  // reach: it overwrites the memory and drops projects it no longer lists
+  // (deleted, or a team the user left), so a wrong entry heals on the next read.
+  rememberProjectTeams(res.data.projects, { authoritative: true })
   rememberTeamNames(res.data.teams)
   return { status: 'ok', directory: res.data }
 }
@@ -200,15 +203,34 @@ export function lastTeamProject(orgId: string): string | null {
   return readMap(LAST_PROJECT_KEY)[orgId] ?? null
 }
 
-/** Record which team owns each project (from the directory or a team's list). */
+/**
+ * Record which team owns each project. Only pass server-returned team ids
+ * (the directory, or the setup list's `organization_id`): on 2026-11-11 the
+ * project switcher tagged a list with the ACTIVE team, filed another team's
+ * apps under an empty team, and every switch back reverted.
+ *
+ * `authoritative` (the directory: every project the user can reach) also
+ * forgets projects it does not list. `onlyUnknown` never overwrites what the
+ * browser already knows (a weaker source than the directory).
+ */
 export function rememberProjectTeams(
   projects: ReadonlyArray<{ id: string; organizationId: string | null }>,
+  opts: { authoritative?: boolean; onlyUnknown?: boolean } = {},
 ): void {
   if (typeof window === 'undefined') return
   const map = readMap(PROJECT_TEAM_KEY)
   let changed = false
+  if (opts.authoritative) {
+    const listed = new Set(projects.map((p) => p.id))
+    for (const id of Object.keys(map)) {
+      if (listed.has(id)) continue
+      delete map[id]
+      changed = true
+    }
+  }
   for (const p of projects) {
     if (!p.organizationId || map[p.id] === p.organizationId) continue
+    if (opts.onlyUnknown && map[p.id]) continue
     delete map[p.id]
     map[p.id] = p.organizationId
     changed = true

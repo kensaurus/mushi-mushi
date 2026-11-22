@@ -7,9 +7,9 @@ import Link from 'next/link'
 import { TestersPageShell } from './components/TestersPageShell'
 
 export const metadata: Metadata = {
-  title: 'Mushi Bounties — crowd-testing marketplace',
+  title: 'Mushi Mushi Bounties — crowd-testing marketplace',
   description:
-    'Get paid to find bugs — browse apps on the Mushi Bounties crowd-testing marketplace and earn mushi-points redeemable for Mushi Pro credit or gift cards.',
+    'Get paid to find bugs — browse apps on the Mushi Mushi Bounties crowd-testing marketplace and earn mushi-points redeemable for gift cards or credit toward a paid Mushi Mushi plan.',
   alternates: { canonical: 'https://kensaur.us/mushi-mushi/testers/' },
 }
 
@@ -56,13 +56,13 @@ export default async function MarketplacePage() {
   return (
     <TestersPageShell>
       <section className="mx-auto max-w-5xl px-4 py-16 text-center">
-        <p className="testers-kicker mb-3">Mushi Bounties</p>
+        <p className="testers-kicker mb-3">Mushi Mushi Bounties</p>
         <h1 className="text-4xl font-bold leading-tight md:text-5xl mb-4">
           Find real bugs.<br />Earn real rewards.
         </h1>
         <p className="testers-muted mx-auto mb-8 max-w-2xl text-xl">
           Developers publish their apps. You find bugs. Every accepted report
-          earns mushi-points redeemable for Mushi Pro credit or 100+ gift cards.
+          earns mushi-points. Spend them on 100+ gift cards or on credit toward a paid Mushi Mushi plan.
         </p>
         <div className="flex flex-col justify-center gap-3 sm:flex-row">
           <a href={`${adminUrl}/login?as=tester`} className="testers-cta px-8 py-3 text-base">
@@ -75,9 +75,9 @@ export default async function MarketplacePage() {
 
         <div className="mt-16 grid grid-cols-1 gap-4 text-left sm:grid-cols-3">
           {[
-            { icon: '🐛', title: 'Find bugs', body: "Use apps as a real user — then report what's broken. We route your report directly to the dev's Sentry inbox." },
+            { icon: '🐛', title: 'Find bugs', body: "Use apps as a real user — then report what's broken. Your report goes straight to the developer's Mushi Mushi inbox." },
             { icon: '💰', title: 'Earn points', body: 'Every accepted bug earns mushi-points. The more critical, the more points. No spam, no filler.' },
-            { icon: '🎁', title: 'Redeem rewards', body: "Spend points on Mushi Pro credit (30% bonus) or cash out via 100+ gift cards including Amazon, Starbucks, and App Store." },
+            { icon: '🎁', title: 'Redeem rewards', body: "Spend points on Mushi Mushi plan credit (30% bonus) or cash out via 100+ gift cards including Amazon, Starbucks, and App Store." },
           ].map(({ icon, title, body }) => (
             <div key={title} className="testers-panel p-5">
               <p className="mb-2 text-2xl">{icon}</p>

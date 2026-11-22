@@ -43,14 +43,14 @@ function countGaps(gaps: SetupGap[]): Record<SetupGapStatus, number> {
 export function setupGapsSentence(gaps: SetupGap[]): { sentence: string; tone: 'ok' | 'warn' | 'danger' | 'neutral' } {
   const c = countGaps(gaps)
   const things = (n: number) => `${n} thing${n === 1 ? '' : 's'}`
-  if (gaps.length === 0) return { sentence: 'Mushi has nothing to check for this app yet.', tone: 'neutral' }
+  if (gaps.length === 0) return { sentence: 'Mushi Mushi has nothing to check for this app yet.', tone: 'neutral' }
   if (c.gap > 0) {
     return {
-      sentence: `${things(c.gap)} to fix before ${c.gap === 1 ? 'it breaks' : 'they break'} a fix or a reply.${c.unknown ? ` Mushi could not check ${things(c.unknown)} more.` : ''}`,
+      sentence: `${things(c.gap)} to fix before ${c.gap === 1 ? 'it breaks' : 'they break'} a fix or a reply.${c.unknown ? ` Mushi Mushi could not check ${things(c.unknown)} more.` : ''}`,
       tone: 'danger',
     }
   }
-  if (c.unknown > 0) return { sentence: `Nothing missing found, but Mushi could not check ${things(c.unknown)}.`, tone: 'warn' }
+  if (c.unknown > 0) return { sentence: `Nothing missing found, but Mushi Mushi could not check ${things(c.unknown)}.`, tone: 'warn' }
   return { sentence: `All ${c.ok} checks pass.`, tone: 'ok' }
 }
 

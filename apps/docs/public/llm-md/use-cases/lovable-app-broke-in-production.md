@@ -17,6 +17,11 @@ This is a checklist for that afternoon. It assumes you can open the browser
 console and you have an AI editor. Most of it has nothing to do with Mushi Mushi;
 one step does.
 
+**Can't open the browser console, or not sure what it is?** Go straight to
+step 8 below. You add a report button to your app with one prompt in Lovable
+or Bolt, and Mushi Mushi collects the user's words, their screen, the page and
+the errors for you, then explains the bug in plain English.
+
 ## 1. Get the user's exact words and their screen
 
 "It's broken" is not a bug report. Ask for three things: what they were
@@ -78,7 +83,7 @@ In Lovable or Bolt there is no terminal, so you install it with a prompt:
 sign up, copy your script tag from the console, and ask the builder to add
 it to the `` of `index.html`. The
 [Lovable or Bolt quickstart](/quickstart/lovable-bolt) walks through it, and
-[Mushi as a Lovable connector](/quickstart/lovable-mcp) lets you read reports
+[Mushi Mushi as a Lovable connector](/quickstart/lovable-mcp) lets you read reports
 from Lovable's chat. With a terminal (Cursor, Claude Code), one command does
 it:
 
@@ -86,7 +91,7 @@ it:
 npx mushi-mushi
 ```
 
-Free is one app and 100 diagnoses a month with no card; self-hosting is free. Other
+Free is three apps and 300 diagnoses a month with no card; self-hosting is free. Other
 tools that solve parts of this are compared on
 [Sentry alternatives for solo founders](/compare/sentry-alternatives-for-solo-founders).
 

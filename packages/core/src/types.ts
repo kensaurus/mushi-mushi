@@ -50,12 +50,17 @@ export interface MushiConfig {
    */
   analytics?: MushiAnalyticsConfig;
   /**
-   * Session lifecycle tracking for the console's Activity and Users views
-   * (session start / heartbeat / end, page views). Default true. Runs only
-   * while the `analytics` gate allows tracking; `false` turns it off even
-   * then.
+   * Session lifecycle tracking for the console's Activity, Users and
+   * Journeys views (session start / heartbeat / end, page views). Default
+   * true. Runs only while the `analytics` gate allows tracking; `false` turns
+   * it off even then.
+   *
+   * `'on-demand'` sends nothing until you ask: while the console's Journeys
+   * page has a recording window open, its share of visitors is recorded; a
+   * tab opened with `?mushi_journeys=1` is always recorded (for you or a
+   * tester). Use it when every request on every visit costs too much.
    */
-  trackSessions?: boolean;
+  trackSessions?: boolean | 'on-demand';
 
   sentry?: MushiSentryConfig;
   widget?: MushiWidgetConfig;
@@ -1506,6 +1511,15 @@ export interface MushiSDKInstance {
   on(event: MushiEventType, handler: MushiEventHandler): () => void;
   setUser(user: { id: string; email?: string; name?: string }): void;
   setMetadata(key: string, value: unknown): void;
+  /**
+   * Diagnostics read when the reporter presses Send (load timings, the last
+   * errors your app logged, connection state). Its keys merge into the report's
+   * metadata; triage reads `screenLoading` / `timings` lines. Gets 300 ms, is
+   * PII-scrubbed and size-capped; a slow or throwing provider never blocks or
+   * drops the report. Keep amounts, names and other personal data out.
+   * Pass `null` to remove it.
+   */
+  setDiagnosticsProvider(provider: (() => Record<string, unknown> | null | undefined | Promise<Record<string, unknown> | null | undefined>) | null): void;
   setScreen(screen: { name: string; route?: string; feature?: string }): void;
   isOpen(): boolean;
   open(): void;
@@ -1778,7 +1792,8 @@ export interface MushiCaptureEventInput {
 export interface MushiApiClient {
   submitReport(report: MushiReport): Promise<MushiApiResponse<{ reportId: string }>>;
   getReportStatus(reportId: string): Promise<MushiApiResponse<{ status: MushiReportStatus }>>;
-  getSdkConfig(): Promise<MushiApiResponse<MushiRuntimeSdkConfig>>;
+  /** `fresh` bypasses the browser HTTP cache (used by `trackSessions: 'on-demand'`). */
+  getSdkConfig(opts?: { fresh?: boolean }): Promise<MushiApiResponse<MushiRuntimeSdkConfig>>;
   /**
    * Send one assistant turn. Forwards the page context + thread id; the
    * end-user identity token (when set) travels on the X-Mushi-User-Token
@@ -2033,6 +2048,11 @@ export interface MushiRuntimeSdkConfig {
    * true only when the project turned it on AND the server can send it.
    */
   reporter?: { emailEnabled: boolean; pushEnabled: boolean; vapidPublicKey: string | null };
+  /**
+   * Journey optimizer recording window, present only while open. Read by
+   * `trackSessions: 'on-demand'`; ignored otherwise.
+   */
+  journeys?: { recordUntil: string; sampleRate: number };
 }
 
 export interface MushiSdkVersionInfo {

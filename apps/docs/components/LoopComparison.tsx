@@ -120,7 +120,7 @@ const LINEAR_STEPS: StepProps[] = [
 
 const LOOP_STEPS: StepProps[] = [
   { label: 'User feels friction',  sublabel: 'variation event',          accent: false },
-  { label: 'Mushi captures',       sublabel: 'phenotype recorded',        accent: false },
+  { label: 'Mushi Mushi captures',       sublabel: 'phenotype recorded',        accent: false },
   { label: 'Mistake DB clusters',  sublabel: 'selection pressure',        accent: true  },
   { label: 'Lesson encoded',       sublabel: '.mushi/lessons.json',       accent: true, glyph: '🧬' },
   { label: 'PR inherits genome',   sublabel: 'agent reads the ruleset',   accent: false },
@@ -130,7 +130,7 @@ const LOOP_STEPS: StepProps[] = [
 export function LoopComparison() {
   return (
     <DiagramFigure
-      ariaLabel="Comparison of linear SDLC random walk without memory versus Mushi cumulative selection loop with genome encoding in lessons.json."
+      ariaLabel="Comparison of linear SDLC random walk without memory versus Mushi Mushi cumulative selection loop with genome encoding in lessons.json."
     >
       <div
         className="not-prose grid grid-cols-1 sm:grid-cols-2"

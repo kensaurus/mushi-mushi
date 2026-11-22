@@ -1,6 +1,7 @@
 import { legacyHubRoutes } from './lib/pageHubs'
 import { ReportsHomeRedirect } from './lib/reportsHomeRedirect'
 import { FirstRunGate } from './components/FirstRunGate'
+import { OperatorRoute } from './components/OperatorRoute'
 import { HubRedirect } from './components/PageHubView'
 import { lazy, Suspense, useEffect } from 'react'
 import { Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom'
@@ -16,12 +17,16 @@ import type { ReactNode } from 'react'
 import { Loading } from './components/ui'
 import { ErrorBoundary, RouteErrorBoundary } from './components/ErrorBoundary'
 import { EditorialErrorState } from './components/EditorialErrorState'
+import { NOT_FOUND_GUIDE } from './lib/fieldGuide'
 import { ToastProvider } from './lib/toast'
 import { UpgradePromptHost } from './components/billing/UpgradePrompt'
 import { loginPathForLocation } from './lib/authRedirect'
+import { mcpManualRedirectTarget } from './lib/mcpManualRedirect'
 import { OfflineBanner } from './components/OfflineBanner'
+import { NewVersionBanner } from './components/NewVersionBanner'
 import { useSessionWatcher } from './lib/sessionWatcher'
 import { initMushiSelf } from './lib/mushi-self'
+import { setupCopilotRedirectTarget } from './lib/setupCopilotView'
 
 // SentryRoutes = Routes (no wrapper).
 //
@@ -58,12 +63,15 @@ const FullStackAuditPage = lazy(() => import('./pages/FullStackAuditPage').then(
 const ChecksPage = lazy(() => import('./pages/ChecksPage').then(m => ({ default: m.ChecksPage })))
 const RecipePage = lazy(() => import('./pages/RecipePage').then(m => ({ default: m.RecipePage })))
 const CiPage = lazy(() => import('./pages/CiPage').then(m => ({ default: m.CiPage })))
+const OpsPage = lazy(() => import('./pages/OpsPage').then(m => ({ default: m.OpsPage })))
+const ProvidersPage = lazy(() => import('./pages/ProvidersPage').then(m => ({ default: m.ProvidersPage })))
 const CreditsPage = lazy(() => import('./pages/CreditsPage').then(m => ({ default: m.CreditsPage })))
 const DesignPage = lazy(() => import('./pages/DesignPage').then(m => ({ default: m.DesignPage })))
 const TeamPage = lazy(() => import('./pages/TeamPage').then(m => ({ default: m.TeamPage })))
 const HomePage = lazy(() => import('./pages/HomePage').then(m => ({ default: m.HomePage })))
 const UxRunsPage = lazy(() => import('./pages/UxRunsPage').then(m => ({ default: m.UxRunsPage })))
 const FirstUserTestPage = lazy(() => import('./pages/FirstUserTestPage').then(m => ({ default: m.FirstUserTestPage })))
+const JourneysPage = lazy(() => import('./pages/JourneysPage').then(m => ({ default: m.JourneysPage })))
 const PortfolioPage = lazy(() => import('./pages/PortfolioPage').then(m => ({ default: m.PortfolioPage })))
 const PromptLabPage = lazy(() => import('./pages/PromptLabPage').then(m => ({ default: m.PromptLabPage })))
 const MarketplacePage = lazy(() => import('./pages/MarketplacePage').then(m => ({ default: m.MarketplacePage })))
@@ -144,6 +152,7 @@ function NotFoundPage() {
   return (
     <EditorialErrorState
       eyebrow="404 · not found"
+      mascot={NOT_FOUND_GUIDE}
       headline={
         <>
           We can't find <em>that page</em>.
@@ -171,18 +180,17 @@ function NotFoundPage() {
 
 function SetupCopilotRedirect() {
   const { search } = useLocation()
-  const params = new URLSearchParams(search)
-  params.set('tab', 'diagnose')
-  return <Navigate to={`/onboarding?${params.toString()}`} replace />
+  return <Navigate to={setupCopilotRedirectTarget(search)} replace />
 }
 
 /**
  * McpManualRedirect — legacy alias from Connect unification; canonical MCP
- * console lives at /mcp (sidebar "Agent help").
+ * console lives at /mcp (sidebar "Agent help"). "Manual" is the copy-paste
+ * config, so it opens the Setup tab, not Summary.
  */
 function McpManualRedirect() {
   const { search } = useLocation()
-  return <Navigate to={`/mcp${search}`} replace />
+  return <Navigate to={mcpManualRedirectTarget(search)} replace />
 }
 /**
  * QaCoverageRedirect — handles legacy Slack notification URLs that used the
@@ -240,16 +248,16 @@ function TesterRoute({ children }: { children: ReactNode }) {
       <div className="flex h-full min-h-0 items-center justify-center overflow-y-auto p-8">
         <div className="max-w-md text-center space-y-4">
           <p className="text-2xl">🪲</p>
-          <h1 className="text-lg font-semibold">Mushi Bounties requires Mushi Cloud</h1>
+          <h1 className="text-lg font-semibold">Mushi Mushi Bounties requires Mushi Mushi Cloud</h1>
           <p className="text-sm text-fg-muted">
             The tester marketplace and reward system are hosted features — they
-            require a Mushi Cloud account on Studio or higher.
+            require a Mushi Mushi Cloud account on Studio or higher.
           </p>
           <a
             href="https://kensaur.us/mushi-mushi/pricing"
             className="inline-block rounded-md bg-brand px-4 py-2 text-sm font-medium text-brand-fg hover:bg-brand-hover motion-safe:transition-opacity"
           >
-            Upgrade to Mushi Cloud →
+            Upgrade to Mushi Mushi Cloud →
           </a>
         </div>
       </div>
@@ -261,7 +269,12 @@ function TesterRoute({ children }: { children: ReactNode }) {
 
 function ResilienceLayer() {
   useSessionWatcher()
-  return <OfflineBanner />
+  return (
+    <>
+      <OfflineBanner />
+      <NewVersionBanner />
+    </>
+  )
 }
 
 /** Lazy-initialises the Mushi self-dogfood SDK.
@@ -391,11 +404,11 @@ export function App() {
                   <Route path="/content/:id" element={<ContentQualityDetailPage />} />
                   <Route path="/projects" element={<ProjectsPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
-                  <Route path="/queue" element={<DLQPage />} />
+                  <Route path="/queue" element={<OperatorRoute><DLQPage /></OperatorRoute>} />
                   <Route path="/graph" element={<GraphPage />} />
                   <Route path="/inventory" element={<InventoryPage />} />
-                  <Route path="/judge" element={<JudgePage />} />
-                  <Route path="/query" element={<QueryPage />} />
+                  <Route path="/judge" element={<OperatorRoute><JudgePage /></OperatorRoute>} />
+                  <Route path="/query" element={<OperatorRoute><QueryPage /></OperatorRoute>} />
                   <Route path="/research" element={<ResearchPage />} />
                   <Route path="/fixes" element={<FixesPage />} />
                   <Route path="/pipeline" element={<PipelinePage />} />
@@ -405,13 +418,16 @@ export function App() {
                   <Route path="/checks" element={<ChecksPage />} />
                   <Route path="/recipe" element={<RecipePage />} />
                   <Route path="/ci" element={<CiPage />} />
+                  <Route path="/providers" element={<OperatorRoute><ProvidersPage /></OperatorRoute>} />
+                  <Route path="/ops" element={<OpsPage />} />
                   <Route path="/credits" element={<CreditsPage />} />
                   <Route path="/design" element={<DesignPage />} />
                   <Route path="/ux-runs" element={<UxRunsPage />} />
                   <Route path="/first-user-test" element={<FirstUserTestPage />} />
+                  <Route path="/journeys" element={<JourneysPage />} />
                   <Route path="/portfolio" element={<PortfolioPage />} />
-                  <Route path="/prompt-lab" element={<PromptLabPage />} />
-                  <Route path="/fine-tuning" element={<Navigate to="/prompt-lab" replace />} />
+                  <Route path="/prompt-lab" element={<OperatorRoute><PromptLabPage /></OperatorRoute>} />
+                  <Route path="/fine-tuning" element={<Navigate to="/prompt-lab?tab=fine-tuning" replace />} />
                   <Route path="/marketplace" element={<MarketplacePage />} />
                   <Route path="/integrations/config" element={<IntegrationsPage />} />
                   <Route path="/mcp" element={<McpPage />} />

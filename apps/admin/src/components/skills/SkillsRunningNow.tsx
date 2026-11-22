@@ -94,9 +94,14 @@ export function runningItems(input: { projectId: string; skillRuns: readonly Ski
 interface Props {
   projectId: string
   onRunOnBug: () => void
+  /**
+   * Render nothing once loaded with no runs. The Pipeline Runs tab gives its
+   * own empty state, and the card said it a second time (round-3 review 2026-11-19).
+   */
+  hideWhenEmpty?: boolean
 }
 
-export function SkillsRunningNow({ projectId, onRunOnBug }: Props) {
+export function SkillsRunningNow({ projectId, onRunOnBug, hideWhenEmpty = false }: Props) {
   const [skillRuns, setSkillRuns] = useState<SkillRun[] | null>(null)
   useEffect(() => {
     let cancelled = false
@@ -116,6 +121,7 @@ export function SkillsRunningNow({ projectId, onRunOnBug }: Props) {
   const ready = skillRuns != null && (pipelines.data != null || pipelines.error != null)
   const items = ready ? runningItems({ projectId, skillRuns: skillRuns ?? [], pipelines: pipelines.data?.data ?? [] }) : []
   const anyRunning = items.some((i) => i.running)
+  if (hideWhenEmpty && ready && items.length === 0) return null
 
   return (
     <Card className="p-0" data-testid="skills-running-now">

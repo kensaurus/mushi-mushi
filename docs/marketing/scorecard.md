@@ -11,6 +11,7 @@ first SDK-originated report). `unmeasured` is a value; never invent a number.
 | Week (ISO) | Visits (lower bound) | Signups | Projects | Keys | SDK installed | Activated | Fix pulled | Habit | Paid | Top source | Top drop-off | Experiment shipped | Launch / post |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 2026-W38 (baseline, 2026-09-20) | unmeasured (GitHub 25 uniques / 14 d) | 0 this week · 9 all-time | 0 · 11 all-time (4 external) | 0 | 0 (last `sdk_first_heartbeat` 2026-07-19) | **0** (0 of 4 external ever) | 0 | 0 | 0 | unmeasured (no `signup_source` yet) | Signup → first report (0/4) | Phase 1: `product_events` + `track()` + `signup_source` + `/growth` | none (no launch has ever run) |
+| 2026-W46 (baseline, 2026-11-11) | 101 landing views, 10-28..11-11 (321 stored, minus 220 from referrer spam `www.aocr.org`; 4 tagged). 11-11 alone shows 35, which likely includes agent and verification traffic | 1 outside, 7 days · 12 non-operator accounts all-time (6 genuine outside) | 1 in week 11-09 · 6 outside all-time | 1 | 1 | **0 real** (1 `activated` row, 11-10, is the setup wizard's own `cli://wizard` test report) | 0 | 0 | 0 | unmeasured (all signups `unknown`) | SDK installed → `sdk_seen_live` (0 of 6 outside projects ever went live; all 4 outside origins are localhost) | spam filter, `sdk_seen_live` on the daily scorecard (`20261111090000`), widget mark "Mushi Mushi" | none yet; plan in `launch-2026-11/PLAN.md` |
 
 ## Phase 1 status — 2026-09-20 (Measure & message)
 
@@ -61,3 +62,26 @@ Owed before the funnel fills: merge PR #394 (deploys admin and docs via GitHub A
 6. **Before switching billing to `on`.** A brand-new owner has no kenji wallet, so `kensaurus_wallet_check` answers `no-wallet` and the preflight would refuse their first diagnosis. Give new mushi owners a free grant first, or treat `no-wallet` as allowed for Free Cloud.
 7. **Hero GIF** (human screen capture of the incident loop), then run R1 Show HN per `docs/marketing/launch-week.md`.
 8. **Uncommitted STT billing work.** The STT billing change in the working tree (`_shared/stt.ts`, `telemetry.ts`, `hosted-llm-billing.ts`, `hosted-model-prices.ts`, `classify-stage2-schema.ts`, `classify-report`) is not in production and not in PR #394.
+
+## Baseline 2026-11-11 (ADR 0056 launch)
+
+All queries are read-only on `dxptnwrhwsqckaftyymj`, run 2026-11-11 around
+03:10 UTC.
+
+| Measure | Value | Query |
+|---|---|---|
+| Landing views stored, 10-28..11-11 | 321, of which 220 came from referrer `www.aocr.org` (spam, now filtered) and 317 carried no `src` | `select referrer_host, src, sum(views) from landing_page_views_daily where day >= '2026-10-28' group by 1, 2` |
+| Real landing views, same window | **101** (is_spam_referrer_host rule, run inline) | the `gtm_daily_scorecard` CTE from `20261111090000`, run as a SELECT |
+| Views per day without spam | 5, 17, 2, 1, 2, 12, 5, 2, 12, 6, 1, 1, 35 (10-28..11-11, days with rows) | same |
+| `sdk_seen_live`, outside projects | **0** ever. The 2 events that exist (11-01, 11-08) are `native` check-ins of complimentary, operator-owned apps | `product_events` joined to `projects` and `organizations` on `properties->>'project_id'` |
+| Outside projects by origin kind | localhost 4, server 1, live_web 0, native 0 | `project_api_key_origins` joined to `project_api_keys`, `organizations` |
+| Weekly funnel, 11-09 | signups 1, projects 1, keys 1, sdk_installed 1, sdk_seen_live 0, first_real_report 1, activated 1 (both false: wizard test) | `company_funnel_weekly(4)` |
+| Production Checks ever | 4: `agent-verify-2026-11-11` 2, `landing-hero` 1, `owner-verify` 1. None from outside | `select src, status, count(*) from production_checks group by 1, 2` |
+| Lifecycle emails ever | 3 | `select count(*) from lifecycle_email_sends` |
+| Proof numbers (`public_scoreboard(60)`) | 9 apps; 34 user reports from 18 reporters; 2,031 other reports; 523 fixes merged, 2 from user reports; 1,745 reviews, 576 held; median 68.9 h to a merged fix | `select public_scoreboard(60)` |
+| Paid | 0 | `company_funnel_weekly` |
+
+**Leading indicator from now on: `sdk_seen_live`.** It is now on the daily
+scorecard (`GET /v1/admin/growth/daily`) once `20261111090000` is applied. The
+north star stays activated external projects per week. The "10 paid by 11-30"
+target is retired (ADR 0056 §6).

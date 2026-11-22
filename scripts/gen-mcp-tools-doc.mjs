@@ -75,7 +75,7 @@ function esc(cell) {
 
 const body = `---
 title: MCP tools reference
-description: Every tool, resource and prompt the Mushi MCP server exposes to Cursor, Claude Code and other editors, with its read or write scope, from the catalog.
+description: Every tool, resource and prompt the Mushi Mushi MCP server exposes to Cursor, Claude Code and other editors, with its read or write scope, from the catalog.
 ---
 
 import { Callout } from 'nextra/components'

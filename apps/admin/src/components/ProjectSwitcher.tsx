@@ -18,6 +18,7 @@ import {
   getActiveProjectIdSnapshot,
   isValidProjectId,
   refetchProjectData,
+  pickActiveProject,
   setActiveProjectIdSnapshot,
 } from '../lib/activeProject'
 import { invalidateApiCache } from '../lib/supabase'
@@ -30,6 +31,7 @@ import {
   lastTeamProject,
   listBelongsToTeam,
   pickRecoveryProject,
+  readProjectDirectory,
   rememberProjectTeams,
   rememberTeamProject,
   resolveTeamForProject,
@@ -122,8 +124,41 @@ export function ProjectSwitcher() {
   // The stamp alone is not enough: the list object is rebuilt when the active
   // project changes (the switch clears it), which re-stamped the old team's
   // list as the new one's. Its projects must not be known to another team.
+  //
+  // A server that names each project's team (`organization_id`, 2026-11-11)
+  // answers this directly; the browser's project→team memory is only the
+  // fallback for an older server.
+  const listProjects = setup.data?.projects ?? []
+  const listHasTeams = listProjects.length > 0 && listProjects.every((p) => typeof p.organization_id === 'string')
   const listIsCurrent =
-    listOrg === activeOrg && listBelongsToTeam(setup.data?.projects.map((p) => p.project_id) ?? [], activeOrg)
+    listOrg === activeOrg &&
+    (listHasTeams && activeOrg
+      ? listProjects.every((p) => p.organization_id === activeOrg)
+      : listBelongsToTeam(listProjects.map((p) => p.project_id), activeOrg))
+
+  // The server's own team ids are true whatever team is active, also for a
+  // list that is not this team's (stale, or a cross-team list): remember them,
+  // which also corrects a wrong entry (audit 2026-11-11).
+  useEffect(() => {
+    const listed = setup.data?.projects ?? []
+    const named = listed.filter((p) => typeof p.organization_id === 'string')
+    if (named.length) rememberProjectTeams(named.map((p) => ({ id: p.project_id, organizationId: p.organization_id ?? null })))
+  }, [setup.data])
+
+  // Self-heal (audit 2026-11-11): a fresh list for the active team that the
+  // memory says belongs to another team means the memory is wrong. It used to
+  // stay wrong until someone cleared localStorage by hand, and every team
+  // switch reverted. Re-read the directory (the server's answer) once per team.
+  const healedForRef = useRef<string | null>(null)
+  const [, setHealTick] = useState(0)
+  useEffect(() => {
+    if (!setup.data || !activeOrg || listOrg !== activeOrg || listIsCurrent || listHasTeams) return
+    if (healedForRef.current === activeOrg) return
+    healedForRef.current = activeOrg
+    void readProjectDirectory().then((read) => {
+      if (read.status === 'ok') setHealTick((n) => n + 1)
+    })
+  }, [setup.data, activeOrg, listOrg, listIsCurrent, listHasTeams])
 
   // A deep link to a project in another of the user's teams: find that team
   // and switch to it, once per project id. apiFetch usually did this before
@@ -158,6 +193,11 @@ export function ProjectSwitcher() {
   const directory = usePageData<ProjectDirectory>(open ? PROJECT_DIRECTORY_PATH : null, {
     scope: 'none',
   })
+  // The open dropdown has the server's full directory: correct the
+  // project→team memory before the user picks another team from it.
+  useEffect(() => {
+    if (directory.data?.projects) rememberProjectTeams(directory.data.projects, { authoritative: true })
+  }, [directory.data])
 
   // Only team owners and admins may create projects (the server 403s anyone
   // else), so members and viewers get an explanation instead of a form that
@@ -195,9 +235,17 @@ export function ProjectSwitcher() {
       (fromUrl && isValidProjectId(fromUrl) ? fromUrl : null) ?? fromStorage
     const known = projects.find((p) => p.project_id === candidate)
     const orgId = getActiveOrgIdSnapshot()
-    // This list is the active team's: remember which team owns each project
-    // so a reload of a link to any of them skips apiFetch's team check.
-    if (orgId) rememberProjectTeams(projects.map((p) => ({ id: p.project_id, organizationId: orgId })))
+    // Remember which team owns each project so a reload of a link to any of
+    // them skips apiFetch's team check. Only from the server's own team ids:
+    // tagging the list with the ACTIVE team (2026-11-11, "All apps" then an
+    // empty team) filed another team's apps under it, and every switch back
+    // reverted. An older server sends no team: then only fill in projects the
+    // browser does not know yet, never overwrite.
+    if (projects.every((p) => typeof p.organization_id === 'string')) {
+      rememberProjectTeams(projects.map((p) => ({ id: p.project_id, organizationId: p.organization_id ?? null })))
+    } else if (orgId) {
+      rememberProjectTeams(projects.map((p) => ({ id: p.project_id, organizationId: orgId })), { onlyUnknown: true })
+    }
     if (known) {
       if (orgId) rememberTeamProject(orgId, known.project_id)
       if (fromStorage !== known.project_id) {
@@ -373,7 +421,7 @@ export function ProjectSwitcher() {
   function pickInTeam(projectId: string, orgId: string) {
     setActiveOrgIdSnapshot(orgId)
     rememberTeamProject(orgId, projectId)
-    setActiveProjectIdSnapshot(projectId)
+    pickActiveProject(projectId)
     setStoredProjectScopeMode('project')
     const next = new URLSearchParams(searchParams)
     next.set(ACTIVE_ORG_QUERY_PARAM, orgId)
@@ -397,7 +445,7 @@ export function ProjectSwitcher() {
   function pick(id: string) {
     const orgId = getActiveOrgIdSnapshot()
     if (orgId) rememberTeamProject(orgId, id)
-    setActiveProjectIdSnapshot(id)
+    pickActiveProject(id)
     setStoredProjectScopeMode('project')
     const next = new URLSearchParams(searchParams)
     next.set(ACTIVE_PROJECT_QUERY_PARAM, id)
@@ -476,7 +524,7 @@ export function ProjectSwitcher() {
         >
           <div className="max-h-96 overflow-y-auto">
           {otherTeams.length > 0 && (
-            <p className="px-2.5 pt-2 pb-1 text-3xs font-medium uppercase tracking-wide text-fg-faint">
+            <p className="px-2.5 pt-2 pb-1 text-3xs font-semibold text-fg-secondary">
               {currentTeamName ? `${currentTeamName} (this team)` : 'This team'}
             </p>
           )}
@@ -494,7 +542,7 @@ export function ProjectSwitcher() {
                       setGroupFilter(slug)
                       writeActiveGroup(slug)
                     }}
-                    className={`rounded-full border px-2 py-0.5 text-2xs ${selected ? SELECTED_TONE : SELECTED_TONE_IDLE}`}
+                    className={`rounded-sm px-2 py-px text-2xs ${selected ? SELECTED_TONE : SELECTED_TONE_IDLE}`}
                   >
                     {g ? g.name : 'All'}
                   </button>
@@ -585,7 +633,7 @@ export function ProjectSwitcher() {
           </ul>
           {otherTeams.map(({ team, projects: teamProjects }) => (
             <div key={team.id} className="border-t border-edge-subtle">
-              <p className="px-2.5 pt-2 pb-1 text-3xs font-medium uppercase tracking-wide text-fg-faint">
+              <p className="px-2.5 pt-2 pb-1 text-3xs font-semibold text-fg-secondary">
                 {team.name}
               </p>
               <ul role="listbox" aria-label={`Projects in ${team.name}`} className="pb-1">

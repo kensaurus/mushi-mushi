@@ -6,6 +6,12 @@
  *          is none), then pick the repository. The repo named like the app is
  *          offered first. Every outcome ends on a plain next step.
  *
+ * A repo linked without App access (the preflight's GitHub check, passed as
+ * `access`) reads "Repo linked · app access missing" with one "Finish
+ * connecting" button. Back from GitHub, the same repo is linked again on its
+ * own: picking it and pressing Keep was the only way, and it read as a
+ * repository change (owner, 2026-11-17).
+ *
  * Flow and security: lib/githubConnect.ts, api/routes/github-connect.ts.
  */
 
@@ -25,6 +31,7 @@ import {
   type RepoList,
   type SavedRepo,
 } from '../lib/githubConnect'
+import { GITHUB_ACCESS_LABEL, githubAccessMissingSentence, type GithubAccess } from '../lib/githubAccess'
 
 interface Props {
   projectId: string
@@ -34,7 +41,22 @@ interface Props {
   currentRepoUrl?: string | null
   /** Called after a repository is saved. */
   onConnected?: (repo: SavedRepo) => void
+  /** The app's GitHub status (lib/githubAccess.ts); without it a linked repo reads as connected. */
+  access?: GithubAccess | null
   className?: string
+}
+
+/** Set before "Finish connecting" leaves for GitHub: link the same repo again on return. */
+const finishKey = (projectId: string) => `mushi:github-finish:${projectId}`
+
+function takeFinishIntent(projectId: string): boolean {
+  try {
+    const set = window.sessionStorage.getItem(finishKey(projectId)) === '1'
+    window.sessionStorage.removeItem(finishKey(projectId))
+    return set
+  } catch {
+    return false
+  }
 }
 
 type Phase =
@@ -47,7 +69,7 @@ type Phase =
 
 const SEARCH_FROM = 8
 
-export function GitHubConnectCard({ projectId, returnTo, currentRepoUrl, onConnected, className = '' }: Props) {
+export function GitHubConnectCard({ projectId, returnTo, currentRepoUrl, onConnected, access, className = '' }: Props) {
   const [searchParams, setSearchParams] = useSearchParams()
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' })
   const [error, setError] = useState<{ code?: string; message: string } | null>(null)
@@ -78,7 +100,23 @@ export function GitHubConnectCard({ projectId, returnTo, currentRepoUrl, onConne
     cardRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }, [returnedError, searchParams, setSearchParams])
 
+  const save = useCallback(async (g: string, list: RepoList, fullName: string) => {
+    setPhase({ kind: 'saving', list, fullName })
+    setError(null)
+    const res = await saveRepo(projectId, g, fullName)
+    if (!res.ok || !res.data) {
+      setError({ code: res.error?.code, message: githubConnectMessage(res.error?.code, res.error?.message) })
+      setPhase({ kind: 'picking', list })
+      return
+    }
+    forgetGithubGrant(projectId)
+    setGrant(null)
+    setPhase({ kind: 'done', repo: res.data })
+    onConnected?.(res.data)
+  }, [projectId, onConnected])
+
   const loadRepos = useCallback(async (g: string) => {
+    const finishing = takeFinishIntent(projectId)
     setPhase({ kind: 'loading' })
     setError(null)
     const res = await listPickableRepos(projectId, g)
@@ -92,8 +130,16 @@ export function GitHubConnectCard({ projectId, returnTo, currentRepoUrl, onConne
       setPhase({ kind: 'idle' })
       return
     }
+    // "Finish connecting": the linked repo is reachable now, so link it again
+    // without asking which one.
+    const linked = repoFullName(res.data.currentRepoUrl)
+    const again = finishing && linked ? res.data.repos.find((r) => r.fullName === linked) : undefined
+    if (again) {
+      void save(g, res.data, again.fullName)
+      return
+    }
     setPhase({ kind: 'picking', list: res.data })
-  }, [projectId])
+  }, [projectId, save])
 
   // Back from GitHub with a grant: list the repositories straight away.
   useEffect(() => {
@@ -104,7 +150,14 @@ export function GitHubConnectCard({ projectId, returnTo, currentRepoUrl, onConne
     cardRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }, [projectId, loadRepos])
 
-  const start = async () => {
+  const start = async (opts: { finish?: boolean } = {}) => {
+    if (opts.finish) {
+      try {
+        window.sessionStorage.setItem(finishKey(projectId), '1')
+      } catch {
+        // Storage disabled: the picker opens instead, with the repo marked "connected now".
+      }
+    }
     setPhase({ kind: 'starting' })
     setError(null)
     const res = await requestConnectLinks(projectId, returnTo)
@@ -121,18 +174,7 @@ export function GitHubConnectCard({ projectId, returnTo, currentRepoUrl, onConne
 
   const pick = async (list: RepoList, fullName: string) => {
     if (!grant) return
-    setPhase({ kind: 'saving', list, fullName })
-    setError(null)
-    const res = await saveRepo(projectId, grant, fullName)
-    if (!res.ok || !res.data) {
-      setError({ code: res.error?.code, message: githubConnectMessage(res.error?.code, res.error?.message) })
-      setPhase({ kind: 'picking', list })
-      return
-    }
-    forgetGithubGrant(projectId)
-    setGrant(null)
-    setPhase({ kind: 'done', repo: res.data })
-    onConnected?.(res.data)
+    await save(grant, list, fullName)
   }
 
   const visible = useMemo(() => {
@@ -142,6 +184,9 @@ export function GitHubConnectCard({ projectId, returnTo, currentRepoUrl, onConne
   }, [phase, query])
 
   const connectedName = phase.kind === 'done' ? phase.repo.fullName : repoFullName(currentRepoUrl ?? loadedRepoUrl)
+  // Linked, but the GitHub App has no install or token that reaches it.
+  const accessMissing = access?.state === 'repo_no_access' && phase.kind !== 'done'
+  const linkedName = connectedName ?? access?.repo ?? null
 
   return (
     <div ref={cardRef} id="connect-github" className={`scroll-mt-20 ${className}`}>
@@ -150,14 +195,27 @@ export function GitHubConnectCard({ projectId, returnTo, currentRepoUrl, onConne
         <div className="min-w-0">
           <h3 className="text-sm font-semibold text-fg">Your code on GitHub</h3>
           <p className="mt-0.5 text-xs text-fg-muted">
-            Mushi reads the repository to explain bugs and opens each fix as a draft pull request you review.
+            Mushi Mushi reads the repository to explain bugs and opens each fix as a draft pull request you review.
             You choose which repositories it can see.
           </p>
         </div>
-        {connectedName && phase.kind !== 'picking' && phase.kind !== 'saving' && (
-          <Badge tone="okSubtle">Connected: {connectedName}</Badge>
+        {accessMissing && phase.kind !== 'picking' && phase.kind !== 'saving' ? (
+          <span data-testid="github-access-missing">
+            <Badge tone="warnSubtle">
+              <span aria-hidden="true">{'⚠'} </span>
+              {GITHUB_ACCESS_LABEL.repo_no_access}
+            </Badge>
+          </span>
+        ) : (
+          connectedName &&
+          phase.kind !== 'picking' &&
+          phase.kind !== 'saving' && <Badge tone="okSubtle">{GITHUB_ACCESS_LABEL.connected}: {connectedName}</Badge>
         )}
       </div>
+
+      {accessMissing && (phase.kind === 'idle' || phase.kind === 'starting') && (
+        <p className="text-xs text-fg-secondary">{githubAccessMissingSentence(linkedName)}</p>
+      )}
 
       {error && (
         <ErrorAlert
@@ -170,7 +228,7 @@ export function GitHubConnectCard({ projectId, returnTo, currentRepoUrl, onConne
 
       {phase.kind === 'done' && (
         <p className="text-xs text-fg-secondary" role="status">
-          Connected <strong>{phase.repo.fullName}</strong> (branch {phase.repo.defaultBranch}). Mushi is reading it now; fixes will open
+          Connected <strong>{phase.repo.fullName}</strong> (branch {phase.repo.defaultBranch}). Mushi Mushi is reading it now; fixes will open
           as draft pull requests there.
         </p>
       )}
@@ -178,22 +236,25 @@ export function GitHubConnectCard({ projectId, returnTo, currentRepoUrl, onConne
       {(phase.kind === 'idle' || phase.kind === 'starting' || phase.kind === 'done') && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <Btn
-            variant={connectedName ? 'ghost' : 'primary'}
+            variant={connectedName && !accessMissing ? 'ghost' : 'primary'}
             size="sm"
             loading={phase.kind === 'starting'}
             disabled={phase.kind === 'starting'}
-            onClick={() => void start()}
+            onClick={() => void start({ finish: accessMissing })}
           >
-            {connectedName ? 'Change repository' : 'Connect GitHub'}
+            {accessMissing ? 'Finish connecting' : connectedName ? 'Change repository' : 'Connect GitHub'}
           </Btn>
-          {!connectedName && (
+          {accessMissing && (
+            <span className="text-2xs text-fg-muted">You sign in to GitHub and give the app access. Mushi Mushi links {linkedName ?? 'the repo'} again on its own.</span>
+          )}
+          {!connectedName && !accessMissing && (
             <span className="text-2xs text-fg-muted">You sign in to GitHub, then pick the repository.</span>
           )}
         </div>
       )}
 
       {phase.kind === 'loading' && (
-        <p className="text-xs text-fg-muted" role="status">Reading the repositories the Mushi GitHub App can see…</p>
+        <p className="text-xs text-fg-muted" role="status">Reading the repositories the Mushi Mushi GitHub App can see…</p>
       )}
 
       {(phase.kind === 'picking' || phase.kind === 'saving') && (
@@ -206,7 +267,7 @@ export function GitHubConnectCard({ projectId, returnTo, currentRepoUrl, onConne
           )}
           {phase.list.repos.length === 0 ? (
             <div className="rounded-sm border border-edge-subtle p-3 text-xs text-fg-secondary space-y-2">
-              <p>The Mushi GitHub App cannot see any repository yet. On GitHub, choose the repositories it may use, then come back.</p>
+              <p>The Mushi Mushi GitHub App cannot see any repository yet. On GitHub, choose the repositories it may use, then come back.</p>
               <div className="flex flex-wrap gap-2">
                 {phase.list.manageUrl && (
                   <a className="text-xs underline underline-offset-2" href={phase.list.manageUrl} target="_blank" rel="noreferrer">Choose repositories on GitHub</a>
@@ -257,7 +318,7 @@ export function GitHubConnectCard({ projectId, returnTo, currentRepoUrl, onConne
               <span>
                 Not in the list?{' '}
                 <a className="underline underline-offset-2" href={phase.list.manageUrl} target="_blank" rel="noreferrer">
-                  Let the Mushi GitHub App see more repositories
+                  Let the Mushi Mushi GitHub App see more repositories
                 </a>
                 , then come back here.
               </span>

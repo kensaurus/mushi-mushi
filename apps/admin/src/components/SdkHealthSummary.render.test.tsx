@@ -58,7 +58,10 @@ describe('SdkHealthSummary on a never-installed app (fe489587)', () => {
     })
     const text = host.textContent ?? ''
     expect(text).toContain('SDK not connected yet')
-    expect(text).toMatch(/initMushi\(\)|missing in/)
+    // Plain words with the real API names, not internals (re-audit 2026-11-11).
+    expect(text).toContain('<MushiProvider>')
+    expect(text).toContain('Mushi.init()')
+    expect(text).not.toMatch(/initMushi\(\)|isEnabled\(\)|heartbeats/)
     expect(text).not.toMatch(/cold|removed from|deploy stopped|17d ago/i)
     // The MCP key is not listed as the app's SDK key.
     expect(text).not.toContain('demo-public-readonly')

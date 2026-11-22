@@ -9,7 +9,7 @@ describe('describeActionError', () => {
   })
 
   it('humanizes network and server faults', () => {
-    expect(describeActionError({ code: 'NETWORK_ERROR', message: 'Failed to fetch' }, 'x')).toMatch(/Could not reach the Mushi API/)
+    expect(describeActionError({ code: 'NETWORK_ERROR', message: 'Failed to fetch' }, 'x')).toMatch(/Could not reach the Mushi Mushi API/)
     expect(describeActionError({ code: 'DB_ERROR', message: 'duplicate key value' }, 'x')).toMatch(/went wrong on our side/)
   })
 

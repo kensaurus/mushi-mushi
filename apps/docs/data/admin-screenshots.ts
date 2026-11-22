@@ -8,8 +8,11 @@ export interface AdminScreenshotEntry {
   image: string
   /** Optional light-mode pair for pages that ship both themes. */
   light?: string
-  /** Optional animated demo (GIF). */
-  gif?: string
+  /**
+   * Demo clip file stem (no extension) when it isn't `{slug}-demo` — DocVideo
+   * loads `{video}.webm` / `.mp4` / `-poster.webp`.
+   */
+  video?: string
   alt: string
   caption: string
   /** Live admin route suffix — joined with ADMIN_DEMO_BASE. */
@@ -24,7 +27,7 @@ export const GLOTIT_DEMO_URL = 'https://kensaur.us/glot-it'
 export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
   index: {
     image: 'report-detail-dark.png',
-    gif: 'tour-console-v2.gif',
+    video: 'tour-console-v2',
     alt: 'Mushi admin console — DiagnosisFixHero plus animated walk through dashboard, reports, fixes, and Connect',
     caption: 'Live admin demo · free signup · 4-stop incident loop tour',
     route: '/dashboard',
@@ -32,9 +35,9 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
   dashboard: {
     image: 'dashboard-dark.png',
     light: 'dashboard-light.png',
-    gif: 'dashboard-demo.gif',
-    alt: 'Dashboard — flow canvas with KPI tiles, severity histogram, and inbox queue',
-    caption: 'Morning check in 30 seconds — backlog, in-flight fixes, LLM cost',
+    video: 'dashboard-demo',
+    alt: 'Home for one app: is it up, what needs you (PRs to decide, reports to look at), the release train, pages with bugs, and who can reach the repo',
+    caption: 'Coffee-length check: is it up, what broke overnight, what needs you today',
     route: '/dashboard',
   },
   onboarding: {
@@ -57,7 +60,7 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
   },
   reports: {
     image: 'reports-dark.png',
-    gif: 'glotit-report-flow.gif',
+    video: 'glotit-report-flow',
     alt: 'Reports inbox with severity stripes and fix actions',
     caption: 'User-felt bugs from glot.it land here with screenshot + breadcrumbs',
     route: '/reports',
@@ -71,8 +74,8 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
   },
   lessons: {
     image: 'graph-dark.png',
-    alt: 'Lessons — vector-clustered mistake DB promoted to .mushi/lessons.json',
-    caption: 'Coherent clusters become named rules the next PR inherits',
+    alt: 'Lessons: rules learned from bugs that kept coming back, each with how often it was seen and where it came from',
+    caption: 'The same bug three times? It becomes a rule your editor reads before the next fix',
     route: '/lessons',
   },
   inventory: {
@@ -90,8 +93,8 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
   },
   fixes: {
     image: 'fixes-dark.png',
-    alt: 'Fix drafts — per-attempt cards and PR links',
-    caption: 'Agent runs stream live · trace per attempt',
+    alt: 'Fixes: PRs ready to merge with their review and CI state, then every attempt with its outcome',
+    caption: 'Every fix your agent tried, which ones are ready to merge, and why the rest stopped',
     route: '/fixes',
   },
   repo: {
@@ -126,7 +129,7 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
   },
   'qa-coverage': {
     image: 'qa-coverage-dark.png',
-    gif: 'qa-coverage-demo.gif',
+    video: 'qa-coverage-demo',
     alt: 'QA Coverage — scheduled user-story tests with Firecrawl / Browserbase / local Playwright',
     caption: 'NL prompts or Playwright scripts on cron — failures thread to Slack',
     route: '/qa-coverage',
@@ -157,7 +160,7 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
   },
   iterate: {
     image: 'intelligence-dark.png',
-    gif: 'tour-console-v2.gif',
+    video: 'tour-console-v2',
     alt: 'Iterate (PDCA) — producer/critic loop with selectable personas',
     caption: 'Live progress + draft-PR exit',
     route: '/iterate',
@@ -195,7 +198,7 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
   mcp: {
     image: 'mcp-dark.png',
     alt: 'MCP install — one-click Cursor deeplink and tool catalog',
-    caption: '130 tools · Add to Cursor deeplink · read-only demo mode',
+    caption: '133 tools · Add to Cursor deeplink · read-only demo mode',
     route: '/mcp',
   },
   notifications: {
@@ -212,7 +215,7 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
   },
   rewards: {
     image: 'rewards-dark.png',
-    gif: 'rewards-demo.gif',
+    video: 'rewards-demo',
     alt: 'Rewards program — point rules, tier ladder, and contributor leaderboard',
     caption: 'Automatic report.submitted / report.triaged points + one-click preset install',
     route: '/rewards',
@@ -237,7 +240,7 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
   },
   'sdk-health': {
     image: 'projects-dark.png',
-    gif: 'glotit-report-flow.gif',
+    video: 'glotit-report-flow',
     alt: 'SDK health — per-runtime heartbeat and version alerts',
     caption: 'glot.it dogfood project — web + React Native heartbeats',
     route: '/sdk-health',
@@ -286,10 +289,22 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
   },
   explore: {
     image: 'explore-dark.png',
-    gif: 'explore-demo.gif',
+    video: 'explore-demo',
     alt: 'Codebase Atlas — ReactFlow graph coloured by architectural layer',
     caption: 'Semantic search over vector embeddings of indexed source files',
     route: '/explore',
+  },
+  ci: {
+    image: 'ci-demo-poster.webp',
+    alt: 'CI runners on a wide screen: what needs a look, machines running now, running jobs with time left, the week, the queue, job times with a spread bar, and the per-machine timeline',
+    caption: 'Why is my fix still not merged? Who is waiting, on which machine, and for how long',
+    route: '/ci',
+  },
+  checks: {
+    image: 'checks-demo-poster.webp',
+    alt: 'Checks: every automatic check for one app in a grid, failing ones first, each with its state and last run',
+    caption: 'One grid answers "is my app OK?": red first, then what to fix, then what is not set up',
+    route: '/checks',
   },
   queue: {
     image: 'queue-dark.png',
@@ -297,4 +312,9 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
     caption: 'worker_jobs with 14d throughput histogram',
     route: '/queue',
   },
+}
+
+/** Demo clip stem for an admin docs page: the entry's `video`, else `{page}-demo`. */
+export function adminDemoVideo(page: string, entry: AdminScreenshotEntry): string {
+  return entry.video ?? `${page}-demo`
 }

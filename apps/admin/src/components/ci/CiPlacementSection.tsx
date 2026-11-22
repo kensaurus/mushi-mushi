@@ -43,7 +43,7 @@ import {
   WATCH_STATUS,
 } from '../../lib/ciPlacementView'
 import { formatDelta } from '../../lib/ciCompareView'
-import { formatSeconds } from '../../lib/ciView'
+import { formatSeconds, type CiRunsOn } from '../../lib/ciView'
 import { apiFetch } from '../../lib/supabase'
 import { applyPlacementNow, GITHUB_INSTALLATIONS_URL, type ApplyResult } from '../../lib/ciPlacementApply'
 import { usePageData } from '../../lib/usePageData'
@@ -51,6 +51,27 @@ import { useNow } from '../../lib/useNow'
 import { Badge, Btn, Callout, ErrorAlert, Input, Loading, RelativeTime, ResultChip, SelectField } from '../ui'
 import { IconAlertTriangle, IconLock, IconShield } from '../icons'
 import { RepoVisibilityBadge } from './RepoVisibilityBadge'
+import { machinePresenceWord, machinesWithLabel, type MachineNow } from '../../lib/ciStatus'
+
+/**
+ * Who serves a runner label, from the one machine status every CI tab uses (the machines' own
+ * heartbeats). GitHub's count said "kensaurus-local (0 of 7 online)" while overseas-ci ran three
+ * jobs on it: its one-job runners are deregistered between jobs (2026-11-18). GitHub's count is
+ * the fallback when no reporting machine carries the label.
+ *
+ * @internal Exported for tests.
+ */
+export function labelServedBy(label: string, online: number, runners: number, machines: readonly MachineNow[]): { text: string; ok: boolean } {
+  const ms = machinesWithLabel(machines, label)
+  if (ms.length > 0) {
+    const up = ms.filter((m) => !m.stale)
+    return { text: ms.map((m) => `${m.name} ${machinePresenceWord(m)}`).join(', '), ok: up.length > 0 }
+  }
+  // No machine that reports in carries the label: GitHub's count is all there is, said as GitHub's.
+  return online > 0
+    ? { text: `GitHub lists ${online} of ${runners} online`, ok: true }
+    : { text: `no machine with this label reports in; GitHub lists none of ${runners} online`, ok: false }
+}
 
 const CI_POLICY_SETTINGS_HREF = '/settings?tab=ci-policy'
 
@@ -121,7 +142,7 @@ function PreviewPanel({ preview }: { preview: PlacementPreview }) {
   )
 }
 
-function RepoCard({ projectId, repo, data, onChanged }: { projectId: string; repo: PlacementRepo; data: CiPlacement; onChanged: () => void }) {
+function RepoCard({ projectId, repo, data, onChanged, machines = [] }: { projectId: string; repo: PlacementRepo; data: CiPlacement; onChanged: () => void; machines?: readonly MachineNow[] }) {
   const allowed = repo.variables.filter((v) => v.allowed)
   const [variable, setVariable] = useState(allowed[0]?.name ?? '')
   const v = allowed.find((x) => x.name === variable) ?? allowed[0]
@@ -154,7 +175,7 @@ function RepoCard({ projectId, repo, data, onChanged }: { projectId: string; rep
     setBusy(null)
     if (!res.ok || !res.data) {
       setPreview(null)
-      setError({ message: res.error?.message ?? 'Mushi could not build the preview.', code: res.error?.code ?? null })
+      setError({ message: res.error?.message ?? 'Mushi Mushi could not build the preview.', code: res.error?.code ?? null })
       return
     }
     setPreview(res.data)
@@ -172,7 +193,7 @@ function RepoCard({ projectId, repo, data, onChanged }: { projectId: string; rep
     }
     setPreview(null)
     setChoice(null)
-    setNotice(`${r.detail} Mushi watches the next jobs.`)
+    setNotice(`${r.detail} Mushi Mushi watches the next jobs.`)
     onChanged()
   }
 
@@ -182,7 +203,7 @@ function RepoCard({ projectId, repo, data, onChanged }: { projectId: string; rep
     const res = await apiFetch<{ id: string }>('/v1/admin/ci/placement/requests', { method: 'POST', body: JSON.stringify(body()) })
     setBusy(null)
     if (!res.ok) {
-      setError({ message: res.error?.message ?? 'Mushi could not save the request.', code: res.error?.code ?? null })
+      setError({ message: res.error?.message ?? 'Mushi Mushi could not save the request.', code: res.error?.code ?? null })
       return
     }
     setPreview(null)
@@ -200,10 +221,10 @@ function RepoCard({ projectId, repo, data, onChanged }: { projectId: string; rep
       {repo.controller ? (
         <Callout tone="neutral" label="Read-only" icon={<IconLock size={14} />}>
           Managed by {repo.controller.name}
-          {repo.controller.owner ? ` (${repo.controller.owner})` : ''}. Mushi shows where its CI runs and does not change it.
+          {repo.controller.owner ? ` (${repo.controller.owner})` : ''}. Mushi Mushi shows where its CI runs and does not change it.
         </Callout>
       ) : !repo.workflowsRead ? (
-        <p className="text-xs text-fg-muted">Mushi has not read this repo’s workflow files yet (they come with the daily GitHub snapshot).</p>
+        <p className="text-xs text-fg-muted">Mushi Mushi has not read this repo’s workflow files yet (they come with the daily GitHub snapshot).</p>
       ) : allowed.length === 0 && repo.profile ? (
         <ProfileControl projectId={projectId} repo={repo} data={data} onChanged={onChanged} />
       ) : allowed.length === 0 ? (
@@ -266,9 +287,14 @@ function RepoCard({ projectId, repo, data, onChanged }: { projectId: string; rep
                   />
                   <span>
                     Self-hosted: <span className="font-mono">{l.label}</span>{' '}
-                    <span className={l.online > 0 ? 'text-ok' : 'text-warn-foreground'}>
-                      ({l.online} of {l.runners} online)
-                    </span>
+                    {(() => {
+                      const served = labelServedBy(l.label, l.online, l.runners, machines)
+                      return (
+                        <span className={served.ok ? 'text-fg-secondary' : 'text-warn-foreground'} data-testid="ci-placement-label-served">
+                          ({served.text})
+                        </span>
+                      )
+                    })()}
                   </span>
                 </label>
               ))}
@@ -305,7 +331,7 @@ function RepoCard({ projectId, repo, data, onChanged }: { projectId: string; rep
                       </option>
                     ))}
                   </SelectField>
-                  <p className="mt-1 text-2xs text-fg-muted">GitHub-hosted minutes are billed on private repos. Mushi puts the current runner back when the time is up.</p>
+                  <p className="mt-1 text-2xs text-fg-muted">GitHub-hosted minutes are billed on private repos. Mushi Mushi puts the current runner back when the time is up.</p>
                 </div>
               )}
               <p id={`${groupId}-hint`} className="text-2xs text-fg-muted">
@@ -360,7 +386,7 @@ function applyFailure(r: Extract<ApplyResult, { ok: false }>): { message: string
 }
 
 const PROFILE_CHOICES = [
-  { value: 'economy', label: 'Economy (recommended, default)', note: 'Mushi fix pull requests skip the checks their workflows mark as skippable; those still run on the release train and on main before a deploy.' },
+  { value: 'economy', label: 'Economy (recommended, default)', note: 'Mushi Mushi fix pull requests skip the checks their workflows mark as skippable; those still run on the release train and on main before a deploy.' },
   { value: 'thorough', label: 'Thorough (more expensive)', note: 'Every check on every pull request, fix pull requests included: more billed GitHub-hosted minutes on a private repo.' },
 ] as const
 
@@ -384,7 +410,7 @@ function ProfileControl({ projectId, repo, data, onChanged }: { projectId: strin
     const res = await apiFetch<PlacementPreview & { id?: string }>(path, { method: 'POST', body: JSON.stringify(body()) })
     setBusy(null)
     if (!res.ok || !res.data) {
-      setError({ message: res.error?.message ?? (kind === 'preview' ? 'Mushi could not build the preview.' : 'Mushi could not save the request.'), code: res.error?.code ?? null })
+      setError({ message: res.error?.message ?? (kind === 'preview' ? 'Mushi Mushi could not build the preview.' : 'Mushi Mushi could not save the request.'), code: res.error?.code ?? null })
       return
     }
     if (kind === 'preview') {
@@ -506,7 +532,7 @@ function RequestRow({ r, data, onChanged }: { r: PlacementRequestRow; data: CiPl
     })
     setBusy(false)
     if (!res.ok) {
-      setError(res.error?.message ?? 'Mushi could not do that.')
+      setError(res.error?.message ?? 'Mushi Mushi could not do that.')
       return
     }
     onChanged()
@@ -562,10 +588,70 @@ function RequestRow({ r, data, onChanged }: { r: PlacementRequestRow; data: CiPl
   )
 }
 
-export function CiPlacementSection({ projectId, scope }: { projectId: string | null; scope: 'project' | 'all' }) {
+/** Where an app's jobs ran this window: filled = your machines, hollow = GitHub-hosted. */
+const RUNS_ON: Record<Exclude<CiRunsOn, null>, { marks: string; words: string }> = {
+  own: { marks: '●', words: 'Runs on your machines' },
+  github: { marks: '○', words: 'Runs on GitHub-hosted runners' },
+  both: { marks: '●○', words: 'Runs on your machines and GitHub-hosted runners' },
+}
+
+export function CiPlacementSection({
+  projectId,
+  scope,
+  apps = [],
+  onPickApp,
+  machines = [],
+}: {
+  projectId: string | null
+  scope: 'project' | 'all'
+  /** Apps to choose from when the page shows all apps (placement is per app). */
+  apps?: Array<{ id: string; name: string; runsOn?: CiRunsOn }>
+  onPickApp?: (projectId: string) => void
+  /** The machines that report in (the Now board's), so a label's status matches every other tab. */
+  machines?: readonly MachineNow[]
+}) {
   const path = scope === 'project' && projectId ? `/v1/admin/ci/placement?project_id=${encodeURIComponent(projectId)}` : null
   const page = usePageData<CiPlacement>(path)
-  if (!path || !projectId) return <p className="text-xs text-fg-muted">Pick one app to see and change where its CI runs.</p>
+  if (!path || !projectId) {
+    // "Pick one app" with nothing to pick was a dead end on All apps (2026-11-07).
+    return (
+      <div className="flex flex-col gap-2">
+        <p className="text-xs text-fg-muted">Where CI runs is set per app. Pick one:</p>
+        {apps.length > 0 && onPickApp ? (
+          <>
+            <div className="flex flex-wrap gap-1.5" data-testid="ci-placement-app-picker">
+              {apps.map((a) => {
+                const on = a.runsOn ? RUNS_ON[a.runsOn] : null
+                return (
+                  <Btn
+                    key={a.id}
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="whitespace-nowrap"
+                    onClick={() => onPickApp(a.id)}
+                    title={on ? on.words : 'No job seen this week'}
+                    data-runs-on={a.runsOn ?? 'none'}
+                  >
+                    <span className="font-mono text-fg-secondary" aria-hidden="true">
+                      {on ? on.marks : '–'}
+                    </span>
+                    <span data-app-name>{a.name}</span>
+                    {on && <span className="sr-only">: {on.words.toLowerCase()}</span>}
+                  </Btn>
+                )
+              })}
+            </div>
+            <p className="text-2xs text-fg-muted" aria-hidden="true">
+              ● your machines · ○ GitHub-hosted · – no job seen this week
+            </p>
+          </>
+        ) : (
+          <p className="text-xs text-fg-muted">Choose an app in the app switcher at the top, then switch to This app.</p>
+        )}
+      </div>
+    )
+  }
   const data = page.data
   if (!data) {
     if (page.error) return <ErrorAlert title="Where CI runs" message={page.error} onRetry={page.reload} />
@@ -593,7 +679,7 @@ export function CiPlacementSection({ projectId, scope }: { projectId: string | n
       ) : (
         <Callout tone="neutral" label="No CI agreement recorded" icon={<IconShield size={14} />}>
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span>Mushi checks changes against your rules once you record them: paid minutes, other tools that manage some repos, standby runners.</span>
+            <span>Mushi Mushi checks changes against your rules once you record them: paid minutes, other tools that manage some repos, standby runners.</span>
             <Link to={CI_POLICY_SETTINGS_HREF} className="font-medium text-brand hover:underline">
               Import from your CI agreement
             </Link>
@@ -602,12 +688,12 @@ export function CiPlacementSection({ projectId, scope }: { projectId: string | n
       )}
       {!data.tokenStored && (
         <Callout tone="warn" label="GitHub access">
-          Mushi has no GitHub access for this app’s repositories, so it cannot read or change runner variables. Connect them with the Mushi GitHub App (Connect → GitHub), or store a fine-grained token with “Variables: Read and write”.
+          Mushi Mushi has no GitHub access for this app’s repositories, so it cannot read or change runner variables. Connect them with the Mushi Mushi GitHub App (Connect → GitHub), or store a fine-grained token with “Variables: Read and write”.
         </Callout>
       )}
       <ul className="grid gap-3 xl:grid-cols-2">
         {data.repos.map((r) => (
-          <RepoCard key={r.repo} projectId={projectId} repo={r} data={data} onChanged={page.reload} />
+          <RepoCard key={r.repo} projectId={projectId} repo={r} data={data} onChanged={page.reload} machines={machines} />
         ))}
       </ul>
       {data.repos.length === 0 && <p className="text-xs text-fg-muted">No repository is connected to this app.</p>}

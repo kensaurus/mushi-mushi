@@ -8,6 +8,8 @@ export interface WhoamiData {
   project_name: string
   /** The key's scopes; absent on servers older than 2026-10-09. */
   scopes?: string[]
+  /** The project's linked repos, primary first; absent on servers older than 2026-11-12. */
+  repo_urls?: string[]
   stats: { total_reports: number; open_reports: number }
 }
 

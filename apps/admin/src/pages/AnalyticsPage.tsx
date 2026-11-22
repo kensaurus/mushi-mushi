@@ -36,7 +36,6 @@ import {
   CodeValue,
   DataTableCell,
   DataTableHead,
-  EmptyState,
   FreshnessPill,
   RelativeTime,
   Section,
@@ -161,14 +160,14 @@ export function AnalyticsPage() {
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-analytics">
       <PageHeaderBar
-        title={copy?.title ?? 'Users & Funnels'}
+        title={copy?.title ?? 'Users & funnels'}
         description={
           copy?.description ??
           'Product events from Mushi.track() — who does what, in which order, and who comes back.'
         }
         projectScope={projectName ?? undefined}
         icon={<IconGauge />}
-        helpTitle={copy?.help?.title ?? 'About Users & Funnels'}
+        helpTitle={copy?.help?.title ?? 'About Users & funnels'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
           'Every Mushi.track() call from your app lands here as an event tied to a person (identified or anonymous). Build funnels from those events, see where people go next, browse people, and read weekly retention.'
@@ -195,8 +194,9 @@ export function AnalyticsPage() {
         slots={[
           {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
-            show: Boolean(summary.data),
-            children: summary.data ? (
+            // No events: four "0" tiles restated the empty state (round-2 sweep 2026-11-18).
+            show: Boolean(summary.data) && !noEvents,
+            children: summary.data && !noEvents ? (
               <StatGrid>
                 <StatCard
                   label="Events"
@@ -242,7 +242,7 @@ export function AnalyticsPage() {
 
       {summary.data && !noEvents && (
         <>
-          <SegmentedControl value={tab} onChange={setTab} options={TABS} ariaLabel="Users & Funnels sections" size="sm" wrap />
+          <SegmentedControl value={tab} onChange={setTab} options={TABS} ariaLabel="Users & funnels sections" size="sm" wrap />
           {tab === 'overview' && <OverviewTab data={summary.data} />}
           {tab === 'funnels' && <FunnelsTab projectKey={projectKey} availableEvents={topEventNames} />}
           {tab === 'paths' && <PathsTab availableEvents={topEventNames} />}
@@ -256,26 +256,26 @@ export function AnalyticsPage() {
 
 // ─── Empty state ─────────────────────────────────────────────────────────────
 
+/**
+ * One sans card with two short lines and the snippet (round-2 sweep
+ * 2026-11-18): the shared EmptyState drew a serif title in a dashed box with a
+ * three-line paragraph, and the docs arrow wrapped onto a line of its own.
+ */
 function NoEventsYet() {
   return (
-    <EmptyState
-      icon={<IconGauge />}
-      title="No events yet"
-      description="Call track() from your app once and this page fills in — event volume, funnels, paths, people, and retention. Events are tied to the same anonymous id the bug widget uses, so a person's reports and their product events line up."
-      action={
-        <div className="space-y-3">
-          <CodeValue value={TRACK_SNIPPET} copyable />
-          <p className="text-2xs text-fg-faint leading-relaxed">
-            Browsers with Do Not Track or Global Privacy Control send nothing — no events, no anonymous id.
-            With <span className="font-mono">consent: 'required'</span> the SDK buffers until you call{' '}
-            <span className="font-mono">setConsent('granted')</span>.{' '}
-            <a href={DOCS_URL} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-fg">
-              Analytics SDK docs →
-            </a>
-          </p>
-        </div>
-      }
-    />
+    <Card className="space-y-2 px-4 py-3" data-testid="analytics-empty">
+      <p className="text-sm font-semibold text-fg">No events yet</p>
+      <p className="text-xs text-fg-muted">
+        Call <span className="font-mono">track()</span> once from your app to fill in volume, funnels, paths, people and retention.
+      </p>
+      <CodeValue value={TRACK_SNIPPET} copyable />
+      <p className="text-2xs text-fg-faint">
+        Do Not Track and Global Privacy Control browsers send nothing.{' '}
+        <a href={DOCS_URL} target="_blank" rel="noopener noreferrer" className="whitespace-nowrap text-link underline underline-offset-2">
+          Analytics SDK docs →
+        </a>
+      </p>
+    </Card>
   )
 }
 

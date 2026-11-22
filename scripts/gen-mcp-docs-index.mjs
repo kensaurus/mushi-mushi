@@ -302,7 +302,7 @@ function render() {
     "  return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route",
     '}',
     '',
-    `/** ${entries.length} pages, generated from llms.txt. */`,
+    `/** ${entries.length} pages, generated from llms.txt. @internal Exported for tests. */`,
     'export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [',
   ]
   for (const e of entries) {

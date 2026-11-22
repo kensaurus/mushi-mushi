@@ -35,18 +35,19 @@ import {
   SegmentedControl,
 } from '../components/ui'
 import { LessonsStatusBanner } from '../components/lessons/LessonsStatusBanner'
-import { LessonsSnapshotStrip } from '../components/lessons/LessonsSnapshotStrip'
+import { LessonsSnapshotStrip, lessonsNothingYet } from '../components/lessons/LessonsSnapshotStrip'
 import { LessonsReadout } from '../components/lessons/LessonsReadout'
 import {
   EMPTY_LESSONS_STATS,
   type LessonsStats,
   type LessonsTabId,
 } from '../components/lessons/LessonsStatsTypes'
-import { IconIntelligence, IconShield, IconChevronRight } from '../components/icons'
+import { LessonRuleRows } from '../components/lessons/LessonRuleRows'
 import { Drawer } from '../components/Drawer'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { CHIP_TONE } from '../lib/chipTone'
 import { PageLoadError } from '../components/PageLoadError'
+import { groupClusters, groupedClustersLabel } from '../lib/lessonsView'
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -118,7 +119,7 @@ function SeverityBadge({ severity }: { severity: string }) {
 // Ids are unchanged (?tab=clusters, ?tab=lessons, ?tab=query keep working).
 const TABS: Array<{ id: LessonsTabId; label: string; description: string }> = [
   { id: 'clusters', label: 'Recurring patterns', description: 'Bugs that keep coming back with the same cause, each with a suggested rule.' },
-  { id: 'lessons',  label: 'Rules in use', description: 'Rules Mushi follows when it diagnoses and fixes a new report.' },
+  { id: 'lessons',  label: 'Rules in use', description: 'Rules Mushi Mushi follows when it diagnoses and fixes a new report.' },
   { id: 'query',    label: 'Try a change', description: 'Paste a change and see which rules would apply to it.' },
 ]
 
@@ -177,13 +178,10 @@ function LessonsTab({ onChanged, canEditProject }: { onChanged: () => void; canE
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <p className="text-sm text-fg-muted">
-            Rules learned from bugs that kept coming back. Mushi follows them when it diagnoses and fixes a new report,
-            and your editor can read them with the <code className="text-xs bg-surface-overlay px-1 rounded font-mono border border-edge/40">lessons.query</code> MCP tool.
-          </p>
-        </div>
+      <div className="mb-2 flex items-center justify-between gap-4 flex-wrap">
+        <p className="min-w-0 flex-1 basis-64 text-xs text-fg-muted" title="Your editor can read these rules with the lessons.query MCP tool.">
+          Retire a rule that no longer applies.
+        </p>
         <SegmentedControl
           value={showRetired}
           onChange={(v) => setShowRetired(v as 'active' | 'retired')}
@@ -197,67 +195,24 @@ function LessonsTab({ onChanged, canEditProject }: { onChanged: () => void; canE
       {loading && <TableSkeleton rows={8} />}
 
       {!loading && lessons.length === 0 && (
+        // No icon: the compact empty state keeps the page's sans heading
+        // (round-2 sweep: the editorial variant set "No lessons yet" in serif).
+        // Named like its tab, "Rules in use" (2026-11-19: the tab's empty state said "No lessons yet").
         <EmptyState
-          icon={<IconIntelligence className="w-8 h-8" />}
-          title="No lessons yet"
+          title="No rules in use yet"
           description="A rule is made when 3 or more reports share one cause and read alike. More reports bring the first one."
         />
       )}
 
       {lessons.length > 0 && (
-        <div className="space-y-2">
-          {lessons.map((lesson) => (
-            <div
-              key={lesson.id}
-              // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
-              className="flex items-start gap-3 p-4 rounded-lg border border-edge hover:bg-surface-overlay/50 cursor-pointer motion-safe:transition-opacity"
-              onClick={() => setSelectedLesson(lesson)}
-            >
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <SeverityBadge severity={lesson.severity} />
-                  <span className="text-xs text-fg-faint">seen {lesson.frequency} {lesson.frequency === 1 ? 'time' : 'times'}</span>
-                  {lesson.mistake_clusters?.name && (
-                    <span className="text-xs text-fg-faint">
-                      from: {lesson.mistake_clusters.name}
-                    </span>
-                  )}
-                  {lesson.retired_at && (
-                    <Badge className="bg-surface-raised text-fg-muted">retired</Badge>
-                  )}
-                </div>
-                <p className="text-sm font-medium text-fg line-clamp-2">
-                  {lesson.rule_text}
-                </p>
-                {lesson.anti_pattern && (
-                  <p className="text-xs text-fg-muted mt-1 line-clamp-1">
-                    Avoid: {lesson.anti_pattern}
-                  </p>
-                )}
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="text-xs text-fg-faint hidden sm:block">
-                  <RelativeTime value={lesson.last_reinforced_at} />
-                </span>
-                <Btn
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="text-xs text-fg-faint hover:text-fg !border-transparent hover:!border-edge shadow-none hover:-translate-y-0"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    handleRetire(lesson.id, !!lesson.retired_at)
-                  }}
-                  disabled={retiring === lesson.id || !canEditProject}
-                  title={canEditProject ? undefined : 'Viewers can read lessons but cannot change them.'}
-                >
-                  {lesson.retired_at ? 'Restore' : 'Retire'}
-                </Btn>
-                <IconChevronRight className="w-4 h-4 text-fg-faint" />
-              </div>
-            </div>
-          ))}
-        </div>
+        <LessonRuleRows
+          // Most-seen first: the rule that fires most is the one worth reading.
+          rows={[...lessons].sort((x, y) => y.frequency - x.frequency)}
+          retiring={retiring}
+          canEdit={canEditProject}
+          onRetire={(l) => handleRetire(l.id, !!l.retired_at)}
+          onOpen={setSelectedLesson}
+        />
       )}
 
       {selectedLesson && (
@@ -272,26 +227,26 @@ function LessonsTab({ onChanged, canEditProject }: { onChanged: () => void; canE
               <span className="text-xs text-fg-faint">seen {selectedLesson.frequency} {selectedLesson.frequency === 1 ? 'time' : 'times'}</span>
             </div>
             <div>
-              <h3 className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1">Rule</h3>
+              <h3 className="text-xs font-semibold text-fg-secondary mb-1">Rule</h3>
               <pre className="mushi-code-block mushi-code-body text-sm p-3 rounded-lg whitespace-pre-wrap border border-edge">
                 {selectedLesson.rule_text}
               </pre>
             </div>
             {selectedLesson.anti_pattern && (
               <div>
-                <h3 className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1">What to avoid</h3>
+                <h3 className="text-xs font-semibold text-fg-secondary mb-1">What to avoid</h3>
                 <p className="text-sm text-fg-secondary">{selectedLesson.anti_pattern}</p>
               </div>
             )}
             {selectedLesson.summary_paragraph && (
               <div>
-                <h3 className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1">Summary</h3>
+                <h3 className="text-xs font-semibold text-fg-secondary mb-1">Summary</h3>
                 <p className="text-sm text-fg-secondary">{selectedLesson.summary_paragraph}</p>
               </div>
             )}
             {selectedLesson.cluster_id && (
               <div>
-                <h3 className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1">Learned from</h3>
+                <h3 className="text-xs font-semibold text-fg-secondary mb-1">Learned from</h3>
                 <p className="text-xs text-fg-secondary">
                   {selectedLesson.mistake_clusters?.name ?? 'A recurring pattern'}
                   {selectedLesson.mistake_clusters ? ` · ${selectedLesson.mistake_clusters.cluster_size} reports` : ''}
@@ -372,13 +327,65 @@ function ClustersTab({ onChanged, canEditProject }: { onChanged: () => void; can
     }
   }, [toast, reload, onChanged])
 
+  const renderCluster = (cluster: Cluster) => (
+    <div
+      key={cluster.id}
+      // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
+      className="px-3 py-2 rounded-md border border-edge hover:bg-surface-overlay/50 motion-safe:transition-opacity"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap mb-1">
+            <Badge
+              className={cluster.status === 'promoted' ? CHIP_TONE.okSubtle : canPromote(cluster) ? CHIP_TONE.warnSubtle : 'bg-surface-overlay text-fg-secondary'}
+            >
+              {clusterStatusWord(cluster)}
+            </Badge>
+            <span className="text-xs font-semibold tabular-nums text-fg">
+              {cluster.cluster_size} {cluster.cluster_size === 1 ? 'report' : 'reports'}
+            </span>
+          </div>
+          <p className="text-sm font-medium text-fg">
+            {cluster.name ?? <span className="text-fg-faint italic">Unnamed pattern</span>}
+          </p>
+          {cluster.suggested_rule ? (
+            <p className="mt-1.5 border-l-2 border-brand/40 pl-2 text-xs text-fg-secondary" data-testid="suggested-rule">
+              <span className="text-fg-muted">Suggested rule: </span>
+              {cluster.suggested_rule}
+            </p>
+          ) : (
+            <p className="mt-1 text-xs text-fg-faint">A rule is suggested once a few more reports arrive.</p>
+          )}
+          <p className="text-xs text-fg-faint mt-1">
+            Last seen: <RelativeTime value={cluster.last_seen_at} />
+          </p>
+        </div>
+        {canPromote(cluster) && (
+          <Btn
+            size="sm"
+            variant={cluster.id === firstReady?.id ? 'primary' : 'ghost'}
+            loading={promoting === cluster.id}
+            disabled={promoting !== null || !canEditProject}
+            title={canEditProject ? undefined : 'Viewers can read clusters but cannot promote them.'}
+            onClick={() => handlePromote(cluster)}
+          >
+            Promote
+          </Btn>
+        )}
+      </div>
+    </div>
+  )
+
   if (error) return <ErrorAlert message={error} />
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
-        <p className="text-sm text-fg-muted">
-          Bugs that keep coming back with the same cause. Promote one and its suggested rule becomes a rule Mushi follows on every new report. Strong patterns are promoted for you every 6 hours.
+      <div className="mb-2 flex items-center justify-between gap-4 flex-wrap">
+        <p
+          className="min-w-0 flex-1 basis-64 text-sm text-fg-muted text-pretty"
+          title="Bugs that keep coming back with the same cause. Promote one and its suggested rule becomes a rule Mushi Mushi follows on every new report."
+        >
+          Promote a pattern to make its rule a lesson. Strong ones are promoted every 6 hours.
         </p>
         <SegmentedControl
           value={statusFilter}
@@ -395,61 +402,30 @@ function ClustersTab({ onChanged, canEditProject }: { onChanged: () => void; can
 
       {!loading && clusters.length === 0 && (
         <EmptyState
-          icon={<IconShield className="w-8 h-8" />}
           title="No recurring patterns yet"
           description="Patterns form by themselves once several reports share one cause. Nothing to do until then."
         />
       )}
 
       <div className="space-y-2">
-        {clusters.map((cluster) => (
-          <div
-            key={cluster.id}
-            // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
-            className="p-4 rounded-lg border border-edge hover:bg-surface-overlay/50 motion-safe:transition-opacity"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <Badge
-                    className={cluster.status === 'promoted' ? CHIP_TONE.okSubtle : canPromote(cluster) ? CHIP_TONE.warnSubtle : 'bg-surface-overlay text-fg-secondary'}
-                  >
-                    {clusterStatusWord(cluster)}
-                  </Badge>
-                  <span className="text-xs font-semibold tabular-nums text-fg">
-                    {cluster.cluster_size} {cluster.cluster_size === 1 ? 'report' : 'reports'}
-                  </span>
-                </div>
-                <p className="text-sm font-medium text-fg">
-                  {cluster.name ?? <span className="text-fg-faint italic">Unnamed pattern</span>}
-                </p>
-                {cluster.suggested_rule ? (
-                  <p className="mt-1.5 border-l-2 border-brand/40 pl-2 text-xs text-fg-secondary" data-testid="suggested-rule">
-                    <span className="text-fg-muted">Suggested rule: </span>
-                    {cluster.suggested_rule}
-                  </p>
-                ) : (
-                  <p className="mt-1 text-xs text-fg-faint">A rule is suggested once a few more reports arrive.</p>
-                )}
-                <p className="text-xs text-fg-faint mt-1">
-                  Last seen: <RelativeTime value={cluster.last_seen_at} />
-                </p>
-              </div>
-              {canPromote(cluster) && (
-                <Btn
-                  size="sm"
-                  variant={cluster.id === firstReady?.id ? 'primary' : 'ghost'}
-                  loading={promoting === cluster.id}
-                  disabled={promoting !== null || !canEditProject}
-                  title={canEditProject ? undefined : 'Viewers can read clusters but cannot promote them.'}
-                  onClick={() => handlePromote(cluster)}
-                >
-                  Promote
-                </Btn>
-              )}
+        {groupClusters(clusters).map((item) =>
+          item.kind === 'group' ? (
+            <div
+              key={item.key}
+              // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
+              className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg border border-edge px-4 py-2.5"
+              data-testid="lessons-cluster-group"
+            >
+              {/* The label already says "still growing"; no chip repeating it. */}
+              <span className="min-w-0 text-sm font-medium text-fg">{groupedClustersLabel(item.clusters.length, item.size)}</span>
+              <span className="text-xs text-fg-faint whitespace-nowrap">
+                Last seen: <RelativeTime value={item.lastSeenAt} />
+              </span>
             </div>
-          </div>
-        ))}
+          ) : (
+          renderCluster(item.cluster)
+          ),
+        )}
       </div>
     </div>
   )
@@ -457,7 +433,7 @@ function ClustersTab({ onChanged, canEditProject }: { onChanged: () => void; can
 
 // ─── Query Simulator tab ──────────────────────────────────────
 
-function QuerySimTab() {
+function QuerySimTab({ lessonCount }: { lessonCount: number }) {
   const projectId = useActiveProjectId()
   const [diffText, setDiffText] = useState('')
   const [maxTokens, setMaxTokens] = useState(3000)
@@ -525,9 +501,15 @@ function QuerySimTab() {
             className="w-24 px-2 py-1 text-sm border border-edge rounded bg-surface-root text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
           />
         </div>
-        <Btn loading={loading} onClick={handleQuery}>
+        {/* Nothing to match against with no lessons: off, with the reason beside it (2026-11-19). */}
+        <Btn loading={loading} onClick={handleQuery} disabled={lessonCount === 0} aria-describedby={lessonCount === 0 ? 'lessons-query-blocked' : undefined}>
           Query lessons
         </Btn>
+        {lessonCount === 0 && (
+          <span id="lessons-query-blocked" className="text-2xs text-fg-muted" data-testid="lessons-query-blocked">
+            No lessons to match yet.
+          </span>
+        )}
       </div>
 
       {error && <ErrorAlert message={error} />}
@@ -672,7 +654,7 @@ export function LessonsPage() {
         projectScope={stats.projectName ?? projectName ?? undefined}
 
         helpTitle={copy?.help?.title ?? 'About Lessons'}
-        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Rules learned from bugs that keep coming back: once 3 or more reports share one cause, Mushi suggests a rule, and a promoted rule guides every new diagnosis and fix.'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Rules learned from bugs that keep coming back: once 3 or more reports share one cause, Mushi Mushi suggests a rule, and a promoted rule guides every new diagnosis and fix.'}
         helpUseCases={copy?.help?.useCases ?? [
           'Inject relevant lessons into PR review context via the lessons.query MCP tool',
           'Test what rules a diff would trigger using the Query Sim tab',
@@ -706,13 +688,16 @@ export function LessonsPage() {
           },
           {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
-            show: !ux.hideLessonsSnapshot,
+            // Nothing learned and nothing growing: the tab's empty state says
+            // so once (round-2 sweep: "No lessons yet" twice over 0/0 tiles).
+            show: !ux.hideLessonsSnapshot && !lessonsNothingYet(stats),
             children: (
               <LessonsSnapshotStrip
                 stats={stats}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
                 statLabels={copy?.statLabels}
+                onTab={setActiveTab}
               />
             ),
           },
@@ -731,7 +716,7 @@ export function LessonsPage() {
 
       {activeTab === 'lessons' && <LessonsTab onChanged={onLessonsChanged} canEditProject={canEditProject} />}
       {activeTab === 'clusters' && <ClustersTab onChanged={onLessonsChanged} canEditProject={canEditProject} />}
-      {activeTab === 'query' && <QuerySimTab />}
+      {activeTab === 'query' && <QuerySimTab lessonCount={stats.activeLessons} />}
 
       <LessonsReadout stats={stats} fetchedAt={statsFetchedAt} isValidating={statsValidating} />
     </div>

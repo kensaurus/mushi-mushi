@@ -19,6 +19,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   inventory: null as unknown,
   findings: { runs: [], findings: [] } as unknown,
+  proposals: { proposals: [] } as unknown,
 }))
 
 vi.mock('../lib/supabase', () => ({ apiFetch: vi.fn(async () => ({ ok: true, data: {} })) }))
@@ -28,6 +29,7 @@ vi.mock('../lib/usePageData', () => ({
     if (path === '/v1/admin/inventory/p1') return { ...base, data: mocks.inventory }
     if (path === '/v1/admin/inventory/p1/user-stories') return { ...base, data: { tree: [] } }
     if (path === '/v1/admin/inventory/p1/findings') return { ...base, data: mocks.findings }
+    if (path === '/v1/admin/inventory/p1/proposals') return { ...base, data: mocks.proposals }
     return { ...base, data: null }
   },
 }))
@@ -100,8 +102,28 @@ describe('InventoryPage', () => {
     expect(host.textContent).not.toContain('Check every action')
   })
 
-  it('names the tabs in plain words', async () => {
+  it('points an app with no inventory at a waiting draft instead of saying there are no stories', async () => {
     mocks.inventory = { snapshot: null, summary: null }
+    mocks.proposals = { proposals: [{ id: 'd1', status: 'draft' }, { id: 'd0', status: 'discarded' }] }
+    await render()
+    const step = host.querySelector('[data-testid="inventory-first-step"]')
+    expect(step?.textContent).toContain('Your user stories are drafted')
+    expect(step?.querySelector('a[href="/inventory?tab=discovery"]')).not.toBeNull()
+    expect(host.textContent).not.toContain('No user stories yet')
+    mocks.proposals = { proposals: [] }
+  })
+
+  it('hides the section tabs on an empty app until there is something to show', async () => {
+    mocks.inventory = { snapshot: null, summary: null }
+    mocks.findings = { runs: [], findings: [] }
+    await render()
+    expect(host.querySelector('[data-testid="inventory-first-step"]')).not.toBeNull()
+    expect(host.querySelector('[aria-label="Inventory sections"]')).toBeNull()
+  })
+
+  it('names the tabs in plain words', async () => {
+    mocks.inventory = FILLED
+    mocks.findings = { runs: [], findings: [] }
     await render()
     const text = host.textContent ?? ''
     for (const label of ['All actions', 'Code checks', 'Live probes', 'Out of sync', 'Map file']) expect(text).toContain(label)

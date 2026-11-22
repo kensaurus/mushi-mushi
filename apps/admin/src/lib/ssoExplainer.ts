@@ -19,11 +19,11 @@ export const SSO_PROTOCOL_DEFINITIONS: SsoProtocolDefinition[] = [
     label: 'SAML 2.0',
     acronym: 'SAML',
     plain:
-      'Your team signs in through your company identity provider (Okta, Azure AD, Google Workspace). Mushi trusts a signed assertion from that provider instead of a password.',
+      'Your team signs in through your company identity provider (Okta, Azure AD, Google Workspace). Mushi Mushi trusts a signed assertion from that provider instead of a password.',
     whenToUse: 'Enterprise security reviews, MFA enforced centrally, automatic admin provisioning.',
     setupSteps: [
       'Paste your IdP metadata URL below and save.',
-      'Copy the ACS URL and Entity ID Mushi returns into your IdP app.',
+      'Copy the ACS URL and Entity ID Mushi Mushi returns into your IdP app.',
       'Map your corporate email domain so only @company.com users can sign in.',
       'Test with a non-admin user before rolling out to the whole team.',
     ],
@@ -37,7 +37,7 @@ export const SSO_PROTOCOL_DEFINITIONS: SsoProtocolDefinition[] = [
     whenToUse: 'When your IdP only offers OIDC/OAuth and not SAML metadata.',
     setupSteps: [
       'Record issuer URL, client ID, and client secret for your audit trail.',
-      'Contact Mushi support to register OIDC with GoTrue on enterprise tier.',
+      'Contact Mushi Mushi support to register OIDC with GoTrue on enterprise tier.',
     ],
   },
 ]

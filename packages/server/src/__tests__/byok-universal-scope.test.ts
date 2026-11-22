@@ -163,13 +163,18 @@ describe('resolveLlmKeys: the five steps in order', () => {
 
   it('5. the platform key only when the app has no key at all', async () => {
     process.env.ANTHROPIC_API_KEY = 'sk-ant-platform-0000'
+    process.env.OPENAI_API_KEY = 'sk-platform-openai-0000'
     try {
-      expect(ids(await byok.resolveLlmKeys(db([]), P_MUSHI, 'anthropic'))).toEqual(['env'])
+      // The platform Claude key reaches a call only through a KENSAURUS AI
+      // route (2026-11-21), so the resolver's platform step is OpenAI's.
+      expect(ids(await byok.resolveLlmKeys(db([]), P_MUSHI, 'anthropic'))).toEqual([])
+      expect(ids(await byok.resolveLlmKeys(db([]), P_MUSHI, 'openai'))).toEqual(['env'])
       expect(ids(await byok.resolveLlmKeys(db([key('universal', { owner_user_id: OWNER })]), P_MUSHI, 'anthropic'))).toEqual([
         'universal',
       ])
     } finally {
       delete process.env.ANTHROPIC_API_KEY
+      delete process.env.OPENAI_API_KEY
     }
   })
 
@@ -238,7 +243,8 @@ describe('resolveLlmKeySource matches the key resolveLlmKeys would use', () => {
     const previous = process.env.ANTHROPIC_API_KEY
     process.env.ANTHROPIC_API_KEY = 'sk-ant-platform-0000'
     try {
-      expect((await agrees(db([]))).source).toBe('env')
+      // No platform Claude key outside a route, so no 'env' source for Claude.
+      expect((await agrees(db([]))).source).toBe(null)
     } finally {
       if (previous === undefined) delete process.env.ANTHROPIC_API_KEY
       else process.env.ANTHROPIC_API_KEY = previous

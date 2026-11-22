@@ -375,3 +375,124 @@ export function triageSummaryOf(report: Row | null, actions: readonly TriageActi
   const next = actions[0] ? `Recommended: ${actions[0].action}.` : 'No action required.'
   return `[${severity}] ${category} — status: ${status}. ${next}`
 }
+
+// ── Journey optimizer (get_journeys) ────────────────────────────────────────
+
+/** The finding kinds GET /v1/admin/projects/:id/journeys returns (_shared/journey-map.ts). */
+export const JOURNEY_FINDING_KINDS = [
+  'broken',
+  'dead_end',
+  'high_exit',
+  'loop',
+  'reload',
+  'duplicate_page',
+  'route_variant',
+  'duplicate_title',
+  'orphan',
+  'deep_page',
+  'unvisited',
+] as const
+
+/** The windows the journeys route accepts. It reads any other value as 30. */
+const JOURNEY_DAY_OPTIONS = [7, 30, 90] as const
+
+/** Most flows get_journeys returns; the route returns every common one. */
+const JOURNEY_MAX_FLOWS = 10
+const JOURNEY_DEFAULT_LIMIT = 20
+export const JOURNEY_MAX_LIMIT = 100
+/** scan_site_journeys' hint: the scan runs in the background. */
+export const JOURNEY_SCAN_NEXT = 'Firecrawl reads the pages on its side, usually in a few minutes. Call get_journeys in about two minutes; each call moves the scan on and returns the map once it is done.'
+
+/** Longest on-demand recording window the route accepts: one week. */
+export const JOURNEY_RECORDING_MAX_HOURS = 168
+
+/**
+ * The PUT /journeys/recording body for record_journeys, checked the way the
+ * route checks it: hours a whole number 0–168 (0 stops), sampleRate in (0, 1].
+ */
+export function journeyRecordingBodyOf(
+  hours: unknown,
+  sampleRate: unknown,
+): { ok: true; body: { hours: number; sample_rate?: number } } | { ok: false; message: string } {
+  if (typeof hours !== 'number' || !Number.isInteger(hours) || hours < 0 || hours > JOURNEY_RECORDING_MAX_HOURS) {
+    return { ok: false, message: `hours must be a whole number from 0 (stop) to ${JOURNEY_RECORDING_MAX_HOURS}` }
+  }
+  if (sampleRate === undefined || sampleRate === null) return { ok: true, body: { hours } }
+  if (typeof sampleRate !== 'number' || !(sampleRate > 0 && sampleRate <= 1)) {
+    return { ok: false, message: 'sampleRate must be above 0 and at most 1 (0.1 = one visitor in ten)' }
+  }
+  return { ok: true, body: { hours, sample_rate: sampleRate } }
+}
+
+/** record_journeys' hint, by whether the window is open. */
+export function journeyRecordingNextOf(hours: number): string {
+  return hours === 0
+    ? 'Recording is off. Apps with trackSessions: \'on-demand\' send no visits until a new window opens.'
+    : 'Recording is on for apps whose SDK uses trackSessions: \'on-demand\'. Call get_journeys once people have used the app.'
+}
+
+/** 30 when unset, the value when the route accepts it, null otherwise. */
+export function journeyDaysOf(days: unknown): number | null {
+  if (days === undefined || days === null) return 30
+  return (JOURNEY_DAY_OPTIONS as readonly unknown[]).includes(days) ? (days as number) : null
+}
+
+export interface JourneysForAgentOptions {
+  kind?: string
+  limit?: number
+  includeGraph?: boolean
+}
+
+/**
+ * What get_journeys hands an agent: the score, stats, top flows and findings
+ * (each with its paste-ready prompt), filtered by kind and capped by limit.
+ * The page nodes and edges (up to 60 and 160 rows) come only on request.
+ */
+export function journeysForAgent(data: Row, opts: JourneysForAgentOptions = {}): Row {
+  const map = (data.map && typeof data.map === 'object' ? data.map : {}) as Row
+  const all = Array.isArray(map.findings) ? (map.findings as Row[]) : []
+  const matching = opts.kind ? all.filter((f) => f.kind === opts.kind) : all
+  const rawLimit = typeof opts.limit === 'number' && Number.isFinite(opts.limit) ? Math.trunc(opts.limit) : JOURNEY_DEFAULT_LIMIT
+  const limit = Math.min(Math.max(rawLimit, 1), JOURNEY_MAX_LIMIT)
+  const findingsByKind: Record<string, number> = {}
+  for (const f of all) findingsByKind[String(f.kind)] = (findingsByKind[String(f.kind)] ?? 0) + 1
+  const stats = (map.stats && typeof map.stats === 'object' ? map.stats : null) as Row | null
+  const scan = (data.scan && typeof data.scan === 'object' ? data.scan : null) as Row | null
+  const mapScan = (data.mapScan && typeof data.mapScan === 'object' ? data.mapScan : null) as Row | null
+  const findings = matching.slice(0, limit)
+
+  const next: string[] = []
+  if (scan?.status === 'running') next.push('A site scan is running. Call get_journeys again in about a minute.')
+  else if (!mapScan) next.push('No site scan yet. Call scan_site_journeys to read the live site\'s links (orphan, duplicate and deep pages).')
+  const recording = (data.recording && typeof data.recording === 'object' ? data.recording : null) as Row | null
+  if (stats && stats.sessions === 0) {
+    next.push(
+      recording && recording.until
+        ? 'No visits yet in this window. Recording is on, so visits will appear as people use the app.'
+        : "No visits in this window. Visits come from the Mushi Mushi SDK in the app; if it uses trackSessions: 'on-demand', open a recording window with record_journeys (or on the console's Journeys page).",
+    )
+  }
+  if (matching.length > findings.length) next.push(`${matching.length - findings.length} more finding(s): raise limit or filter by kind.`)
+  if (findings.length > 0) next.push('Each finding has a prompt: paste it into your coding agent in the app\'s repo.')
+
+  const out: Row = {
+    days: data.days ?? null,
+    liveUrl: data.liveUrl ?? null,
+    score: map.score ?? null,
+    rootPath: map.rootPath ?? null,
+    stats,
+    scan,
+    mapScan,
+    recording,
+    flows: Array.isArray(map.flows) ? map.flows.slice(0, JOURNEY_MAX_FLOWS) : [],
+    findingsTotal: matching.length,
+    findingsByKind,
+    findings,
+    next,
+  }
+  if (opts.includeGraph) {
+    out.nodes = Array.isArray(map.nodes) ? map.nodes : []
+    out.edges = Array.isArray(map.edges) ? map.edges : []
+  }
+  return out
+}

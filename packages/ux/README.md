@@ -1,6 +1,6 @@
 # @mushi-mushi/ux
 
-> **Your AI wrote it. Mushi Mushi tells you why it broke.**
+> **Your AI built it. Mushi Mushi makes it better.**
 
 For people who build with an AI coding agent and keep hearing that a screen is cramped, unreadable or broken on a phone. This [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) tool finds the UX problems on every screen of your app before your users do, and lets the coding agent you already pay for fix them one screen at a time. Every change is measured. Only the ones that help are kept, on a branch you review.
 
@@ -17,13 +17,13 @@ flowchart LR
     subgraph local["Your computer"]
         S["Studio on 127.0.0.1<br/>mushi ux ui"] --> R["Run: map screens,<br/>agent edits, measure"] --> B["Branch mushi-ux/run-id<br/>kept changes only"]
     end
-    R -. "--sync mirrors the run" .-> C["Mushi console<br/>review every screen"]
+    R -. "--sync mirrors the run" .-> C["Mushi Mushi console<br/>review every screen"]
     B --> P["Draft PR"] --> C
     C --> M["Merge"]
 ```
 
 1. **Studio (your computer).** `mushi ux ui` opens a page on 127.0.0.1. Pick the agent, model, skill and pages, then watch each attempt live.
-2. **Console (mirror and review).** With sync on, the run is mirrored to the [console](https://kensaur.us/mushi-mushi/admin) as it goes. The studio offers sync when you are signed in with the Mushi CLI; from the terminal, add `--sync`. **Review in console** on a run opens it there, screen by screen.
+2. **Console (mirror and review).** With sync on, the run is mirrored to the [console](https://kensaur.us/mushi-mushi/admin) as it goes. The studio offers sync when you are signed in with the Mushi Mushi CLI; from the terminal, add `--sync`. **Review in console** on a run opens it there, screen by screen.
 3. **Merge.** Open the kept changes as a draft PR from the studio, then merge it from the console (after a confirmation) or on GitHub. Nothing is merged for you.
 
 ## Quick start
@@ -73,7 +73,8 @@ With `--steps` (on by default in the studio) the agent first plans 2–5 small c
 | `mushi-ux ui` | The studio: start runs and watch them |
 | `mushi-ux run --dev "<cmd with {port}>"` | Run the loop from the terminal |
 | `mushi-ux discover --url <url>` | List the screens, change nothing |
-| `mushi-ux audit --url <live url> --profile-dir <dir>` | Find UX bugs on signed-in screens and file them as Mushi reports (below) |
+| `mushi-ux audit --url <live url> --profile-dir <dir>` | Find UX bugs on signed-in screens and file them as Mushi Mushi reports (below) |
+| `mushi-ux scorecard --url <live url> --profile-dir <dir>` | Score every page 1–10 on a written UX rubric and file the root causes (below) |
 | `mushi-ux explore --url <live url> --profile-dir <dir>` | Let a model use the signed-in app like a careless user; file the errors a replay confirms (below) |
 | `mushi-ux fresh-eyes --url <landing> --goal "<text>"` | Try one goal as a first-time visitor; time the path and file what stops them (below) |
 | `mushi-ux login --url <url>` | Sign in once, in a visible browser |
@@ -90,11 +91,11 @@ With `--steps` (on by default in the studio) the agent first plans 2–5 small c
 | `--sync` | off | Mirror the run to the console (`mushi ux` passes your login) |
 | `--no-judge` / `--no-preflight` / `--no-dashboard` | — | Skip the review, the agent check, or the local dashboard |
 
-Run state and screenshots live in `.mushi/ux/<runId>/`. The run adds its folders to `.git/info/exclude`, so `git status` stays clean. `--sync` refuses a run whose app reports to a different Mushi project than your login.
+Run state and screenshots live in `.mushi/ux/<runId>/`. The run adds its folders to `.git/info/exclude`, so `git status` stays clean. `--sync` refuses a run whose app reports to a different Mushi Mushi project than your login.
 
 ## Audit signed-in screens
 
-`mushi-ux audit` checks the live app the way a signed-in user sees it and files what is wrong as Mushi reports, so the fix loop picks them up. It never edits code and never opens a fresh browser: point it at a cached, signed-in profile.
+`mushi-ux audit` checks the live app the way a signed-in user sees it and files what is wrong as Mushi Mushi reports, so the fix loop picks them up. It never edits code and never opens a fresh browser: point it at a cached, signed-in profile.
 
 ```bash
 mushi-ux audit --url https://example.com/admin \
@@ -107,6 +108,25 @@ mushi-ux audit --url https://example.com/admin \
 - `--file` files at most 15 reports a run, one per screen and problem, and skips one filed in the last 14 days or still open. It needs `MUSHI_API_KEY` and `MUSHI_PROJECT_ID`; without them it writes `to-file.json` next to the summary. `--dry-run` files nothing.
 - `--profile-dir` opens the profile with your installed Chrome (`--channel chromium` for one Chromium made). A signed-out profile stops the run: sign it in once by hand.
 - Output: `~/.cache/mushi/ux-audits/<run>/` (summary, findings, screenshots).
+
+## Score every page: the UX scorecard
+
+`mushi-ux scorecard` scores each page of the live app 1–10 against a written rubric, groups what is wrong into root causes, and can file the top causes as Mushi Mushi reports (ADR 0067).
+
+```bash
+mushi-ux scorecard --url https://example.com/admin/ \
+  --profile-dir ~/.playwright-cli-profiles/example \
+  --paths-file pages.txt --sync --file --dry-run
+```
+
+- **The rubric:** clarity, hierarchy and density, consistency with the app's own pages, states (loading, empty, error, locked), truthfulness (does the page claim what its own data contradicts), copy, accessibility and speed. A page's score follows its worst dimension. The settle time and axe cap the speed and accessibility scores.
+- **What it reads:** the tab title, headings, visible text (with banners outside the content), controls, a screenshot about a second into the load and one once the page settles, the settle time and axe. It never clicks, only navigates.
+- **Pages:** `--path` (repeatable) or `--paths-file`, else the routes in your source (`--routes-from <dir>`), else a crawl under the URL. `/team?view=sso` and `/team?view=billing` are two pages. A console with its own nav registry should pass that list as `--paths-file`; `--routes-from` reads route files and `<Route path>` literals, and misses views kept in the query string.
+- **Who scores:** `--score-via server` (default) sends each page to Mushi, which uses your app's AI key, then Mushi's. `claude-code`, `cursor` or `anthropic-api` score on your machine.
+- **The viewport:** desktop first, 1440×900. Set it per app on the console, or pass `--viewport 390x844`.
+- **Root causes:** problems that come from one shared thing (a component, a banner, a status rule) become one cause with every page it touches. So do two pages that disagree about the same fact. `--file` files at most 5 causes a run, one report per cause. A cause that is already open only gets its pages refreshed.
+- **`--from-captures <dir>`** scores captures another browser driver wrote as `<dir>/pages/<page>/{facts.json, early.png, settled.png}`. Use it when the signed-in profile is already open in another browser.
+- **Output:** `scorecard.md` and `scorecard.json` in the run folder. `--sync` shows the run on the console (UX runs → Scorecard), with each page's trend across runs.
 
 ## Explore signed-in screens
 
@@ -136,7 +156,7 @@ mushi-ux fresh-eyes --url https://example.com --goal "get my first report" \
 - **Time to first value** is the app's wait (each action, navigation and settle) plus reading time for each new screen (238 words a minute, at most a minute a screen), until the goal check passes: `--success-url`, `--success-text`, `--success-selector` or `--success-api` (all given must hold). The model's think time is recorded but never counted.
 - **Measured findings**, filed once a replay of the steps without the model shows them again: console and page errors, a 5xx, a blank page, a dead end, a sign-in it cannot pass, a captcha (never solved), a step that needs an inbox, an API key, a terminal or another account. **Opinions** ("confusing", "unclear copy", "too many choices", giving up) are filed only when 2 of the sessions (`--sessions`, default 3) name the same screen.
 - **Writes** reach only the start URL's origin and `--app-host` hosts. Payments, third-party sign-in, public sign-up endpoints (`/auth/v1/signup`, OTP, recovery) and anything labelled delete, revoke, upgrade or sign out are refused in every mode. `--dry-run` writes nothing, uses no account and files nothing.
-- **Accounts:** the model types `{{email}}` and `{{password}}`; code fills in `MUSHI_FRESH_EYES_EMAIL` / `MUSHI_FRESH_EYES_PASSWORD` (your app's test account) or, for Mushi itself, `--mint-account` (an operator key; the account is flagged synthetic and deleted after a day). The real values never reach the prompt, the timeline or the console.
+- **Accounts:** the model types `{{email}}` and `{{password}}`; code fills in `MUSHI_FRESH_EYES_EMAIL` / `MUSHI_FRESH_EYES_PASSWORD` (your app's test account) or, for Mushi Mushi itself, `--mint-account` (an operator key; the account is flagged synthetic and deleted after a day). The real values never reach the prompt, the timeline or the console.
 - **Terminal setup:** `--terminal` runs a CLI setup step itself when a screen asks for a terminal: a sample app in a temp folder, the setup command (`--setup-command`, `{projectId}` and `{apiKey}` filled from the screen), one report through the widget, each phase timed.
 - What the model reads: the page's main content first, then its navigation, never a control a mouse user cannot see. A window a click opens on the app (a sign-in popup) is followed. A wait that hits its 20 s cap is marked on its step and never counted as the app's time. `--steps` defaults to 30, or 60 with a test account; the minted account's user id is in the log and timeline (never its password).
 - Output: `timeline.md` (each step, its screenshot, app wait and reading time, where it stalled), `result.json` and `shots/`. `--out <dir>` chooses the folder. `--sync` mirrors the run to the console's First-time user test page (a `--dry-run` too, marked "look around only"). `--request-stdin` reads the run (its id, start page, goal, visitors and test accounts) as JSON on stdin: how a local worker runs a test the console queued, so nothing it was given sits in argv.

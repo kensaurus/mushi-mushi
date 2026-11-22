@@ -79,7 +79,7 @@ export function HeaderContextChip({
         </span>
       ) : kicker ? (
         <span
-          className={`text-2xs uppercase tracking-wider text-fg-muted shrink-0${kickerClass}`}
+          className={`text-2xs text-fg-secondary shrink-0${kickerClass} font-semibold`}
         >
           {kicker}
         </span>

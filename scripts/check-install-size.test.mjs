@@ -84,9 +84,9 @@ test('overBudget reports each exceeded dimension and nothing within budget', () 
   assert.match(problems[1], /unpacked size .* exceeds/)
 })
 
-test('budgets exist for the two npx-launched packages', () => {
+test('budgets exist for the three npx-launched packages', () => {
   assert.deepEqual(
     BUDGETS.map((b) => b.name),
-    ['@mushi-mushi/mcp', '@mushi-mushi/cli'],
+    ['@mushi-mushi/mcp', '@mushi-mushi/cli', 'mushi-mushi'],
   )
 })

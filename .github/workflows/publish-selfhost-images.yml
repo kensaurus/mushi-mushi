@@ -1,0 +1,237 @@
+# FILE: publish-selfhost-images.yml
+# PURPOSE: Build and push the self-host images the Helm chart and docs use:
+#            ghcr.io/<owner>/mushi-mushi-edge   (deploy/Dockerfile.edge)
+#            ghcr.io/<owner>/mushi-mushi-admin  (deploy/Dockerfile.admin)
+#            ghcr.io/<owner>/mushi-mushi-migrate (deploy/Dockerfile.migrate)
+#          for linux/amd64 and linux/arm64. First the `smoke` job installs the
+#          stack from scratch with these images (deploy/selfhost/install.sh:
+#          Supabase's kit, every migration on an empty database, sign-in, a
+#          report), so a broken image is never pushed.
+#
+# WHEN:    On release tags, manual dispatch, and once a week. Never on pull
+#          requests or branch pushes (Actions minutes are billed; see ci-cost
+#          rules).
+#          Tags created by the Release workflow's GITHUB_TOKEN do not trigger
+#          other workflows, so release.yml's `selfhost-images` job dispatches
+#          this one with the released `mushi-mushi` version. By hand:
+#            gh workflow run "Publish self-host images" --ref master -f version=<x.y.z>
+#          or push a `selfhost-v<x.y.z>` tag yourself.
+#          Weekly (Thursday 19:00 JST, after ADR 0062's npm release day): if
+#          anything that goes into an image changed since the last published
+#          image, publish `<mushi-mushi version>-selfhost.<YYYYMMDD>` and
+#          `latest`; otherwise build nothing. Server-only fixes carry no
+#          changeset, so they used to reach self-hosters only by a manual
+#          dispatch (2026-11-20). Not on every merge: `latest` is what
+#          `mushi.sh update` pulls and its migrations run on start, so it
+#          moves on a cadence, as Sentry's self-hosted images do.
+#
+# NOTES:   - Plain docker CLI steps, no third-party build actions.
+#          - The runner needs Docker with BuildKit (the per-Dockerfile
+#            .dockerignore files need it).
+#          - A new GHCR package starts private. Make both packages public once
+#            (Package settings → Change visibility) or `helm install` gets 401.
+
+name: Publish self-host images
+
+on:
+  push:
+    tags:
+      - 'mushi-mushi@*'
+      - 'selfhost-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Image version tag (e.g. 1.37.0). Empty = sha-<commit>, no latest.'
+        required: false
+        default: ''
+  schedule:
+    # Thursday 10:00 UTC = 19:00 JST, after the weekly npm release (ADR 0062).
+    - cron: '0 10 * * 4'
+
+concurrency:
+  group: publish-selfhost-images-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    name: Anything new for the images?
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      publish: ${{ steps.decide.outputs.publish }}
+      version: ${{ steps.decide.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Decide
+        id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          # Tags and dispatches always publish (they name what they want).
+          if [ "$EVENT" != "schedule" ]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Weekly: compare with the commit the last published images came from.
+          prev=$(gh run list -R "$GITHUB_REPOSITORY" --workflow publish-selfhost-images.yml \
+            --status success --limit 1 --json headSha --jq '.[0].headSha // ""')
+          if [ -n "$prev" ] && git cat-file -e "${prev}^{commit}" 2>/dev/null \
+            && git diff --quiet "$prev" HEAD -- packages apps/admin deploy package.json pnpm-lock.yaml; then
+            echo "::notice::Nothing that goes into an image changed since ${prev::7}; nothing to publish."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          base=$(node -p "require('./packages/launcher/package.json').version")
+          version="${base}-selfhost.$(date -u +%Y%m%d)"
+          echo "::notice::Image inputs changed since ${prev:0:7}; publishing ${version} and latest."
+          {
+            echo "publish=true"
+            echo "version=${version}"
+          } >> "$GITHUB_OUTPUT"
+
+  smoke:
+    name: Install from scratch with the new images
+    needs: changes
+    if: needs.changes.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+
+      - name: Build the images (amd64, local)
+        env:
+          DOCKER_BUILDKIT: '1'
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          # The same names the publish job pushes (a fork builds its own).
+          prefix="ghcr.io/${OWNER,,}/mushi-mushi"
+          echo "MUSHI_IMAGE_PREFIX=$prefix" >> "$GITHUB_ENV"
+          for image in edge admin migrate; do
+            docker build -q -f "deploy/Dockerfile.${image}" -t "${prefix}-${image}:ci" .
+          done
+
+      - name: Install
+        env:
+          MUSHI_VERSION: ci
+          MUSHI_SKIP_PULL: '1'
+        run: sh deploy/selfhost/install.sh --dir "$RUNNER_TEMP/mushi" --email ci@example.com --yes | tee "$RUNNER_TEMP/install.log"
+
+      - name: Check the running install
+        working-directory: ${{ runner.temp }}/mushi
+        run: sh "$GITHUB_WORKSPACE/deploy/selfhost/smoke.sh" "$RUNNER_TEMP/install.log"
+
+      - name: Logs on failure
+        if: failure()
+        working-directory: ${{ runner.temp }}/mushi
+        run: |
+          docker compose ps -a || true
+          docker compose logs --tail 80 || true
+
+  publish:
+    name: Build & push edge + admin + migrate images
+    needs: [changes, smoke]
+    runs-on: ${{ (github.actor != 'dependabot[bot]' && vars.LINUX_RUNNER) || 'ubuntu-latest' }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+
+      - name: Resolve tags
+        id: tags
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          WEEKLY_VERSION: ${{ needs.changes.outputs.version }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          if [ -n "$WEEKLY_VERSION" ]; then
+            version="$WEEKLY_VERSION"
+            latest=true
+          elif [ "$REF_TYPE" = "tag" ]; then
+            version="${REF_NAME#mushi-mushi@}"
+            version="${version#selfhost-v}"
+            latest=true
+          elif [ -n "$INPUT_VERSION" ]; then
+            version="$INPUT_VERSION"
+            latest=true
+          else
+            version="sha-${GITHUB_SHA::7}"
+            latest=false
+          fi
+          if ! [[ "$version" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::Invalid version tag: $version"
+            exit 1
+          fi
+          {
+            echo "owner=$owner"
+            echo "version=$version"
+            echo "latest=$latest"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+      - name: Enable arm64 builds
+        run: |
+          set -euo pipefail
+          docker run --privileged --rm tonistiigi/binfmt:qemu-v10.2.1@sha256:d3b963f787999e6c0219a48dba02978769286ff61a5f4d26245cb6a6e5567ea3 --install arm64
+          docker buildx create --use --name mushi-multiarch --driver docker-container
+
+      - name: Build & push
+        env:
+          DOCKER_BUILDKIT: '1'
+          OWNER: ${{ steps.tags.outputs.owner }}
+          VERSION: ${{ steps.tags.outputs.version }}
+          LATEST: ${{ steps.tags.outputs.latest }}
+        run: |
+          set -euo pipefail
+          for image in edge admin migrate; do
+            repo="ghcr.io/${OWNER}/mushi-mushi-${image}"
+            tags=(-t "${repo}:${VERSION}")
+            if [ "$LATEST" = "true" ]; then tags+=(-t "${repo}:latest"); fi
+            # The admin build stage runs on the runner's platform ($BUILDPLATFORM);
+            # only the nginx stage is per-architecture.
+            docker buildx build \
+              --platform linux/amd64,linux/arm64 \
+              -f "deploy/Dockerfile.${image}" \
+              --label "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+              --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+              --label "org.opencontainers.image.version=${VERSION}" \
+              "${tags[@]}" --push .
+            echo "::notice::Pushed ${repo}:${VERSION} (amd64, arm64)"
+          done
+
+      - name: Remove the build container
+        if: always()
+        run: docker buildx rm mushi-multiarch || true
+
+      - name: Log out
+        if: always()
+        run: docker logout ghcr.io || true

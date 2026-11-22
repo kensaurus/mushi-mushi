@@ -33,12 +33,15 @@ export function SdkInstallSnippetColumn({
   autoFrameworkApplied,
   code,
   install,
+  belowTabs,
 }: {
   framework: Framework
   onFrameworkChange: (fw: Framework) => void
   autoFrameworkApplied: React.MutableRefObject<boolean>
   code: string
   install: string
+  /** A choice that belongs to the picked tab (the React setup), above the code it changes. */
+  belowTabs?: React.ReactNode
 }) {
   const [snippetCopied, setSnippetCopied] = useState(false)
   const [installCopied, setInstallCopied] = useState(false)
@@ -62,7 +65,9 @@ export function SdkInstallSnippetColumn({
           "React Native" on a single line when wrapping kicks in
           (otherwise it splits into "React" / "Native" on adjacent
           lines, which the eye reads as two separate tabs). */}
-      <div className="flex flex-wrap items-center gap-1 border-b border-edge-subtle pb-2">
+      {/* No wrap here: the chips wrap inside their own control and the ⓘ stays at the end of
+          the row. A wrapping row left a lone ⓘ under the chips (round-3 review, 2026-11-19). */}
+      <div className="flex items-start gap-1 border-b border-edge-subtle pb-2">
         <SegmentedControl
           value={framework}
           options={FRAMEWORKS.map((fw) => ({ id: fw, label: frameworkLabel(fw) }))}
@@ -80,6 +85,8 @@ export function SdkInstallSnippetColumn({
         />
         <ConfigHelp helpId="sdk-install.framework" />
       </div>
+
+      {belowTabs}
 
       <CodePanel
         label="Install"

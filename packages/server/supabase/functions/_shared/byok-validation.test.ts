@@ -225,3 +225,31 @@ Deno.test(
     assertEquals(revoked.keyStatus, 'auth_failed');
   },
 );
+
+Deno.test('validateOpenAiBaseUrl takes an operator model server only when allowed', () => {
+  // Default: a local http server is refused (a user-stored base URL never gets the flag).
+  assertEquals(validateOpenAiBaseUrl('http://ollama:11434/v1').ok, false);
+  assertEquals(validateOpenAiBaseUrl('http://ollama:11434/v1', [], {}).ok, false);
+  // Operator opted in (MUSHI_ALLOW_PRIVATE_LLM_BASE_URL=true): http, any host and port.
+  assertEquals(validateOpenAiBaseUrl('http://ollama:11434/v1/', [], { allowPrivateServer: true }), {
+    ok: true,
+    value: 'http://ollama:11434/v1',
+  });
+  // Still no credentials, query, fragment or other schemes.
+  for (const bad of ['http://u:p@ollama:11434/v1', 'http://ollama:11434/v1?x=1', 'file:///etc/passwd', 'ftp://ollama/v1']) {
+    assertEquals(validateOpenAiBaseUrl(bad, [], { allowPrivateServer: true }).ok, false, bad);
+  }
+});
+
+Deno.test('validateOpenAiBaseUrl trusts any https host the operator configures, but only https', () => {
+  // A user-stored base URL keeps the provider list.
+  assertEquals(validateOpenAiBaseUrl('https://integrate.api.nvidia.com/v1').ok, false);
+  // The operator's OPENAI_BASE_URL: any https host and port, no code change per provider.
+  for (const url of ['https://integrate.api.nvidia.com/v1', 'https://llm.internal.example:8443/v1']) {
+    assertEquals(validateOpenAiBaseUrl(url, [], { operatorConfigured: true }), { ok: true, value: url }, url);
+  }
+  // http still needs MUSHI_ALLOW_PRIVATE_LLM_BASE_URL; credentials and queries stay refused.
+  for (const bad of ['http://integrate.api.nvidia.com/v1', 'https://u:p@llm.example/v1', 'https://llm.example/v1?k=1']) {
+    assertEquals(validateOpenAiBaseUrl(bad, [], { operatorConfigured: true }).ok, false, bad);
+  }
+});

@@ -81,7 +81,7 @@ export function PdcaRunDrawer({ run, open, onClose, onAbort, onTrigger, onRefres
 
         {scores.length > 0 && (
           <div>
-            <p className="mb-2 text-3xs font-medium uppercase tracking-wide text-fg-muted">
+            <p className="mb-2 text-3xs font-semibold text-fg-secondary">
               Score timeline
             </p>
             <div className="flex h-16 items-end gap-1">
@@ -112,7 +112,7 @@ export function PdcaRunDrawer({ run, open, onClose, onAbort, onTrigger, onRefres
         )}
 
         <div>
-          <p className="mb-2 text-3xs font-medium uppercase tracking-wide text-fg-muted">
+          <p className="mb-2 text-3xs font-semibold text-fg-secondary">
             Iterations
           </p>
           {iterations.length === 0 ? (
@@ -154,7 +154,7 @@ export function PdcaRunDrawer({ run, open, onClose, onAbort, onTrigger, onRefres
 
         {activeIter && (
           <div>
-            <p className="mb-2 text-3xs font-medium uppercase tracking-wide text-fg-muted">
+            <p className="mb-2 text-3xs font-semibold text-fg-secondary">
               Critique — iteration {activeIter.iteration_n}
             </p>
             <Card className="space-y-3 p-4">

@@ -96,6 +96,7 @@ import {
   reportReopenedSince,
   reportsInChangedFiles,
   revertSafety,
+  SECOND_JUDGE_DEFAULT_MODEL,
   secondJudgeDue,
   signalRegresses,
   VERIFY_RECHECK_MS,
@@ -423,7 +424,12 @@ async function runSecondJudge(
     return { state: stored ? { kind: 'result', record: stored } : null, record: stored }
   }
   const resolved = await (ctx.deps.resolveJudgeKey ?? ((db, p, s) => resolveSecondJudgeKey(db, p, s)))(ctx.db, attempt.project_id, settings)
-  if (!resolved.key) return { state: { kind: 'unavailable', reason: resolved.reason }, record: stored }
+  // No key of the app's own: the platform keys run the second review through
+  // the fix-verifier-judge KENSAURUS AI route (2026-11-21, ADR 0035 amendment),
+  // on OpenAI-compatible candidates only, so it stays a different model family
+  // from the Opus review. Off and over-budget still mean unavailable.
+  const onRoute = !resolved.key && resolved.reason === 'no_key'
+  if (!resolved.key && !onRoute) return { state: { kind: 'unavailable', reason: resolved.reason }, record: stored }
 
   const diff = buildReviewDiff(input.files, { complete: input.filesComplete })
   const prompt = buildReviewPrompt({
@@ -440,32 +446,56 @@ async function runSecondJudge(
     diff,
     scrub: (t) => sanitizeForLLM(t).text,
   })
-  const usageCtx = {
+  const usageFor = (model: string, keySource: 'byok' | 'env') => ({
     functionName: 'fix-verifier',
     stage: 'second_review',
     projectId: attempt.project_id,
     reportId: attempt.report_id,
-    model: resolved.model,
-    keySource: resolved.key.source,
+    model,
+    keySource,
     startedAt: Date.now(),
-  } as const
+  } as const)
   const at = ctx.now.toISOString()
   ctx.summary.judged++
+  const callJudge = ctx.deps.callJudge ?? defaultCallJudge
+  /** One judge call, recorded (a failed call can still have spent tokens). */
+  const judgeOn = async (key: ResolvedKey, model: string) => {
+    const usageCtx = usageFor(model, key.source)
+    try {
+      const out = await callJudge({ key, model, system: AGENT_PR_REVIEW_SYSTEM_PROMPT, prompt, abortSignal: AbortSignal.timeout(JUDGE_TIMEOUT_MS) })
+      void recordLlmUsage(ctx.db, usageCtx, { result: out })
+      return out
+    } catch (err) {
+      void recordLlmUsage(ctx.db, usageCtx, { error: err })
+      throw err
+    }
+  }
+  let judgeProvider: 'openai' | 'openrouter' = resolved.key ? resolved.provider : 'openai'
+  let judgeModel: string = resolved.key ? resolved.model : SECOND_JUDGE_DEFAULT_MODEL.openai
   let result: JudgeCallResult
   try {
-    result = await (ctx.deps.callJudge ?? defaultCallJudge)({
-      key: resolved.key,
-      model: resolved.model,
-      system: AGENT_PR_REVIEW_SYSTEM_PROMPT,
-      prompt,
-      abortSignal: AbortSignal.timeout(JUDGE_TIMEOUT_MS),
-    })
+    if (resolved.key) {
+      result = await judgeOn(resolved.key, resolved.model)
+    } else {
+      const { withPlatformRoute } = await import('../_shared/llm-failover.ts')
+      const routed = await withPlatformRoute(ctx.db, attempt.project_id, { feature: 'fix-verifier-judge', tier: 'standard' }, {
+        openai: (key) => {
+          judgeModel = key.model ?? SECOND_JUDGE_DEFAULT_MODEL.openai
+          judgeProvider = key.provider === 'openrouter' ? 'openrouter' : 'openai'
+          return judgeOn(key, judgeModel)
+        },
+      })
+      result = routed.result
+    }
   } catch (err) {
-    // A failed call can still have spent tokens: record it first.
-    void recordLlmUsage(ctx.db, usageCtx, { error: err })
+    // The route found no platform key either: the same unavailable state as before.
+    const e = err as { name?: string; code?: string } | null
+    if (onRoute && e?.name === 'LlmFailoverError' && e.code === 'NO_KEYS_CONFIGURED') {
+      return { state: { kind: 'unavailable', reason: 'no_key' }, record: stored }
+    }
     const record: SecondJudgeRecord = {
-      provider: resolved.provider,
-      model: resolved.model,
+      provider: judgeProvider,
+      model: judgeModel,
       verdict: null,
       findings: [],
       summary: null,
@@ -478,18 +508,17 @@ async function runSecondJudge(
     }
     return { state: { kind: 'result', record }, record }
   }
-  void recordLlmUsage(ctx.db, usageCtx, { result })
   const review = normalizeReview(result.object, {
     ciFailed: false,
     diffTruncated: diff.truncated,
     sourceOmitted: diff.sourceOmitted.length > 0,
     fileListIncomplete: diff.fileListIncomplete,
   })
-  const model = servedModel(result, resolved.model)
+  const model = servedModel(result, judgeModel)
   const tokens = extractLlmUsage(result)
   const cost = estimateCallCostUsd(model, tokens.inputTokens ?? 0, tokens.outputTokens ?? 0)
   const record: SecondJudgeRecord = {
-    provider: resolved.provider,
+    provider: judgeProvider,
     model,
     verdict: review.verdict,
     findings: review.findings,

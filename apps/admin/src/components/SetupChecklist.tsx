@@ -15,12 +15,13 @@
  *          real work only and never repeats a setup step beside it.
  */
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { SetupProject, SetupStep } from '../lib/useSetupStatus'
 import { CHIP_TONE } from '../lib/chipTone'
 import { useClaimNextStep, useNextStep } from '../lib/useNextStep'
 import { setupCountLabel } from '../lib/setupProgress'
+import { plainSetupSteps } from '../lib/setupStepWords'
 import { Btn, Card, RefreshIconButton } from './ui'
 import { SdkHealthPanel } from './SdkHealthPanel'
 
@@ -60,7 +61,9 @@ function formatRelativeTime(iso: string | null | undefined): string | null {
   return `${Math.round(seconds / 86400)} days ago`
 }
 
-export function SetupChecklist({ project, mode, extrasOnly, onRefresh, adminEndpointHost }: SetupChecklistProps) {
+export function SetupChecklist({ project: serverProject, mode, extrasOnly, onRefresh, adminEndpointHost }: SetupChecklistProps) {
+  // Plain words, and one button per page (lib/setupStepWords.ts, audit 2026-11-11).
+  const project = useMemo(() => ({ ...serverProject, steps: plainSetupSteps(serverProject.steps) }), [serverProject])
   const requiredDone = project.required_complete >= project.required_total
   const allDone = project.complete >= project.total
   const pct = Math.round((project.required_complete / Math.max(1, project.required_total)) * 100)
@@ -160,7 +163,7 @@ function BannerChecklist({
           </div>
           <p className="mt-0.5 text-2xs text-fg-muted truncate">
             {requiredDone
-              ? 'Optional integrations below unlock auto-fix PRs and BYOK billing.'
+              ? 'Optional extras below: Mushi Mushi can open fixes for you, or use your own AI key.'
               : `Project: ${project.project_name}`}
           </p>
         </div>
@@ -193,8 +196,11 @@ function BannerChecklist({
         </div>
       </div>
 
-      <ol className="space-y-1 p-3">
-        {project.steps.map(step => (
+      {/* The count above is of the required steps, so those are the rows
+          under it. "2 of 4 done" over ten rows did not add up (re-audit
+          2026-11-11); the optional ones sit apart, named as not counted. */}
+      <ol className="space-y-1 p-3" data-testid="setup-required-steps">
+        {requiredSteps(project).map(step => (
           <ChecklistRow
             key={step.id}
             step={step}
@@ -204,8 +210,47 @@ function BannerChecklist({
           />
         ))}
       </ol>
+      {optionalSteps(project).length > 0 && (
+        <details className="border-t border-edge-subtle px-3 py-2" open={requiredDone} data-testid="setup-optional-steps">
+          <summary className="cursor-pointer select-none text-2xs text-fg-muted hover:text-fg-secondary">
+            {optionalLabel(project)}
+          </summary>
+          <ol className="mt-1 space-y-1">
+            {optionalSteps(project).map(step => (
+              <ChecklistRow
+                key={step.id}
+                step={step}
+                current={step.id === nextRequiredId}
+                adminEndpointHost={adminEndpointHost}
+                projectId={project.project_id}
+              />
+            ))}
+          </ol>
+        </details>
+      )}
     </div>
   )
+}
+
+/** The steps the "N of M done" count is about. An older API with no `required` flags counts every step. */
+function requiredSteps(project: SetupProject): SetupStep[] {
+  const required = project.steps.filter((s) => s.required)
+  return required.length > 0 ? required : project.steps
+}
+
+function optionalSteps(project: SetupProject): SetupStep[] {
+  return project.steps.some((s) => s.required) ? project.steps.filter((s) => !s.required) : []
+}
+
+/**
+ * @internal Exported for unit tests only.
+ * "Optional: 2 of 6 on". It read "6 optional extras, not counted above (2 on)",
+ * which the owner's walkthrough could not parse (2026-11-17).
+ */
+export function optionalLabel(project: Pick<SetupProject, 'steps'>): string {
+  const extras = optionalSteps(project as SetupProject)
+  const done = extras.filter((s) => s.complete).length
+  return `Optional: ${done} of ${extras.length} on`
 }
 
 function WizardChecklist({ project, requiredDone, pct, nextRequiredId, adminEndpointHost, extrasOnly }: InternalProps) {
@@ -216,7 +261,8 @@ function WizardChecklist({ project, requiredDone, pct, nextRequiredId, adminEndp
     const extras = project.steps.filter((step) => !step.required)
     return (
       <div className="space-y-3" data-testid="setup-extras">
-        <p className="text-xs text-fg-muted">Optional. Each one adds something once your app is set up.</p>
+        {/* The tab guide says "All optional" once; this line said it again,
+            and every card carried an "optional" chip (round-2 review). */}
         <ol className="space-y-2">
           {extras.map((step) => (
             <li key={step.id}>
@@ -250,8 +296,8 @@ function WizardChecklist({ project, requiredDone, pct, nextRequiredId, adminEndp
         </div>
       </Card>
 
-      <ol className="space-y-2">
-        {project.steps.map(step => (
+      <ol className="space-y-2" data-testid="setup-required-steps">
+        {requiredSteps(project).map(step => (
           <li key={step.id}>
             <ChecklistCard
               step={step}
@@ -262,6 +308,23 @@ function WizardChecklist({ project, requiredDone, pct, nextRequiredId, adminEndp
           </li>
         ))}
       </ol>
+      {optionalSteps(project).length > 0 && (
+        <div className="space-y-2" data-testid="setup-optional-steps">
+          <p className="text-2xs text-fg-muted">{optionalLabel(project)}</p>
+          <ol className="space-y-2">
+            {optionalSteps(project).map(step => (
+              <li key={step.id}>
+                <ChecklistCard
+                  step={step}
+                  current={step.id === nextRequiredId}
+                  adminEndpointHost={adminEndpointHost}
+                  projectId={project.project_id}
+                />
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
     </div>
   )
 }
@@ -405,12 +468,12 @@ function ChecklistRow({
             {stepLabel(step)}
           </span>
           {current && (
-            <span className="rounded-sm px-1 py-0.5 text-2xs uppercase tracking-wider bg-brand/12 text-brand border border-brand/28">
+            <span className="rounded-sm px-1 py-0.5 text-2xs bg-brand/12 text-brand border border-brand/28 font-semibold">
               do this next
             </span>
           )}
           {!step.required && !current && (
-            <span className="rounded-sm border border-edge-subtle bg-surface-raised px-1 py-0.5 text-2xs text-fg-faint uppercase tracking-wider">
+            <span className="rounded-sm bg-surface-raised px-1 py-px text-2xs text-fg-faint">
               optional
             </span>
           )}
@@ -420,7 +483,8 @@ function ChecklistRow({
         {fix.panel}
       </div>
       {fix.button}
-      {!step.complete && (
+      {/* One action per row: the fix button when there is one, else the step's link. */}
+      {!step.complete && step.cta_label && !fix.button && (
         <Link
           to={step.cta_to}
           className="shrink-0 text-2xs text-accent-foreground hover:text-accent"
@@ -446,9 +510,10 @@ function ChecklistCard({
   const diag = buildSdkDiagnostic(step, adminEndpointHost)
   const fix = useSdkFix(step, projectId)
   return (
-    <div className={`rounded-md border p-3 motion-safe:transition-[transform,opacity] ${
+    // A done step is said once, by the ✓: no green fill and no "done" chip.
+    <div data-step-done={step.complete ? 'true' : undefined} className={`rounded-md border p-3 motion-safe:transition-[transform,opacity] ${
       step.complete
-        ? 'border-ok/30 bg-ok-muted/10'
+        ? 'border-edge-subtle bg-surface-raised/30'
         : current
           ? 'border-brand/40 bg-brand/5 ring-2 ring-brand/40'
           : step.required
@@ -463,27 +528,19 @@ function ChecklistCard({
               {stepLabel(step)}
             </h4>
             {current && (
-              <span className="rounded-sm bg-brand text-brand-fg px-1.5 py-0.5 text-2xs uppercase tracking-wider font-semibold">
+              <span className="rounded-sm bg-brand text-brand-fg px-1.5 py-0.5 text-2xs font-semibold">
                 do this next
               </span>
             )}
-            {!step.required && !current && (
-              <span className="rounded-sm border border-edge-subtle bg-surface-raised px-1 py-0.5 text-2xs text-fg-faint uppercase tracking-wider">
-                optional
-              </span>
-            )}
-            {step.complete && (
-              <span className="rounded-sm px-1.5 py-0.5 text-2xs uppercase tracking-wider bg-ok-muted/50 text-ok-foreground border border-ok/25">
-                done
-              </span>
-            )}
+            {/* Wizard cards sit under "Optional: N of M on" or the extras
+                tab's "All optional" guide: no per-card "optional" chip. */}
           </div>
           <p className="mt-1 text-xs text-fg-muted">{step.description}</p>
           {diag && <SdkDiagnostic tone={diag.tone} lines={diag.lines} />}
           {fix.panel}
         </div>
         {fix.button}
-        {!step.complete && (
+        {!step.complete && step.cta_label && !fix.button && (
           <Link
             to={step.cta_to}
             className="shrink-0 inline-flex items-center gap-1 rounded-sm bg-brand px-2.5 py-1 text-xs font-medium text-brand-fg hover:bg-brand-hover motion-safe:transition-opacity"

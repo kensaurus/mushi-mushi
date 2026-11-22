@@ -1,19 +1,19 @@
-# @mushi-mushi/svelte
+# mushi-mushi/svelte
 
 Source: https://kensaur.us/mushi-mushi/docs/sdks/svelte
 
 ---
-title: '@mushi-mushi/svelte'
-description: Reference for @mushi-mushi/svelte, the Mushi Mushi Svelte SDK. initMushi, getMushi and the SvelteKit handleError helpers that send browser errors to your queue.
+title: 'mushi-mushi/svelte'
+description: Reference for mushi-mushi/svelte, the Mushi Mushi Svelte SDK. initMushi, getMushi and the SvelteKit handleError helpers that send browser errors to your queue.
 ---
 
-# `@mushi-mushi/svelte`
+# `mushi-mushi/svelte`
 
-Mushi Mushi boot helpers for Svelte and SvelteKit over [`@mushi-mushi/web`](/sdks/web). Shared
+Mushi Mushi boot helpers for Svelte and SvelteKit over [`mushi-mushi`](/sdks/web). Shared
 wrapper notes: [Framework wrappers](/sdks/framework-wrappers).
 
 ```bash
-npm install @mushi-mushi/svelte
+npm install mushi-mushi
 ```
 
 See [Quickstart → Svelte](/quickstart/svelte) for the short install path.
@@ -21,7 +21,7 @@ See [Quickstart → Svelte](/quickstart/svelte) for the short install path.
 ## API surface
 
 ```ts
-import { initMushi, getMushi, createMushiErrorHandler } from '@mushi-mushi/svelte'
+import { initMushi, getMushi, createMushiErrorHandler } from 'mushi-mushi/svelte'
 ```
 
 | Export | Purpose |
@@ -33,12 +33,12 @@ import { initMushi, getMushi, createMushiErrorHandler } from '@mushi-mushi/svelt
 
 The error helpers send only when an SDK instance exists. Because `initMushi()`
 does nothing on the server, a helper used in `hooks.server.ts` does not send
-server errors; use [`@mushi-mushi/node`](/sdks/node) for those.
+server errors; use [`mushi-mushi/node`](/sdks/node) for those.
 
 ## Setup
 
 ```ts
-import { initMushi } from '@mushi-mushi/svelte'
+import { initMushi } from 'mushi-mushi/svelte'
 
 initMushi({
   projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
@@ -51,7 +51,7 @@ Call from `hooks.client.ts` or a top-level `+layout.svelte` `onMount`.
 ## Submitting a report
 
 ```ts
-import { getMushi } from '@mushi-mushi/svelte'
+import { getMushi } from 'mushi-mushi/svelte'
 
 const mushi = getMushi()
 await mushi.captureEvent({

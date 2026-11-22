@@ -157,6 +157,63 @@ export function bisectTrain<T>(members: T[]): { retry: T[]; deferred: T[]; faile
   return { retry: members.slice(0, half), deferred: members.slice(half), failedAlone: null }
 }
 
+/**
+ * Re-runs of a red train's failed checks before it is judged (bisected, or its
+ * only member blocked). A runner that could not install a browser (SBC #1299,
+ * 2026-11-12) or a page scanned before it hydrated is not the members' code.
+ */
+export const TRAIN_CI_RERUNS = 1
+/** `release_trains.detail` while a red train's failed checks run again. */
+export const TRAIN_RERUN_DETAIL_PREFIX = 'Re-running the failed checks once:'
+
+/** Whether a red train gets its failed checks re-run instead of being judged now. */
+export function shouldRerunTrain(ciReruns: number | null | undefined): boolean {
+  return (ciReruns ?? 0) < TRAIN_CI_RERUNS
+}
+
+/**
+ * The GitHub Actions workflow runs behind a head's failed check runs, from each
+ * check run's details URL (`…/actions/runs/<id>/job/<job>`). A check from
+ * another CI (no Actions run in its URL) cannot be re-run this way and is left
+ * out. At most 10, deduplicated.
+ */
+export function failedWorkflowRunIds(checkRuns: ReadonlyArray<{ conclusion?: string | null; details_url?: string | null }>): number[] {
+  const ids = new Set<number>()
+  for (const c of checkRuns) {
+    if (c.conclusion !== 'failure' && c.conclusion !== 'timed_out') continue
+    const m = /\/actions\/runs\/(\d+)(?:\/|$)/.exec(c.details_url ?? '')
+    if (m) ids.add(Number(m[1]))
+  }
+  return [...ids].slice(0, 10)
+}
+
+/** `release_trains.detail` while GitHub refuses a train whose checks read clean. */
+export const TRAIN_BLOCKED_DETAIL_PREFIX = 'GitHub blocks this train:'
+/** How long GitHub may keep refusing before the train gives its place back. */
+export const TRAIN_BLOCKED_GRACE_MS = 30 * 60_000
+
+/**
+ * Whether a train whose checks read clean may merge. Mushi's read of the checks
+ * is not enough: a cancelled check is not a failed one, so a train whose CI was
+ * cancelled looks green, and a token with admin rights merges past the required
+ * checks where the repo does not enforce them for admins (2026-11-02). GitHub's
+ * own merge state knows, so a train merges only when GitHub says it can.
+ * A refused train waits for a re-run, then is abandoned, because a repo's queue
+ * does nothing else while it has an active train.
+ */
+export function trainMergeGate(args: {
+  mergeableState: string | null | undefined
+  detail: string | null | undefined
+  updatedAt: string | null | undefined
+  now: Date
+}): 'merge' | 'hold' | 'wait' | 'abandon' {
+  const s = (args.mergeableState ?? 'unknown').toLowerCase()
+  if (s === 'clean' || s === 'unstable' || s === 'has_hooks') return 'merge'
+  if (s !== 'blocked') return 'wait'
+  if (!(args.detail ?? '').startsWith(TRAIN_BLOCKED_DETAIL_PREFIX)) return 'hold'
+  return args.now.getTime() - Date.parse(args.updatedAt ?? '') >= TRAIN_BLOCKED_GRACE_MS ? 'abandon' : 'wait'
+}
+
 /** `mushi/train/20261024-0130`, UTC. */
 export function trainBranchName(now: Date): string {
   const p = (n: number) => String(n).padStart(2, '0')

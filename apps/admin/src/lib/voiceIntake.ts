@@ -264,7 +264,7 @@ export async function uploadAndSubmitVoice(
 ): Promise<{ ok: true; session: VoiceSession } | { ok: false; message: string; code?: string }> {
   const mime = resolveVoiceMime(file as { type?: string; name?: string })
   if (!mime) {
-    return { ok: false, message: `Mushi can't read this kind of audio file. Use a ${VOICE_ACCEPTED_FORMATS} recording.` }
+    return { ok: false, message: `Mushi Mushi can't read this kind of audio file. Use a ${VOICE_ACCEPTED_FORMATS} recording.` }
   }
   onStage?.('signing')
   const target = await requestVoiceUploadUrl(mime)

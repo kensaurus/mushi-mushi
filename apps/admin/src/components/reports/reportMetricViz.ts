@@ -12,18 +12,24 @@ export function confidencePercent(confidence: number | null | undefined): number
   return Math.round(Math.max(0, Math.min(1, confidence)) * 100)
 }
 
+/*
+ * Confidence is how sure the classifier is, not whether anything failed: a
+ * red "55%" read as an error on a healthy row (R2 sweep 2026-11-18). High and
+ * medium confidence are ink; only a low score (read the evidence before you
+ * send a fix) is amber, the warning colour. Never red.
+ */
+
 /** Bar + segment fill tone for a 0–1 confidence score. */
 export function confidenceBarTone(confidence: number): string {
-  if (confidence >= 0.85) return 'bg-ok'
-  if (confidence >= 0.65) return 'bg-warn'
-  return 'bg-danger'
+  if (confidence >= 0.85) return 'bg-fg-secondary'
+  if (confidence >= 0.65) return 'bg-fg-muted'
+  return 'bg-warn'
 }
 
 /** Subtle cell wash behind confidence meters — bordered so bars read on dark canvas. */
 export function confidenceCellTint(confidence: number): string {
-  if (confidence >= 0.85) return 'bg-ok-muted/45 border border-ok/25'
-  if (confidence >= 0.65) return 'bg-warn-muted/45 border border-warn/25'
-  return 'bg-danger-muted/45 border border-danger/25'
+  if (confidence >= 0.65) return 'bg-surface-overlay/45 border border-edge-subtle'
+  return 'bg-warn-muted/45 border border-warn/25'
 }
 
 export function confidenceEmptySegmentTone(): string {
@@ -31,9 +37,9 @@ export function confidenceEmptySegmentTone(): string {
 }
 
 export function confidenceTextTone(pct: number): string {
-  if (pct >= 85) return 'text-ok-foreground'
-  if (pct >= 65) return 'text-warn-foreground'
-  return 'text-danger-foreground'
+  if (pct >= 85) return 'text-fg'
+  if (pct >= 65) return 'text-fg-secondary'
+  return 'text-warn-foreground'
 }
 
 /** Whether segment `index` (0..4) should render filled at `pct` (0–100). */

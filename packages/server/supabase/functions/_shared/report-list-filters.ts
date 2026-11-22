@@ -57,6 +57,7 @@ export const REPORT_LIST_SDK_PACKAGES = ['@mushi-mushi/web', '@mushi-mushi/react
  * they resolve to `@mushi-mushi/web` rather than failing.
  */
 const SDK_PACKAGE_ALIASES: Record<string, string> = {
+  'mushi-mushi': '@mushi-mushi/web',
   '@mushi-mushi/react': '@mushi-mushi/web',
   '@mushi-mushi/vue': '@mushi-mushi/web',
   '@mushi-mushi/svelte': '@mushi-mushi/web',

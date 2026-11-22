@@ -19,6 +19,15 @@ interface Props {
   onDraft?: () => void
 }
 
+/**
+ * Every number is zero, so the status block becomes the page's one first step with its own
+ * "Draft release notes" button. The header's "+ Draft" and the Drafts tab's empty state then
+ * step aside: one empty state, one action (fresh-eyes sweep 2026-11-18).
+ */
+export function releasesFirstStep(stats: Pick<ReleasesStats, 'publishedCount' | 'draftCount' | 'fixedReportsCount'>): boolean {
+  return stats.publishedCount === 0 && stats.draftCount === 0 && stats.fixedReportsCount === 0
+}
+
 function releasesSentence(stats: ReleasesStats): string {
   if (stats.totalReleases === 0) {
     return stats.fixedReportsCount > 0
@@ -65,7 +74,7 @@ export function ReleasesSnapshotStrip({ stats, statsFetchedAt, statsValidating, 
       ]}
       empty={{
         title: 'No releases yet',
-        sentence: 'Once a fix merges, Mushi drafts release notes from it and credits the people who reported the bug.',
+        sentence: 'Once a fix merges, Mushi Mushi drafts release notes from it and credits the people who reported the bug.',
         action: onDraft ? { label: 'Draft release notes', onClick: onDraft } : { label: 'Draft release notes', to: '/releases?tab=draft' },
       }}
     />

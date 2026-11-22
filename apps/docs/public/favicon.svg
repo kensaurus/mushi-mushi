@@ -1,18 +1,15 @@
-<!--
-  FILE: apps/docs/public/favicon.svg
-  PURPOSE: Browser-tab brand mark for the docs static export. Keep this in
-           sync with apps/admin/public/favicon.svg so admin, marketing, and
-           docs share the same Mushi hanko identity and the docs build does
-           not emit favicon 404s in browser verification.
--->
-<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 100 100">
-  <g transform="rotate(-3 50 50)">
-    <rect x="8" y="8" width="84" height="84" rx="12" fill="#E03C2C"/>
-    <text x="50" y="78"
-          text-anchor="middle"
-          fill="#F8F4ED"
-          font-family="'Hiragino Mincho ProN','Yu Mincho Pr6N','Yu Mincho','Source Han Serif JP','Noto Serif CJK JP','SimSun',serif"
-          font-weight="700"
-          font-size="62">虫</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Mushi Mushi mark (2026-11-17): a magnifier over a ladybug on the vermillion tile. The PNG icons add the small mascot; at tab size it would be a speck. -->
+  <rect width="512" height="512" rx="112" fill="#E03C2C"/>
+  <g transform="translate(-22 14)">
+  <!-- the magnifier, the main shape -->
+  <line x1="372" y1="372" x2="462" y2="462" stroke="#5b3a12" stroke-width="54" stroke-linecap="round"/>
+  <circle cx="290" cy="222" r="176" fill="#FBF3E6" stroke="#C8962E" stroke-width="36"/>
+  <ellipse cx="290" cy="244" rx="104" ry="110" fill="#D7362A"/>
+  <path d="M290 138 V354" stroke="#1a1a1a" stroke-width="12"/>
+  <path d="M206 164 A104 76 0 0 1 374 164 Z" fill="#1a1a1a"/>
+  <circle cx="258" cy="148" r="12" fill="#fff"/><circle cx="322" cy="148" r="12" fill="#fff"/>
+  <circle cx="234" cy="232" r="21" fill="#1a1a1a"/><circle cx="346" cy="232" r="21" fill="#1a1a1a"/>
+  <circle cx="248" cy="298" r="19" fill="#1a1a1a"/><circle cx="332" cy="298" r="19" fill="#1a1a1a"/>
   </g>
 </svg>

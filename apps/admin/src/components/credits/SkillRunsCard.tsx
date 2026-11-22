@@ -17,6 +17,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ACTIVE_PROJECT_QUERY_PARAM, getActiveProjectIdSnapshot, isValidProjectId } from '../../lib/activeProject'
 import { Badge, Btn, Input, SelectField, Toggle } from '../ui'
+import { StatusGlyph } from '../signal/StatusGlyph'
 import { useToast } from '../../lib/toast'
 import { loadSkillRuns, skillRunLine, startSkillRun, stopSkillRun, type SkillRun, type SkillRunSkill } from '../../lib/skillRuns'
 import { usePageData } from '../../lib/usePageData'
@@ -24,6 +25,14 @@ import { LANES_PATH, myLanesFor, type WorkLanesData } from '../../lib/workers'
 
 const POLL_MS = 60_000
 const STATUS_TONE = { active: 'info', done: 'ok', stopped: 'warn' } as const
+
+/** @internal Exported for tests. Finished runs by outcome, the larger group first. */
+export function groupFinishedRuns<T extends { status: 'active' | 'done' | 'stopped' }>(runs: readonly T[]): Array<{ status: 'done' | 'stopped'; runs: T[] }> {
+  const groups = (['stopped', 'done'] as const)
+    .map((status) => ({ status, runs: runs.filter((r) => r.status === status) }))
+    .filter((g) => g.runs.length > 0)
+  return groups.sort((a, b) => b.runs.length - a.runs.length)
+}
 
 interface Props {
   projects: Array<{ id: string; name: string }> | null
@@ -152,40 +161,68 @@ export function SkillRunsCard({ projects }: Props) {
         )}
       </div>
       {skill?.measure && <p className="text-2xs text-fg-muted">Each round measures {skill.measure}, before and after, in its pull request.</p>}
-      <Btn size="sm" type="button" loading={busy} disabled={!projectId || scope.trim().length < 3} onClick={() => void start()}>
-        Start skill run
-      </Btn>
+      <div className="flex flex-wrap items-center gap-2">
+        <Btn size="sm" type="button" loading={busy} disabled={!projectId || scope.trim().length < 3} onClick={() => void start()}>
+          Start skill run
+        </Btn>
+        {/* A greyed button says why (round-2 review). */}
+        {!projectId ? (
+          <span className="text-2xs text-fg-secondary" data-testid="skill-run-disabled-reason">Pick an app first.</span>
+        ) : scope.trim().length < 3 ? (
+          <span className="text-2xs text-fg-secondary" data-testid="skill-run-disabled-reason">Say what to work on first.</span>
+        ) : null}
+      </div>
 
-      {runs && runs.length > 0 && (
-        <ul className="divide-y divide-edge-subtle border-t border-edge-subtle">
-          {runs.map((r) => (
-            <li key={r.id} className="flex flex-wrap items-start gap-x-2 gap-y-1 py-1.5">
-              <Badge tone={STATUS_TONE[r.status]}>{r.status === 'active' ? 'Running' : r.status === 'done' ? 'Done' : 'Stopped'}</Badge>
-              <span className="min-w-0 flex-1 text-2xs text-fg-secondary">
-                <span className="font-medium">{names.get(r.project_id) ?? 'App'}</span> · {skills.find((s) => s.slug === r.skill_slug)?.label ?? r.skill_slug} · {r.scope}
-                <span className="block text-fg-muted">
-                  {skillRunLine(r)}
-                  {r.lane_id ? ` · on lane ${laneNames.get(r.lane_id) ?? 'a local worker'}` : ''}
-                  {r.current_report_id && (
-                    <>
-                      {' '}
-                      ·{' '}
-                      <Link className="text-brand underline underline-offset-2" to={`/reports/${r.current_report_id}`}>
-                        current round
-                      </Link>
-                    </>
-                  )}
-                </span>
+      {runs && runs.length > 0 && (() => {
+        const runRow = (r: SkillRun) => (
+          <li key={r.id} className="flex flex-wrap items-start gap-x-2 gap-y-1 py-1.5">
+            <Badge tone={STATUS_TONE[r.status]}>{r.status === 'active' ? 'Running' : r.status === 'done' ? 'Done' : 'Stopped'}</Badge>
+            <span className="min-w-0 flex-1 text-2xs text-fg-secondary">
+              <span className="font-medium">{names.get(r.project_id) ?? 'App'}</span> · {skills.find((s) => s.slug === r.skill_slug)?.label ?? r.skill_slug} · {r.scope}
+              <span className="block text-fg-muted">
+                {skillRunLine(r)}
+                {r.lane_id ? ` · on lane ${laneNames.get(r.lane_id) ?? 'a local worker'}` : ''}
+                {r.current_report_id && (
+                  <>
+                    {' '}
+                    ·{' '}
+                    <Link className="text-brand underline underline-offset-2" to={`/reports/${r.current_report_id}`}>
+                      current round
+                    </Link>
+                  </>
+                )}
               </span>
-              {r.status === 'active' && (
-                <Btn size="sm" variant="ghost" type="button" onClick={() => void stop(r)}>
-                  Stop
-                </Btn>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+            </span>
+            {r.status === 'active' && (
+              <Btn size="sm" variant="ghost" type="button" onClick={() => void stop(r)}>
+                Stop
+              </Btn>
+            )}
+          </li>
+        )
+        // Running runs stay open; finished ones fold by outcome ("Stopped 17",
+        // "Done 3"): twenty rows repeating "closed without merging" before.
+        const active = runs.filter((r) => r.status === 'active')
+        const finished = groupFinishedRuns(runs)
+        return (
+          <div className="space-y-1 border-t border-edge-subtle pt-1" data-testid="skill-runs">
+            {active.length > 0 && <ul className="divide-y divide-edge-subtle">{active.map(runRow)}</ul>}
+            {finished.map((g) => (
+              <details key={g.status} className="group" data-testid={`skill-runs-${g.status}`}>
+                <summary className="flex cursor-pointer select-none items-center gap-1.5 py-1 text-xs text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50">
+                  <StatusGlyph tone={g.status === 'done' ? 'ok' : 'off'} />
+                  <span className="font-semibold">{g.status === 'done' ? 'Done' : 'Stopped'}</span>
+                  <span className="tabular-nums text-fg-secondary">{g.runs.length}</span>
+                  <span className="text-2xs text-fg-muted">
+                    {g.status === 'done' ? 'runs that finished' : 'runs that ended early: stopped, a round not merged, or a limit hit'}
+                  </span>
+                </summary>
+                <ul className="divide-y divide-edge-subtle">{g.runs.map(runRow)}</ul>
+              </details>
+            ))}
+          </div>
+        )
+      })()}
     </div>
   )
 }

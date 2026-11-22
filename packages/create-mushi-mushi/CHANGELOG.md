@@ -1,5 +1,77 @@
 # create-mushi-mushi
 
+## 0.6.18
+
+### Patch Changes
+
+- Updated dependencies [11c99a5]
+- Updated dependencies [e5f813d]
+  - @mushi-mushi/cli@0.41.0
+
+## 0.6.17
+
+### Patch Changes
+
+- 0ce3357: One package for users, continued (ADR 0060 Phase 1b).
+
+  - `mushi-mushi/eslint`: the Mushi Mushi ESLint rules (`no-dead-handler`,
+    `no-mock-leak`) now ship inside `mushi-mushi`. Use
+    `import mushi from 'mushi-mushi/eslint'` and `mushi.configs.recommended`
+    (or `import { recommended } from 'mushi-mushi/eslint'`) in a flat config.
+    `eslint` is an optional peer. `eslint-plugin-mushi-mushi` is no longer
+    published; 0.3.7 is its last version.
+  - `npx mushi-mushi --template <vue|svelte|node> [dir]` scaffolds a starter app.
+    The starters moved from `create-mushi-mushi` into `@mushi-mushi/cli`, and
+    they now install `mushi-mushi` and import from `mushi-mushi/vue`,
+    `mushi-mushi/svelte` and `mushi-mushi/node`, the same as the docs.
+  - `create-mushi-mushi` is now an alias of `npx mushi-mushi`: it forwards every
+    argument to the same code, so `npm create mushi-mushi` also forwards `mushi`
+    commands (`npm create mushi-mushi setup`). A bare word that is not a command
+    (`npm create mushi-mushi my-app`) still runs the wizard, after one hint line
+    about `--template`. Errors from both bins now start with the bin name.
+
+- Updated dependencies [0ce3357]
+  - @mushi-mushi/cli@0.40.0
+
+## 0.6.16
+
+### Patch Changes
+
+- f318574: npm descriptions and READMEs now say who each package is for. To add Mushi Mushi to an app, install `mushi-mushi`; the integration and tooling packages say when you need them, and the SDK READMEs show the matching `mushi-mushi/<framework>` import. No code changes.
+- Updated dependencies [f318574]
+  - @mushi-mushi/cli@0.39.0
+
+## 0.6.15
+
+### Patch Changes
+
+- Updated dependencies [d597fb0]
+- Updated dependencies [d597fb0]
+  - @mushi-mushi/cli@0.38.0
+
+## 0.6.14
+
+### Patch Changes
+
+- Updated dependencies [59d7cd0]
+  - @mushi-mushi/cli@0.37.0
+
+## 0.6.13
+
+### Patch Changes
+
+- Updated dependencies [7f3dd9a]
+- Updated dependencies [7f3dd9a]
+  - @mushi-mushi/cli@0.36.0
+
+## 0.6.12
+
+### Patch Changes
+
+- 184d4ea: The README and the npm description now use the full product name, Mushi Mushi, everywhere instead of a shortened "Mushi". In `@mushi-mushi/mcp`, `search_mushi_docs` and `get_mushi_doc` also return the updated docs pages and the corrected auto-fix-loop blog post.
+- Updated dependencies [184d4ea]
+  - @mushi-mushi/cli@0.35.6
+
 ## 0.6.11
 
 ### Patch Changes

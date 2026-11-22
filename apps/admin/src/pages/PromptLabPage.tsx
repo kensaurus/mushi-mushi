@@ -11,9 +11,9 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
-import { DisclosurePanel, SegmentedControl } from '../components/ui'
+import { DisclosurePanel } from '../components/ui'
 import { PageLoadError } from '../components/PageLoadError'
 import { describeApiError } from '../lib/humanizeApiError'
 import { PageHeaderBar } from '../components/PageHeaderBar'
@@ -24,7 +24,7 @@ import { useToast } from '../lib/toast'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageContext } from '../lib/pageContext'
-import { STAGE_LABELS, type PromptLabData, type PromptVersion } from '../components/prompt-lab/types'
+import type { PromptLabData, PromptVersion } from '../components/prompt-lab/types'
 import { PromptStageTable } from '../components/prompt-lab/PromptStageTable'
 import { PromptEditorModal } from '../components/prompt-lab/PromptEditorModal'
 import { PromptDiffModal } from '../components/prompt-lab/PromptDiffModal'
@@ -39,6 +39,11 @@ import { PromptLabSnapshotStrip } from '../components/prompt-lab/PromptLabSnapsh
 import { PromptLabReadout } from '../components/prompt-lab/PromptLabReadout'
 import { PromptScoreboard } from '../components/prompt-lab/PromptScoreboard'
 import { EMPTY_PROMPT_LAB_STATS, type PromptLabStats } from '../components/prompt-lab/PromptLabStatsTypes'
+import { promptRecommendation, type PromptRecommendationAction } from '../components/prompt-lab/promptRecommendation'
+import { STAGE_LABELS } from '../components/prompt-lab/types'
+import { trafficWords } from '../components/prompt-lab/VersionStateMark'
+import { promptTestSummary, reconcilePromptLabStats } from '../components/prompt-lab/promptLabCounts'
+import { opensFineTuning } from '../components/prompt-lab/fineTuneActions'
 
 export function PromptLabPage() {
   const { data, loading, error, errorCode, reload } = usePageData<PromptLabData>('/v1/admin/prompt-lab')
@@ -49,7 +54,13 @@ export function PromptLabPage() {
     reload: reloadStats,
   } = usePageData<PromptLabStats>('/v1/admin/prompt-lab/stats')
   const [searchParams] = useSearchParams()
-  const promptLabStats = statsData ?? EMPTY_PROMPT_LAB_STATS
+  const navigate = useNavigate()
+  // One source: once the prompt list loads, the banner and status line count the same
+  // steps the scoreboard draws (the stats endpoint counted every candidate row).
+  const promptLabStats = useMemo(
+    () => reconcilePromptLabStats(statsData ?? EMPTY_PROMPT_LAB_STATS, data?.prompts),
+    [statsData, data?.prompts],
+  )
   const [editing, setEditing] = useState<PromptVersion | null>(null)
   const [diffing, setDiffing] = useState<PromptVersion | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -104,6 +115,8 @@ export function PromptLabPage() {
   // dataset tile) scrolls to the dataset card.
   const tabParam = searchParams.get('tab')
   const stageParam = searchParams.get('stage')
+  const fineTuningLink = opensFineTuning(tabParam)
+  const [advancedOpen, setAdvancedOpen] = useState(fineTuningLink)
   // Applied once per link, so a background reload does not scroll again.
   const appliedLinkRef = useRef<string | null>(null)
   useEffect(() => {
@@ -116,6 +129,9 @@ export function PromptLabPage() {
       document.getElementById('prompt-lab-stages')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     } else if (tabParam === 'dataset') {
       document.getElementById('prompt-lab-dataset')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    } else if (opensFineTuning(tabParam)) {
+      setAdvancedOpen(true)
+      document.getElementById('prompt-lab-fine-tuning')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
   }, [data, grouped, tabParam, stageParam])
 
@@ -157,12 +173,44 @@ export function PromptLabPage() {
     })
     setBusy(null)
     if (res.ok) {
-      toast.push({ tone: 'success', message: `${p.version} is now serving 100% of ${p.stage}` })
+      toast.push({ tone: 'success', message: `${STAGE_LABELS[p.stage] ?? p.stage} now uses ${p.version} for every report` })
       reload()
+      reloadStats()
     } else {
       const e = describeApiError(res.error, 'Could not activate the prompt')
       toast.error(e.title, e.hint)
     }
+  }
+
+  /** The lead's "Start on half of reports": the same PATCH as the traffic dialog. */
+  async function startTest(p: PromptVersion, pct: number) {
+    setBusy(p.id)
+    const res = await apiFetch(`/v1/admin/prompt-lab/prompts/${p.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ trafficPercentage: pct }),
+    })
+    setBusy(null)
+    if (res.ok) {
+      toast.push({ tone: 'success', message: `Testing ${p.version} on ${trafficWords(pct)}` })
+      reload()
+      reloadStats()
+    } else {
+      const e = describeApiError(res.error, 'Could not start the test')
+      toast.error(e.title, e.hint)
+    }
+  }
+
+  function openStage(stage: string) {
+    setActiveStage(stage)
+    document.getElementById('prompt-lab-stages')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  function runRecommendation(action: PromptRecommendationAction) {
+    if (action.kind === 'switch') setActivateTarget(action.version)
+    else if (action.kind === 'start') void startTest(action.version, action.pct)
+    // Points at the Run button on Triage grading; the paid run still asks first there.
+    else if (action.kind === 'grade') navigate('/judge?action=run')
+    else openStage(action.stage)
   }
 
   function setTraffic(p: PromptVersion) {
@@ -242,13 +290,28 @@ export function PromptLabPage() {
         : `${activePrompts} active · ${candidatePrompts} candidate${candidatePrompts === 1 ? '' : 's'}`,
   })
 
-  if (loading) return <TableSkeleton rows={6} columns={5} showFilters showKpiStrip label="Loading prompt lab" />
+  if (loading) return <TableSkeleton rows={6} columns={5} showFilters showKpiStrip label="Loading AI prompts" />
   if (error) return <PageLoadError error={error} code={errorCode} onRetry={reload} />
   if (!data) return null
 
   const parentForDiff = diffing
     ? data.prompts.find((p) => p.id === diffing.parent_version_id)
     : undefined
+  const testSummary = promptTestSummary(data.prompts)
+  const recommendation = promptRecommendation(data.prompts)
+
+  // Rare-use tools. Opened from a fine-tuning link they render first, under the status, instead
+  // of at the foot of the page under the eval dataset (2026-11-19: y about 3,300 at 390).
+  const advanced = (
+    <div id="prompt-lab-fine-tuning" className="scroll-mt-4">
+      <DisclosurePanel title="Advanced: fine-tuning & synthetic" open={advancedOpen} onOpenChange={setAdvancedOpen}>
+        <div className="space-y-4">
+          <FineTuningJobsCard jobs={data.fineTuningJobs ?? []} onChange={reload} />
+          <SyntheticReportsCard />
+        </div>
+      </DisclosurePanel>
+    </div>
+  )
 
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-prompt-lab">
@@ -256,7 +319,7 @@ export function PromptLabPage() {
         title="AI prompts"
 
         helpTitle="About AI prompts"
-        helpWhatIsIt="An advanced page (a Lab) for the instructions Mushi gives the AI at each step: the fast filter, the diagnosis, grading, the fix writer and more. Each step shows the version in use and the version being tested, with their grades from Triage grading."
+        helpWhatIsIt="An advanced page (a Lab) for the instructions Mushi Mushi gives the AI at each step: the fast filter, the diagnosis, grading, the fix writer and more. Each step shows the version in use and the version being tested, with their grades from Triage grading."
         helpUseCases={[
           'Test a sharper diagnosis prompt on a share of reports before it replaces the one in use',
           'Change category rules without redeploying: prompts are read from the database',
@@ -270,6 +333,8 @@ export function PromptLabPage() {
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
+            // Setup gaps only: the status line below leads with the one recommendation.
+            show: promptLabStats.topPriority === 'no_project' || promptLabStats.topPriority === 'no_dataset',
             children: (
               <PromptLabStatusBanner
                 stats={promptLabStats}
@@ -288,12 +353,9 @@ export function PromptLabPage() {
                 stats={promptLabStats}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
-                bestIsBuiltIn={data.prompts.some(
-                  (p) =>
-                    p.project_id == null &&
-                    p.stage === promptLabStats.bestStage &&
-                    p.version === promptLabStats.bestVersion,
-                )}
+                testSummary={testSummary}
+                recommendation={recommendation}
+                onAction={runRecommendation}
               />
             ),
           },
@@ -309,35 +371,20 @@ export function PromptLabPage() {
         ]}
       />
 
+      {fineTuningLink && advanced}
+
       <PromptScoreboard
         stages={orderedStages}
         grouped={grouped}
         selected={visibleStage}
-        onOpen={(stage) => {
-          setActiveStage(stage)
-          document.getElementById('prompt-lab-stages')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        }}
+        headingExtra={<ConfigHelp helpId="prompt-lab.stage" />}
+        onOpen={openStage}
       />
 
-      {orderedStages.length > 0 && visibleStage && (
-        <div id="prompt-lab-stages" className="flex min-w-0 items-center gap-1.5 scroll-mt-4">
-          <ConfigHelp helpId="prompt-lab.stage" />
-          <SegmentedControl<string>
-            size="sm"
-            scrollable
-            ariaLabel="Prompt stage"
-            value={visibleStage}
-            options={orderedStages.map((stage) => ({
-              id: stage,
-              label: STAGE_LABELS[stage] ?? stage,
-              count: grouped[stage]?.length ?? 0,
-            }))}
-            onChange={setActiveStage}
-          />
-        </div>
-      )}
-
+      {/* The scoreboard rows above pick the step; a second strip of twelve stage tabs
+          repeated them (2026-11-18). The anchor stays for ?tab=prompts&stage= links. */}
       {visibleStage && (
+        <div id="prompt-lab-stages" className="min-w-0 scroll-mt-4">
         <PromptStageTable
           key={visibleStage}
           stage={visibleStage}
@@ -350,6 +397,7 @@ export function PromptLabPage() {
           onTraffic={setTraffic}
           onDelete={deletePrompt}
         />
+        </div>
       )}
 
       <EvalDatasetCard
@@ -359,12 +407,7 @@ export function PromptLabPage() {
       />
 
       {/* Rare-use tools: vendor fine-tuning jobs and synthetic test reports. */}
-      <DisclosurePanel title="Advanced: fine-tuning & synthetic">
-        <div className="space-y-4">
-          <FineTuningJobsCard jobs={data.fineTuningJobs ?? []} onChange={reload} />
-          <SyntheticReportsCard />
-        </div>
-      </DisclosurePanel>
+      {!fineTuningLink && advanced}
 
       {/* Endpoints and raw counts: developer detail, at the foot of the page. */}
       <PromptLabReadout
@@ -389,17 +432,17 @@ export function PromptLabPage() {
 
       {trafficTarget && (
         <PromptDialog
-          title={`A/B traffic for ${trafficTarget.version}`}
-          body="Set the percentage of live classifications routed to this prompt. The remainder stays on the currently-active prompt."
-          label="Traffic share (0–100)"
+          title={`How many reports should ${trafficTarget.version} test on?`}
+          body="The share of new reports this version diagnoses. The version in use keeps the rest. 0 stops the test."
+          label="Share of reports, % (0–100)"
           inputType="number"
           defaultValue={String(trafficTarget.traffic_percentage)}
-          confirmLabel="Update traffic"
+          confirmLabel="Save share"
           loading={busy === trafficTarget.id}
           validate={(v) => {
             const n = Number(v)
             if (!Number.isFinite(n)) return 'Enter a number between 0 and 100.'
-            if (n < 0 || n > 100) return 'Traffic must be between 0 and 100.'
+            if (n < 0 || n > 100) return 'Enter a number between 0 and 100.'
             return null
           }}
           onConfirm={commitTraffic}
@@ -409,9 +452,9 @@ export function PromptLabPage() {
 
       {activateTarget && (
         <ConfirmDialog
-          title={`Activate ${activateTarget.version} at 100%?`}
-          body={`This sets "${activateTarget.version}" to serve 100% of ${activateTarget.stage} traffic immediately, replacing the current active prompt. All A/B splits will be removed. This is irreversible without a manual rollback.`}
-          confirmLabel="Activate at 100%"
+          title={`Switch ${STAGE_LABELS[activateTarget.stage] ?? activateTarget.stage} to ${activateTarget.version}?`}
+          body={`Every new ${STAGE_LABELS[activateTarget.stage] ?? activateTarget.stage} report uses this version from now on, and the tests in this step stop. To undo, switch back to the previous version in this table.`}
+          confirmLabel="Switch to it"
           onConfirm={commitActivatePrompt}
           onCancel={() => setActivateTarget(null)}
         />

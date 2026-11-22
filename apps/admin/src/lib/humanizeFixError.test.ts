@@ -28,7 +28,7 @@ describe('humanizeFixError: review gate', () => {
 
   it('says there was nothing to change, and offers no retry', () => {
     const h = humanizeFixError(COMMENTS_ONLY)
-    expect(h?.title).toBe('Mushi found no code change to make from this report.')
+    expect(h?.title).toBe('Mushi Mushi found no code change to make from this report.')
     expect(h?.hint).toContain('fix prompt')
     expect(h?.action).toBeUndefined()
     expect(h?.severity).toBe('hard')
@@ -56,7 +56,7 @@ describe('humanizeFixError: Cursor cannot reach the repo', () => {
 
   it('keeps the schema-drift reading for other validation errors', () => {
     expect(humanizeFixError('Cursor API 400 validation_error: Unrecognized key "branchName"')?.title).toBe(
-      'Mushi sent Cursor a field it no longer accepts.',
+      'Mushi Mushi sent Cursor a field it no longer accepts.',
     )
   })
 })

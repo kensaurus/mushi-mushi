@@ -34,7 +34,7 @@ Below the bar you will see:
 
 **What happens at 100%?**
 
-- **Free:** New reports are captured but **not diagnosed** until the period resets.
+- **Free:** New reports are captured but **not diagnosed** until the period resets. A free project with its own Anthropic or OpenAI key is not capped.
 - **Builder / Studio (monthly):** Overage continues ($0.03 a diagnosis on Builder, $0.02 on Studio) until your **spend cap** pauses Stage-2 classification. No reports are lost.
 - **Builder / Studio (annual):** No overage. Stage-2 classification pauses at the included diagnoses until the next calendar month. No reports are lost.
 
@@ -46,7 +46,7 @@ Below the bar you will see:
 | **Reports** | Reports received this period (no report limit on current plans) |
 | **Seats** | Members plus pending invitations, against the plan's seats |
 | **Spend cap** | Your hard USD ceiling on overage, or **Not set** |
-| **Fixes merged** | Fix PRs from Mushi merged this period, from any agent |
+| **Fixes merged** | Fix PRs from Mushi Mushi merged this period, from any agent |
 
 The card also shows **Classifier tokens** for the period. A `past_due` subscription shows a banner asking you to update your card.
 
@@ -69,7 +69,7 @@ Both settings save immediately via the Billing API. Leave the cap blank to rever
 
 ## Apps on your plan
 
-A plan sets how many apps your team watches: **Free 1, Builder 3, Studio 10, Enterprise no limit**. Creating one more app than the plan allows stops with a message that names your plan, how many apps the team has, and the plan that fits, plus a **See plans** button that opens the Plans tab. Apps you already have keep working.
+A plan sets how many apps your team watches: **Free 3, Builder 3, Studio 10, Enterprise no limit**. Creating one more app than the plan allows stops with a message that names your plan, how many apps the team has, and the plan that fits, plus a **See plans** button that opens the Plans tab. Apps you already have keep working.
 
 The **Plans** tab compares Free, Builder, Studio and Enterprise by apps, diagnoses, overage and history, and shows whether your team's apps and this period's diagnoses fit each plan.
 

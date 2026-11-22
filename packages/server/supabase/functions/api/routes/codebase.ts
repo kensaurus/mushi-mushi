@@ -97,20 +97,27 @@ export function registerCodebaseRoutes(app: Hono<{ Variables: Variables }>): voi
 
     const { chunk, shouldIndex, sha256Hex } = await import('../../_shared/code-indexer.ts');
     const { createEmbedding } = await import('../../_shared/embeddings.ts');
+    const { upsertCodebaseChunks } = await import('../../_shared/codebase-chunk-upsert.ts');
+    const { extractRelativeImports } = await import('../../_shared/codebase-graph-build.ts');
 
     if (!shouldIndex(normalizedPath)) {
       return c.json({ ok: true, chunks: 0, skipped: 'unsupported_extension' });
     }
 
     const db = getServiceClient();
-    const chunks = chunk(normalizedPath, pgSafeText(body.source));
+    const safeSource = pgSafeText(body.source);
+    const chunks = chunk(normalizedPath, safeSource);
+    const imports = extractRelativeImports(safeSource);
     let inserted = 0;
     for (const ch of chunks) {
       try {
         const text = `${body.filePath}::${ch.symbolName ?? 'whole'}\n${ch.body}`;
         const embedding = await createEmbedding(text, { projectId, functionName: 'codebase-index' });
         const contentHash = await sha256Hex(ch.body);
-        await db.from('project_codebase_files').upsert(
+        // Through upsert_codebase_chunks like the GitHub indexer: it stores
+        // only the 768-d search vector (embedding_768), never the legacy
+        // 1536-d `embedding` column (2026-11-11 cost audit).
+        const { error } = await upsertCodebaseChunks(db, [
           {
             project_id: projectId,
             file_path: body.filePath,
@@ -121,13 +128,14 @@ export function registerCodebaseRoutes(app: Hono<{ Variables: Variables }>): voi
             language: ch.language,
             content_hash: contentHash,
             content_preview: pgSafeSlice(ch.body, 600),
+            imports,
             embedding,
             embedding_model: 'text-embedding-3-small',
             last_modified: new Date().toISOString(),
             tombstoned_at: null,
           },
-          { onConflict: 'project_id,file_path,symbol_name' },
-        );
+        ]);
+        if (error) throw new Error(error.message);
         inserted++;
       } catch (err) {
         // best-effort per chunk; continue

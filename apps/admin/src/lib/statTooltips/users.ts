@@ -19,11 +19,11 @@ export function totalSignupsTooltip(metrics: UsersMetrics | null | undefined): M
   const total = metrics?.total_users ?? 0
   const takeaway =
     total > 0
-      ? `${total.toLocaleString()} Mushi account${total === 1 ? '' : 's'} registered platform-wide.`
+      ? `${total.toLocaleString()} Mushi Mushi account${total === 1 ? '' : 's'} registered platform-wide.`
       : 'No signups recorded yet — metrics populate after the first user registers.'
 
   return metricTip(
-    'Total registered Mushi accounts across the entire platform (super-admin view).',
+    'Total registered Mushi Mushi accounts across the entire platform (super-admin view).',
     'GET /v1/super-admin/users metrics — counts auth.users / platform signups all-time.',
     takeaway,
   )

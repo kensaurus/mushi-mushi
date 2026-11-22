@@ -13,10 +13,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge, Btn } from '../ui'
-import { IconAlertTriangle, IconCheck, IconChevronDown, IconChevronRight, IconClock, IconExternalLink } from '../icons'
+import { IconChevronDown, IconChevronRight, IconExternalLink } from '../icons'
 import { ACTION_META, actionableIds, ageLabel, sharedBlockReason, type ActionOutcome, type PipelineAction, type PipelineGroup, type PipelineItem } from '../../lib/pipeline'
+import { groupPrimary, offeredActions, primaryAction } from '../../lib/pipelineSignals'
+import { heldReasonOf, withoutReasonCode } from '../../lib/heldReason'
 import type { PendingAction } from './PipelineActionDialog'
+import { MoreActionsMenu } from '../signal/MoreActionsMenu'
+import { StatusPill, type RunStatus } from '../signal/StatusMark'
+import { StatusGlyph, type SignalTone } from '../signal/StatusGlyph'
+import { VitalText } from '../signal/VitalText'
 import { SendToWorkerButton } from './SendToWorkerButton'
+import { AppGroupSection } from '../ui/app-group'
+import { groupByApp, type AppGroup } from '../../lib/groupByApp'
 import type { WorkerLane } from '../../lib/workers'
 
 interface Props {
@@ -32,27 +40,65 @@ interface Props {
   workerLanes?: WorkerLane[]
   /** A group to open and scroll to (`/pipeline?group=<id>`, Home's Needs you buttons). */
   focusGroupId?: string | null
+  /**
+   * The one group to start with (the status line's "biggest"): the only row that takes ▲.
+   * Unset: the first failed group. ▲ sat on ~18 rows beside a legend calling it "the
+   * bottleneck" (round-2 review, 2026-11-18); a failed row keeps its red edge.
+   */
+  topGroupId?: string | null
 }
 
 /** Stages whose reports have no fix to keep yet: a local worker may take them. */
 const SENDABLE_STAGES = new Set(['reported', 'triaged', 'pr'])
 
-const TONE_ICON = {
-  stuck: <span className="text-danger-foreground"><IconAlertTriangle size={14} /></span>,
-  moving: <span className="text-info-foreground"><IconClock size={14} /></span>,
-  done: <span className="text-ok-foreground"><IconCheck size={14} /></span>,
+/**
+ * Stuck groups that are slow or waiting, not failed (2026-11-18): an agent or CI still running,
+ * a conflict agent not started, a PR waiting on its base or a later train, a backlog report, a
+ * merged fix with no deploy yet. They take ◆; ▲ is only for what failed or needs a decision.
+ */
+const SLOW_GROUP_IDS: ReadonlySet<string> = new Set(['agent_slow', 'ci_slow', 'conflict_stuck', 'base_red', 'after_red_train', 'no_fix_old', 'not_deployed'])
+
+/** The signal tone of a group's mark: ▲ failed, ◆ slow or waiting, ■ moving, ● done. @internal Exported for tests. */
+export function groupSignalTone(group: Pick<PipelineGroup, 'id' | 'tone'>): SignalTone {
+  if (group.tone === 'done') return 'ok'
+  if (group.tone === 'moving') return 'info'
+  return SLOW_GROUP_IDS.has(group.id) ? 'warn' : 'danger'
 }
 
-const TONE_BORDER = {
-  stuck: 'border-l-danger',
-  moving: 'border-l-info',
-  done: 'border-l-ok',
+const TONE_BORDER: Record<SignalTone, string> = {
+  danger: 'border-l-danger',
+  warn: 'border-l-warn',
+  info: 'border-l-info',
+  ok: 'border-l-ok',
+  off: 'border-l-edge',
 }
 
-const VERDICT_TONE: Record<string, 'ok' | 'warn' | 'danger' | 'neutral'> = { merge: 'ok', fix_first: 'warn', hold: 'danger' }
+const VERDICT_STATUS: Record<string, RunStatus> = { merge: 'passed', fix_first: 'slow', hold: 'failed' }
 const VERDICT_LABEL: Record<string, string> = { merge: 'Opus: merge', fix_first: 'Opus: fix first', hold: 'Opus: hold' }
 
 /** Where the person fixes what blocks an action, when it is a setting. */
+/** A group's signal as a RunStatus, for the per-app header counts. */
+const SIGNAL_RUN_STATUS: Record<SignalTone, RunStatus> = { danger: 'failed', warn: 'slow', info: 'running', ok: 'passed', off: 'idle' }
+
+/**
+ * All apps: a group's items by app, the app with the oldest item first and, inside it, the
+ * oldest item first (the one that has waited longest is the worst). One app: null, the list
+ * stays flat. @internal Exported for tests.
+ */
+export function groupItemsByApp(
+  group: Pick<PipelineGroup, 'items'>,
+  projectNames: ReadonlyMap<string, string>,
+  showApp: boolean,
+): AppGroup<PipelineItem>[] | null {
+  if (!showApp || new Set(group.items.map((i) => i.projectId)).size < 2) return null
+  return groupByApp(group.items, (i) => ({ id: i.projectId, name: projectNames.get(i.projectId) }), {
+    rank: (i) => {
+      const t = Date.parse(i.since)
+      return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY
+    },
+  })
+}
+
 function blockedFixLink(reason: string): { label: string; to: string } | null {
   if (/GitHub token/i.test(reason)) return { label: 'GitHub connection', to: '/integrations/config#platform-card-github' }
   if (/follow-ups are off|Cursor key/i.test(reason)) return { label: 'Review follow-ups setting', to: '/settings?tab=byok#review-followups' }
@@ -63,6 +109,10 @@ function blockedFixLink(reason: string): { label: string; to: string } | null {
  * One button per group action. An action the server would refuse for every
  * item is disabled with its reason (report 69fcafcb); a bulk button runs on
  * the items that can take it and says how many.
+ *
+ * `split` (the pipeline page, 2026-11-18): only the primary action
+ * (lib/pipelineSignals.ts `primaryAction`) is a button; the rest sit in a
+ * "More" menu with the same disabled reasons, busy state and test ids.
  */
 export function ActionButtons({
   actions,
@@ -72,6 +122,8 @@ export function ActionButtons({
   busyKey,
   onAction,
   testIdPrefix,
+  split = false,
+  omitPrimary = false,
 }: {
   actions: PipelineAction[]
   items: PipelineItem[]
@@ -80,35 +132,70 @@ export function ActionButtons({
   busyKey: string | null
   onAction: Props['onAction']
   testIdPrefix: string
+  split?: boolean
+  /** The group sits under a heading whose one button runs this primary for every group: show only More. */
+  omitPrimary?: boolean
 }) {
-  const shown = actions.filter((a) => items.some((i) => (a === 'dismiss' || a === 'mark_fixed' || a === 'requeue' ? i.reportId : i.prUrl)))
+  const shown = offeredActions(actions, items)
   if (shown.length === 0) return null
+  const byId = new Map(items.map((i) => [i.id, i]))
+  const meta = (a: PipelineAction) => {
+    const key = `${a}:${keyPrefix}`
+    const ids = actionableIds(items, a)
+    const off = ids.length === 0
+    const reason = off ? (sharedBlockReason(items, a) ?? 'None of these can take it right now.') : undefined
+    const some = !off && ids.length < items.length ? `${ids.length} of ${items.length} can take it; the others are listed with the reason.` : undefined
+    return {
+      key,
+      ids,
+      off,
+      title: reason ?? some,
+      label: `${ACTION_META[a].label}${ids.length > 1 ? ` (${ids.length})` : ''}`,
+      run: () => onAction({ action: a, fixIds: ids, reportIds: ids.map((id) => byId.get(id)?.reportId ?? null), target }, key),
+    }
+  }
+  const button = (a: PipelineAction) => {
+    const m = meta(a)
+    return (
+      <Btn
+        key={a}
+        size="sm"
+        variant={m.off ? 'ghost' : ACTION_META[a].variant}
+        loading={busyKey === m.key}
+        disabled={m.off || (busyKey != null && busyKey !== m.key)}
+        title={m.title}
+        aria-describedby={m.off ? `${testIdPrefix}-${a}-why` : undefined}
+        onClick={m.run}
+        data-testid={`${testIdPrefix}-${a}`}
+      >
+        {m.label}
+      </Btn>
+    )
+  }
+  if (!split) return <span className="flex flex-wrap gap-1">{shown.map(button)}</span>
+  const primary = primaryAction(shown, items)
+  const rest = shown.filter((a) => a !== primary)
   return (
-    <span className="flex flex-wrap gap-1">
-      {shown.map((a) => {
-        const key = `${a}:${keyPrefix}`
-        const ids = actionableIds(items, a)
-        const off = ids.length === 0
-        const reason = off ? (sharedBlockReason(items, a) ?? 'None of these can take it right now.') : undefined
-        const some = !off && ids.length < items.length ? `${ids.length} of ${items.length} can take it; the others are listed with the reason.` : undefined
-        const byId = new Map(items.map((i) => [i.id, i]))
-        return (
-          <Btn
-            key={a}
-            size="sm"
-            variant={off ? 'ghost' : ACTION_META[a].variant}
-            loading={busyKey === key}
-            disabled={off || (busyKey != null && busyKey !== key)}
-            title={reason ?? some}
-            aria-describedby={off ? `${testIdPrefix}-${a}-why` : undefined}
-            onClick={() => onAction({ action: a, fixIds: ids, reportIds: ids.map((id) => byId.get(id)?.reportId ?? null), target }, key)}
-            data-testid={`${testIdPrefix}-${a}`}
-          >
-            {ACTION_META[a].label}
-            {ids.length > 1 ? ` (${ids.length})` : ''}
-          </Btn>
-        )
-      })}
+    <span className="flex flex-wrap items-center gap-1">
+      {primary && !omitPrimary && button(primary)}
+      <MoreActionsMenu
+        label={target}
+        testId={`${testIdPrefix}-more-actions`}
+        actions={rest.map((a) => {
+          const m = meta(a)
+          return {
+            key: a,
+            label: m.label,
+            onSelect: m.run,
+            disabled: m.off || (busyKey != null && busyKey !== m.key),
+            busy: busyKey === m.key,
+            title: m.title,
+            describedBy: m.off ? `${testIdPrefix}-${a}-why` : undefined,
+            testId: `${testIdPrefix}-${a}`,
+            danger: ACTION_META[a].variant === 'danger',
+          }
+        })}
+      />
     </span>
   )
 }
@@ -143,32 +230,54 @@ export function BlockedReasons({ item, actions, testIdPrefix }: { item: Pipeline
 function Evidence({ item }: { item: PipelineItem }) {
   const verdict = item.review?.verdict ?? null
   const showReview = !!verdict && verdict !== 'merge'
+  const note = item.lastError ?? item.queueDetail
+  const why = note && withoutReasonCode(note) !== note ? heldReasonOf(note) : null
   return (
     <div className="space-y-1 text-2xs text-fg-muted">
       {item.failingChecks.length > 0 && (
         <p className="flex flex-wrap items-center gap-1">
           <span>Failing:</span>
           {item.failingChecks.slice(0, 8).map((c) => (
-            <Badge key={c} tone="dangerSubtle">{c}</Badge>
+            <StatusPill key={c} status="failed" label={c} />
           ))}
         </p>
       )}
       {showReview && (
         <div className="space-y-0.5">
           <p className="flex flex-wrap items-center gap-1">
-            <Badge tone={VERDICT_TONE[verdict] ?? 'neutral'}>{VERDICT_LABEL[verdict] ?? verdict}</Badge>
-            {item.review?.summary && <span className="min-w-0 wrap-break-word">{item.review.summary}</span>}
+            <StatusPill status={VERDICT_STATUS[verdict] ?? 'idle'} label={VERDICT_LABEL[verdict] ?? verdict} />
+            {item.review?.summary && (
+              <span className="min-w-0 wrap-break-word">
+                <VitalText text={item.review.summary} />
+              </span>
+            )}
           </p>
           {item.review && item.review.findings.length > 0 && (
             <ul className="list-disc space-y-0.5 pl-4">
               {item.review.findings.map((f, i) => (
-                <li key={i} className="wrap-break-word">{f}</li>
+                <li key={i} className="wrap-break-word">
+                  <VitalText text={f} />
+                </li>
               ))}
             </ul>
           )}
         </div>
       )}
-      {(item.lastError ?? item.queueDetail) && <p className="wrap-break-word">{item.lastError ?? item.queueDetail}</p>}
+      {note && (
+        <p className="wrap-break-word">
+          {why && (
+            // A reason code in the server's sentence ("(key_used_up)") reads as a plain-word chip (2026-11-18).
+            <span
+              className="mr-1 inline-flex items-center rounded-sm border border-warn/55 bg-warn-muted px-1 text-3xs font-bold text-warn-foreground"
+              title={note}
+              data-testid={`pipeline-item-${item.id}-why`}
+            >
+              {why}
+            </span>
+          )}
+          <VitalText text={why ? withoutReasonCode(note) : note} />
+        </p>
+      )}
     </div>
   )
 }
@@ -180,10 +289,12 @@ function ItemRow({ item, group, props }: { item: PipelineItem; group: PipelineGr
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
         {item.reportId ? (
           <Link to={`/reports/${item.reportId}`} className="min-w-0 max-w-full truncate text-xs font-medium text-fg hover:underline">
-            {item.title}
+            <VitalText text={item.title} />
           </Link>
         ) : (
-          <span className="min-w-0 max-w-full truncate text-xs font-medium text-fg">{item.title}</span>
+          <span className="min-w-0 max-w-full truncate text-xs font-medium text-fg">
+            <VitalText text={item.title} />
+          </span>
         )}
         {item.prUrl && (
           <a href={item.prUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 font-mono text-2xs text-fg-secondary hover:text-fg hover:underline">
@@ -211,6 +322,7 @@ function ItemRow({ item, group, props }: { item: PipelineItem; group: PipelineGr
           busyKey={props.busyKey}
           onAction={props.onAction}
           testIdPrefix={`pipeline-item-${item.id}`}
+          split
         />
         {result && (
           <span className={`text-2xs ${result.ok ? 'text-ok-foreground' : 'text-danger-foreground'}`} role="status" data-testid={`pipeline-item-${item.id}-result`}>
@@ -223,10 +335,19 @@ function ItemRow({ item, group, props }: { item: PipelineItem; group: PipelineGr
   )
 }
 
+/**
+ * A group's header row: one column (title, then age + actions beneath) below 640 px, then
+ * title | age + actions. A viewport breakpoint, not a container query: `container-type` gives
+ * the card layout containment, a stacking context, so an open More menu would paint under
+ * the next card.
+ */
+// mushi-mushi-allowlist: title track shrinks, the age + actions track keeps its content width
+const GROUP_HEAD = 'grid grid-cols-1 items-center gap-x-3 gap-y-1.5 p-2.5 sm:grid-cols-[minmax(0,1fr)_auto]'
+
 /** Items shown per group before "Show more": the page scrolls, the group does not (2375c9c5). */
 const ITEMS_STEP = 20
 
-function GroupCard({ group, props }: { group: PipelineGroup; props: Props }) {
+function GroupCard({ group, props, marked, inSection = false }: { group: PipelineGroup; props: Props; marked: boolean; inSection?: boolean }) {
   const focused = props.focusGroupId === group.id
   const [open, setOpen] = useState(focused)
   const ref = useRef<HTMLLIElement>(null)
@@ -237,25 +358,32 @@ function GroupCard({ group, props }: { group: PipelineGroup; props: Props }) {
   const apps = new Set(group.items.map((i) => i.projectId))
   const appId = apps.size === 1 ? [...apps][0]! : null
   const sendIds = [...new Set(group.items.map((i) => i.reportId).filter((x): x is string => !!x))]
+  const signal = groupSignalTone(group)
   const lanes = appId && SENDABLE_STAGES.has(group.stage) ? (props.workerLanes ?? []).filter((l) => l.projectId === appId) : []
+  const byApp = groupItemsByApp(group, props.projectNames, props.showApp)
+  // "Show more" pages through the whole group in the grouped order, so each app shows its oldest first.
+  const shownIds = new Set((byApp ? byApp.flatMap((a) => a.items) : group.items).slice(0, shown).map((i) => i.id))
   return (
-    <li ref={ref} className={`scroll-mt-20 rounded-md border border-edge-subtle border-l-4 bg-surface-raised ${TONE_BORDER[group.tone]}`} data-testid={`pipeline-group-${group.id}`}>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 p-2.5">
+    // On a phone the title takes its own line and the age + actions a row beneath, never a
+    // one-letter-wide column (GROUP_HEAD, 2026-11-18).
+    <li ref={ref} className={`scroll-mt-20 rounded-md border border-edge-subtle border-l-4 bg-surface-raised ${TONE_BORDER[signal]}`} data-testid={`pipeline-group-${group.id}`} data-tone={signal}>
+      <div className={GROUP_HEAD} data-testid={`pipeline-group-${group.id}-head`}>
         <button
           type="button"
-          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+          className="flex min-w-0 items-center gap-2 text-left"
           aria-expanded={open}
           onClick={() => setOpen((v) => !v)}
           data-testid={`pipeline-group-${group.id}-toggle`}
         >
           {open ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
-          {TONE_ICON[group.tone]}
+          {/* ▲ once per list (the group to start with); ◆ slow and ■/● stay on every row. */}
+          {(signal !== 'danger' || marked) && <StatusGlyph tone={signal} label={marked ? 'Start here' : undefined} />}
           <span className="min-w-0 text-xs font-medium text-fg wrap-break-word">{group.label}</span>
+        </button>
+        <span className="flex flex-wrap items-center gap-2 pl-5.5 sm:justify-end sm:pl-0" data-testid={`pipeline-group-${group.id}-side`}>
           {group.oldestAt && group.tone !== 'done' && (
             <span className="shrink-0 text-2xs tabular-nums text-fg-muted">oldest {ageLabel(group.oldestAt, props.now)}</span>
           )}
-        </button>
-        <span className="flex flex-wrap items-center gap-2">
           {group.settings && (
             <Link
               to={group.settings.to}
@@ -274,6 +402,8 @@ function GroupCard({ group, props }: { group: PipelineGroup; props: Props }) {
             busyKey={props.busyKey}
             onAction={props.onAction}
             testIdPrefix={`pipeline-group-${group.id}`}
+            split
+            omitPrimary={inSection}
           />
           {appId && lanes.length > 0 && sendIds.length > 0 && (
             <SendToWorkerButton projectId={appId} reportIds={sendIds} lanes={lanes} data-testid={`pipeline-group-${group.id}-send-to-worker`} />
@@ -287,9 +417,31 @@ function GroupCard({ group, props }: { group: PipelineGroup; props: Props }) {
       )}
       {open && (
         <ul className="divide-y divide-edge-subtle border-t border-edge-subtle px-2.5">
-          {group.items.slice(0, shown).map((item) => (
-            <ItemRow key={item.id} item={item} group={group} props={props} />
-          ))}
+          {byApp
+            ? // All apps: one block per app (worst first), its count in the header and "Open →"
+              // to that app's own pipeline at this group. The row's app badge would repeat the header.
+              byApp.map((app) => {
+                const rows = app.items.filter((i) => shownIds.has(i.id))
+                if (rows.length === 0) return null
+                return (
+                  <li key={app.id} className="py-1" data-testid={`pipeline-group-${group.id}-app-${app.id}`}>
+                    <AppGroupSection
+                      app={app}
+                      counts={{ [SIGNAL_RUN_STATUS[signal]]: app.items.length }}
+                      summary={app.items[0] ? `oldest ${ageLabel(app.items[0].since, props.now)}` : undefined}
+                      to={`/pipeline?project=${encodeURIComponent(app.id)}&group=${encodeURIComponent(group.id)}`}
+                      data-testid={`pipeline-app-group-${group.id}-${app.id}`}
+                    >
+                      <ul className="divide-y divide-edge-subtle">
+                        {rows.map((item) => (
+                          <ItemRow key={item.id} item={item} group={group} props={{ ...props, showApp: false }} />
+                        ))}
+                      </ul>
+                    </AppGroupSection>
+                  </li>
+                )
+              })
+            : group.items.slice(0, shown).map((item) => <ItemRow key={item.id} item={item} group={group} props={props} />)}
           {shown < group.items.length && (
             <li className="py-2">
               <Btn size="sm" variant="ghost" onClick={() => setShown((n) => n + ITEMS_STEP)} data-testid={`pipeline-group-${group.id}-more`}>
@@ -306,15 +458,125 @@ function GroupCard({ group, props }: { group: PipelineGroup; props: Props }) {
   )
 }
 
+/**
+ * Groups whose one fix is the same action, under one heading with one button for all of them
+ * (round-2 review, 2026-11-18: "Update branch" ×4, "Re-run review" ×3, "Not a code bug" ×3 as
+ * separate rows). Only a primary the server would take counts; a group alone keeps its own
+ * button. Order is the list's order (biggest first). @internal Exported for tests.
+ */
+export function actionSections(groups: readonly PipelineGroup[]): Array<{ action: PipelineAction | null; groups: PipelineGroup[] }> {
+  const primaries = new Map(groups.map((g) => [g, groupPrimary(g)]))
+  const byAction = new Map<PipelineAction, PipelineGroup[]>()
+  for (const g of groups) {
+    const p = primaries.get(g)
+    if (p) byAction.set(p.action, [...(byAction.get(p.action) ?? []), g])
+  }
+  const out: Array<{ action: PipelineAction | null; groups: PipelineGroup[] }> = []
+  const placed = new Set<PipelineAction>()
+  for (const g of groups) {
+    const p = primaries.get(g)
+    const same = p ? (byAction.get(p.action) ?? []) : []
+    if (p && same.length > 1) {
+      if (placed.has(p.action)) continue
+      placed.add(p.action)
+      out.push({ action: p.action, groups: same })
+    } else out.push({ action: null, groups: [g] })
+  }
+  return out
+}
+
+/**
+ * The list as drawn: action sections, and every run of lone groups that follows a section under
+ * its own "Other" heading. Lone rows ("8 apps: auto-fix is on…", "5 reports: rejected at intake")
+ * sat right under "Send to CI repair: 2 groups" and read as part of it (round-3 review,
+ * 2026-11-19). Lone groups before the first section need no heading. @internal Exported for tests.
+ */
+export function sectionBlocks(groups: readonly PipelineGroup[]): Array<{ kind: 'action'; action: PipelineAction; groups: PipelineGroup[] } | { kind: 'other'; groups: PipelineGroup[]; headed: boolean }> {
+  const out: Array<{ kind: 'action'; action: PipelineAction; groups: PipelineGroup[] } | { kind: 'other'; groups: PipelineGroup[]; headed: boolean }> = []
+  let seenSection = false
+  for (const sec of actionSections(groups)) {
+    if (sec.action) {
+      seenSection = true
+      out.push({ kind: 'action', action: sec.action, groups: sec.groups })
+      continue
+    }
+    const last = out[out.length - 1]
+    if (last && last.kind === 'other' && last.headed === seenSection) last.groups.push(...sec.groups)
+    else out.push({ kind: 'other', groups: [...sec.groups], headed: seenSection })
+  }
+  return out
+}
+
+/** A heading for groups that take the same fix, and the one button that runs it on all of them. */
+function ActionSection({ action, groups, props, markId }: { action: PipelineAction; groups: PipelineGroup[]; props: Props; markId: string | null }) {
+  const ids: string[] = []
+  const reportIds: Array<string | null> = []
+  for (const g of groups) {
+    const byId = new Map(g.items.map((i) => [i.id, i]))
+    for (const id of groupPrimary(g)?.ids ?? []) {
+      ids.push(id)
+      reportIds.push(byId.get(id)?.reportId ?? null)
+    }
+  }
+  const total = groups.reduce((n, g) => n + g.count, 0)
+  const key = `${action}:section`
+  const label = ACTION_META[action].label
+  // The heading counts what the button runs on ("14 items" over "Send to CI repair (13)",
+  // round-3 review 2026-11-19); the rest are named as such.
+  const left = Math.max(0, total - ids.length)
+  return (
+    <li className="space-y-1" data-testid={`pipeline-action-section-${action}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1 pt-1">
+        <p className="text-2xs font-semibold text-fg-secondary" data-testid={`pipeline-action-section-${action}-head`}>
+          {label}:{' '}
+          <span className="font-normal text-fg-muted">
+            {groups.length} groups, {ids.length} {ids.length === 1 ? 'item' : 'items'}
+            {left > 0 && ` (${left} more can't take it now)`}
+          </span>
+        </p>
+        <Btn
+          size="sm"
+          variant={ACTION_META[action].variant === 'primary' ? 'primary' : 'ghost'}
+          loading={props.busyKey === key}
+          disabled={ids.length === 0 || (props.busyKey != null && props.busyKey !== key)}
+          onClick={() => props.onAction({ action, fixIds: ids, reportIds, target: `${groups.length} groups: ${label}` }, key)}
+          data-testid={`pipeline-action-section-${action}-run`}
+        >
+          {label}
+          {ids.length > 1 ? ` (${ids.length})` : ''}
+        </Btn>
+      </div>
+      <ul className="space-y-1">
+        {groups.map((g) => (
+          <GroupCard key={`${g.stage}:${g.id}`} group={g} props={props} marked={g.id === markId} inSection />
+        ))}
+      </ul>
+    </li>
+  )
+}
+
 export function PipelineGroups(props: Props) {
   if (props.groups.length === 0) {
     return <p className="text-xs text-fg-muted" data-testid="pipeline-groups-empty">Nothing here right now.</p>
   }
+  const markId = props.topGroupId ?? props.groups.find((g) => groupSignalTone(g) === 'danger')?.id ?? null
+  const card = (g: PipelineGroup) => <GroupCard key={`${g.stage}:${g.id}`} group={g} props={props} marked={g.id === markId} />
   return (
     <ul className="space-y-2" data-testid="pipeline-groups">
-      {props.groups.map((g) => (
-        <GroupCard key={`${g.stage}:${g.id}`} group={g} props={props} />
-      ))}
+      {sectionBlocks(props.groups).map((b, i) =>
+        b.kind === 'action' ? (
+          <ActionSection key={`section:${b.action}`} action={b.action} groups={b.groups} props={props} markId={markId} />
+        ) : b.headed ? (
+          <li key={`other:${i}`} className="space-y-1" data-testid="pipeline-other-section">
+            <p className="px-1 pt-1 text-2xs font-semibold text-fg-secondary">
+              Other: <span className="font-normal text-fg-muted">{b.groups.length} {b.groups.length === 1 ? 'group' : 'groups'}, {b.groups.reduce((n, g) => n + g.count, 0)} items</span>
+            </p>
+            <ul className="space-y-1">{b.groups.map(card)}</ul>
+          </li>
+        ) : (
+          b.groups.map(card)
+        ),
+      )}
     </ul>
   )
 }

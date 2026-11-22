@@ -1,17 +1,23 @@
 'use client'
 
 /**
- * Cinematic landing hero — H1, the one-job lead, the install box (pick Claude Code / Cursor / Lovable or Bolt / other, then three steps), one secondary link to the sample diagnosis, Motion stamp / line stagger, lazy R3F ink.
+ * Cinematic landing hero (ADR 0056) — H1, the plain subline, then exactly two
+ * actions: the PRIMARY one is the free check's address box (no sign-up,
+ * nothing to install), with a facts row under it; the SECOND is the install
+ * box (Lovable or Bolt first, then Claude Code, Cursor, other). The sample
+ * diagnosis is one scroll down, in How it works. Motion stamp / line stagger,
+ * lazy R3F ink.
  * No scroll timelines (docs/MOTION.md).
  */
 import { useEffect, useState, type ReactNode } from 'react'
 import dynamic from 'next/dynamic'
-import Link from 'next/link'
 import { motion } from 'motion/react'
-import { LANDING_CHECK_LINK, LANDING_HERO } from '@/lib/landing-copy'
+import { LANDING_HERO, LANDING_INSTALL_LEAD } from '@/lib/landing-copy'
+import { LandingCheckBox } from './LandingCheckBox'
 import { LandingInstallStrip } from './LandingInstallStrip'
 import { usePrefersReducedMotion } from './use-prefers-reduced-motion'
 import { landingStampVariants } from './landing-stagger'
+import { LandingHeroVisual } from './LandingHeroVisual'
 
 const InkMothCanvas = dynamic(
   () => import('./InkMothCanvas').then((m) => m.InkMothCanvas),
@@ -60,6 +66,11 @@ export function CinematicEditorialHero({
         <div className="landing-ink-poster" aria-hidden="true" />
       )}
 
+      {/* Desktop only: the real-bug clip's poster (play on click) with Field
+          Kenji peering at it through his magnifier. Phones download none of
+          it and stay address-box-first (LandingHeroVisual). */}
+      <LandingHeroVisual />
+
       <div className="landing-cinematic-hero__content">
         {eyebrow ? (
           <p className="docs-editorial-hero__eyebrow">
@@ -103,17 +114,16 @@ export function CinematicEditorialHero({
             </motion.p>
           )
         ) : null}
+        {/* Primary action (ADR 0056): value before trust. */}
+        <LandingCheckBox />
+        <ul className="landing-hero-facts" aria-label="What it takes">
+          {LANDING_HERO.facts.map((fact) => (
+            <li key={fact}>{fact}</li>
+          ))}
+        </ul>
+        {/* Second action: add the report button. */}
+        <p className="landing-install-lead">{LANDING_INSTALL_LEAD}</p>
         <LandingInstallStrip />
-        {/* The one secondary link (ADR 0052, amended 2026-10-28): the free
-            Production Check, value before trust. The sample is in How it works. */}
-        <p className="landing-hero-sample">
-          {LANDING_CHECK_LINK.lead}{' '}
-          <Link href={LANDING_CHECK_LINK.href} data-mushi-cta={LANDING_CHECK_LINK.id} data-mushi-location="hero">
-            {LANDING_CHECK_LINK.label} →
-          </Link>{' '}
-          <span className="landing-hero-note">({LANDING_CHECK_LINK.note})</span>
-        </p>
-        <p className="landing-hero-reassure">{LANDING_HERO.reassure}</p>
       </div>
     </header>
   )

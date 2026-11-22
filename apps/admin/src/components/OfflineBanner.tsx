@@ -35,7 +35,7 @@ export function OfflineBanner() {
         <div>
           <p className="font-semibold">You appear to be offline.</p>
           <p className="mt-0.5 text-xs text-fg-muted">
-            Keep working carefully. New requests may fail until the connection returns, then Mushi will refresh cached data.
+            Keep working carefully. New requests may fail until the connection returns, then Mushi Mushi will refresh cached data.
           </p>
         </div>
       </div>

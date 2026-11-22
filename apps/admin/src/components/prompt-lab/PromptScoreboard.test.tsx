@@ -13,7 +13,7 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PromptVersion } from './types'
-import { PromptScoreboard, scoreboardRows, stageVerdict } from './PromptScoreboard'
+import { PromptScoreboard, scoreboardRows, splitScoreboardRows, stageVerdict } from './PromptScoreboard'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -69,7 +69,31 @@ describe('scoreboardRows + stageVerdict', () => {
 
   it('never calls an ungraded test better or worse', () => {
     const row = { stage: 'stage1', active: v('stage1', 'v1', { is_active: true, avg_judge_score: 0.8 }), candidate: v('stage1', 'v2', { is_candidate: true, traffic_percentage: 5 }) }
-    expect(stageVerdict(row).text).toBe('Test at 5% of traffic, waiting for grades')
+    expect(stageVerdict(row).text).toBe('Testing on 1 in 20 reports, waiting for grades')
+  })
+
+  it('calls a test at 0% of traffic not started, not running', () => {
+    const row = { stage: 'stage1', active: v('stage1', 'v1', { is_active: true }), candidate: v('stage1', 'v2', { is_candidate: true, traffic_percentage: 0 }) }
+    expect(stageVerdict(row)).toEqual({ text: 'Not started: gets no reports', tone: 'warn' })
+  })
+})
+
+describe('splitScoreboardRows', () => {
+  const g = {
+    stage1: [v('stage1', 'v1', { is_active: true }), v('stage1', 'v2', { is_candidate: true })],
+    fix: [v('fix', 'v1', { is_active: true })],
+    judge: [v('judge', 'v1', { is_active: true })],
+    nl_plan: [v('nl_plan', 'v1', { is_active: true, avg_judge_score: 0.5 })],
+  }
+  it('folds ungraded baseline-only steps into one group and keeps tests first', () => {
+    const { shown, baselineOnly } = splitScoreboardRows(scoreboardRows(['fix', 'nl_plan', 'stage1', 'judge'], g))
+    expect(shown.map((r) => r.stage)).toEqual(['stage1', 'nl_plan'])
+    expect(baselineOnly.map((r) => r.stage)).toEqual(['fix', 'judge'])
+  })
+  it('does not group a single baseline row', () => {
+    const { shown, baselineOnly } = splitScoreboardRows(scoreboardRows(['stage1', 'fix'], g))
+    expect(shown.map((r) => r.stage)).toEqual(['stage1', 'fix'])
+    expect(baselineOnly).toEqual([])
   })
 })
 
@@ -84,5 +108,46 @@ describe('PromptScoreboard', () => {
     expect(rows[1]!.textContent).toContain('Grading')
     act(() => (rows[1] as HTMLButtonElement).click())
     expect(onOpen).toHaveBeenCalledWith('judge')
+  })
+
+  it('has column headers and one grouped row for baseline-only steps', () => {
+    const g = {
+      stage1: [v('stage1', 'v1', { is_active: true }), v('stage1', 'v2', { is_candidate: true })],
+      fix: [v('fix', 'v1', { is_active: true })],
+      judge: [v('judge', 'v1', { is_active: true })],
+    }
+    act(() => root.render(createElement(PromptScoreboard, { stages: ['stage1', 'fix', 'judge'], grouped: g, selected: 'stage1', onOpen: vi.fn() })))
+    expect(host.querySelector('[data-testid="prompt-scoreboard-head"]')?.textContent).toBe('PromptIn useTestingStatus')
+    const group = host.querySelector('[data-testid="prompt-scoreboard-baseline"]')
+    expect(group?.querySelector('summary')?.textContent).toContain('2 prompts')
+    // Nothing on the page is graded: the status line says so once, rows do not repeat it
+    // on every version (round-2 review 2026-11-18: "no grades yet" ×5).
+    expect(group?.querySelector('summary')?.textContent).toContain('In use only')
+    expect(host.textContent).not.toContain('no grades yet')
+    expect(group?.querySelectorAll('li button')).toHaveLength(2)
+  })
+
+  it('names the missing grade per version once some version on the page has one', () => {
+    const g = {
+      stage1: [v('stage1', 'v1', { is_active: true, avg_judge_score: 0.8 }), v('stage1', 'v2', { is_candidate: true, traffic_percentage: 10 })],
+      fix: [v('fix', 'v1', { is_active: true })],
+      judge: [v('judge', 'v1', { is_active: true })],
+    }
+    act(() => root.render(createElement(PromptScoreboard, { stages: ['stage1', 'fix', 'judge'], grouped: g, selected: 'stage1', onOpen: vi.fn() })))
+    expect(host.textContent).toContain('Testing: v2 · no grades yet')
+    expect(host.querySelector('[data-testid="prompt-scoreboard-baseline"] summary')?.textContent).toContain('In use only, no grades yet')
+  })
+
+  it('shows the test that gets traffic, matching the banner (not a 0% one)', () => {
+    const g = {
+      stage2: [
+        v('stage2', 'v1', { is_active: true, traffic_percentage: 100 }),
+        v('stage2', 'v2-experiment', { is_candidate: true, traffic_percentage: 0 }),
+        v('stage2', 'v3', { is_candidate: true, traffic_percentage: 50 }),
+      ],
+    }
+    const [row] = scoreboardRows(['stage2'], g)
+    expect(row!.candidate?.version).toBe('v3')
+    expect(stageVerdict(row!).text).toBe('Testing on half of reports, waiting for grades')
   })
 })

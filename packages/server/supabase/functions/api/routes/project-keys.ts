@@ -22,7 +22,9 @@ export function registerProjectKeysRoutes(app: Hono<{ Variables: Variables }>): 
   // is the same for POST /v1/ingest/runner, the key that lives on a CI runner
   // host (migration 20261021111344, Plan 022). `worker:run` is a local
   // worker's key (`mushi work --daemon`, migration 20261027150000, ADR 0048).
-  const ALLOWED_KEY_SCOPES = ['report:write', 'mcp:read', 'mcp:write', 'voice:write', 'runner:write', 'worker:run'] as const;
+  // `ops:write` is an app server's key for POST /v1/ops/events (the Ops hub,
+  // migration 20261117120000).
+  const ALLOWED_KEY_SCOPES = ['report:write', 'mcp:read', 'mcp:write', 'voice:write', 'runner:write', 'worker:run', 'ops:write'] as const;
   type AllowedScope = (typeof ALLOWED_KEY_SCOPES)[number];
 
   function normaliseScopes(input: unknown): AllowedScope[] | { error: string } {
@@ -514,7 +516,7 @@ async function keyMintRefusalDetails(
   const consoleBase = (Deno.env.get('MUSHI_CONSOLE_URL') ?? 'https://kensaur.us/mushi-mushi/admin').replace(/\/$/, '');
   const out: KeyMintRefusal = { signedInAs: email ?? null, role, organization: null, canPromote: [], teamUrl: `${consoleBase}/team` };
   try {
-    const { data: project } = await db.from('projects').select('organization_id, organizations(name)').eq('id', projectId).maybeSingle();
+    const { data: project } = await db.from('projects').select('organization_id, organizations!projects_organization_id_fkey(name)').eq('id', projectId).maybeSingle();
     const p = project as { organization_id?: string | null; organizations?: { name?: string | null } | null } | null;
     out.organization = p?.organizations?.name ?? null;
     if (p?.organization_id) {

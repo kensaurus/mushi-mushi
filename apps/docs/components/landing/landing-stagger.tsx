@@ -70,7 +70,10 @@ export function LandingStagger({
       variants={landingRevealContainer}
       initial="hidden"
       whileInView="visible"
-      viewport={{ once: true, margin: '0px 0px -8% 0px' }}
+      // Reveal a little before the section scrolls into view: with a negative
+      // margin a tall section on a phone stayed blank below the hero until it
+      // was well inside the screen.
+      viewport={{ once: true, margin: '0px 0px 15% 0px' }}
       {...rootProps}
     >
       {children}

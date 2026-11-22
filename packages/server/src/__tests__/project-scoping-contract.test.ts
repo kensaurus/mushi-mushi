@@ -44,12 +44,9 @@ describe('admin project scoping contract', () => {
     );
   });
 
-  it('keeps legacy assist on the same handler as Ask Mushi messages', () => {
-    const assistStart = askMushi.indexOf("app.post('/v1/admin/assist'");
-    expect(assistStart).toBeGreaterThan(0);
-    const assistTail = askMushi.slice(assistStart);
-    expect(assistTail).toContain('handleAskMushiMessage');
-    expect(assistTail).not.toContain("functionName: 'assist'");
-    expect(assistTail).not.toContain('generateText');
+  it('Ask Mushi has one message handler and no legacy assist route', () => {
+    expect(askMushi).not.toContain("app.post('/v1/admin/assist'");
+    expect(askMushi).toContain("app.post('/v1/admin/ask-mushi/messages', jwtAuth, (c) => handleAskMushiMessage(c))");
+    expect(askMushi).not.toContain("functionName: 'assist'");
   });
 });

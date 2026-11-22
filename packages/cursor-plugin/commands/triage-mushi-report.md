@@ -6,7 +6,7 @@ Investigate a bug report end-to-end using the Mushi MCP tools, then present find
 
 1. If no project ID is known, call `list_projects` to discover accessible projects.
 2. Call `get_project_context` for a health snapshot (SDK heartbeat, ingest status, open reports).
-3. If a specific report ID was provided, skip to step 4. Otherwise call `get_recent_reports { status: "open", limit: 10 }` and ask the user to pick one.
+3. If a specific report ID was provided, skip to step 4. Otherwise call `get_recent_reports { limit: 10 }` (newest first; add `status: "classified"` for diagnosed, unfixed reports) and ask the user to pick one.
 4. Call `triage_issue { reportId: "<id>", projectId: "<id>", includeLogs: true }` to pull the full triage packet.
 5. Present a structured summary:
    - **Severity / Status**: `[CRITICAL] "Login fails on mobile" — open`

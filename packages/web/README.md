@@ -1,27 +1,30 @@
 # @mushi-mushi/web
 
-> **Your AI wrote it. Mushi Mushi tells you why it broke.**
+> **Your AI built it. Mushi Mushi makes it better.**
 
-A bug widget for any website. When a user reports a problem, it sends a screenshot, the route, their note and the last console and network events to [Mushi Mushi](https://github.com/kensaurus/mushi-mushi). Mushi explains the cause in plain English and hands your editor a fix. It renders in a Shadow DOM, so your CSS and the widget's never mix.
+A bug widget for any website. When a user reports a problem, it sends a screenshot, the route, their note and the last console and network events to [Mushi Mushi](https://github.com/kensaurus/mushi-mushi). Mushi Mushi explains the cause in plain English and hands your editor a fix. It renders in a Shadow DOM, so your CSS and the widget's never mix.
+
+The same code ships in the [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi) package: `npm install mushi-mushi`, then `import { Mushi } from 'mushi-mushi'`. This package keeps working and keeps getting updates.
 
 ```mermaid
 flowchart LR
-    A["User taps the widget"] --> B["Mushi diagnoses the bug"] --> C["Fix lands in your editor"]
+    A["User taps the widget"] --> B["Mushi Mushi diagnoses the bug"] --> C["Fix lands in your editor"]
 ```
 
 ## Quick start
 
 ```bash
-npx mushi-mushi              # wizard: picks the right SDK, installs it, writes env vars
-# or: npm install @mushi-mushi/web
+npm install mushi-mushi      # then import from 'mushi-mushi'
+# or: npx mushi-mushi        # wizard: picks the right SDK, installs it, writes env vars
+# or: npm install @mushi-mushi/web   # same code; import from '@mushi-mushi/web'
 ```
 
 ```ts
-import { Mushi } from '@mushi-mushi/web';
+import { Mushi } from 'mushi-mushi';
 
 Mushi.init({
-  projectId: '00000000-0000-0000-0000-000000000000', // from the console's Projects page
-  apiKey: 'mushi_xxx',                               // report:write key from Setup → Verify
+  projectId: '00000000-0000-0000-0000-000000000000', // from the console's Manage apps page
+  apiKey: 'mushi_xxx',                               // report:write key from Set up → Test it
 });
 ```
 
@@ -41,7 +44,7 @@ Building in Lovable or Bolt with no terminal? A script tag works too: [Mushi Mus
 | **Privacy** | A built-in PII scrubber, selector masking for screenshots, and opt-in session replay. |
 | **Stays out of the way** | Zero-size host with `pointer-events: none`, keyboard-first, respects reduced motion. |
 | **Runtime config** | Change the widget from the console without a deploy. Values you set in code win. |
-| **Size** | CI caps the core bundle at 90.5 KB gzipped (105 KB uncompressed). Screenshot markup and the Your reports views load only when used. |
+| **Size** | CI caps the core bundle at 89.2 KB gzipped (105 KB uncompressed). Screenshot capture, screenshot markup and the Your reports views load only when used. |
 
 ## Recipes
 

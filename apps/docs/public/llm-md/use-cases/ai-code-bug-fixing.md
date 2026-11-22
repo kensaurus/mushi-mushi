@@ -14,16 +14,16 @@ having written the module; every investigation starts cold. The fix itself is
 cheap — an agent can write it in seconds — but only once someone has worked
 out **what actually broke and where**.
 
-Mushi Mushi is built around that bottleneck. It's the bug mediator for
-AI-built apps: it turns raw user reports into diagnoses an agent (or you) can
-act on immediately.
+Mushi Mushi is one place to improve AI-built apps, and fixing what breaks is
+the pillar built around that bottleneck: it turns raw user reports into
+diagnoses an agent (or you) can act on right away.
 
 ## The pipeline
 
 **Capture.** Users report bugs in your app — widget tap on web, shake on
 mobile. The report keeps the screenshot, the page, and the user's own words.
 
-**Diagnose.** Mushi reads the report against your repo and writes a
+**Diagnose.** Mushi Mushi reads the report against your repo and writes a
 plain-English explanation: what the user hit, the likely cause, which files
 are involved, how severe it is.
 
@@ -42,7 +42,7 @@ sprint.
 ## Where this fits with your existing tools
 
 Keep your error monitor for crashes and your test suite for regressions.
-Mushi covers the third category — the bugs only users find — and closes the
+Mushi Mushi covers the third category — the bugs only users find — and closes the
 loop back to your editor instead of a ticket queue.
 
 ## Start with one command
@@ -52,7 +52,7 @@ npx mushi-mushi
 ```
 
 The wizard installs the right SDK, writes env vars, and can file a test
-report so you see the loop before real users do. One app and 100 diagnoses a month free;
+report so you see the loop before real users do. Three apps and 300 diagnoses a month free;
 self-host if you prefer.
 
 **Next:** [Incident loop quickstart](/quickstart/incident-loop) ·

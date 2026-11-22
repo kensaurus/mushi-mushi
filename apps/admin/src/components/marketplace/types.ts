@@ -131,6 +131,62 @@ export const INTEGRATIONS_HREF_BY_PLUGIN_SLUG: Record<string, string> = {
 }
 
 /**
+ * Round-2 sweep 2026-11-18: five of six catalogue cards were full cards that
+ * only said "Already on Integrations →", each with an "Official" chip. The
+ * catalogue now draws a card only for a plugin you can install (or have
+ * installed) here; the ones Integrations covers fold into one row of links.
+ */
+export function splitCatalog<T extends { slug: string }>(
+  catalog: readonly T[],
+  installedSlugs: ReadonlySet<string>,
+): { own: T[]; covered: Array<T & { href: string }> } {
+  const own: T[] = []
+  const covered: Array<T & { href: string }> = []
+  for (const p of catalog) {
+    const href = INTEGRATIONS_HREF_BY_PLUGIN_SLUG[p.slug]
+    if (href && !installedSlugs.has(p.slug)) covered.push({ ...p, href })
+    else own.push(p)
+  }
+  return { own, covered }
+}
+
+/** "Official" only tells plugins apart when some are not; on an all-official list it is noise. */
+export function showOfficialChip(catalog: ReadonlyArray<{ is_official: boolean }>): boolean {
+  return catalog.some((p) => p.is_official) && catalog.some((p) => !p.is_official)
+}
+
+/** The product is "Mushi Mushi", never "Mushi" (catalogue rows still carry the short name). */
+export function displayPublisher(publisher: string): string {
+  return ['mushi', 'mushi-mushi', 'mushi mushi'].includes(publisher.trim().toLowerCase()) ? 'Mushi Mushi' : publisher
+}
+
+/** Same rule for catalogue descriptions: "any Mushi event" → "any Mushi Mushi event". */
+export function displayPluginText(text: string): string {
+  return text.replace(/\bMushi( Mushi)?\b/g, 'Mushi Mushi')
+}
+
+/**
+ * The empty-state copy for a project with no plugins (2026-11-18). "No plugins installed
+ * yet" sat above cards that mostly said "Already on Integrations", so it names the plugins
+ * that are actually left to install here instead.
+ */
+export function marketplaceEmptyCopy(catalog: ReadonlyArray<{ slug: string; name: string }>): { title: string; description: string } {
+  const PURPOSE = 'A plugin sends Mushi Mushi events (new report, fix merged) to your own HTTPS endpoint, signed so you can verify them.'
+  const own = catalog.filter((p) => !INTEGRATIONS_HREF_BY_PLUGIN_SLUG[p.slug])
+  const covered = catalog.length - own.length
+  if (covered === 0 || catalog.length === 0) return { title: 'No plugins installed yet', description: PURPOSE }
+  if (own.length === 0) return { title: 'Every plugin here is set up from Integrations', description: PURPOSE }
+  const names = own.map((p) => p.name)
+  const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+  return {
+    title: `${list} ${own.length === 1 ? 'is the only plugin' : 'are the only plugins'} not covered by Integrations`,
+    // The "Set up from Integrations:" link row under the cards names the others; the intro said
+    // it a second time (2026-11-19).
+    description: PURPOSE,
+  }
+}
+
+/**
  * Minimum signing-secret length for a webhook plugin. One number for the
  * install form's field check and the submit guard (they used to say 32 and
  * 16). The generated secret is 64 hex characters.

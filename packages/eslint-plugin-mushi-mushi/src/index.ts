@@ -14,9 +14,13 @@
  * Both ship under MIT so customers can drop them into existing flat or
  * legacy ESLint configs without paying for Mushi Mushi (whitepaper §8.4).
  *
+ * Private since ADR 0060 Phase 1b: users get these rules from the
+ * `mushi-mushi/eslint` subpath, which bundles this package. Inside the
+ * monorepo it is still imported by name through `workspace:`.
+ *
  * Usage (flat config):
  *
- *   import mushi from 'eslint-plugin-mushi-mushi'
+ *   import mushi from 'mushi-mushi/eslint'
  *   export default [
  *     mushi.configs.recommended,
  *   ]

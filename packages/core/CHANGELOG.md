@@ -1,5 +1,37 @@
 # @mushi-mushi/core
 
+## 1.37.0
+
+### Minor Changes
+
+- fd05f9a: **`setDiagnosticsProvider()`** attaches your app's own diagnostics (load timings, recent errors, connection) at the moment the reporter presses Send. The function gets 300 ms, its strings are scrubbed for personal data, and the result is size-capped. A slow or throwing provider never blocks or drops the report. Its keys merge into the report's metadata, and triage now reads `screenLoading` / `timings` lines as evidence.
+
+  React Native also gets:
+  - **App version.** `reports.app_version` now comes from the new `appVersion` option, then `expo-application` (version and build) or `react-native-device-info`. It never falls back to the OS version, which made Expo apps report Android's `36`.
+  - **`loadMyReports()`.** It resolves `null` when the list could not be loaded, so the report sheet shows an error with Retry instead of "no reports". `listMyReports()` keeps returning `[]` on failure.
+
+## 1.35.0
+
+### Patch Changes
+
+- f318574: Stopping a Journeys recording window now takes effect on the next page load. With `trackSessions: 'on-demand'` the SDK reads its settings past the browser's HTTP cache, which could keep serving a stopped window for up to about 6 minutes. Apps on the default setting keep the cached read. The core bundle budget goes from 25.9 to 26.0 kB for this option.
+
+## 1.34.0
+
+### Minor Changes
+
+- d597fb0: New `trackSessions: 'on-demand'` for the Journey optimizer. In this mode the SDK sends no session, heartbeat or page-view request until you ask for one. You can open a recording window on the console's Journeys page (for 1 hour, 1 day or 1 week, for 10%, 50% or all visitors), or open your app with `?mushi_journeys=1` to record your own tab. Each device is drawn into or out of the sample once and keeps that result, so a visitor is never half recorded. The check uses the runtime config the SDK already loads, so outside a window it adds no request. `true` (the default) and `false` work as before.
+
+### Patch Changes
+
+- d597fb0: New npm description and README hero (ADR 0058): Mushi Mushi is one place to improve AI-built apps. It fixes bugs, smooths the journeys people take through the app and cleans up the code, from your editor. Bug fixing is now one of three pillars instead of the whole product. No API changes.
+
+## 1.33.6
+
+### Patch Changes
+
+- 184d4ea: The README and the npm description now use the full product name, Mushi Mushi, everywhere instead of a shortened "Mushi". In `@mushi-mushi/mcp`, `search_mushi_docs` and `get_mushi_doc` also return the updated docs pages and the corrected auto-fix-loop blog post.
+
 ## 1.33.5
 
 ### Patch Changes

@@ -1,7 +1,7 @@
 {
   "name": "@mushi-mushi/core",
-  "version": "1.33.5",
-  "description": "Types, API client and pre-filter for Mushi SDKs. The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.",
+  "version": "1.37.0",
+  "description": "Mushi Mushi SDK types, API client, pre-filter. One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -37,6 +37,16 @@
         "types": "./dist/reporter-channels.d.cts",
         "default": "./dist/reporter-channels.cjs"
       }
+    },
+    "./diagnostics": {
+      "import": {
+        "types": "./dist/diagnostics.d.ts",
+        "default": "./dist/diagnostics.js"
+      },
+      "require": {
+        "types": "./dist/diagnostics.d.cts",
+        "default": "./dist/diagnostics.cjs"
+      }
     }
   },
   "typesVersions": {
@@ -46,6 +56,9 @@
       ],
       "reporter-channels": [
         "./dist/reporter-channels.d.ts"
+      ],
+      "diagnostics": [
+        "./dist/diagnostics.d.ts"
       ]
     }
   },
@@ -99,7 +112,7 @@
   "size-limit": [
     {
       "path": "dist/index.js",
-      "limit": "25.9 KB"
+      "limit": "26.0 KB"
     }
   ],
   "devDependencies": {

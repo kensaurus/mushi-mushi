@@ -35,18 +35,32 @@ sequenceDiagram
   participant Widget
   participant API
 
-  User->>Widget: Opens report sheet (screenshot mode on-report/auto)
-  Widget->>Widget: Capture screen → data URL
-  Widget->>User: Show <img> preview + privacy caption + Remove
+  alt auto
+    User->>Widget: Opens report
+    Widget->>Widget: Capture screen → data URL
+  else on-report (web 1.38+)
+    User->>Widget: Presses Send with no screenshot attached
+    Widget->>Widget: onBeforeSubmit → capture; report NOT sent
+    Widget->>User: "Check the screenshot below, then press Send again"
+  end
+  Widget->>User: Show <img> preview + privacy caption + Mark up + Remove
   alt User removes screenshot
-    User->>Widget: Tap Remove
-    Widget->>User: Preview cleared; report submits without image
+    User->>Widget: Tap Remove (screenshotDeclined: no new capture for this report)
+    User->>Widget: Send
+    Widget->>API: POST report, no image
   else User keeps screenshot
     User->>Widget: Optional Mark up (web) → annotate/blur
-    User->>Widget: Submit
-    Widget->>API: POST report (screenshot blob attached)
+    User->>Widget: Send
+    Widget->>API: POST report (screenshot attached)
   end
 ```
+
+Invariant (web): `onSubmit` never captures. Every automatic capture happens
+where the reporter sees it (on open, or in `onBeforeSubmit`, which holds the
+send for a second press), and `screenshotDeclined` blocks any capture after
+Remove until the report is sent or the panel closes. Before 1.38,
+`on-report` captured inside `onSubmit` and sent the image unseen, and Remove
+followed by Send re-captured. Regression tests: `packages/web/src/screenshot-submit.test.ts`.
 
 | Surface | Before 1.19.0 | After 1.19.0 |
 | --- | --- | --- |
@@ -61,7 +75,7 @@ The privacy caption is controlled separately via `screenshotSensitiveHint`.
 
 ## Configuration
 
-`screenshotSensitiveHint` lives on `MushiWidgetConfig` in `@mushi-mushi/core`:
+`screenshotSensitiveHint` lives on `MushiWidgetConfig` in `mushi-mushi/core`:
 
 ```typescript
 widget: {
@@ -79,7 +93,7 @@ widget: {
 ### SDK init (host app)
 
 ```typescript
-import { Mushi } from '@mushi-mushi/web'
+import { Mushi } from 'mushi-mushi'
 
 Mushi.init({
   projectId: 'proj_xxx',
@@ -108,9 +122,11 @@ import { MushiProvider } from '@mushi-mushi/react-native'
 </MushiProvider>
 ```
 
-Screenshot **mode** (`capture.screenshot`: `'on-report' | 'auto' | 'off'`) is
-unchanged — this feature only affects what happens **after** a screenshot is
-captured. See [CONFIG_REFERENCE — Screenshot mode](./CONFIG_REFERENCE.md).
+Screenshot **mode** (`capture.screenshot`: `'on-report' | 'auto' | 'off'`)
+decides **when** the screenshot is taken (see the diagram above); this feature
+decides what the reporter can do with it. See
+[CONFIG_REFERENCE — Screenshot mode](./CONFIG_REFERENCE.md) and the public
+[What leaves the browser](../apps/docs/content/security/what-leaves-the-browser.mdx).
 
 ### Localized default captions (web)
 

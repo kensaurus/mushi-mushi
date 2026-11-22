@@ -15,7 +15,7 @@
 import { Btn } from '../ui'
 import { usePageCopy } from '../../lib/copy'
 import { StatusBannerShell } from '../StatusBannerShell'
-import type { KeySummary } from './keyStatus'
+import { keysNeedingAction, keysToTidy, type KeySummary } from './keyStatus'
 import type { SettingsStats, SettingsTabId } from './types'
 import { slackAlertsReady } from './slackAlertStatus'
 import type { ConnectionView } from '../../lib/integrationConnection'
@@ -34,7 +34,16 @@ interface Props {
   sentry?: ConnectionView | null
   onTab?: (tab: SettingsTabId) => void
   plainBanner?: boolean
+  /**
+   * The saved fix-branch pattern breaks the current rule (fixes fall back to
+   * the default). It sat halfway down General; it now leads with the keys.
+   */
+  branchPatternInvalid?: boolean
+  /** Scroll to the Fix branch names row. */
+  onFixBranch?: () => void
 }
+
+const BRANCH_LINE = 'Your saved fix branch pattern is no longer allowed, so fixes use the default.'
 
 type BannerPriority =
   | 'keys_attention'
@@ -42,6 +51,7 @@ type BannerPriority =
   | 'no_anthropic'
   | 'sdk_off'
   | 'keys_unchecked'
+  | 'keys_tidy'
   | 'routing_optional'
   | 'slack_incomplete'
   | 'healthy'
@@ -64,6 +74,7 @@ export function settingsBannerPriority(
   if (!hasAnthropicKey) return 'no_anthropic'
   if (!stats.sdkConfigEnabled) return 'sdk_off'
   if (unchecked > 0) return 'keys_unchecked'
+  if (keySummary && keysToTidy(keySummary) > 0) return 'keys_tidy'
   // slackConfigured is "any Slack field is saved". That includes a channel
   // id with no bot, which cannot send. slackCanPost is the send check.
   if (stats.slackConfigured && stats.slackCanPost === false) return 'slack_incomplete'
@@ -82,6 +93,8 @@ export function SettingsStatusBanner({
   hasAnthropicKey = stats.byokAnthropicConfigured,
   sentry = null,
   onTab,
+  branchPatternInvalid = false,
+  onFixBranch,
 }: Props) {
   const copy = usePageCopy('/settings')
   const actions = copy?.actionLabels ?? {}
@@ -93,15 +106,65 @@ export function SettingsStatusBanner({
         {label}
       </Btn>
     ) : null
+  const fixBranch = onFixBranch ? (
+    <Btn size="sm" variant="ghost" onClick={onFixBranch} className="whitespace-nowrap" data-testid="settings-banner-fix-branch">
+      Fix pattern
+    </Btn>
+  ) : null
+
+  // Problems first. A broken pattern only falls back to the default, so a
+  // bigger problem (keys, the widget off) keeps the banner and the pattern
+  // rides along as a second line; below those, the pattern leads.
+  const withBranch = (main: string) =>
+    branchPatternInvalid ? (
+      <>
+        <span className="block">{main}</span>
+        <span className="mt-1 flex flex-wrap items-center gap-x-2" data-testid="settings-banner-branch">
+          <span>{BRANCH_LINE}</span>
+          {fixBranch}
+        </span>
+      </>
+    ) : (
+      main
+    )
+  const carriesBranch = priority === 'keys_attention' || priority === 'keys_expiring' || priority === 'sdk_off'
+  if (branchPatternInvalid && !carriesBranch) {
+    return (
+      <StatusBannerShell
+        tone="warn"
+        title="Fix branch pattern no longer allowed"
+        subtitle="Fixes use the default pattern until you reset or edit it. Other settings still save."
+        action={fixBranch}
+      />
+    )
+  }
 
   switch (priority) {
     case 'keys_attention': {
-      const n = keySummary ? keySummary.attention : stats.byokKeysFailing
+      // The same count as the AI keys tab badge: every key whose row asks
+      // for something, tidy-up included (round-3 review 2026-11-19).
+      const n = keySummary ? keysNeedingAction(keySummary) : stats.byokKeysFailing
+      const broken = keySummary ? keySummary.attention : n
+      const tidy = keySummary ? keysToTidy(keySummary) : 0
+      const rest = n - broken - tidy
+      const parts = [
+        `${broken} not working`,
+        tidy > 0 ? `${tidy} to tidy up` : null,
+        rest > 0 ? `${rest} to check or replace` : null,
+      ].filter(Boolean)
       return (
         <StatusBannerShell
           tone="danger"
-          title={`${plural(n, 'key')} ${n === 1 ? 'needs' : 'need'} your attention`}
-          subtitle="Rejected, out of quota, expired or replaced. Each one says what to do in AI keys."
+          // The title counts every problem the banner lists: the keys, plus the
+          // branch pattern when it rides along (round-2 review 2026-11-18).
+          title={
+            branchPatternInvalid
+              ? `${plural(n, 'key')} and the fix branch pattern need your attention`
+              : `${plural(n, 'key')} ${n === 1 ? 'needs' : 'need'} your attention`
+          }
+          subtitle={withBranch(
+            parts.length > 1 ? `${parts.join(', ')}. Each row in AI keys says what to do.` : 'Each row in AI keys says what to do.',
+          )}
           action={go('byok', actions.byok ?? 'Fix keys')}
         />
       )
@@ -112,7 +175,7 @@ export function SettingsStatusBanner({
         <StatusBannerShell
           tone="warn"
           title={`${plural(n, 'key')} ${n === 1 ? 'expires' : 'expire'} within a week`}
-          subtitle="Create a new key at the provider and add it before the old one stops working."
+          subtitle={withBranch('Create a new key at the provider and add it before the old one stops working.')}
           action={go('byok', 'Replace keys')}
         />
       )
@@ -131,7 +194,7 @@ export function SettingsStatusBanner({
         <StatusBannerShell
           tone="warn"
           title="The bug widget is off"
-          subtitle={`People using ${projectLabel} can't send bug reports until it is turned on.`}
+          subtitle={withBranch(`People using ${projectLabel} can't send bug reports until it is turned on.`)}
           action={go('sdk', actions.sdk ?? 'Open SDK & connection')}
         />
       )
@@ -141,8 +204,19 @@ export function SettingsStatusBanner({
         <StatusBannerShell
           tone="info"
           title={`${plural(n, 'key')} not checked yet`}
-          subtitle="Mushi won't use a key until the provider accepts it. Press Test on each one."
+          subtitle="Mushi Mushi won't use a key until the provider accepts it. Press Test on each one."
           action={go('byok', actions.test ?? 'Test keys')}
+        />
+      )
+    }
+    case 'keys_tidy': {
+      const n = keySummary ? keysToTidy(keySummary) : 0
+      return (
+        <StatusBannerShell
+          tone="info"
+          title={`${plural(n, 'key')} to tidy up`}
+          subtitle="Replaced or saved twice. Nothing is broken; each row says which one to remove."
+          action={go('byok', 'Open AI keys')}
         />
       )
     }
@@ -151,7 +225,7 @@ export function SettingsStatusBanner({
         <StatusBannerShell
           tone="warn"
           title="Slack alerts cannot be sent yet"
-          subtitle="A Slack setting is saved, but nothing can post. Add Mushi to Slack and pick a channel, or paste a webhook."
+          subtitle="A Slack setting is saved, but nothing can post. Add Mushi Mushi to Slack and pick a channel, or paste a webhook."
           action={go('general', 'Finish Slack setup')}
         />
       )

@@ -4,22 +4,37 @@ Source: https://kensaur.us/mushi-mushi/docs/pricing
 
 ---
 title: "Pricing: Free, Builder, Studio and self-host"
-description: Mushi Mushi pricing. Free for one app and 100 AI bug diagnoses a month. Builder $29/mo for 3 apps, Studio $79/mo for 10. Free to self-host.
+description: Mushi Mushi pricing. Free for three apps and 300 AI bug diagnoses a month. Builder $29/mo for 1,000 diagnoses, Studio $79/mo for 10 apps. Free to self-host.
 ---
 
 # Pricing
 
-## Plans
+Free for three apps. You pay only when you want more diagnoses, longer history or more apps. A
+**diagnosis** is one bug explained in plain English, and repeat reports of the
+same bug count once.
 
-A plan is the number of **apps** Mushi Mushi watches for your team: one on Free, three on Builder, ten on Studio. Diagnoses are the allowance under it. Reports are always captured and are never billed.
+Every plan includes the report button, the plain-English diagnosis and the fix
+prompt. You don't need an AI key of your own, and the integrations (Sentry,
+Slack, GitHub, Linear, Jira) work on every plan.
 
-Installing plugins from the Marketplace (PagerDuty, Zapier, the Cursor and Claude Code agents, Linear Sync, Sentry Mirror) needs Builder or above. The Integrations page (Sentry, Slack, GitHub, Linear) works on every plan.
+That is all most people need. The plan table, the limits and the details for
+developers are below.
+
+## All plans
+
+A plan sets how many **apps** your team can have: three on Free and Builder, ten on Studio. Diagnoses are the allowance under it. Reports are always captured and are never billed.
+
+**More than one app?** A plan belongs to your team. Upgrade from any app's card on the Billing page and every app in the team is on the plan: the diagnoses a month are shared by all of them, and so are the overage, the spend cap, the app limit, seats, history, plugins and the widget without a Mushi Mushi mark. Eight apps on Studio cost $79 a month, not eight times that.
+
+**What Free can fix.** On Free you can ask for a fix pull request from the built-in fixer once GitHub is connected, send a bug to a Cursor cloud agent with your own Cursor key, and run fixes on your own computer with `mushi work`. Plugins from the Marketplace (PagerDuty, Zapier, Linear Sync, Sentry Mirror, and the Cursor plugin that starts a fix by itself on each new bug) work on Free too, and so do usage alerts. The Integrations page (Sentry, Slack, GitHub, Linear, Jira) works on every plan. Team invites need Studio.
 
   **Annual billing saves two months.** Pay for 10 months, get 12: Builder is $290 a year, Studio $790. Annual plans have no pay-as-you-go overage: they include the plan's diagnoses each month and pause new diagnoses at that limit. Pick annual at checkout, or switch an existing plan with **Change plan** on the Billing page. For Enterprise commits, contact us.
 
-  **Overage is capped.** Builder and Studio include a default cap on overage spend ($50 and $200 a month, on top of the base fee). You can lower or raise it in the console. At the cap, Mushi pauses new diagnoses and says so, instead of sending a bigger invoice. Email alerts fire at **50%, 80%, and 100%** of your included diagnoses.
+  **Overage is capped.** Builder and Studio include a default cap on overage spend ($50 and $200 a month, on top of the base fee). You can lower or raise it in the console. At the cap, Mushi Mushi pauses new diagnoses and says so, instead of sending a bigger invoice. Email alerts fire at **50%, 80%, and 100%** of your included diagnoses.
 
-  **Free has a hard stop**, not a soft limit. At 100 diagnoses Mushi stops diagnosing new reports until the next calendar month. No card, no charge, no bill shock.
+  **Free has a hard stop**, not a soft limit. At 300 diagnoses Mushi Mushi stops diagnosing new reports until the next calendar month. No card, no charge, no bill shock. The cap is for diagnoses on Mushi Mushi's AI key: a free project that adds its own Anthropic or OpenAI key is not capped.
+
+**Details for developers**: what counts as a diagnosis, an estimator, example bills, your own AI key, and a comparison with Sentry
 
 ## What counts as a diagnosis
 
@@ -29,7 +44,7 @@ One diagnosis = one completed classification pass. Specifically:
 - It is not a duplicate of an existing group already classified this period.
 - The classifier finishes and writes a plain-English root cause + severity + fix hint.
 
-Under the hood that is a two-stage pipeline (Haiku fast-filter → Sonnet structured output). Classification, deduplication, knowledge-graph writes, and MCP tool calls are **not** counted separately: they are included in the per-diagnosis price. Fix PRs and agent runs are not counted as diagnoses; with your own AI key (see [below](#your-own-ai-key-and-the-self-host-path)), their tokens are billed by that vendor.
+Under the hood that is a two-stage pipeline (Haiku fast-filter → Sonnet structured output). Classification, deduplication, knowledge-graph writes, and MCP tool calls are **not** counted separately: they are included in the per-diagnosis price. Fix PRs and agent runs are not counted as diagnoses. A diagnosis counts whichever key wrote it: adding your own AI key (see [below](#your-own-ai-key-and-the-self-host-path)) moves the AI vendor's bill to you, but does not add diagnoses to a paid plan. On Free, your own Anthropic or OpenAI key lifts the monthly cap.
 
 **What does NOT count:**
 
@@ -66,7 +81,7 @@ The cap is checked per calendar month (UTC) of usage: at the cap, new diagnoses 
 
 ## Why apps, not reports?
 
-Reports are noisy: one broken button can send fifty, and a busy week is hard to predict. The number of apps you ship is something you already know, and it grows with what you get out of Mushi. So a plan is sized by apps watched, diagnoses are a generous allowance under it, and reports are never billed at all.
+Reports are noisy: one broken button can send fifty, and a busy week is hard to predict. The number of apps you ship is something you already know, and it grows with what you get out of Mushi Mushi. So a plan is sized by apps watched, diagnoses are a generous allowance under it, and reports are never billed at all.
 
 ## Why diagnoses, not events
 
@@ -74,31 +89,38 @@ Sentry meters errors. We meter diagnoses: one per plain-English root cause and p
 
 ## Your own AI key and the self-host path
 
-On every Cloud plan, Free included, you can add your own Anthropic, OpenAI or Cursor key under **Settings → API keys**. Mushi then uses it for fix PRs and agent work; you pay those vendors directly at list rate, and we never mark up tokens.
+No plan needs a key of your own. On every Cloud plan, Free included, you can add one under **Settings → AI keys**, and the rule is the same everywhere:
 
-When self-hosting, Mushi uses **your** keys for everything. For a sense of scale: on Mushi's own key, a diagnosis cost about $0.017–0.022 in LLM tokens over the 30 days to 2026-10-28, so 1,000 diagnoses is roughly $20. Fix PRs and reviews are extra and depend on the model you pick.
+- **An Anthropic or OpenAI key** is used first for that app's AI work: the diagnosis, fix drafts, fix grading and the weekly summary. Mushi Mushi's own key is the fallback when you have added none. You pay the vendor directly at list rate, and we never mark up tokens.
+- **A diagnosis written on your own key still counts** against your plan's diagnoses.
+- **The second AI that reviews each fix pull request** runs only on your own Anthropic or OpenAI key. Without one, that review is skipped.
+- **A Cursor key** is what lets a Cursor cloud agent write fixes.
+
+The full table is on [Bring-your-own-key](/security/byok).
+
+When self-hosting, Mushi Mushi uses **your** keys for everything. For a sense of scale: on Mushi Mushi's own key, a diagnosis cost about $0.017–0.022 in LLM tokens over the 30 days to 2026-10-28, so 1,000 diagnoses is roughly $20. Fix PRs and reviews are extra and depend on the model you pick.
 
 The self-host path is free, and always will be: [see the guide](/self-hosting).
 
 ## Compared to Sentry + Seer
 
-| | Sentry Team + Seer | Mushi Builder |
+| | Sentry Team + Seer | Mushi Mushi Builder |
 |---|---|---|
 | Base plan | Team: $26 / mo billed annually, $29 monthly | $29 / mo for 3 apps ($290 a year) |
 | AI diagnosis | Seer add-on: + $40 / active contributor / mo | Included |
 | Solo dev total | **$66–69 / mo** plus any pay-as-you-go | **$29 / mo** |
 | Catches non-crash friction | Via its User Feedback widget and Session Replay | Yes: a report widget (shake on mobile) with screenshot and console/network tail, then a diagnosis |
-| Bugs in your editor | Sentry MCP server: issues and Seer analysis in Cursor / Claude Code | Mushi MCP server: diagnosis, fix prompt and lessons; no second LLM key |
+| Bugs in your editor | Sentry MCP server: issues and Seer analysis in Cursor / Claude Code | Mushi Mushi MCP server: diagnosis, fix prompt and lessons; no second LLM key |
 
 Sentry prices from [sentry.io/pricing](https://sentry.io/pricing/) and [Sentry's pricing docs](https://docs.sentry.io/pricing/), checked 2026-10-29. Seer is an add-on to the Team or Business plan, billed as its own monthly charge. An active contributor is anyone who opens two or more pull requests in a month to a Seer-enabled repo; the $66–69 total assumes one of them. Seer is not available in self-hosted Sentry ([self-hosted docs](https://develop.sentry.dev/self-hosted/)).
 
-Sentry + Seer is strong at code-thrown errors, tracing, breadcrumbs and session replay, and Seer is an AI debugging agent for those issues. Mushi starts from user-felt friction that never triggers an error, ingests Sentry's errors too, and turns each into a plain-English diagnosis and a paste-ready fix prompt in your editor. A diagnosis is an LLM's reading and can be wrong; check it before you merge.
+Sentry + Seer is strong at code-thrown errors, tracing, breadcrumbs and session replay, and Seer is an AI debugging agent for those issues. Mushi Mushi starts from user-felt friction that never triggers an error, ingests Sentry's errors too, and turns each into a plain-English diagnosis and a paste-ready fix prompt in your editor. A diagnosis is an LLM's reading and can be wrong; check it before you merge.
 
 ## Frequently asked questions
 
 ### What happens when I hit my diagnosis limit?
 
-**Free:** New plain-English diagnoses pause until the next calendar month. Reports are still captured.
+**Free:** New plain-English diagnoses pause until the next calendar month. Reports are still captured. A free project with its own Anthropic or OpenAI key does not pause.
 
 **Builder / Studio (monthly):** You can keep diagnosing into overage until your **spend cap** stops new classification runs. Reports are never dropped.
 
@@ -110,7 +132,7 @@ The console says how many apps your plan watches and how many your team has, and
 
 ### Can I use my own AI key on Free?
 
-Yes. Bring-your-own-key works on every plan, Free included. Add an Anthropic, OpenAI or Cursor key under **Settings → API keys** and Mushi can open fix PRs with it, so you see the whole loop on your first app before paying anything.
+Yes. Bring-your-own-key works on every plan, Free included. Add an Anthropic, OpenAI or Cursor key under **Settings → AI keys**. Mushi Mushi then uses your Anthropic or OpenAI key first for the diagnosis and for fix drafts, and a Cursor key lets a Cursor cloud agent write fixes. On Free, a project with its own Anthropic or OpenAI key is not capped: the 300 a month is for diagnoses on Mushi Mushi's key. On a paid plan, a diagnosis on your own key still counts toward the plan.
 
 ### When does my quota reset?
 
@@ -118,19 +140,19 @@ Diagnoses are counted per calendar month (UTC) on every plan, so the count start
 
 ### Can I change my spend cap?
 
-Yes. Open **Billing → Spending cap** on your project card. Set any USD cap on overage from $0–100,000 or clear it to use the plan default ($50 Builder, $200 Studio).
+Yes. Open **Billing → Spending cap** on any app's card. Set any USD cap on overage from $0–100,000 or clear it to use the plan default ($50 Builder, $200 Studio). The cap covers the whole team. Set it to **$0** for a fixed bill: diagnoses then pause at the included amount until the 1st, and the team never pays more than the base fee.
 
 ### Who receives usage alert emails?
 
-By default, the **project owner**. Override the address under **Usage alert email** on the same card. Alerts fire once per threshold (50%, 80%, 100%) per billing month.
+By default, the **team owner**. Override the address under **Usage alert email** on the same card. Alerts fire once per threshold (50%, 80%, 100%) of the team's diagnoses per billing month.
 
 ### Is usage per app or per team?
 
-**Diagnoses are per app; the app limit is per team.** Each app you connect has its own diagnosis counter and spend cap, and the plan's app limit counts the apps in your team.
+**Per team.** A plan belongs to the team: its diagnoses are one shared allowance for every app in the team, counted together each month, and the app limit, seats and spend cap are the team's too. So the most a team can be billed in a calendar month is the base fee plus the cap ($29 + $50 on Builder, $79 + $200 on Studio, at the default caps), however many apps it has.
 
 ### Can I downgrade mid-cycle?
 
-Change plans in the console with **Change plan** on the Billing page (Builder ↔ Studio, monthly ↔ annual). The change applies immediately and is pro-rated: unused time is credited and the new plan is charged for the rest of the period. Moving between monthly and annual starts a new billing period that day. Stripe's customer portal (**Manage**) handles your card, invoices and cancellation.
+Yes. Change plans in the console with **Change plan** on the Billing page (Builder ↔ Studio, monthly ↔ annual). An upgrade and a downgrade work the same way: the change applies immediately and is pro-rated, so unused time is credited and the new plan is charged for the rest of the period. Moving between monthly and annual starts a new billing period that day. To go back to Free, cancel: Stripe's customer portal (**Manage**) handles your card, invoices and cancellation.
 
 ### Do annual plans include overage?
 
@@ -138,7 +160,7 @@ No. Annual plans include the plan's diagnoses every month (1,000 on Builder, 3,0
 
 ### What does Enterprise cost?
 
-From $499 a month, billed annually: unlimited apps, SAML SSO, the SOC 2 readiness pack, self-host support and up to 365 days of history. [Contact us](mailto:kensaurus@gmail.com?subject=Mushi%20Enterprise%20inquiry) for a quote.
+From $499 a month, billed annually: unlimited apps, SAML SSO, the SOC 2 readiness pack, self-host support and up to 365 days of history. [Contact us](mailto:kensaurus@gmail.com?subject=Mushi%20Mushi%20Enterprise%20inquiry) for a quote.
 
 ### How do I estimate before signing up?
 

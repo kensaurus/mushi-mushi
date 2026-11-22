@@ -18,6 +18,19 @@ detection, and an optional Sentry bridge.
   repository, as below. `npx mushi-mushi` does not set up native Android projects.
 </Callout>
 
+## Get your project ID and API key
+
+The SDK needs two values from a Mushi Mushi project.
+
+- **By hand:** [create a free account](https://kensaur.us/mushi-mushi/admin/signup?src=quickstart-android)
+  (no card) and create a project. The panel that opens shows the **project ID**
+  and an **API key** that starts with `mushi_`. Copy the key now: it is shown
+  once. You can mint another under **Set up → Test it → Generate API key**.
+- **Self-hosting?** Your own console gives you the same two values. See
+  [Self-hosting](/self-hosting).
+
+They go into the config in the Initialize step below.
+
 ## Build from source
 
 The library lives in [`packages/android`](https://github.com/kensaurus/mushi-mushi/tree/master/packages/android)

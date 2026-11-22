@@ -37,9 +37,9 @@
      fg 0.93 > secondary 0.72 > muted 0.67 > faint 0.63, all ≥ 4.5:1 on
      surface, raised and overlay. */
   --color-fg: oklch(0.93 0.005 285);
-  --color-fg-secondary: oklch(0.72 0.005 285);
-  --color-fg-muted: oklch(0.67 0.005 285);
-  --color-fg-faint: oklch(0.63 0.005 285);
+  --color-fg-secondary: oklch(0.80 0.005 285);
+  --color-fg-muted: oklch(0.75 0.005 285);
+  --color-fg-faint: oklch(0.70 0.005 285);
 
   /* ── Brand (amber / beetle-chitin) ─────────────────────────────────── */
   --color-brand: oklch(0.80 0.16 80);
@@ -84,6 +84,34 @@
   --color-info: oklch(0.68 0.16 240);
   --color-info-fg: oklch(0.16 0.04 240);
   --color-info-muted: oklch(0.28 0.05 240);
+
+  /* ── Run status (2026-11-18, owner: "a running runner could show as running
+     colour and status and graphical, and show different when broken") ───
+     One set per state: `st-<s>` the bright mark (dot, ring, bar), `-ink` the
+     text beside it, `-soft` the tinted ground. Ink on soft is at least 7:1 in
+     both themes. The shape and motion live in components/signal/StatusMark:
+     colour is never the only cue. */
+  --color-st-running: oklch(0.64 0.19 259);
+  --color-st-running-ink: oklch(0.84 0.09 259);
+  --color-st-running-soft: oklch(0.27 0.07 262);
+  --color-st-passed: oklch(0.72 0.19 150);
+  --color-st-passed-ink: oklch(0.88 0.11 152);
+  --color-st-passed-soft: oklch(0.27 0.05 152);
+  --color-st-failed: oklch(0.64 0.21 25);
+  --color-st-failed-ink: oklch(0.86 0.08 18);
+  --color-st-failed-soft: oklch(0.26 0.07 22);
+  --color-st-waiting: oklch(0.76 0.16 80);
+  --color-st-waiting-ink: oklch(0.90 0.10 85);
+  --color-st-waiting-soft: oklch(0.28 0.05 80);
+  --color-st-slow: oklch(0.70 0.19 50);
+  --color-st-slow-ink: oklch(0.86 0.09 55);
+  --color-st-slow-soft: oklch(0.27 0.06 50);
+  --color-st-idle: oklch(0.66 0.02 255);
+  --color-st-idle-ink: oklch(0.85 0.015 255);
+  --color-st-idle-soft: oklch(0.25 0.01 255);
+  --color-st-cancelled: oklch(0.55 0.015 255);
+  --color-st-cancelled-ink: oklch(0.76 0.01 255);
+  --color-st-cancelled-soft: oklch(0.23 0.008 255);
   /* On tinted semantic surfaces (banners, chips, toasts), use *-foreground
      tokens for copy — never raw text-ok / text-warn / text-danger / text-accent
      on matching bg-*-muted tints (fails WCAG AA). See semanticBannerTone(). */
@@ -140,74 +168,13 @@
   --color-editorial-vermillion-muted: color-mix(in oklch, var(--mushi-vermillion) 60%, var(--mushi-ink-muted));
   --color-editorial-jade: var(--mushi-jade);
 
-  /* ── Data viz (xyflow edges, sparklines, lang chips) ─────────────── */
-  --color-viz-edge-dark: oklch(0.22 0.01 285);
-  --color-viz-edge-light: oklch(0.91 0.01 285);
-  --color-viz-flow-info: oklch(0.68 0.15 250);
-  --color-viz-flow-brand: oklch(0.78 0.14 80);
-  --color-viz-flow-danger: oklch(0.63 0.22 25);
-  --color-viz-score-ok: oklch(0.72 0.19 155);
-  /* Same hue as --color-warn (55): charts and the hero flow read warnings
-     in the chip colour, not the brand amber. */
-  --color-viz-score-warn: oklch(0.75 0.15 55);
-  --color-viz-score-danger: oklch(0.63 0.22 25);
-  --color-viz-lang-default: oklch(0.55 0.01 285);
-  --color-viz-terminal-bg: oklch(0.12 0.01 285);
-  --color-viz-terminal-fg: oklch(0.88 0.006 285);
+  /* Chart colours (`--color-viz-*`) are in the `@theme static` block below.
+     Tailwind drops `@theme` colours no utility uses, and SVG/canvas reads
+     them through getComputedStyle, so a normal `@theme` entry never ships. */
   --color-code-surface: var(--color-viz-terminal-bg);
   --color-code-surface-fg: var(--color-viz-terminal-fg);
   --color-code-surface-fg-muted: oklch(0.72 0.008 285);
   --color-code-surface-border: oklch(0.28 0.01 285);
-  --color-viz-step-pending: oklch(0.65 0.02 285);
-  --color-viz-step-running: oklch(0.68 0.15 250);
-  --color-viz-step-passed: oklch(0.72 0.17 160);
-  --color-viz-step-failed: oklch(0.63 0.22 25);
-  --color-viz-step-skipped: oklch(0.55 0.01 285);
-  --color-viz-neutral: oklch(0.65 0.02 285);
-  --color-viz-lang-typescript: oklch(0.52 0.15 250);
-  --color-viz-lang-javascript: oklch(0.86 0.16 95);
-  --color-viz-lang-python: oklch(0.48 0.12 250);
-  --color-viz-lang-go: oklch(0.62 0.12 220);
-  --color-viz-lang-rust: oklch(0.72 0.06 55);
-  --color-viz-lang-react: oklch(0.72 0.12 220);
-  --color-viz-sentry: oklch(0.55 0.12 300);
-  --color-viz-graph-muted: oklch(0.55 0 0);
-  --color-viz-node-bg-dark: oklch(0.19 0.007 265);
-  --color-viz-node-bg-light: oklch(0.99 0.004 265);
-  --color-viz-node-text-dark: oklch(0.90 0.006 265);
-  --color-viz-node-text-light: oklch(0.16 0.006 265);
-  --color-viz-node-subtext: oklch(0.52 0.004 265);
-  --color-viz-node-border-dark: oklch(0.30 0.006 265);
-  --color-viz-node-border-light: oklch(0.82 0.004 265);
-  --color-viz-node-selected-dark: oklch(0.24 0.014 265);
-  --color-viz-node-selected-light: oklch(0.94 0.010 265);
-  --color-viz-canvas-bg: oklch(0.11 0.004 265);
-  --color-viz-canvas-dot: oklch(0.28 0 0);
-  /* Explore atlas layers */
-  --color-viz-layer-ui: oklch(0.72 0.19 240);
-  --color-viz-layer-lib: oklch(0.72 0.19 155);
-  --color-viz-layer-backend: oklch(0.65 0.22 25);
-  --color-viz-layer-test: oklch(0.72 0.19 300);
-  --color-viz-layer-config: oklch(0.60 0.08 240);
-  --color-viz-layer-other: oklch(0.50 0 0);
-  /* File complexity ramp */
-  --color-viz-complexity-tiny: oklch(0.70 0.15 145);
-  --color-viz-complexity-small: oklch(0.68 0.17 145);
-  --color-viz-complexity-medium: oklch(0.70 0.18 80);
-  --color-viz-complexity-large: oklch(0.68 0.19 50);
-  --color-viz-complexity-xlarge: oklch(0.65 0.20 30);
-  --color-viz-complexity-huge: oklch(0.60 0.22 25);
-  /* FixGitGraph lane / focus chrome */
-  --color-viz-git-main: oklch(0.30 0 0);
-  --color-viz-git-branch: oklch(0.40 0.10 250);
-  --color-viz-git-focus: oklch(0.82 0.16 240);
-  --color-viz-git-node-stroke: oklch(0.10 0 0);
-  /* ExploreCanvas minimap mask / chrome */
-  --color-viz-mask-dark: oklch(0.12 0 0 / 0.7);
-  --color-viz-mask-light: oklch(0.96 0 0 / 0.7);
-  --color-viz-minimap-bg-dark: oklch(0.14 0 0 / 0.90);
-  --color-viz-minimap-bg-light: oklch(0.98 0 0 / 0.90);
-  --color-viz-minimap-border: oklch(0.5 0 0 / 0.18);
 
   /* Syntax highlighting — shared by .mushi-code-* blocks in both themes. */
   --color-code-kw: oklch(0.78 0.18 280);
@@ -258,7 +225,9 @@
      Reserve text-3xs (11px) for non-interactive micro-meta (freshness pills,
      kbd labels, timestamps); text-2xs (12px) for all label/badge copy. */
   --text-2xs: 0.75rem;
-  --text-3xs: 0.6875rem;
+  /* 2026-11-16: 11px → 12px. The owner could not read the 11px micro-meta;
+     12px is the floor, and nothing else grows. */
+  --text-3xs: 0.75rem;
   /* Above 2xs, use Tailwind's own scale (text-xs … text-2xl). A Jul 2026
      label/body/title/heading/display ramp duplicated it and had no users;
      check:design-tokens now rejects those names. */
@@ -374,4 +343,101 @@
   --card-elevated-bg-from: oklch(0.23 0.007 285);
   --card-elevated-bg-to: oklch(0.20 0.006 285);
   --card-elevated-inset-highlight: oklch(1 0 0 / 0.03);
+}
+
+/* Always emit chart colours. `static` opts out of Tailwind's unused-token
+   tree-shake. These are read through getComputedStyle (`readVizToken`),
+   not as utilities (only `bg-viz-sentry` and `bg-viz-terminal-bg` are),
+   so a normal `@theme` entry drops the rest. Light-mode overrides stay
+   in base-and-density.css (`html[data-theme="light"]`). */
+@theme static {
+  /* ── Data viz (xyflow edges, sparklines, lang chips) ─────────────── */
+  --color-viz-edge-dark: oklch(0.22 0.01 285);
+  --color-viz-edge-light: oklch(0.91 0.01 285);
+  --color-viz-flow-info: oklch(0.68 0.15 250);
+  --color-viz-flow-brand: oklch(0.78 0.14 80);
+  --color-viz-flow-danger: oklch(0.63 0.22 25);
+  --color-viz-score-ok: oklch(0.72 0.19 155);
+  /* Same hue as --color-warn (55): charts and the hero flow read warnings
+     in the chip colour, not the brand amber. */
+  --color-viz-score-warn: oklch(0.75 0.15 55);
+  --color-viz-score-danger: oklch(0.63 0.22 25);
+  --color-viz-lang-default: oklch(0.55 0.01 285);
+  --color-viz-terminal-bg: oklch(0.12 0.01 285);
+  --color-viz-terminal-fg: oklch(0.88 0.006 285);
+  --color-viz-step-pending: oklch(0.65 0.02 285);
+  --color-viz-step-running: oklch(0.68 0.15 250);
+  --color-viz-step-passed: oklch(0.72 0.17 160);
+  --color-viz-step-failed: oklch(0.63 0.22 25);
+  --color-viz-step-skipped: oklch(0.55 0.01 285);
+  --color-viz-neutral: oklch(0.65 0.02 285);
+  --color-viz-lang-typescript: oklch(0.52 0.15 250);
+  --color-viz-lang-javascript: oklch(0.86 0.16 95);
+  --color-viz-lang-python: oklch(0.48 0.12 250);
+  --color-viz-lang-go: oklch(0.62 0.12 220);
+  --color-viz-lang-rust: oklch(0.72 0.06 55);
+  --color-viz-lang-react: oklch(0.72 0.12 220);
+  --color-viz-sentry: oklch(0.55 0.12 300);
+  --color-viz-graph-muted: oklch(0.55 0 0);
+  --color-viz-node-bg-dark: oklch(0.19 0.007 265);
+  --color-viz-node-bg-light: oklch(0.99 0.004 265);
+  --color-viz-node-text-dark: oklch(0.90 0.006 265);
+  --color-viz-node-text-light: oklch(0.16 0.006 265);
+  --color-viz-node-subtext: oklch(0.52 0.004 265);
+  --color-viz-node-border-dark: oklch(0.30 0.006 265);
+  --color-viz-node-border-light: oklch(0.82 0.004 265);
+  --color-viz-node-selected-dark: oklch(0.24 0.014 265);
+  --color-viz-node-selected-light: oklch(0.94 0.010 265);
+  --color-viz-canvas-bg: oklch(0.11 0.004 265);
+  --color-viz-canvas-dot: oklch(0.28 0 0);
+  /* Explore atlas layers */
+  --color-viz-layer-ui: oklch(0.72 0.19 240);
+  --color-viz-layer-lib: oklch(0.72 0.19 155);
+  --color-viz-layer-backend: oklch(0.65 0.22 25);
+  --color-viz-layer-test: oklch(0.72 0.19 300);
+  --color-viz-layer-config: oklch(0.60 0.08 240);
+  --color-viz-layer-other: oklch(0.50 0 0);
+  /* File complexity ramp */
+  --color-viz-complexity-tiny: oklch(0.70 0.15 145);
+  --color-viz-complexity-small: oklch(0.68 0.17 145);
+  --color-viz-complexity-medium: oklch(0.70 0.18 80);
+  --color-viz-complexity-large: oklch(0.68 0.19 50);
+  --color-viz-complexity-xlarge: oklch(0.65 0.20 30);
+  --color-viz-complexity-huge: oklch(0.60 0.22 25);
+  /* FixGitGraph lane / focus chrome */
+  --color-viz-git-main: oklch(0.30 0 0);
+  --color-viz-git-branch: oklch(0.40 0.10 250);
+  --color-viz-git-focus: oklch(0.82 0.16 240);
+  --color-viz-git-node-stroke: oklch(0.10 0 0);
+  /* ExploreCanvas minimap mask / chrome */
+  --color-viz-mask-dark: oklch(0.12 0 0 / 0.7);
+  --color-viz-mask-light: oklch(0.96 0 0 / 0.7);
+  --color-viz-minimap-bg-dark: oklch(0.14 0 0 / 0.90);
+  --color-viz-minimap-bg-light: oklch(0.98 0 0 / 0.90);
+  --color-viz-minimap-border: oklch(0.5 0 0 / 0.18);
+  /* CI page data ramps (2026-11-17, checked with the dataviz validator:
+     ordinal, light end at least 2:1 on white; cell text black on the light
+     steps, white on the dark ones, every pair at least 4.5:1). Teal = how
+     much (jobs, wait); red = how often it fails; divr/divb = below/above a
+     target, with a grey middle. Used through the `.ci-heat-*` classes. */
+  --color-viz-heat-1: oklch(0.747 0.092 183.7);
+  --color-viz-heat-2: oklch(0.685 0.106 182.2);
+  --color-viz-heat-3: oklch(0.599 0.100 187.0);
+  --color-viz-heat-4: oklch(0.507 0.086 185.3);
+  --color-viz-heat-5: oklch(0.416 0.070 186.6);
+  --color-viz-heat-6: oklch(0.326 0.054 187.3);
+  --color-viz-fail-1: oklch(0.730 0.130 24.2);
+  --color-viz-fail-2: oklch(0.640 0.169 25.6);
+  --color-viz-fail-3: oklch(0.557 0.185 27.1);
+  --color-viz-fail-4: oklch(0.465 0.166 27.5);
+  --color-viz-fail-5: oklch(0.365 0.131 27.9);
+  --color-viz-divr-1: oklch(0.730 0.130 24.2);
+  --color-viz-divr-2: oklch(0.573 0.188 26.9);
+  --color-viz-divr-3: oklch(0.423 0.153 27.7);
+  --color-viz-divr-4: oklch(0.315 0.112 27.5);
+  --color-viz-divb-1: oklch(0.764 0.097 253.2);
+  --color-viz-divb-2: oklch(0.622 0.161 255.1);
+  --color-viz-divb-3: oklch(0.480 0.142 256.1);
+  --color-viz-divb-4: oklch(0.338 0.103 256.9);
+  --color-viz-mid: oklch(0.928 0.006 84.6);
 }

@@ -1,8 +1,8 @@
 {
   "name": "@mushi-mushi/cli",
-  "version": "0.35.3",
+  "version": "0.41.0",
   "license": "MIT",
-  "description": "Mushi CLI: SDK setup, MCP wiring, bug triage. The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.",
+  "description": "Mushi Mushi CLI: SDK setup, MCP wiring, triage. One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code.",
   "bin": {
     "mushi": "./dist/index.js"
   },
@@ -43,6 +43,7 @@
   },
   "files": [
     "dist",
+    "templates",
     "README.md",
     "LICENSE"
   ],
@@ -99,6 +100,12 @@
       "import": {
         "types": "./dist/wizard-args.d.ts",
         "default": "./dist/wizard-args.js"
+      }
+    },
+    "./wizard-bin": {
+      "import": {
+        "types": "./dist/wizard-bin.d.ts",
+        "default": "./dist/wizard-bin.js"
       }
     },
     "./version": {

@@ -8,6 +8,9 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
+  ageBuckets,
+  localInfraGroup,
+  MAX_ITEMS_PER_GROUP,
   buildDispatchers,
   buildPipeline,
   dispatcherGroup,
@@ -544,5 +547,81 @@ describe('the merge queue detail texts of 2026-10-26', () => {
     const g = group(run({ reviews: [review({ verdict: 'fix_first' })] }), 'fix_first')!.group
     expect(g.actions[0]).toBe('followup')
     expect(g.settings?.hint).toContain('local mushi work --followups lanes')
+  })
+})
+
+describe('age buckets for the console age bar (2026-11-18)', () => {
+  const DAY = 86_400_000
+  const at = (days: number) => new Date(NOW.getTime() - days * DAY).toISOString()
+
+  it('buckets time in stage as 0–3 d, 3–7 d, 7–30 d, 30 d+, with half-open edges', () => {
+    expect(ageBuckets([at(0), at(2.9), at(3), at(6.9), at(7), at(29.9), at(30), at(400)], NOW)).toEqual([2, 2, 2, 2])
+    expect(ageBuckets([], NOW)).toEqual([0, 0, 0, 0])
+  })
+
+  it('counts an unreadable time as an item, so the bar still adds up', () => {
+    expect(ageBuckets(['not a date', at(10)], NOW)).toEqual([1, 0, 1, 0])
+  })
+
+  it('counts every item of a group, not only the listed ones', () => {
+    const reports = Array.from({ length: 150 }, (_, i) => ({
+      id: `r${i}`,
+      project_id: P,
+      status: 'classified',
+      title: `Bug ${i}`,
+      summary: null,
+      description: null,
+      created_at: at(i < 50 ? 1 : i < 100 ? 10 : 60),
+      processing_error: null,
+    }))
+    const stages = run({ reports, attempts: [], reviews: [] })
+    const groups = stages.flatMap((s) => s.groups).filter((g) => g.stage === 'triaged')
+    expect(groups.length).toBeGreaterThan(0)
+    const total = groups.reduce((n, g) => n + g.count, 0)
+    expect(total).toBe(150)
+    for (const g of groups) {
+      expect(g.ages, g.id).toBeDefined()
+      expect(g.ages!.reduce((a, b) => a + b, 0), g.id).toBe(g.count)
+      expect(g.items.length).toBeLessThanOrEqual(MAX_ITEMS_PER_GROUP)
+    }
+    const sum = groups.reduce<number[]>((acc, g) => acc.map((n, i) => n + g.ages![i]!), [0, 0, 0, 0])
+    expect(sum[3]).toBeGreaterThan(0)
+    expect(sum[0] + sum[1] + sum[2] + sum[3]).toBe(150)
+  })
+
+  it('the triaged backlog ("Waiting for a fix") buckets all of its reports by the created_at the stage card reads', () => {
+    // Preview of #1166: the stage card said "765 waiting over 3 days, oldest 58 d" while the bar was empty.
+    const report = (id: string, days: number) => ({ id, project_id: P, status: 'classified', title: id, summary: null, description: null, created_at: at(days), processing_error: null })
+    const reports = [
+      ...Array.from({ length: 20 }, (_, i) => report(`fresh${i}`, 1)), // under 3 days: moving, not the backlog
+      ...Array.from({ length: 30 }, (_, i) => report(`wk${i}`, 5)),
+      ...Array.from({ length: 70 }, (_, i) => report(`mo${i}`, 20)),
+      ...Array.from({ length: 65 }, (_, i) => report(`old${i}`, 58 - i * 0.1)),
+    ]
+    const stages = run({ reports, attempts: [], reviews: [] })
+    const triaged = stages.find((s) => s.id === 'triaged')!
+    const backlog = group(stages, 'no_fix_old')!.group
+    expect(backlog.tone).toBe('stuck')
+    expect(backlog.count).toBe(165)
+    expect(triaged.stuck).toBe(165)
+    // The same timestamp as "oldest 58 d" and "over 3 days": created_at, bucketed before the list is cut.
+    expect(backlog.oldestAt).toBe(at(58))
+    expect(triaged.oldestAt).toBe(at(58))
+    expect(backlog.items.length).toBe(MAX_ITEMS_PER_GROUP)
+    expect(backlog.ages).toEqual([0, 30, 70, 65])
+    expect(backlog.ages!.reduce((a, b) => a + b, 0)).toBe(triaged.stuck)
+    // The fresh ones stay in their own moving group, out of the stuck count.
+    const fresh = group(stages, 'no_fix')!.group
+    expect(fresh.tone).toBe('moving')
+    expect(fresh.ages).toEqual([20, 0, 0, 0])
+  })
+
+  it('the local worker group buckets against the read time it is given', () => {
+    const claims = [
+      { id: 'c1', project_id: P, report_id: 'r1', lane_id: 'l1', outcome: 'infra', detail: null, claimed_at: at(1), finished_at: at(1) },
+      { id: 'c2', project_id: P, report_id: 'r2', lane_id: 'l1', outcome: 'infra', detail: null, claimed_at: at(8), finished_at: at(8) },
+    ]
+    const g = localInfraGroup(claims as never, new Map(), new Map(), NOW)!
+    expect(g.ages).toEqual([1, 0, 1, 0])
   })
 })

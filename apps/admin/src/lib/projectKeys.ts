@@ -46,7 +46,7 @@ export function rotateKeyConfirmCopy(key: RotatableKey): {
   return {
     title: `Rotate key ${key.key_prefix}…?`,
     body:
-      'Mushi creates a replacement with the same access and revokes this key immediately. ' +
+      'Mushi Mushi creates a replacement with the same access and revokes this key immediately. ' +
       'Every app, CI build or editor still using it stops working (bug reports from a live app stop arriving) ' +
       'until you paste the new key in and redeploy. Your other keys keep working.',
     lines: [

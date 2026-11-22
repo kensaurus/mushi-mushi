@@ -143,7 +143,7 @@ export function MilestoneBar({ ytd, threshold, cap, kycCleared }: {
 function PendingRedemptionCard({ r }: { r: PendingRedemption }) {
   const icon = r.kind === 'mushi_pro_credit' ? '🚀' : '🎁'
   const label = r.kind === 'mushi_pro_credit'
-    ? 'Mushi Pro credit'
+    ? 'Mushi Mushi Pro credit'
     : `Gift card — $${r.faceValueUsd?.toFixed(0) ?? '?'}`
   return (
     <div className="flex items-center gap-3 px-4 py-3 border-t border-edge-subtle first:border-t-0">
@@ -229,7 +229,7 @@ export function TesterWalletPage() {
     <div className="space-y-6">
         <TesterPageIntro
           title="Wallet"
-          description="Redeem mushi-points for Mushi Pro credit (1.3× bonus) or gift cards via Tremendous."
+          description="Redeem mushi-points for Mushi Mushi Pro credit (1.3× bonus) or gift cards via Tremendous."
         />
 
         <TesterHelpBanner title="Redemption tips">
@@ -324,7 +324,7 @@ export function TesterWalletPage() {
                 ))}
               </div>
               <p className="text-xs text-fg-faint mt-3">
-                1,000 pts = $10 gift card (Tremendous) or $13 Mushi Pro credit (1.3× premium).
+                1,000 pts = $10 gift card (Tremendous) or $13 Mushi Mushi Pro credit (1.3× premium).
                 Gift cards capped at ${wallet.kycCapUsd ?? 599}/yr before KYC required.
                 {wallet.nextRedemptionEtaHours !== null && ` Gift card delivery: ~${wallet.nextRedemptionEtaHours}h based on recent orders.`}
               </p>

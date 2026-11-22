@@ -16,7 +16,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { testReportHref, useSendTestReport } from '../lib/useSendTestReport'
 import { usePageData } from '../lib/usePageData'
-import type { TimeToFirstDiagnosis } from '../lib/setupRail'
+import { formatDiagnosisDuration, type TimeToFirstDiagnosis } from '../lib/setupRail'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { Card, Btn, Input, ErrorAlert, ResultChip, type ResultChipTone, CopyButton, SegmentedControl, HelpBanner, Loading } from '../components/ui'
 import { SetupProgressRail } from '../components/onboarding/SetupProgressRail'
@@ -25,6 +25,7 @@ import { OnboardingSetupReadout } from '../components/onboarding/OnboardingSetup
 import { SetupGapsSection } from '../components/onboarding/SetupGapsSection'
 import { EMPTY_ONBOARDING_STATS, type OnboardingStats, type OnboardingTabId } from '../components/onboarding/types'
 import { usePublishPageContext } from '../lib/pageContext'
+import { tabbedPageTitle } from '../lib/pageTitle'
 import { useRealtimeReload } from '../lib/realtime'
 import { ContainedBlock } from '../components/report-detail/ReportSurface'
 import { OnboardingSkeleton } from '../components/skeletons/OnboardingSkeleton'
@@ -54,6 +55,8 @@ import { clearStoredInstanceConfig } from '../lib/env'
 import { IconChat, IconBolt } from '../components/icons'
 import { askMushiPanel } from '../lib/useAskMushiPanel'
 import { PageLoadError } from '../components/PageLoadError'
+import { Mascot } from '../components/mascot/Mascot'
+import { FIRST_RUN_NAME_PROJECT, onboardingTabGuide } from '../lib/fieldGuide'
 
 const SetupCopilotPage = lazy(() => import('./SetupCopilotPage').then((m) => ({ default: m.SetupCopilotPage })))
 
@@ -134,8 +137,6 @@ export function OnboardingPage() {
     loading: legacyStatsLoading,
     error: legacyStatsError,
     reload: legacyReloadStats,
-    lastFetchedAt: legacyStatsFetchedAt,
-    isValidating: legacyStatsValidating,
   } = usePageData<OnboardingStats>(
     activationEnabled ? null : '/v1/admin/onboarding/stats',
   )
@@ -143,8 +144,6 @@ export function OnboardingPage() {
   const statsData = activationEnabled ? activation.stats : legacyStatsData
   const statsLoading = activationEnabled ? activation.loading : legacyStatsLoading
   const statsError = activationEnabled ? activation.error : legacyStatsError
-  const statsFetchedAt = activationEnabled ? activation.lastFetchedAt : legacyStatsFetchedAt
-  const statsValidating = activationEnabled ? activation.isValidating : legacyStatsValidating
   const reloadStats = activationEnabled ? activation.reload : legacyReloadStats
   // Required counts and "ready" follow GET /v1/admin/setup (see withSetupRequiredCounts).
   const stats = withSetupRequiredCounts(statsData ?? EMPTY_ONBOARDING_STATS, legacySetup.activeProject)
@@ -412,11 +411,15 @@ export function OnboardingPage() {
   // left for this project to do. Keeps the page useful as a permanent SDK
   // reference for fully onboarded users.
   const setupComplete = Boolean(project?.done && project.complete >= project.total)
+  // The rail's "Your app is wired up": the server's four required steps.
+  // The tab guide and the footer read this, not setupComplete (which also
+  // waits on the optional extras), so the guide no longer said "The rail
+  // above shows the next step" under a rail with every step done.
+  const wiredUp = Boolean(project && project.required_total > 0 && project.required_complete >= project.required_total)
 
   usePublishPageContext({
     route: '/onboarding',
-    title: `${activeTabMeta.label} · Set up`,
-    summary: activeTabMeta.description,
+    title: tabbedPageTitle('Set up', activeTabMeta.label, activeTabMeta.id === ONBOARDING_TABS[0].id),
     filters: { tab: activeTab, project_id: activeProjectId ?? undefined },
     criticalCount: stats.setupDone ? 0 : stats.requiredTotal - stats.requiredComplete,
   })
@@ -448,19 +451,19 @@ export function OnboardingPage() {
       setup.error.includes('NetworkError')
     return (
       <ErrorAlert
-        title={isNetwork ? 'Cannot reach the Mushi backend' : undefined}
+        title={isNetwork ? 'Cannot reach the Mushi Mushi backend' : undefined}
         message={setup.error}
         onRetry={reloadAll}
         actions={
           isNetwork
-            ? [{ label: 'Reset to Mushi Cloud', onClick: () => clearStoredInstanceConfig() }]
+            ? [{ label: 'Reset to Mushi Mushi Cloud', onClick: () => clearStoredInstanceConfig() }]
             : undefined
         }
       >
         {isNetwork && (
           <p className="text-xs text-danger/80 mt-2">
             A saved self-hosted URL may be wrong. Resetting clears local overrides and reloads
-            against Mushi Cloud.
+            against Mushi Mushi Cloud.
           </p>
         )}
       </ErrorAlert>
@@ -535,12 +538,14 @@ export function OnboardingPage() {
       {!project ? (
         <div className="space-y-4">
           <div>
-            <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">Step 1 of 2</p>
+            <p className="text-3xs font-semibold text-fg-secondary">Step 1 of 2</p>
             <h2 className="mt-0.5 text-base font-semibold text-fg">Name your project</h2>
-            <p className="mt-1 text-xs text-fg-muted">
-              That is the only input we need. Your report key is minted for you.
-            </p>
           </div>
+          {/* The field guide says what this step does: the name is the only
+              input, and the report key is made for you. */}
+          {!createdProject && (
+            <Mascot {...FIRST_RUN_NAME_PROJECT} size="md" data-testid="onboarding-first-run-guide" />
+          )}
           {createdProject ? (
             <Card className="p-4 border-ok/30 bg-ok/5">
               <p className="text-sm font-medium text-fg">
@@ -655,8 +660,20 @@ export function OnboardingPage() {
           options={tabOptions}
           ariaLabel="Setup sections"
           size="sm"
+          // Its own width, like the tabs on To-do and Settings, not a full-width bordered strip.
+          className="self-start"
         />
       ) : null}
+
+      {/* One field-guide line for the open tab: what this step is for. On a wired-up Overview the
+          rail's heading already says "Your app is wired up" (round-3 review, 2026-11-19). */}
+      {effectiveTab === 'overview' && wiredUp ? null : (
+        <Mascot
+          {...onboardingTabGuide(effectiveTab, { hasProject: stats.hasAnyProject, complete: wiredUp })}
+          size="sm"
+          data-testid="onboarding-tab-guide"
+        />
+      )}
 
       {effectiveTab === 'overview' && (
         <>
@@ -747,7 +764,7 @@ export function OnboardingPage() {
               <h3 className="text-sm font-semibold text-fg">Ask about this page</h3>
               <p className="mt-0.5 text-xs leading-relaxed text-fg-muted">
                 Press{' '}
-                <kbd className="rounded-sm border border-edge/80 bg-surface-overlay px-1 py-px font-mono text-2xs text-fg-secondary">
+                <kbd className="rounded-sm bg-surface-overlay px-1 py-px font-mono text-2xs text-fg-secondary">
                   Cmd/Ctrl+J
                 </kbd>
                 {' '}or run{' '}
@@ -847,7 +864,7 @@ export function OnboardingPage() {
             <h3 className="text-sm font-semibold text-fg">Test your connection</h3>
             <ContainedBlock tone="muted" className="mt-2">
               <p className="text-xs text-fg-muted">
-                Check that Mushi is reachable, then send a test bug and watch it get a plain-English read.
+                Check that Mushi Mushi is reachable, then send a test bug and watch it get a plain-English read.
               </p>
             </ContainedBlock>
           </div>
@@ -871,7 +888,7 @@ export function OnboardingPage() {
                   at={testStatus === 'pass' || testStatus === 'fail' ? testRanAt : null}
                 >
                   {testStatus === 'running' && 'Submitting test report…'}
-                  {testStatus === 'pass' && 'Mushi got it. It is on the Bugs page.'}
+                  {testStatus === 'pass' && 'Mushi Mushi got it. It is on the Bugs page.'}
                   {testStatus === 'fail' && (error || 'Submission failed')}
                 </ResultChip>
               )}
@@ -924,7 +941,7 @@ export function OnboardingPage() {
               </span>
             </div>
             <p className="text-xs text-fg-muted mt-1">
-              Mushi is working on your test bug. Follow it from report to diagnosis
+              Mushi Mushi is working on your test bug. Follow it from report to diagnosis
               to fix to see what happens to a real user's bug.
             </p>
           </div>
@@ -1012,10 +1029,12 @@ export function OnboardingPage() {
               )}
             </Card>
           )}
-          <SdkInstallCard projectId={project.project_id} projectSlug={project.project_slug} apiKey={createdProject?.apiKey ?? apiKey?.key} showConnectionStatus />
-          <div className="flex gap-2">
-            <Btn variant="ghost" onClick={() => navigate('/dashboard')}>Go to Dashboard</Btn>
-          </div>
+          {/* A "Go to Dashboard" button sat here over the footer's "Skip setup —
+              go to dashboard": one way out, at the foot. */}
+          {/* The backend-reachable check only helps before the app has checked in. Once Setup gaps
+              says "All 6 checks pass", "Not checked yet · Run check" under it was a contradiction
+              (round-3 review, 2026-11-19). */}
+          <SdkInstallCard projectId={project.project_id} projectSlug={project.project_slug} apiKey={createdProject?.apiKey ?? apiKey?.key} showConnectionStatus={!wiredUp} />
         </div>
       )}
         </>
@@ -1023,9 +1042,11 @@ export function OnboardingPage() {
       </>
       )}
 
-      {/* Where reports go: endpoint and host provenance, at the foot. */}
-      {!firstRun ? (
-        <OnboardingSetupReadout stats={stats} statsFetchedAt={statsFetchedAt} statsValidating={statsValidating} />
+      {/* Where reports go: endpoint and host provenance, at the foot. Fix a
+          problem carries its own readout (endpoints, project ref, signals):
+          two "Developer details" bars stacked there. */}
+      {!firstRun && effectiveTab !== 'diagnose' ? (
+        <OnboardingSetupReadout stats={stats} />
       ) : null}
 
       {!ux.hideFooterLinks ? (
@@ -1036,7 +1057,7 @@ export function OnboardingPage() {
           onClick={() => navigate('/dashboard')}
           className="border-0 bg-transparent shadow-none hover:bg-transparent px-0 py-0 text-2xs text-fg-faint hover:text-fg-muted"
         >
-          Skip setup — go to dashboard
+          {wiredUp ? 'Go to Home' : 'Skip setup — go to Home'}
         </Btn>
         <span className="text-2xs text-fg-faint" aria-hidden="true">·</span>
         <Btn
@@ -1056,18 +1077,6 @@ export function OnboardingPage() {
   )
 }
 
-/** Format a millisecond interval as a short human string ("1m 48s", "42s"). */
-function formatDiagnosisDuration(ms: number): string {
-  const totalSec = Math.max(0, Math.round(ms / 1000))
-  if (totalSec < 60) return `${totalSec}s`
-  const m = Math.floor(totalSec / 60)
-  const s = totalSec % 60
-  if (m < 60) return s ? `${m}m ${s}s` : `${m}m`
-  const h = Math.floor(m / 60)
-  const rem = m % 60
-  return rem ? `${h}h ${rem}m` : `${h}h`
-}
-
 /**
  * Surfaces the phase-1 north-star: time from making a key to the
  * first plain-English diagnosis. Target is "under 2 minutes" for a fresh
@@ -1085,15 +1094,17 @@ function TimeToFirstDiagnosisCard({ hasApiKey, onOpenSdk }: { hasApiKey: boolean
   if (ms != null) {
     const underTarget = ms <= TARGET_MS
     return (
-      <Card className={`p-5 ${underTarget ? 'border border-ok/30 bg-ok/5' : 'border border-info/25 bg-info/5'}`}>
+      // Once the first report has arrived this is history, and nothing can change it: a slow first
+      // install stays neutral, never an amber warning (round-3 review, 2026-11-19).
+      <Card className={`p-5 ${underTarget ? 'border border-ok/30 bg-ok/5' : ''}`} data-testid="ttfd-measured">
         <div className="flex items-baseline justify-between gap-3">
           <div>
-            <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">First report in your queue</p>
+            <p className="text-3xs font-semibold text-fg-secondary">First report in your queue</p>
             <p className={`mt-0.5 text-2xl font-semibold tabular-nums ${underTarget ? 'text-ok' : 'text-fg'}`}>
               {formatDiagnosisDuration(ms)}
             </p>
           </div>
-          <span className={`text-2xs font-medium ${underTarget ? 'text-ok' : 'text-info'}`}>
+          <span className={`text-2xs font-medium ${underTarget ? 'text-ok' : 'text-fg-muted'}`}>
             {underTarget ? 'Under the 2-minute target ✓' : 'Target: under 2 minutes'}
           </span>
         </div>
@@ -1110,8 +1121,8 @@ function TimeToFirstDiagnosisCard({ hasApiKey, onOpenSdk }: { hasApiKey: boolean
   if (data?.testDiagnosisAt) {
     return (
       <Card className="p-5 border border-ok/25 bg-ok/5" data-testid="ttfd-test-only">
-        <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">First report from your app</p>
-        <p className="mt-0.5 text-sm text-fg-secondary">Your test bug got its plain-English read, so Mushi works for this app.</p>
+        <p className="text-3xs font-semibold text-fg-secondary">First report from your app</p>
+        <p className="mt-0.5 text-sm text-fg-secondary">Your test bug got its plain-English read, so Mushi Mushi works for this app.</p>
         <p className="mt-1 text-xs text-fg-muted leading-relaxed">
           The 2-minute clock starts with the first report from your app. Install the SDK, then report a bug from your
           app with its bug button.
@@ -1125,7 +1136,7 @@ function TimeToFirstDiagnosisCard({ hasApiKey, onOpenSdk }: { hasApiKey: boolean
 
   return (
     <Card className="p-5 border border-edge-subtle">
-      <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">First report from your app</p>
+      <p className="text-3xs font-semibold text-fg-secondary">First report from your app</p>
       <p className="mt-0.5 text-sm text-fg-secondary">Waiting on the first report from your app.</p>
       <p className="mt-1 text-xs text-fg-muted leading-relaxed">
         Send a test bug below, then report a bug from your app. Target: a plain-English read in under 2 minutes
@@ -1140,7 +1151,7 @@ function KeyReveal({ apiKey, copied, onCopy }: { apiKey: ApiKey; copied: boolean
     <div className="space-y-3">
       <Card  className="px-3 py-2">
         <div className="flex items-center justify-between mb-1">
-          <span className="text-2xs text-fg-muted uppercase tracking-wider font-medium">Your API Key</span>
+          <span className="text-2xs text-fg-secondary font-semibold">Your API Key</span>
           <CopyButton
             onCopy={onCopy}
             copied={copied}

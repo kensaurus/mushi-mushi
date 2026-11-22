@@ -1,16 +1,18 @@
 # `@mushi-mushi/plugin-github-issues`
 
-> **Your AI wrote it. Mushi Mushi tells you why it broke.**
+> **Your AI built it. Mushi Mushi makes it better.**
+
+**Self-host only:** you need this only when you run your own Mushi Mushi server. To add Mushi Mushi to an app, install [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi).
 
 For people who track work in GitHub Issues. This opens a GitHub issue
 (labelled `mushi-bug`) for each bug Mushi Mushi triages and closes it when
-Mushi applies the fix.
+Mushi Mushi applies the fix.
 
 **Do you need this package?** Not on Mushi Mushi Cloud: add GitHub Issues on the
 **Integrations** page of the console (owner, repo and a token with Issues:
-write) and Mushi opens and closes the issues itself, on any plan. The console's
+write) and Mushi Mushi opens and closes the issues itself, on any plan. The console's
 Marketplace has no GitHub Issues listing (checked 2026-10-29), so this
-package only receives events from a Mushi server you run yourself, once you
+package only receives events from a Mushi Mushi server you run yourself, once you
 add a `plugin_registry` row for it.
 
 ```bash
@@ -70,4 +72,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 77 edge functions · 546 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 78 edge functions · 583 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

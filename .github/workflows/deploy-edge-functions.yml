@@ -71,6 +71,7 @@ jobs:
       contents: read
       # Reads this workflow's last successful run to diff from it.
       actions: read
+      deployments: write  # Records the deploy as a GitHub deployment (last step)
 
     steps:
       # SUPPLY-CHAIN HARDENING: this job uses SUPABASE_ACCESS_TOKEN to
@@ -216,3 +217,36 @@ jobs:
             exit 1
           fi
           echo "::notice::CORS preflight from kensaur.us passed (HTTP $HTTP)"
+
+      - name: Record the deploy for Mushi Mushi (GitHub deployment)
+        # Home and Pipeline said "No deploy seen yet" for mushi-mushi (2026-11-16): Mushi
+        # Mushi records deploys from GitHub's deployment_status event, and this job made
+        # none. A deployment record from the job's own token fires it. Not a job-level
+        # `environment:`, which would change the OIDC subject the deploy role trusts.
+        # Never fails the deploy.
+        if: ${{ github.event_name == 'push' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_WHAT: Edge functions
+        run: |
+          id=$(jq -n --arg ref "$GITHUB_SHA" --arg d "$DEPLOY_WHAT" \
+            '{ref: $ref, environment: "production", auto_merge: false, required_contexts: [], description: $d}' \
+            | gh api "repos/$GITHUB_REPOSITORY/deployments" --input - --jq .id)
+          gh api "repos/$GITHUB_REPOSITORY/deployments/$id/statuses" -f state=success -f environment=production > /dev/null
+          echo "::notice::Recorded deployment $id for $GITHUB_SHA"
+
+      # Tell the Kensaurus Slack (2026-11-17): #releases when it is live, #alerts when it failed.
+      # Never fails the deploy; a missing secret skips it.
+      - name: Tell Slack what shipped
+        if: ${{ !cancelled() && github.event_name != 'schedule' }}
+        continue-on-error: true
+        env:
+          SLACK_RELEASES_WEBHOOK_URL: ${{ secrets.SLACK_RELEASES_WEBHOOK_URL }}
+          SLACK_ALERTS_WEBHOOK_URL: ${{ secrets.SLACK_ALERTS_WEBHOOK_URL }}
+          JOB_STATUS: ${{ job.status }}
+          MUSHI_OPS_KEY: ${{ secrets.MUSHI_OPS_KEY }}
+          MUSHI_API_URL: ${{ vars.MUSHI_API_URL }}
+          MUSHI_FUNCTION_REGION: ${{ vars.MUSHI_FUNCTION_REGION }}
+          WHAT: Edge functions
+        run: node scripts/notify-slack-release.mjs

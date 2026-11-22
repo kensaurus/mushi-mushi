@@ -6,6 +6,7 @@ import { isReportClassified } from '../../lib/reportDiagnosis'
 import { KNOWN_ISSUES_SEARCH_HREF } from '../../lib/settingsTabs'
 import { NO_CODE_LOCATION_REASON } from '../../lib/reportCodeLocation'
 import { verdictFromError } from '../../lib/pdcaAct'
+import { isAgentOutOfUsageError } from '../../lib/agentOutOfUsage'
 
 /** The opt-in's name as the fix worker quotes it in a skip reason. */
 const WEB_SEARCH_SETTING_NAME = 'Search the web for known fixes'
@@ -41,6 +42,12 @@ export interface Recommendation {
    *  indexing & retry" link so the user fixes the prerequisite in one click
    *  instead of hunting through /integrations. */
   actions?: RecommendationAction[]
+  /**
+   * The card says only what the triage bar below already says and does (the
+   * no-code-location reason and "Dispatch anyway"). The page shows the bar
+   * alone: "Dispatch anyway" and the reason appeared twice (sweep 2026-11-18).
+   */
+  repeatsTriageBar?: boolean
 }
 
 /**
@@ -174,7 +181,7 @@ function verdictRecommendation(
   onDispatch: () => void,
   onClose?: (patch: ReportClosePatch) => void,
 ): Recommendation | null {
-  const said = (latest.error ?? '').replace(/^[^:]{0,60}:\s*/, '').replace(/^\**\s*Mushi verdict:\s*\w+\s*\**\s*/i, '').trim()
+  const said = (latest.error ?? '').replace(/^[^:]{0,60}:\s*/, '').replace(/^\**\s*(?:Mushi )?Mushi verdict:\s*\w+\s*\**\s*/i, '').trim()
   const detail = said ? ` The agent wrote: “${said.slice(0, 400)}${said.length > 400 ? '…' : ''}”` : ''
   const sendAgain: RecommendationAction = { label: 'Still broken: send again', onClick: onDispatch, tone: 'ghost' }
   if (verdict === 'already_fixed') {
@@ -237,6 +244,7 @@ function recommendationFor(
           description: `${NO_CODE_LOCATION_REASON} If it is config, an outage or expected behaviour, close it with Not a code bug below.`,
           tone: rec.tone,
           actions: [{ label: 'Dispatch anyway', onClick: onDispatch, tone: 'ghost' }],
+          repeatsTriageBar: true,
         }
 
   if (dispatchState.status === 'completed' && dispatchState.prUrl) {
@@ -380,6 +388,22 @@ function recommendationFor(
       }
     }
 
+    // The coding agent's account ran out of credits: a retry goes to the same
+    // empty account (2026-11-07 on: 274 runs, "You're out of usage").
+    if (latest.status === 'failed' && isAgentOutOfUsageError(latest.error)) {
+      return {
+        title: "Fix stopped: the coding agent's account was out of credits",
+        description:
+          'While its credits are out, a retry stops the same way. Copy the fix prompt above into your editor, or run the fix with Claude Code on your own computer. Spend credits says whether the credits are back and when they come back.',
+        tone: 'urgent',
+        meta: lastAttemptMeta,
+        actions: [
+          { label: 'See what to do →', to: '/credits#agent-credits', tone: 'primary' },
+          { label: 'Retry dispatch', onClick: onDispatch, tone: 'ghost' },
+        ],
+      }
+    }
+
     // skipped_no_sandbox: sandbox environment not available
     if (latest.status === 'skipped_no_sandbox') {
       return {
@@ -516,7 +540,7 @@ function recommendationFor(
     return {
       title: 'Classification failed — triage manually',
       description:
-        'Pick a status and severity by hand, or dispatch a fix once you understand the issue.',
+        'Press Retry triage in the Pipeline strip, or pick a status and severity by hand.',
       tone: 'urgent',
     }
   }
@@ -533,7 +557,7 @@ function recommendationFor(
   if (report.status === 'classified' && commentCount === 0) {
     return triage({
       title: 'Triage this report',
-      description: 'Add a triage note for context, or dispatch an autofix attempt.',
+      description: 'Add a triage note for context, or dispatch a fix.',
       cta: { label: 'Dispatch fix', onClick: onDispatch },
       tone: 'info',
     })

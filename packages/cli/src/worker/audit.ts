@@ -6,18 +6,30 @@
  *          self-review over-reported, so a model's word never files a report.
  *
  *            1. A cheap model (the lane's model), read-only (`--mode ask`),
- *               proposes up to 3 findings for one screen. Each must cite
- *               file:line, quote the code there, and name a check from a
- *               closed set: a `pattern` over one file, or one of the repo's
- *               own package scripts (lint, typecheck, test, check). Never a
- *               command the model writes.
+ *               proposes 0 to 3 findings for one screen, none when nothing
+ *               would matter to a real user (ADR 0063: no quota). Each must
+ *               cite file:line, quote the code there, say what the user sees,
+ *               rate its confidence, and name a check from a closed set: a
+ *               `pattern` over one file, or one of the repo's own package
+ *               scripts (lint, typecheck, test, check). Never a command the
+ *               model writes. Below AUDIT_MIN_CONFIDENCE it is dropped.
  *            2. The worker runs the check itself, with no model: the quote
- *               must be on that line (±2), and the check must reproduce.
+ *               must be on that line (±2), and the check must reproduce. When
+ *               an `absent` pattern is found in a shared wrapper around the
+ *               line, the finding still files, rooted at that wrapper: having
+ *               the attribute is not doing the job (ADR 0065).
  *            3. A second model (the lane's review model, when set) may only
  *               veto a reproduced finding. No answer counts as a veto.
- *            4. A reproduced, unvetoed finding goes to the server, which
- *               screens it, dedupes it by file + rule + a hash of the real
- *               line, and files it under the hourly caps.
+ *            4. A reproduced, unvetoed finding goes to the server with its
+ *               root (the shared component or route kind one fix lands in).
+ *               The server screens it, dedupes it by file + rule + a hash of
+ *               the real line, then by pattern (category + root): a new
+ *               screen of an open pattern joins that report, a fixed one
+ *               reopens as a regression, and past the app's open cap the
+ *               finding waits server-side instead of being filed.
+ *            0. When the claim asks for it (once a day, ADR 0063), every open
+ *               finding of the app is checked again on the default branch
+ *               first; what no longer reproduces is closed with the commit.
  *
  *          The screens done and findings waiting for the cap live in Mushi's
  *          own cache (~/.cache/mushi/audit/<lane>.json). The audit reads the
@@ -29,16 +41,22 @@ import { closeSync, constants as fsConstants, existsSync, fstatSync, mkdirSync, 
 import { homedir, tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { agentEnv, clearWorktree, defaultBranch, failureTail, git, installCommand, installDeps, runProc, type Api } from '../commands/work.js'
+import { agentRun, agentSpec, type LocalAgent } from '../commands/work-agents.js'
+import { parseAuditCheck, recheckReport } from '../commands/work-recheck.js'
+import { absentHeldByWrapper, patternRoot } from './audit-patterns.js'
 
 /** One model call; the 2026-10-26 loop needed a hard stop at 15 min. */
 const ASK_TIMEOUT_MS = 15 * 60_000
 const SCRIPT_TIMEOUT_MS = 10 * 60_000
+/** An upper bound only: the model is asked for 0 to 3, and none is the usual answer (ADR 0063). */
 const MAX_FINDINGS_PER_SCREEN = 3
+/** A finding its model rates lower is not filed (the server's AUDIT_MIN_CONFIDENCE). */
+const MIN_CONFIDENCE = 0.6
 const MAX_PENDING = 20
 const MAX_FILE_BYTES = 1_000_000
 
 /**
- * @internal Exported for tests only. A file in the worktree read in one go: opened once without
+ * A file in the worktree read in one go (also used by work-recheck.ts): opened once without
  * following a symlink (a model-named path must not leave the clone), checked on the open handle
  * (a regular file, at most MAX_FILE_BYTES), then read from that same handle. Null when it is not.
  */
@@ -80,6 +98,8 @@ interface Proposal {
   userImpact: string
   fix: string
   doneWhen: string
+  /** The model's own confidence that a real user hits this, 0 to 1. */
+  confidence: number
   check: AuditCheck
 }
 
@@ -98,6 +118,9 @@ interface FindingBody {
   screen: string
   proposedBy: string | null
   vetoBy: string | null
+  confidence: number
+  /** Where one fix would land (audit-patterns.ts patternRoot). */
+  rootFile: string
 }
 
 interface AuditState {
@@ -137,18 +160,24 @@ export function nextScreen(state: AuditState, screens: readonly string[]): { scr
   return { screen: screens[0]!, state: next }
 }
 
-/** The proposing model's task for one screen. */
-function proposePrompt(screen: string, pass: number): string {
-  const focus = pass === 1 ? 'bugs a real user would notice' : 'small rough edges a careful user would notice (polish pass)'
+/**
+ * @internal Exported for tests only. The proposing model's task for one
+ * screen. Every pass asks the same thing: the 2026-10-29 "polish pass" asked
+ * for rough edges once the bugs were filed, and found them on every screen.
+ */
+export function proposePrompt(screen: string): string {
   return `You are auditing one screen of this app as its most careful user. Screen file: ${screen}. Read it and only the files it imports directly (at most 8 files); do not explore the rest of the repo and do not run commands. Answer within a few minutes.
-Find up to ${MAX_FINDINGS_PER_SCREEN} ${focus}, each CONCRETE and visible to a user: wrong or missing data, text in the wrong language, numbers that contradict each other, a broken empty, loading or error state, a control that does nothing, text that overflows, missing feedback after an action, an accessibility gap (unlabelled control, tiny target, contrast).
+Return 0 to ${MAX_FINDINGS_PER_SCREEN} findings. Return none when nothing on this screen would matter to a real user: an empty list is the usual, correct answer, and there is no quota. A finding must be a CONCRETE bug a real user of this screen hits: wrong or missing data, text in the wrong language, numbers that contradict each other, a broken empty, loading or error state, a control that does nothing, text that overflows, missing feedback after an action, an accessibility gap (unlabelled control, tiny target, contrast).
+When the problem lives in a shared component this screen renders (a wrapper, a layout, a primitive), say so in user_impact: one fix there covers every screen.
+Severity: high = a user loses data, money or access, or cannot finish the screen's main task; medium = a user sees wrong information or is blocked from a secondary task; low = a user is confused or slowed, with a way around it.
+Confidence: how sure you are, from 0 to 1, that a real user hits this as you describe it. Below 0.6, leave it out.
 A program checks every finding before anyone sees it, with no model, and drops what it cannot reproduce:
 - "quote" must be the exact code on "line" of "file" (it is compared with the file);
 - "check" must reproduce the problem, as ONE of:
   {"kind":"pattern","file":"path","regex":"JavaScript regex","ignoreCase":false,"expect":"present"|"absent","line":123}  (the regex is matched against each line of that file, within 3 lines of "line" when given; "absent" means the problem is that something is missing there)
   {"kind":"script","script":"lint"|"typecheck"|"test"|"check","expect":"text the failing output prints"}  (the repo's own package script must fail and print this text and the file's path)
-Rules: no style opinions, no refactors, no "consider"; nothing that needs CI, secrets or another service. If nothing concrete, return an empty list.
-Answer with ONLY this JSON: {"findings":[{"title":"short, the user's view","severity":"high|medium|low","file":"path","line":123,"rule":"short-slug","quote":"exact code on that line","user_impact":"what the user sees","fix":"smallest change","done_when":"observable check","check":{...}}]}`
+Rules: no style opinions, no refactors, no "consider", no polish; nothing that needs CI, secrets or another service. If nothing concrete, return {"findings":[]}.
+Answer with ONLY this JSON: {"findings":[{"title":"short, the user's view","severity":"high|medium|low","confidence":0.8,"file":"path","line":123,"rule":"short-slug","quote":"exact code on that line","user_impact":"what the user sees and when","fix":"smallest change","done_when":"observable check","check":{...}}]}`
 }
 
 /** The second model's task: veto or not, never confirm. */
@@ -171,7 +200,7 @@ function jsonIn(text: string): Record<string, unknown> | null {
 }
 
 const SAFE_PATH_RE = /^[A-Za-z0-9_@()[\]+.-]+(?:\/[A-Za-z0-9_@()[\]+.-]+)*$/
-/** @internal Exported for tests only. A repo-relative path with no way out of the worktree. */
+/** A repo-relative path with no way out of the worktree (also used by work-recheck.ts). */
 export function safePath(raw: unknown): string | null {
   if (typeof raw !== 'string') return null
   const p = raw.trim().replace(/^\.\//, '')
@@ -180,7 +209,7 @@ export function safePath(raw: unknown): string | null {
 }
 
 /**
- * @internal Exported for tests only. A regex the worker will run: at most 200
+ * A regex the worker will run (also used by work-recheck.ts): at most 200
  * characters, no backreference, no quantified group that itself repeats (the
  * classic catastrophic-backtracking shape), and it must compile.
  */
@@ -223,9 +252,14 @@ export function parseProposals(text: string): Proposal[] {
       check = { kind: 'script', script: c.script as (typeof SCRIPT_NAMES)[number], expect: str(c.expect, 200) }
     }
     if (!check) continue
-    const severity = raw.severity === 'high' || raw.severity === 'low' ? raw.severity : 'medium'
+    // ADR 0063: a severity the rubric does not name, no user impact, or a low or missing confidence is not a finding.
+    if (raw.severity !== 'high' && raw.severity !== 'medium' && raw.severity !== 'low') continue
+    const userImpact = str(raw.user_impact, 1000)
+    if (userImpact.length < 10) continue
+    const confidence = typeof raw.confidence === 'number' && Number.isFinite(raw.confidence) ? Math.min(1, Math.max(0, raw.confidence)) : null
+    if (confidence === null || confidence < MIN_CONFIDENCE) continue
     const rule = (str(raw.rule, 60).toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '') || 'other').slice(0, 60)
-    out.push({ title, severity, file, line, rule, quote, userImpact: str(raw.user_impact, 1000), fix: str(raw.fix, 1000), doneWhen: str(raw.done_when, 500), check })
+    out.push({ title, severity: raw.severity, file, line, rule, quote, userImpact, fix: str(raw.fix, 1000), doneWhen: str(raw.done_when, 500), confidence, check })
   }
   return out
 }
@@ -249,7 +283,7 @@ export function evidenceLine(fileText: string, line: number, quote: string): { l
   return null
 }
 
-/** @internal Exported for tests only. A pattern check over one file's text: does the problem reproduce? */
+/** A pattern check over one file's text: does the problem reproduce? (Also how work-recheck.ts rechecks a filed finding.) */
 export function patternReproduces(fileText: string, c: Extract<AuditCheck, { kind: 'pattern' }>): boolean {
   const re = safeRegex(c.regex, c.ignoreCase)
   if (!re) return false
@@ -307,13 +341,54 @@ function saveAuditState(lane: string, s: AuditState): void {
 interface AuditRunOptions {
   repoDir: string
   laneName: string
+  /** The local agent (worker.json `agent`), read-only here; default cursor. */
+  agent?: LocalAgent
   model?: string
   reviewModel: string | null
+  /** The claim asks for the daily recheck of every open finding first (ADR 0063). */
+  recheck?: boolean
+  /** False when the app is at its open cap or its hourly cap: recheck only, no model call. */
+  propose?: boolean
   log: (line: string) => void
   signal?: AbortSignal
 }
 
-type FileResult = 'filed' | 'duplicate' | 'capped' | 'refused' | 'error'
+type FileResult = 'filed' | 'merged' | 'deferred' | 'duplicate' | 'capped' | 'refused' | 'error'
+
+interface RecheckList {
+  reports: Array<{ id: string; status: string; description: string | null }>
+  deferred: Array<{ id: string; finding: FindingBody }>
+}
+
+/**
+ * @internal Exported for tests only. The daily recheck (ADR 0063): every open
+ * code-audit report of the app, its own check run again on the default
+ * branch in `wt` (shared wrappers followed); the deferred findings that fit
+ * the free slots are checked the same way and come back to be filed.
+ */
+export function recheckSweep(list: RecheckList, wt: string, readFile: (path: string) => string | null = readWorktreeFile): {
+  results: Array<{ reportId: string; gone: boolean; reason: string }>
+  refile: FindingBody[]
+  deferredGone: string[]
+} {
+  const results = list.reports.map((r) => {
+    const res = recheckReport({ source: 'code_audit', description: r.description }, wt, readFile)
+    return { reportId: r.id, gone: res.gone, reason: res.reason ?? '' }
+  })
+  const refile: FindingBody[] = []
+  const deferredGone: string[] = []
+  for (const d of list.deferred) {
+    const f = d.finding
+    if (!f || typeof f.check?.summary !== 'string' || f.check.kind !== 'pattern') {
+      deferredGone.push(d.id)
+      continue
+    }
+    const res = recheckReport({ source: 'code_audit', description: `Reproduced by the worker with no model: pattern check, ${f.check.summary}` }, wt, readFile)
+    if (res.gone || !parseAuditCheck(`Reproduced by the worker with no model: pattern check, ${f.check.summary}`)) deferredGone.push(d.id)
+    else refile.push(f)
+  }
+  return { results, refile, deferredGone }
+}
 
 /** One audit pass over one screen. Never throws: every end is an outcome the daemon reports. */
 export async function auditPass(api: Api, claimId: string, o: AuditRunOptions): Promise<AuditOutcome> {
@@ -323,7 +398,10 @@ export async function auditPass(api: Api, claimId: string, o: AuditRunOptions): 
   let state = loadAuditState(o.laneName)
   const fileOne = async (body: FindingBody): Promise<FileResult> => {
     try {
-      await api(`/v1/worker/claims/${claimId}/findings`, { method: 'POST', body: JSON.stringify(body) })
+      const res = await api<{ outcome?: string } | null>(`/v1/worker/claims/${claimId}/findings`, { method: 'POST', body: JSON.stringify(body) })
+      // ADR 0063: the server may add it to an open report of the same pattern, or set it aside past the open cap.
+      if (res?.outcome === 'merged' || res?.outcome === 'regressed') return 'merged'
+      if (res?.outcome === 'deferred') return 'deferred'
       return 'filed'
     } catch (err) {
       const m = err instanceof Error ? err.message : String(err)
@@ -334,13 +412,17 @@ export async function auditPass(api: Api, claimId: string, o: AuditRunOptions): 
       return 'error'
     }
   }
-  const ask = async (model: string | undefined, prompt: string) =>
-    runProc('cursor-agent', ['-p', '--mode', 'ask', '--trust', '--output-format', 'text', '--workspace', wt, ...(model ? ['--model', model] : []), prompt], {
+  const agent = o.agent ?? 'cursor'
+  const ask = async (model: string | undefined, prompt: string) => {
+    const inv = agentRun(agent, { mode: 'ask', workspace: wt, model, prompt })
+    return runProc(inv.cmd, inv.args, {
       cwd: wt,
       env: agentEnv(process.env, empty),
       timeoutMs: ASK_TIMEOUT_MS,
       signal: o.signal,
+      ...(inv.input !== undefined ? { input: inv.input } : {}),
     })
+  }
 
   let filed = 0
   let held = 0
@@ -362,19 +444,39 @@ export async function auditPass(api: Api, claimId: string, o: AuditRunOptions): 
     mkdirSync(empty, { recursive: true })
     await clearWorktree(o.repoDir, wt)
     await git(o.repoDir, ['worktree', 'add', '--detach', wt, `refs/remotes/origin/${base}`])
+    let swept = ''
+    /** Findings whose missing pattern is in a shared wrapper around the line: rooted there (ADR 0065). */
+    const wrapperRoot = new Map<Proposal, string>()
+    if (o.recheck) {
+      const list = await api<RecheckList>(`/v1/worker/claims/${claimId}/recheck`)
+      const sweep = recheckSweep(list, wt)
+      const sha = (await git(wt, ['rev-parse', 'HEAD'])).trim()
+      const out = await api<{ closed: number; requeued: number; deferredDropped: number }>(`/v1/worker/claims/${claimId}/recheck`, {
+        method: 'POST',
+        body: JSON.stringify({ sha, base, results: sweep.results, deferredGone: sweep.deferredGone }),
+      })
+      let refiled = 0
+      for (const body of sweep.refile) if ((await fileOne(body)) === 'filed') refiled++
+      filed += refiled
+      swept = `recheck on ${base} at ${sha.slice(0, 9)}: ${out.closed} of ${list.reports.length} open finding(s) closed as no longer there, ${out.requeued} queued again, ${refiled} waiting finding(s) filed, ${out.deferredDropped} dropped`
+      o.log(`  audit: ${swept}`)
+    }
+    if (o.propose === false) return { result: filed ? 'filed' : 'no_change', detail: swept || 'the app is at its open cap; nothing proposed' }
     const files = (await git(wt, ['ls-tree', '-r', '--name-only', 'HEAD'])).split('\n').filter(Boolean)
     const pick = nextScreen(state, listScreens(files))
     state = pick.state
     if (!pick.screen) return { result: 'no_change', detail: 'no screen or UI file found in the default branch' }
     const screen = pick.screen
 
-    const proposed = await ask(o.model, proposePrompt(screen, state.pass))
+    const proposed = await ask(o.model, proposePrompt(screen))
     if (o.signal?.aborted) return { result: 'stopped', detail: `stopped (lost the lease) while reading ${screen}` }
     if (proposed.timedOut) return { result: 'timeout', failureKind: 'code', detail: `the model did not answer about ${screen} within ${ASK_TIMEOUT_MS / 60_000} min` }
-    if (proposed.code !== 0) return { result: 'failed', failureKind: 'infra', detail: `cursor-agent exited ${proposed.code}: ${failureTail(proposed, 200)}` }
+    if (proposed.code !== 0) return { result: 'failed', failureKind: 'infra', detail: `${agentSpec(agent).bin} exited ${proposed.code}: ${failureTail(proposed, 200)}` }
     const proposals = parseProposals(proposed.stdout)
 
     let reproduced = 0
+    let merged = 0
+    let deferred = 0
     let vetoes = 0
     let duplicates = 0
     let depsReady = false
@@ -388,6 +490,16 @@ export async function auditPass(api: Api, claimId: string, o: AuditRunOptions): 
       if (p.check.kind === 'pattern') {
         const checked = readWorktreeFile(join(wt, p.check.file))
         ok = checked !== null && patternReproduces(checked, p.check)
+        // The pattern sits in a shared wrapper around the line: the wrapper is where the fix goes (ADR 0065).
+        if (ok && checked !== null && p.check.expect === 'absent') {
+          const re = safeRegex(p.check.regex, p.check.ignoreCase)
+          const readRel = (f: string) => readWorktreeFile(join(wt, f))
+          const held = re ? absentHeldByWrapper(p.check.file, checked, p.check.line, re, readRel, (f) => readRel(f) !== null) : null
+          if (held) {
+            o.log(`  audit: ${p.file}:${evidence.line} is rooted at ${held}, which wraps it and has /${p.check.regex}/ without doing the job`)
+            wrapperRoot.set(p, held)
+          }
+        }
       } else if (scriptRuns < 1) {
         // One script run per pass: they are slow and take memory.
         const pkg = existsSync(join(wt, 'package.json')) ? (JSON.parse(readFileSync(join(wt, 'package.json'), 'utf8')) as { scripts?: Record<string, string> }) : {}
@@ -418,6 +530,8 @@ export async function auditPass(api: Api, claimId: string, o: AuditRunOptions): 
         screen,
         proposedBy: o.model ?? null,
         vetoBy: o.reviewModel,
+        confidence: p.confidence,
+        rootFile: wrapperRoot.get(p) ?? patternRoot(p.file, evidence.text, source, (f) => readWorktreeFile(join(wt, f)), (f) => readWorktreeFile(join(wt, f)) !== null),
       }
       if (o.reviewModel) {
         const v = await ask(o.reviewModel, vetoPrompt(body))
@@ -430,6 +544,8 @@ export async function auditPass(api: Api, claimId: string, o: AuditRunOptions): 
       }
       const r = await fileOne(body)
       if (r === 'filed') filed++
+      else if (r === 'merged') merged++
+      else if (r === 'deferred') deferred++
       else if (r === 'duplicate') duplicates++
       else if (r === 'capped' || r === 'error') {
         held++
@@ -438,7 +554,7 @@ export async function auditPass(api: Api, claimId: string, o: AuditRunOptions): 
     }
     state.done = [...state.done, screen]
     saveAuditState(o.laneName, state)
-    const detail = `${screen} (pass ${state.pass}): ${proposals.length} proposed, ${reproduced} reproduced, ${vetoes} vetoed, ${duplicates} already filed, ${filed} filed${held ? `, ${held} wait for the hourly cap` : ''}`
+    const detail = `${swept ? `${swept}; ` : ''}${screen} (pass ${state.pass}): ${proposals.length} proposed, ${reproduced} reproduced, ${vetoes} vetoed, ${duplicates} already filed, ${merged} joined an open report, ${deferred} set aside past the open cap, ${filed} filed${held ? `, ${held} wait for the hourly cap` : ''}`
     return { result: filed ? 'filed' : 'no_change', detail }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)

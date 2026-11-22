@@ -25,6 +25,7 @@
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
+import { monitorScrapeBody } from './monitor-url.ts'
 
 export const THUMBNAIL_BUCKET = 'app-thumbnails'
 export const THUMBNAIL_TABLE = 'project_home_thumbnails'
@@ -177,12 +178,15 @@ export async function captureThumbnail(
     const res = await fetchImpl(FIRECRAWL_SCRAPE, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-      body: JSON.stringify({
-        url: pageUrl,
-        formats: [{ type: 'screenshot', fullPage: false, quality: 70, viewport: { width: 1280, height: 800 } }, 'markdown'],
-        onlyMainContent: false,
-        timeout: 30_000,
-      }),
+      // The Home card's picture of the live app: a watch-kind page load.
+      body: JSON.stringify(
+        monitorScrapeBody('watch', {
+          url: pageUrl,
+          formats: [{ type: 'screenshot', fullPage: false, quality: 70, viewport: { width: 1280, height: 800 } }, 'markdown'],
+          onlyMainContent: false,
+          timeout: 30_000,
+        }),
+      ),
       signal: AbortSignal.timeout(40_000),
     })
     if (res.status === 401 || res.status === 403) throw new ThumbnailError('FIRECRAWL_AUTH_FAILED', 'Firecrawl refused the key.')

@@ -123,6 +123,12 @@ export interface WeekRow {
   lastWeek: number
   moreIsBetter: boolean
   href: string
+  /**
+   * Daily counts over both weeks, oldest first (14 UTC days, the last is
+   * today so far). Absent on an older server or when the server could not
+   * read every row behind it; the row then shows no chart.
+   */
+  daily?: number[]
 }
 
 export interface ActivityLine {
@@ -161,14 +167,6 @@ export interface ProjectHome {
   partial: string[]
 }
 
-/** Dot colour for a traffic light (with a text label beside it, never colour alone). */
-export const LIGHT_DOT: Record<Light, string> = {
-  good: 'bg-ok',
-  warn: 'bg-warn',
-  bad: 'bg-danger',
-  busy: 'bg-info motion-safe:animate-pulse',
-  off: 'bg-fg-faint',
-}
 
 export const LIGHT_WORD: Record<Light, string> = {
   good: 'Good',

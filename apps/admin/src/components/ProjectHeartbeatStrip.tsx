@@ -148,7 +148,7 @@ export function ProjectHeartbeatStrip({
           </>
         )}
         {!isCorner && heartbeat.tone === 'mismatch' && (
-          <span className="shrink-0 rounded px-1 py-px text-3xs font-medium bg-warn-muted/50 text-warn-foreground border border-warn/25">
+          <span className="shrink-0 rounded px-1 py-px text-3xs font-medium bg-warn-muted/50 text-warn-foreground">
             host mismatch
           </span>
         )}

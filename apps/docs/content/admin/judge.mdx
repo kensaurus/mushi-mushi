@@ -1,6 +1,9 @@
 ---
 title: Triage grading
 description: The Triage grading page in the Mushi Mushi console shows how often a second AI agrees with each diagnosis, week by week, and the worst recent disagreements.
+robots:
+  index: false
+  follow: true
 ---
 
 <AdminDocHero page="judge" />
@@ -14,13 +17,34 @@ A second AI grades each diagnosis Mushi Mushi makes: was the category right, the
 severity, the part of the app, and were the steps to reproduce usable. This page shows
 how often it agrees, so you can tell whether to trust a diagnosis before you merge its fix.
 
-**First on the page:** one sentence with this week's score and how often the grader
-disagreed **in the last 14 days** (the window is named; an older server without it
-gets "so far", all time), with **See disagreements**. Under it, **How often the grader
-agrees** draws the weekly agreement share for 12 weeks, and **Worst disagreements,
-last 14 days** lists the 3 lowest-scored disagreements with the grader's reason and a
-link to each report. `GET /v1/admin/judge/stats` returns `recentWindowDays`,
-`recentEvaluations`, `recentDisagreements` and `agreementWeeks` for this.
+**First on the page:** one line that says how many diagnoses the grader disagreed with
+**in the last 14 days** ("7 of 12 diagnoses in the last 14 days disagreed with the grader")
+and a **Review 7** button. An older server without the window says "so far", all time.
+Beside it: **Agreed** as a bar against the 80% target, the disagreements still to review,
+and the reports ready to grade.
+
+Under it, **How often the grader agrees** draws one bar per week for 12 weeks against a
+dashed 80% target line (green at or over it, amber under, red under 60%). **Worst
+disagreements, last 14 days** lists the 3 lowest-graded disagreements as review rows.
+
+### Reviewing a disagreement
+
+**Review N** opens **Grades** filtered to the last 14 days of disagreements, rows still to review first, one compact row each: the report,
+its grade as a bar, the grader's reason in one line, and the decision:
+
+- **Accept grader's view** applies the grader's correction to the report (category,
+  severity or area; only values the report accepts are offered).
+- **Keep diagnosis** keeps the report as it is and adds a team note.
+
+Both confirm the report's category as a person, so the row turns into **✓ Reviewed** and
+leaves the count. Confirming a category also lets a reporter's feature request go to
+auto-fix. A row with no correction to offer, a report filed under a reporter's own category
+(feature, question, feedback), or a server older than this page, shows
+**Open report** instead. Viewers can read the rows but not decide.
+
+`GET /v1/admin/judge/stats` returns `recentWindowDays`, `recentEvaluations`,
+`recentDisagreements`, `recentToReview` and `agreementWeeks`; each row of
+`GET /v1/admin/judge/evaluations` carries `grader_patch` and `reviewed`.
 
 ---
 

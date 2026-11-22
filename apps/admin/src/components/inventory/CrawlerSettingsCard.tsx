@@ -381,7 +381,7 @@ function Field({
 }) {
   return (
     <div className="space-y-1">
-      <label className="text-2xs font-medium text-fg-muted uppercase tracking-wider block">{label}</label>
+      <label className="text-2xs font-semibold text-fg-secondary block">{label}</label>
       {children}
       {hint && <p className="text-2xs text-fg-faint leading-relaxed">{hint}</p>}
     </div>

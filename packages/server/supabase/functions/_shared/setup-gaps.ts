@@ -26,6 +26,9 @@
  * The route (api/routes/setup-gaps.ts) does the reads and the GitHub probes.
  */
 
+import { agentCreditsSummary, agentCreditsTitle, CLAUDE_FOLLOWUPS_COMMAND, CLAUDE_WORK_COMMAND, shortDay, type AgentCreditsState } from './agent-credits.ts'
+import type { OffKey } from './pipeline-view.ts'
+
 export type GapAudience = 'app_owner' | 'platform'
 export type GapStatus = 'ok' | 'gap' | 'unknown'
 
@@ -40,6 +43,11 @@ export interface SetupGap {
   summary: string
   /** Where to fix it: a console path, or a docs path for platform checks. */
   fixHref: string
+  /**
+   * Exact steps when the fix is not a page (a command to run on your own
+   * computer). The Health check turns a gap with steps into a guided fix.
+   */
+  steps?: string[]
 }
 
 export const FIX_HREFS = {
@@ -261,12 +269,30 @@ export function followupKeyGap(input: FollowupKeyInput): SetupGap {
   return { ...base, status: 'ok', summary: 'Review follow-ups are on and their Cursor key is active.' }
 }
 
+/**
+ * Follow-ups that are on with an active key still do not start while the
+ * agents are out of credits (2026-11-07 on: 133 held PRs waited on them while
+ * this line said "their Cursor key is active").
+ */
+export function withFollowupCredits(gap: SetupGap, credits: AgentCreditsState | null | undefined): SetupGap {
+  if (!credits?.out || gap.status !== 'ok' || !/\bare on\b/.test(gap.summary)) return gap
+  return {
+    ...gap,
+    status: 'gap',
+    summary: `Review follow-ups are on, but the coding agent's account is out of credits, so they do not start. ${agentCreditsSummary(credits)}`,
+    fixHref: '/credits#agent-credits',
+    steps: [`For the pull requests waiting on review fixes, run in your app's folder: ${CLAUDE_FOLLOWUPS_COMMAND}`],
+  }
+}
+
 // ── Auto-fix dispatch ───────────────────────────────────────────────────────
 
 export interface DispatchInput {
   projectId: string
   /** From buildDispatchers; null when it could not be read. */
-  dispatcher: { autofixOn: boolean; server: { agentKeys: number; offKeys: number } } | null
+  dispatcher: { autofixOn: boolean; server: { agentKeys: number; offKeys: number; offKeyList?: OffKey[] } } | null
+  /** Whether the fix agents have credits (agent-credits.ts); absent when not read. */
+  credits?: AgentCreditsState | null
 }
 
 export function autofixKeyGap(input: DispatchInput): SetupGap {
@@ -274,15 +300,62 @@ export function autofixKeyGap(input: DispatchInput): SetupGap {
   const d = input.dispatcher
   if (!d) return { ...base, status: 'unknown', summary: 'Mushi could not read the auto-fix setting and its Cursor keys.' }
   if (!d.autofixOn) return { ...base, status: 'ok', summary: 'Auto-fix is off (your choice).' }
-  if (d.server.agentKeys === 0) {
-    const off = d.server.offKeys
+  // Out of credits (2026-11-07 on): the remedy is not "pick a key", it is
+  // another agent until the credits come back (console audit 2026-11-11).
+  if (input.credits?.out) {
     return {
       ...base,
       status: 'gap',
-      summary: `Auto-fix is on, but no Cursor key can start an agent${off ? ` (${off} key${off === 1 ? ' is' : 's are'} off, used up, or have spend-down off)` : ''}. No fix will start on its own.`,
+      title: agentCreditsTitle(input.credits),
+      summary: agentCreditsSummary(input.credits),
+      fixHref: '/credits#agent-credits',
+      steps: [
+        `On your computer, in your app's folder, run: ${CLAUDE_WORK_COMMAND}`,
+        `For the pull requests waiting on review fixes, run there: ${CLAUDE_FOLLOWUPS_COMMAND}`,
+      ],
+    }
+  }
+  if (d.server.agentKeys === 0) {
+    // Present tense: automatic fixes are stopped now, not at risk later. Each
+    // key gets its own problem and its own repair (report e32cd161).
+    // The title names the problem to fix: the health gate prints it as
+    // "Paused until this is fixed: <title>. <summary>", where "Automatic fixes
+    // are stopped" read as the pause repeated, not what to fix.
+    const list = d.server.offKeyList ?? []
+    const off = d.server.offKeys
+    const keysPart = list.length
+      ? ` ${list.map(offKeyProblem).join(' ')}`
+      : off
+        ? ` ${off} key${off === 1 ? ' is' : 's are'} off, used up, or have spend-down off.`
+        : ' You have no Cursor key for this app.'
+    return {
+      ...base,
+      status: 'gap',
+      title: 'No Cursor key can start fixes',
+      summary: `Auto-fix is on, but no Cursor key can start an agent, so automatic fixes are stopped.${keysPart}`,
+      ...(list.length ? { steps: list.map(offKeyRepair) } : {}),
     }
   }
   return { ...base, status: 'ok', summary: `Auto-fix is on with ${d.server.agentKeys} Cursor key${d.server.agentKeys === 1 ? '' : 's'} that can start agents.` }
+}
+
+function keyName(k: OffKey): string {
+  return k.label ? `Key "${k.label}"` : 'A key without a name'
+}
+
+/** "Key "main" is used up until Nov 22." */
+function offKeyProblem(k: OffKey): string {
+  if (k.issue === 'turned_off') return `${keyName(k)} is turned off.`
+  if (k.issue === 'used_up') return `${keyName(k)} is used up${k.until ? ` until ${shortDay(k.until)}` : ''}.`
+  return `${keyName(k)} has spend-down off.`
+}
+
+/** The one repair for that key, on the Credits page. */
+function offKeyRepair(k: OffKey): string {
+  const name = keyName(k)
+  if (k.issue === 'turned_off') return `${name}: turn it back on, or add a new Cursor key.`
+  if (k.issue === 'used_up') return `${name}: wait${k.until ? ` until ${shortDay(k.until)}` : ' for its credits to come back'}, or add another Cursor key.`
+  return `${name}: turn on spend-down for it.`
 }
 
 // ── Deploy events ───────────────────────────────────────────────────────────

@@ -43,8 +43,8 @@ interface ImportResponse {
 
 const OUTCOME_LABEL: Record<string, string> = {
   created: 'New report',
-  linked: 'Already in Mushi',
-  deduped: 'Already in Mushi',
+  linked: 'Already in Mushi Mushi',
+  deduped: 'Already in Mushi Mushi',
   ignored: 'Skipped (no title)',
   error: 'Not imported',
 }
@@ -127,9 +127,9 @@ export function SentryImportPanel({ sentryProjects, onImported, showHeading = tr
         </div>
       ) : null}
       <p className="text-2xs text-fg-faint leading-snug">
-        Alerts only reach Mushi after the webhook is set up. Paste issue ids or short ids (up to 10), or leave it
+        Alerts only reach Mushi Mushi after the webhook is set up. Paste issue ids or short ids (up to 10), or leave it
         empty to search a Sentry project for unresolved issues. A backlog comes in pages of {SENTRY_IMPORT_MAX};
-        importing again is safe, issues already in Mushi are linked, not duplicated.
+        importing again is safe, issues already in Mushi Mushi are linked, not duplicated.
       </p>
       {sentryProjects.length > 0 ? (
         // Shown up front: an app often reports to several Sentry projects
@@ -207,7 +207,7 @@ export function SentryImportPanel({ sentryProjects, onImported, showHeading = tr
         <div className="space-y-1">
           <p className="text-2xs text-fg-secondary">
             {lastSearch ? `Page ${page}${result.sentryProject ? ` of ${result.sentryProject}` : ''}: ` : ''}
-            {result.created.length} new · {result.linked.length} already in Mushi · {result.failed} not imported
+            {result.created.length} new · {result.linked.length} already in Mushi Mushi · {result.failed} not imported
             {result.indexing.queued ? ` · indexing ${result.indexing.paths} stack file(s)` : ''}
           </p>
           <ul className="space-y-0.5">

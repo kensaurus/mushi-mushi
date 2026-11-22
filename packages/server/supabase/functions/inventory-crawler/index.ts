@@ -52,6 +52,7 @@ import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { computeStats, parseInventoryYaml, type Inventory } from '../_shared/inventory.ts'
 import { resolveStoryExternalId } from '../_shared/inventory-story-scope.ts'
 import { markKeyUsed, resolveLlmKey, type ResolvedKey } from '../_shared/byok.ts'
+import { monitorScrapeBody, untagMonitorUrl } from '../_shared/monitor-url.ts'
 import {
   assertSafeOutboundUrl,
   inventoryAppAllowHosts,
@@ -353,14 +354,17 @@ async function renderWithFirecrawl(
   const res = await fetch(FIRECRAWL_SCRAPE_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      url: check.url.toString(),
-      formats: ['rawHtml'],
-      onlyMainContent: false,
-      waitFor: FIRECRAWL_WAIT_MS,
-      timeout: FIRECRAWL_TIMEOUT_MS,
-      maxAge: 0,
-    }),
+    // Marked as Mushi's audit traffic (mushi_monitor=audit + User-Agent), see monitor-url.ts.
+    body: JSON.stringify(
+      monitorScrapeBody('audit', {
+        url: check.url.toString(),
+        formats: ['rawHtml'],
+        onlyMainContent: false,
+        waitFor: FIRECRAWL_WAIT_MS,
+        timeout: FIRECRAWL_TIMEOUT_MS,
+        maxAge: 0,
+      }),
+    ),
     signal: AbortSignal.timeout(FIRECRAWL_TIMEOUT_MS + 5_000),
   })
   if (!res.ok) throw new Error(`firecrawl HTTP ${res.status}`)
@@ -373,8 +377,9 @@ async function renderWithFirecrawl(
     throw new Error('firecrawl returned no HTML')
   }
 
-  const landed = json.data?.metadata?.url ?? json.data?.metadata?.sourceURL
-  if (typeof landed !== 'string') return { html, finalUrl: null }
+  const landedRaw = json.data?.metadata?.url ?? json.data?.metadata?.sourceURL
+  if (typeof landedRaw !== 'string') return { html, finalUrl: null }
+  const landed = untagMonitorUrl(landedRaw)
   const landedCheck = assertSafeOutboundUrl(landed, urlOptions)
   if (!landedCheck.ok) throw new Error(`firecrawl landed off the allowlist: ${landedCheck.reason}`)
   return { html, finalUrl: landedCheck.url }

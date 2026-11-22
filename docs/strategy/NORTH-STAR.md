@@ -1,9 +1,9 @@
-# North star — the bug mediator for AI-built apps
+# North star — one place to improve AI-built apps
 
-> **Canonical source of truth:** [`/VISION.md`](../../VISION.md) (the constitution).
+> **Canonical source of truth:** [`docs/VISION.md`](../VISION.md) (the constitution).
 > This file is the internal working notes layer: it carries the *shipped vs.
 > target* honesty table and the Phase-1 GTM metric. When this file and
-> `VISION.md` disagree on identity, **`VISION.md` wins** — update this file, not
+> `docs/VISION.md` disagree on identity, **`docs/VISION.md` wins** — update this file, not
 > the other way around.
 
 Public surfaces import copy from `@mushi-mushi/brand` and
@@ -12,14 +12,18 @@ north-star sentence below.
 
 ## One line
 
-> **Your AI shipped it. Mushi Mushi tells you why it broke — in plain English, in your
-> editor, with the fix ready to go — so a bug costs you five minutes instead of
-> your whole afternoon.**
+> **Your AI built it. Mushi Mushi makes it better: it finds what breaks, where
+> people get stuck and what the code needs, then hands your editor the fix in
+> plain English.**
 
 ## Category
 
-**The bug mediator for AI-built apps** — the layer that makes a bug
-*understandable*: between *an error happened* and *here's the fix ready to paste*.
+**One place to improve AI-built apps** ([ADR 0058](../adr/0058-one-stop-platform-to-enhance-vibe-coded-apps.md),
+owner, 2026-11-13; it was "the bug mediator for AI-built apps", then "Bug
+fixing for AI-built apps"). Three pillars: fix what breaks, improve the
+journeys people take, improve the code. Underneath, still the layer that makes
+a problem *understandable*: between *something is wrong* and *here's the fix
+ready to paste*.
 
 Not error monitoring. Not observability. Not a "synthesis layer / integration
 hub." Those signal ops burden to the vibe-coder buyer, or assume they already
@@ -29,7 +33,7 @@ run a monitoring stack. The word is **understandable**.
 
 The solo / indie **vibe coder** who builds fast with AI and loses whole
 afternoons when something breaks. Small teams/agencies are secondary. The
-enterprise SRE is explicitly *not* who we lead with. See `VISION.md` §1.4.
+enterprise SRE is explicitly *not* who we lead with. See `docs/VISION.md` §1.4.
 
 ## Primary surface
 

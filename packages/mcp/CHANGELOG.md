@@ -1,5 +1,121 @@
 # @mushi-mushi/mcp
 
+## 0.31.8
+
+### Patch Changes
+
+- c98879e: - **`search_mushi_docs` finds the new "What leaves the browser" page** — what the web SDK sends with a report, where each part is filtered, and how to keep private pages out of reports.
+
+## 0.31.7
+
+### Patch Changes
+
+- 84043c1: - **`diagnose_setup` with an account key** — it now diagnoses instead of failing with `ORG_KEY_NOT_ALLOWED`. An account key (from `mushi setup` in account mode) cannot ingest, so the SDK ingest check refused it and the whole tool errored in `full` and `ingest` mode. The ingest steps are now read for the named project (`projectId`, or the configured one) from the new `GET /v1/admin/projects/:id/ingest-setup`. Without a project, the tool asks for `projectId`.
+- df894db: `search_mushi_docs` finds the one-command Docker install (`deploy/selfhost/install.sh`) and the updated self-hosting pages.
+
+## 0.31.6
+
+### Patch Changes
+
+- fa71919: Self-hosting is easier to follow and to check:
+
+  - `mushi selfhost doctor` exits 0 on a healthy minimal install. Optional extras that are not set up (Langfuse, Sentry, an AI key, a console address) print as `INFO` and never change the exit code; `WARN` exits 2 and `FAIL` exits 1 as before.
+  - The doctor now also checks that the console answers at the saved address (and warns when the CLI would sign you in on Mushi Mushi Cloud instead), that `/health` reports a stamped, self-hosted deploy, and, on the server, the AI key, that cron jobs no longer call Mushi Mushi Cloud, and that the private screenshots bucket exists. Lines lead with a plain name and the app's name, never `codebase_index:<uuid>`. `--console-url` checks another address.
+  - `mushi selfhost up` stamps the deploy with your commit (using the clone's own `scripts/deploy-edge-function.mjs` helper), so `/health` no longer reports `"dev"`, and sets `MUSHI_INSTANCE_MODE=self-hosted` so the server and console agree on what the instance is.
+  - With `--console-url`, `up` also sets `MUSHI_ADMIN_ORIGIN_ALLOWLIST` to the console's origin, so the API answers a console served on your own domain (before, only Mushi Mushi Cloud and localhost dev ports were allowed). The server now sends `mushi login` to that console (`ADMIN_BASE_URL`) on a self-host, instead of Mushi Mushi Cloud's.
+  - The no-key note points at Settings → AI keys (it said API Keys).
+  - The MCP docs index includes the new self-hosting pages (Environment variables, Operate and upgrade).
+
+## 0.31.5
+
+### Patch Changes
+
+- 141c554: `npx @mushi-mushi/mcp --help` now prints how to set it up and the env vars it reads, then exits, instead of starting the server and waiting. `--version` prints the version.
+
+  With an SDK key (report:write), setup mode now gives one command to fix it: `npx mushi-mushi login --project-id <id>`, then restart the server (and, if the key came from `MUSHI_API_KEY` in the server's env block, remove it there so the saved key is used).
+
+- 8f4759b: `search_mushi_docs` and `get_mushi_doc` now find the new Ops hub guide (payments, releases and alerts in your team's Slack) and the Ops console page.
+
+## 0.31.4
+
+### Patch Changes
+
+- fd05f9a: The docs index the MCP `search_mushi_docs` tool reads now covers `setDiagnosticsProvider()`, the React Native app version and `loadMyReports()`.
+- Updated dependencies [fd05f9a]
+  - @mushi-mushi/core@1.37.0
+
+## 0.31.3
+
+### Patch Changes
+
+- e4266e6: The docs index the MCP `search_mushi_docs` tool reads now describes the CI runners page's new **Right now** board and **Machines** view.
+
+## 0.31.2
+
+### Patch Changes
+
+- 0ce3357: The npm page and the setup docs now explain Mushi Mushi in plain words: one command, what happens next, and a prompt to paste into your AI editor.
+
+## 0.31.1
+
+### Patch Changes
+
+- f318574: `mushi-mushi` is now the one package you install. `npm install mushi-mushi`, then import from `mushi-mushi` (the browser SDK) or `mushi-mushi/react`, `mushi-mushi/vue`, `mushi-mushi/svelte`, `mushi-mushi/angular` and `mushi-mushi/node`. `npx mushi-mushi` still runs the setup wizard, and the wizard now installs `mushi-mushi` and writes imports from it (React Native and Capacitor still get their own package). `mushi upgrade` and `mushi doctor` recognise `mushi-mushi` next to the `@mushi-mushi/*` names. Already on `@mushi-mushi/react`, `@mushi-mushi/web` or another scoped SDK? Nothing changes: it keeps working and keeps getting updates.
+
+  The MCP server's built-in docs search (`search_mushi_docs`) now answers install questions with `mushi-mushi`.
+
+- Updated dependencies [f318574]
+  - @mushi-mushi/core@1.35.0
+
+## 0.31.0
+
+### Minor Changes
+
+- d597fb0: Three new tools for the Journey optimizer. `get_journeys` (read) answers "where do people get stuck in my app, and what should I change?". It returns the journey score, visit stats, the most common paths and each finding: dead ends, pages people leave, loops, reloads, duplicate pages, route variants, orphan and deep pages, and pages nobody visits. Each finding comes with a ready prompt for your coding agent. Filter with `kind`, cap with `limit` (default 20) and add `includeGraph` for the page map. `scan_site_journeys` (write) starts a scan of the live site (up to 40 pages, on your Firecrawl key), so the map also knows the site's links. `record_journeys` (write) opens, extends or stops the visit recording window for apps whose SDK uses `trackSessions: 'on-demand'`, for up to 168 hours and a share of visitors you choose. All three work on stdio and on hosted MCP, in the default `triage` group. The catalog now has 133 tools.
+
+### Patch Changes
+
+- d597fb0: New npm description and README hero (ADR 0058): Mushi Mushi is one place to improve AI-built apps. It fixes bugs, smooths the journeys people take through the app and cleans up the code, from your editor. Bug fixing is now one of three pillars instead of the whole product. No API changes.
+- Updated dependencies [d597fb0]
+- Updated dependencies [d597fb0]
+  - @mushi-mushi/core@1.34.0
+
+## 0.30.7
+
+### Patch Changes
+
+- 271d741: The bundled docs index (`search_mushi_docs`, `get_mushi_doc`) includes the new 特定商取引法に基づく表記 page (`/legal/tokushoho`) and the updated Terms, Privacy Policy and Japanese overview, which now give the operator's address and set Japanese law and the Tokyo District Court for disputes.
+- af44fd3: `get_usage` describes the team's quota: a plan belongs to the team, so its diagnoses, spend cap and plan are counted across every app in the team, not only the current project.
+
+## 0.30.6
+
+### Patch Changes
+
+- b6062d2: Mark Claude Code in the client registry (`MCP_CLIENTS`) with `oauthDefault`: a surface that can run the OAuth sign-in leads with the keyless `buildOAuthInstall('claude-code', …)` command, and `build()` (the `--header "Authorization: Bearer …"` command) is the variant for CI or headless use. `McpClientDef.oauthDefault` is the new optional field; the Claude Code description now says there is no key to copy.
+
+## 0.30.5
+
+### Patch Changes
+
+- 7f3dd9a: Refresh the bundled docs index with the new beginner pages (What is Mushi Mushi?, the glossary, the samples page, and pages for no-code founders, agencies and phone apps) and the retitled phone-app, connect and how-it-works pages.
+- a45452b: Refresh the bundled docs index after the framework quickstarts were renamed ("Bug report widget for …") and gained a step on where the project ID and API key come from.
+- 7f3dd9a: Add Lovable to the client registry (`MCP_CLIENTS`): a keyless entry for Lovable's custom MCP connector, with the hosted OAuth URL and the steps to add it. `McpClientDef.keyless` marks a client that signs in with OAuth, so the console mints no key for it.
+
+## 0.30.4
+
+### Patch Changes
+
+- 7c4a90a: Refresh the bundled docs index after the MCP quickstart dropped a dead registry link.
+
+## 0.30.3
+
+### Patch Changes
+
+- 82fa4f8: `search_mushi_docs` and `get_mushi_doc` now find the new "How Mushi Mushi works" page, which walks through reporting a bug, the diagnosis, connecting an editor and the pipeline on recorded screens.
+- 184d4ea: The README and the npm description now use the full product name, Mushi Mushi, everywhere instead of a shortened "Mushi". In `@mushi-mushi/mcp`, `search_mushi_docs` and `get_mushi_doc` also return the updated docs pages and the corrected auto-fix-loop blog post.
+- Updated dependencies [184d4ea]
+  - @mushi-mushi/core@1.33.6
+
 ## 0.30.2
 
 ### Patch Changes

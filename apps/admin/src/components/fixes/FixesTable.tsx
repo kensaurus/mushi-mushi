@@ -8,6 +8,7 @@ import { ResponsiveTable } from '../ResponsiveTable'
 import { FixRowView } from './FixRowView'
 import { FixDetailPanel } from './FixDetailPanel'
 import type { FixAttempt } from './types'
+import { pluralizeWithCount } from '../../lib/format'
 import { FIXES_STICKY_LEAD, FIXES_TABLE_COL, TABLE_CELL } from './fixesTableLayout'
 
 interface InventoryActionNodeLike {
@@ -80,7 +81,7 @@ export function FixesTable({
       ) : (
         <div className="px-3 py-1.5 border-b border-edge-subtle bg-surface-raised/50">
           <span className="text-2xs text-fg-muted">
-            {fixes.length} draft fix{fixes.length === 1 ? '' : 'es'} — tap a row for details
+            {pluralizeWithCount(fixes.length, 'fix', 'fixes')} — tap a row for details
           </span>
         </div>
       )}
@@ -102,7 +103,7 @@ export function FixesTable({
             <col className={FIXES_TABLE_COL.started} />
             <col className={FIXES_TABLE_COL.action} />
           </colgroup>
-          <thead className="bg-surface-raised text-2xs uppercase tracking-wider text-fg-faint sticky top-0 z-10">
+          <thead className="bg-surface-raised text-2xs text-fg-secondary sticky top-0 z-10 font-semibold">
             <tr>
               <th scope="col" className={`${FIXES_TABLE_COL.stripe} p-0`} aria-label="Status stripe" />
               <th scope="col" className={`${FIXES_TABLE_COL.status} ${TABLE_CELL.pxMeta} py-2 text-left font-medium`}>Status</th>

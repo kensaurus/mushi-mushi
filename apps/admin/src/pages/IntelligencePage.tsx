@@ -40,10 +40,10 @@ import { IntelligenceStatusBanner } from '../components/intelligence/Intelligenc
 import { IntelligenceSnapshotStrip } from '../components/intelligence/IntelligenceSnapshotStrip'
 import {
   ContainedBlock,
-  InlineProof,
   SignalChip,
 } from '../components/report-detail/ReportSurface'
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
+import { digestBody, formatDigestWeek, showInsightsSnapshot } from '../lib/intelligenceView'
 import {
   EMPTY_INTELLIGENCE_STATS,
   type IntelligenceStats,
@@ -72,7 +72,7 @@ const TABS: Array<{ id: IntelligenceTabId; label: string; description: string }>
   },
   {
     id: 'reports',
-    label: 'Reports',
+    label: 'Digests',
     description: 'Archived weekly digests with stats and exportable HTML summaries.',
   },
   {
@@ -334,10 +334,9 @@ export function IntelligencePage() {
       TABS.map((t) => ({
         id: t.id,
         label: copy?.tabLabels?.[t.id] ?? t.label,
+        // The Digests count is the tile above; the tab does not repeat it (round-2 sweep 2026-11-18).
         count:
-          t.id === 'reports' && stats.reportCount > 0
-            ? stats.reportCount
-            : t.id === 'pipeline' && (stats.pendingFindings > 0 || stats.activeJobCount > 0)
+          t.id === 'pipeline' && (stats.pendingFindings > 0 || stats.activeJobCount > 0)
               ? stats.pendingFindings + stats.activeJobCount
               : undefined,
       })),
@@ -371,6 +370,19 @@ export function IntelligencePage() {
     )
   }
 
+  // A read past the 15 s GET limit is "not checked" with a retry, never an
+  // endless skeleton (round-2 sweep 2026-11-18, 390 px showed only skeletons).
+  if (statsError && statsErrorCode === 'TIMEOUT') {
+    return (
+      <p className="flex flex-wrap items-center gap-2 text-xs text-fg-muted" data-testid="insights-not-checked">
+        <span aria-hidden className="ci-nodata inline-block h-3 w-6 shrink-0 rounded-sm border border-edge-subtle" />
+        Weekly insights not checked: the read took too long.
+        <Btn size="sm" variant="ghost" onClick={reloadStats}>
+          Try again
+        </Btn>
+      </p>
+    )
+  }
   if (statsError) {
     return <PageLoadError error={statsError} code={statsErrorCode} onRetry={reloadStats} />
   }
@@ -478,7 +490,7 @@ export function IntelligencePage() {
           },
           {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
-            show: !ux.hideIntelligenceSnapshot,
+            show: !ux.hideIntelligenceSnapshot && showInsightsSnapshot(stats),
             children: (
               <IntelligenceSnapshotStrip
                 stats={stats}
@@ -675,30 +687,24 @@ function ThisWeekNarrative({ latest, projectName, stats }: ThisWeekNarrativeProp
     )
   }
 
-  if (!latest?.summary_md) {
-    return (
-      <Card className="space-y-3 border border-brand/30 bg-surface-raised p-4">
-        <SignalChip tone="brand">
-          {latest?.week_start ? `Week of ${latest.week_start}` : 'Latest digest'}
-        </SignalChip>
-        <InlineProof>Digest archived — open Reports tab for full narrative and export.</InlineProof>
-      </Card>
-    )
-  }
-
+  // The body without the lines that only name the digest: a box holding
+  // "Weekly digest — kensaur.us / Week of 2026-11-02" under "Week of 2026-11-02"
+  // said the title twice and nothing else (round-2 sweep 2026-11-18).
+  const body = digestBody(latest?.summary_md)
+  const week = formatDigestWeek(latest?.week_start)
   return (
-    <Card className="border border-brand/30 bg-surface-raised p-4">
+    <Card className="p-4" data-testid="insights-this-week">
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-sm font-semibold text-brand">Week of {latest.week_start}</h3>
-        {latest.llm_model && (
-          <SignalChip tone="brand" className="font-mono">
-            {latest.llm_model}
-          </SignalChip>
-        )}
+        <h3 className="text-sm font-semibold text-fg">{week ? `Week of ${week}` : 'Latest digest'}</h3>
+        {latest?.llm_model && <span className="font-mono text-2xs text-fg-faint">{latest.llm_model}</span>}
       </div>
-      <ContainedBlock tone="muted" className="mt-2">
-        <ProseBlock value={latest.summary_md} mode="excerpt" tone="muted" />
-      </ContainedBlock>
+      {body ? (
+        <ProseBlock value={body} mode="excerpt" tone="muted" />
+      ) : (
+        <p className="text-xs text-fg-muted" data-testid="insights-no-body">
+          This digest has only its title, no written summary. Generate this week for a fresh one.
+        </p>
+      )}
     </Card>
   )
 }

@@ -76,7 +76,7 @@ function RolloutModal({ onClose }: { onClose: () => void }) {
         setPreview(res.data)
         setSelected(defaultSelection(res.data))
       } else {
-        setLoadError(res.error?.message ?? 'Mushi could not read the CI advice. Try again in a minute.')
+        setLoadError(res.error?.message ?? 'Mushi Mushi could not read the CI advice. Try again in a minute.')
       }
     })
     return () => {
@@ -117,7 +117,7 @@ function RolloutModal({ onClose }: { onClose: () => void }) {
 
   const capNote =
     request && preview && (request.overRepoCap || request.overItemCap)
-      ? `Mushi opens at most ${preview.caps.reposPerRequest} repos at a time and ${preview.caps.itemsPerRepo} fixes per repo. Untick some, then open the rest next time.`
+      ? `Mushi Mushi opens at most ${preview.caps.reposPerRequest} repos at a time and ${preview.caps.itemsPerRepo} fixes per repo. Untick some, then open the rest next time.`
       : null
 
   const footer = results ? (
@@ -161,12 +161,12 @@ function RolloutModal({ onClose }: { onClose: () => void }) {
         ) : !preview ? (
           <p className="text-fg-muted">Reading the CI advice for your apps…</p>
         ) : preview.repos.length === 0 ? (
-          <p className="text-fg-secondary">No CI cost fix Mushi can open for your apps right now.{preview.partial ? ` ${preview.partial}` : ''}</p>
+          <p className="text-fg-secondary">No CI cost fix Mushi Mushi can open for your apps right now.{preview.partial ? ` ${preview.partial}` : ''}</p>
         ) : (
           <>
             <p className="text-fg-secondary">
               Each repo gets <strong>one draft pull request</strong> with all its fixes, so it runs CI once. Nothing changes until you review, mark ready and
-              merge each one. Mushi still refuses an edit that could do harm, and lists it in the pull request.
+              merge each one. Mushi Mushi still refuses an edit that could do harm, and lists it in the pull request.
             </p>
             {preview.partial && <p className="text-warn">{preview.partial}</p>}
             <ul className="flex flex-col gap-2">

@@ -196,6 +196,30 @@ use `capture.screenshot: false` while those routes are focused.
 Maintainer deep-dive:
 [SDK_SCREENSHOT_PREVIEW.md](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SDK_SCREENSHOT_PREVIEW.md)
 
+### Diagnostics at send time
+
+Attach what your app knows when the reporter presses **Send**: screen load timings, the last errors you logged, the connection. Mushi Mushi reads the function at that moment, so the report shows the app's state when it was sent, not when you last called `setMetadata`.
+
+```tsx
+const mushi = useMushi()
+
+useEffect(() => {
+  mushi?.setDiagnosticsProvider(() => ({
+    screenLoading: loadLog.lines(), // e.g. "plan call budgets: 3114 ms"
+    connection: netInfo.type,
+  }))
+  return () => mushi?.setDiagnosticsProvider(null)
+}, [mushi])
+```
+
+- The keys merge into the report's metadata. Lines in `screenLoading` or `timings` are triage evidence: a step of 1.5 s or more reads as a slowness symptom even when the description is short.
+- The function gets 300 ms. If it is slow or throws, the report is sent without it, never dropped.
+- Strings are scrubbed for personal data and the result is capped in size. Keep amounts, names and other personal data out anyway.
+
+### App version
+
+`reports.app_version` comes from the `appVersion` option on `<MushiProvider config>` when you set it. Otherwise it is read from `expo-application` (version and build, e.g. `1.22.59 (1084)`) or `react-native-device-info`. Before 0.25 the SDK fell back to the OS version, so Expo apps without either reported Android's `36`.
+
 ### Manual breadcrumbs
 
 ```tsx
@@ -271,7 +295,8 @@ function MyReportsScreen() {
 
 | Method | Returns |
 | ------ | ------- |
-| `listMyReports()` | User's submitted reports with status, category, timestamps |
+| `listMyReports()` | User's submitted reports with status, category, timestamps (`[]` on failure) |
+| `loadMyReports()` | Same list, or `null` when it could not be loaded, so you can show an error and Retry |
 | `listMyComments(reportId)` | Thread between reporter and admin |
 | `replyToReport(reportId, body)` | Post a follow-up from the app |
 | `getReputation()` / `getTier()` | Points balance and tier for contribution UI |
@@ -420,6 +445,6 @@ function ProfileBadge() {
 }
 ```
 
-The `MushiRewardsBadge` component from `@mushi-mushi/react` is web-only
+The `MushiRewardsBadge` component from `mushi-mushi/react` is web-only
 (uses `<span>`). On React Native, render tier data from `getTier()` and
 `getReputation()` directly using your own `<Text>` / `<View>` elements.

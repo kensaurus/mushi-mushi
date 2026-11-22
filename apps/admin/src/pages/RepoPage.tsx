@@ -272,6 +272,8 @@ export function RepoPage() {
   const [branchPage, setBranchPage] = useState(1)
   const [activityKind, setActivityKind] = useState<ActivityKind | 'all'>('all')
   const [activityShown, setActivityShown] = useState(ACTIVITY_PAGE_SIZE)
+  // Open-PR counts reported by the list, so the status line can lead with "1 PR ready to merge".
+  const [prCounts, setPrCounts] = useState<{ open: number; mergeable: number } | null>(null)
   const setBucket = useCallback(
     (next: Bucket) => {
       setSearchParams((prev) => {
@@ -395,9 +397,9 @@ export function RepoPage() {
   const activityPanel = (
     <Card className="p-3">
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-fg-muted">Repo activity</h3>
-        {activity && (
-          <span className="text-3xs text-fg-faint font-mono">
+        <h3 className="text-xs font-semibold text-fg-secondary">Repo activity</h3>
+        {activity && activity.length > 0 && (
+          <span className="text-3xs text-fg-faint tabular-nums">
             {pluralizeWithCount(activity.length, 'event')}
           </span>
         )}
@@ -500,13 +502,24 @@ export function RepoPage() {
     </div>
   )
 
+  // A repo with no fix branches: one row in the pull-request card, not a second empty state floating
+  // under it (round 3). "Bugs", as the sidebar names them.
+  const emptyBranchesRow = (
+    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-edge-subtle pt-2 text-xs text-fg-muted" data-testid="repo-no-fix-branches">
+      No fix branches yet: dispatch a fix on a classified bug and its branch lands here.
+      <Btn to="/reports" variant="ghost" size="sm">
+        Open Bugs
+      </Btn>
+    </p>
+  )
+
   const emptyBranches = (
     <EmptyState
       title={hasRepo ? 'No fix branches yet' : 'Connect your repo'}
       description={
         hasRepo
           ? "Dispatch a fix on a classified report and its branch will land here the moment the agent pushes."
-          : "Install the Mushi GitHub App on the repo you want auto-fix PRs opened against."
+          : "Install the Mushi Mushi GitHub App on the repo you want auto-fix PRs opened against."
       }
       action={
         <Btn to={hasRepo ? '/reports' : '/integrations/config'} variant="primary" size="sm">
@@ -523,7 +536,7 @@ export function RepoPage() {
         projectScope={projectName}
 
         helpTitle={copy?.help?.title ?? 'About pull requests'}
-        helpWhatIsIt={copy?.help?.whatIsIt ?? "A repo-level view of Mushi's fix pipeline: every draft PR, its branch, and its CI conclusion in one place. Multi-repo projects (e.g. frontend + backend) can have multiple repos linked — each gets its own fix worker run."}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? "A repo-level view of Mushi Mushi's fix pipeline: every draft PR, its branch, and its CI conclusion in one place. Multi-repo projects (e.g. frontend + backend) can have multiple repos linked — each gets its own fix worker run."}
         helpUseCases={copy?.help?.useCases ?? [
           'Spot stuck PRs (dispatched but never opened) so auth or agent issues surface fast',
           'Verify that CI is green across the board before scaling dispatch volume',
@@ -537,10 +550,13 @@ export function RepoPage() {
           'Review: Pull requests lists every fix PR with CI status. Activity lists dispatches, commits, and CI results; filter it by event type.',
         ].join('\n')}
       >
-        <FreshnessPill at={statsFetchedAt} isValidating={statsValidating} />
-        <span className="text-2xs text-fg-faint font-mono">
-          {pluralizeWithCount(counts.branches ?? counts.total, 'branch', 'branches')}
-        </span>
+        {/* The status line carries "Updated"; the header shows it only when that line is hidden. */}
+        {ux.hideRepoSnapshot ? <FreshnessPill at={statsFetchedAt} isValidating={statsValidating} /> : null}
+        {(counts.branches ?? counts.total) > 0 && (
+          <span className="text-2xs text-fg-faint whitespace-nowrap tabular-nums" title="Branches Mushi Mushi pushed for fixes">
+            {pluralizeWithCount(counts.branches ?? counts.total, 'fix branch', 'fix branches')}
+          </span>
+        )}
         <Btn size="sm" variant="ghost" onClick={reload} loading={statsValidating}>
           Refresh
         </Btn>
@@ -564,13 +580,16 @@ export function RepoPage() {
           },
           {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
-            show: !ux.hideRepoSnapshot,
+            // Clean up's own blocker (a missing token) is its status; "1 PR ready to merge" above it
+            // pointed at another tab (round 3).
+            show: !ux.hideRepoSnapshot && activeTab !== 'cleanup',
             children: (
               <RepoSnapshotStrip
                 stats={repoStats}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
                 statLabels={copy?.statLabels}
+                readyToMerge={prCounts?.mergeable ?? null}
               />
             ),
           },
@@ -588,11 +607,13 @@ export function RepoPage() {
       )}
 
       {/* Every open PR in the connected repos, fix or not, with Merge once its checks pass. */}
-      {activeTab === 'branches' && activeProjectId && <OpenPullRequests projectId={activeProjectId} />}
+      {activeTab === 'branches' && activeProjectId && (
+        <OpenPullRequests projectId={activeProjectId} onCounts={setPrCounts} footer={hasRepo && branches.length === 0 ? emptyBranchesRow : undefined} />
+      )}
 
       {/* Open PRs lead; the per-attempt history is a closed panel under them. */}
       {activeTab === 'branches' && (
-        branches.length === 0 ? emptyBranches : (
+        branches.length === 0 ? (hasRepo && activeProjectId ? null : emptyBranches) : (
           <DisclosurePanel
             title="Fix attempt branches"
             trailing={<span className="text-2xs font-normal text-fg-faint">{branches.length} attempts</span>}

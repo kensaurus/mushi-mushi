@@ -21,7 +21,7 @@ export function targetLabel(t: PlacementTarget): string {
 
 /** Where jobs that follow a variable run now. */
 export function currentPlacement(v: PlacementRepo['variables'][number]): { text: string; kind: 'github_hosted' | 'self_hosted' | 'unknown' } {
-  if (!v.current) return { text: 'Unknown: Mushi could not read the variable', kind: 'unknown' }
+  if (!v.current) return { text: 'Unknown: Mushi Mushi could not read the variable', kind: 'unknown' }
   if (!v.current.exists || !v.current.value) {
     const fb = v.fallbacks[0] ?? null
     if (fb && !isHostedLabel(fb)) return { text: `Self-hosted: ${fb} (no variable set)`, kind: 'self_hosted' }
@@ -37,7 +37,9 @@ export function hostedDisabledReason(policy: CiRunnerPolicy | null, repo: Placem
   if (!policy?.noPaidHostedOnPrivate) return null
   if (repo.visibility === 'public') return null
   if (policy.hostedAllowedRepos.some((r) => sameRepo(r, repo.repo))) return null
-  return `Your CI agreement says no paid GitHub-hosted minutes on private repos${policy.sourceNote ? ` (${policy.sourceNote})` : ''}.`
+  // The agreement and its source are in the box above the repos; here only why this choice is off
+  // (round 3: the owner's decision text was printed twice on Settings).
+  return 'Off: your CI agreement above rules out paid GitHub-hosted minutes on private repos.'
 }
 
 function matches(value: string, pattern: string): boolean {

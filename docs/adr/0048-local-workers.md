@@ -282,3 +282,87 @@ and to change.
 - **Capability, not version sniffing.** A daemon that can switch sends
   `host.can: ["cursor_login"]`; without it the console says to update the CLI.
   Migration `20261028150000_worker_cursor_account.sql` (additive).
+
+## Amendment 2026-11-12: a drain floor and one fix per duplicate group
+
+The owner had about 1,000 open reports across apps and wanted the workers to
+fix the worst first, without a person picking each one.
+
+- **`work_lanes.min_severity`** (critical, high, medium; NULL = all). It is
+  server-only, like `review_model`: the claim route applies it to the ranked
+  list, and the heartbeat never carries it, so an older daemon never sees an
+  unknown setting. A report a person queued goes whatever its severity.
+- **One fix per duplicate group** (`reports.report_group_id`). A ranked report
+  is not offered while another member of its group is claimed, queued, has a
+  live run or an open PR, or is `fixing`; and only the worst-ranked member of a
+  free group is offered. A read error leaves no group busy, so the worst case
+  is a second fix of a duplicate, never an idle lane.
+- **Rejected: closing grouped duplicates in bulk.** A sample of 12 grouped
+  code-audit reports on 2026-11-12 held 2 different bugs under one canonical
+  ("Go back can leave the app" under "Go back pops in and shifts the error
+  screen"). Closing all 134 grouped duplicates would have buried about 20 real
+  bugs.
+- **Not done: choosing the agent per lane from the console.** The daemon runs
+  one agent per machine (its sign-in check and out-of-usage backoff are
+  per host), so the agent stays a machine setting (`--agent`, worker.json).
+- Migration `20261112090000_work_lane_min_severity.sql` (additive).
+
+## Amendment 2026-11-12 (b): spend no agent run on a report that is already gone
+
+Of 10 drain runs on 2026-11-12, 3 found nothing to fix: two audit findings the
+code no longer had, and one fix main already carried (`already_fixed` in
+db4c8383a), which also stayed open and would have been tried again after the
+7-day cooldown. Over 30 days, 105 of 2,924 attempts ended `already_fixed`,
+`not_actionable` or `wrong_repo`.
+
+- **Free recheck before a run.** A `code_audit` report carries the
+  deterministic check that filed it (`Reproduced by the worker with no model:
+  pattern check, /re/ is present|absent in <file> near line N`). `mushi work`
+  runs it again with the audit's own evaluator on the fresh worktree, before
+  any install or agent. No longer reproduces → the run ends `gone` and the
+  report is closed as fixed with a team note. Only `source = code_audit` is
+  read this way: a person's words never close their own report. A check cut
+  short, an unsafe pattern or path, or a file that moved leaves the report to
+  the agent. A `present` problem is gone only when the whole file no longer
+  has it: the audit's ±3-line window alone called 93 of 217 findings gone
+  whose code had only moved (measured 2026-11-12 over 638 open findings: 420
+  still reproduce, 124 resolved, 93 moved, 1 file deleted; of 6 sampled
+  resolved ones, 5 were truly fixed and 1 partly).
+- **`already_fixed` with proof closes the report.** A verdict naming a commit
+  that `git merge-base --is-ancestor` finds on the base branch ends `gone`.
+- **`gone` claim outcome.** The daemon ends its claim `gone` with the note as
+  `detail`; the claim route closes an open report (never one a person closed)
+  and posts the note. Manual `mushi work` closes it through
+  `PATCH /v1/admin/reports/:id` with the CLI key.
+- **`mushi work --recheck`** sweeps every open code-audit report the same way,
+  on one worktree, with no agent (`--dry-run` only counts).
+- Migration `20261112100000_work_claims_outcome_gone.sql` widens the outcome
+  CHECK.
+
+## Amendment 2026-11-16: the queue moves one report at a time, and only waiting reports count
+
+Driving the console as a user on 2026-11-16, the glot.it lane's queue could
+not be changed at all. It held 209 reports (50 already fixed or dismissed)
+against a cap of 50, set in #827 with no stated reason. Add answered "A lane
+holds at most 50 queued reports", and Move up, Move down and Remove resent
+the whole list as one PUT, which the 50-id limit refused with raw API text.
+
+- **One report per move.** `POST /v1/admin/work/lanes/:id/queue/move
+  { reportId, to: top | up | down | bottom | remove }` writes one or two
+  rows and answers the fresh queue. Ties in `position` (a replace writes
+  0..n, an append epoch seconds, a requeue minus epoch) are renumbered once
+  before a swap. The full-list PUT stays for replacing a queue.
+- **Fix next.** `PUT …/queue { reportIds, front: true }` puts reports first,
+  in the order given; one already queued moves up instead of being ignored.
+  "Send to my local worker" (report detail, Bugs list, pipeline groups) now
+  uses it, so a report someone sends is the lane's next one.
+- **Only waiting reports count.** Every queue write first drops fixed,
+  verified, dismissed, deleted or moved reports, and the lanes answer hides
+  them. `QUEUE_MAX` is 200 waiting reports per lane (the claim reads only the
+  head); one request carries at most 50 ids (`QUEUE_REQUEST_MAX`). Adding only
+  closed reports answers `ALREADY_CLOSED`; a vanished report `NOT_QUEUED`.
+- **Not done: adding a lane from the console.** `mushi worker install --lane`
+  replaces the machine's whole lane list, so a console hint that prints it
+  would wipe the other lanes. A console-declared lane (the machine clones the
+  linked repo itself) changes this ADR's "lanes come from worker.json" rule and
+  needs the owner's amendment first.

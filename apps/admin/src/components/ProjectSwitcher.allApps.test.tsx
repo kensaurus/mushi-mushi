@@ -206,3 +206,42 @@ describe('ProjectSwitcher — All apps', () => {
     expect(allRow()).not.toBeNull()
   })
 })
+
+/**
+ * Console audit 2026-11-11, finding 4: the switcher tagged every listed app
+ * with the ACTIVE team. After "All apps" and an empty team, the other team's
+ * apps were filed under the empty one, and every switch back reverted.
+ */
+describe('ProjectSwitcher — remembers each app under the team the server names', () => {
+  const EMPTY_TEAM = '11111111-1111-4111-8111-111111111111'
+  const KENJI = '22222222-2222-4222-8222-222222222222'
+  const teamMap = () => JSON.parse(window.localStorage.getItem('mushi:project_team_by_id') ?? '{}') as Record<string, string>
+
+  it('files apps under their own team, not the active one', async () => {
+    window.localStorage.setItem('mushi:active_org_id', EMPTY_TEAM)
+    setStoredProjectScopeMode('all')
+    setup.value = {
+      loading: false,
+      error: null,
+      reload: vi.fn(),
+      data: {
+        projects: [
+          { ...setupProject(PROJECT_A, 'glot.it'), organization_id: KENJI },
+          { ...setupProject(PROJECT_B, 'yen-yen'), organization_id: KENJI },
+        ],
+        admin_endpoint_host: null,
+      },
+    }
+    await render(`/reports?apps=all`)
+    expect(teamMap()[PROJECT_A]).toBe(KENJI)
+    expect(teamMap()[PROJECT_B]).toBe(KENJI)
+  })
+
+  it('on an older server (no team on the list) never overwrites a team it already knows', async () => {
+    window.localStorage.setItem('mushi:active_org_id', EMPTY_TEAM)
+    window.localStorage.setItem('mushi:project_team_by_id', JSON.stringify({ [PROJECT_A]: KENJI }))
+    setStoredProjectScopeMode('all')
+    await render(`/reports?apps=all`)
+    expect(teamMap()[PROJECT_A]).toBe(KENJI)
+  })
+})

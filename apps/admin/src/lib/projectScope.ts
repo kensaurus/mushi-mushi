@@ -29,6 +29,7 @@ import {
   ACTIVE_PROJECT_QUERY_PARAM,
   getActiveProjectIdSnapshot,
   isValidProjectId,
+  pickActiveProject,
   useActiveProjectSignal,
 } from './activeProject'
 
@@ -67,9 +68,14 @@ const ALL_APPS_EXACT: readonly string[] = ['/reports']
 
 /**
  * Pages that never show one app's data, so the one-app notice would be wrong
- * on them: the account-wide portfolio, the project list, team settings.
+ * on them: the account-wide portfolio, the project list, team settings, and
+ * Providers & AI routes (the platform's provider accounts, never one app's;
+ * it said "This page shows one app at a time", 2026-11-18). Help & support
+ * lists your tickets to the Mushi team across every app, each with its app
+ * name (console audit 2026-11-21). Ops is every app's events for the team,
+ * filtered by app in its own URL (report 5b386672: it said "one app at a time").
  */
-const ACCOUNT_WIDE_ROUTE_PREFIXES: readonly string[] = ['/portfolio', '/projects', '/org/']
+const ACCOUNT_WIDE_ROUTE_PREFIXES: readonly string[] = ['/portfolio', '/projects', '/org/', '/providers', '/users', '/docs-bridge', '/feedback', '/ops']
 
 type AllAppsSupport = 'combined' | 'account' | 'single'
 
@@ -78,10 +84,28 @@ function matchesRoute(pathname: string, route: string): boolean {
   return pathname === route || pathname.startsWith(`${route}/`)
 }
 
-/** How a route behaves in all-apps mode. */
-export function allAppsSupportFor(pathname: string): AllAppsSupport {
+/**
+ * Team (/team) views that are the whole team, never one app. `/org/:slug/settings/members`
+ * lands on `/team?view=members` (via /organization/members), so the '/org/' prefix
+ * above never matched by the time the page rendered, and the members list said
+ * "This page shows one app at a time" (fresh-eyes 2026-11-18). Billing, AI spend,
+ * audit and storage still read the open app, so only these views opt out.
+ */
+const TEAM_ACCOUNT_WIDE_VIEWS: readonly string[] = ['members']
+
+/**
+ * How a route behaves in all-apps mode. `search` defaults to the current URL's
+ * query; it only matters for the Team page's views.
+ */
+export function allAppsSupportFor(pathname: string, search?: string): AllAppsSupport {
   // `/projects/:pid/qa-coverage/:storyId` is one app's story (a redirect).
   if (/^\/projects\/[^/]+\//.test(pathname)) return 'single'
+  if (pathname === '/team') {
+    const query = search ?? (typeof window !== 'undefined' ? window.location.search : '')
+    // No `view` is the first view, Members (lib/pageHubs.ts drops it from the URL).
+    const view = new URLSearchParams(query).get('view') ?? 'members'
+    if (TEAM_ACCOUNT_WIDE_VIEWS.includes(view)) return 'account'
+  }
   if (ALL_APPS_EXACT.includes(pathname)) return 'combined'
   if (ALL_APPS_ROUTES.some((r) => matchesRoute(pathname, r))) return 'combined'
   if (ACCOUNT_WIDE_ROUTE_PREFIXES.some((r) => matchesRoute(pathname, r))) return 'account'
@@ -206,6 +230,18 @@ export function useSetProjectScopeMode(): (mode: ProjectScopeMode) => void {
     },
     [setSearchParams],
   )
+}
+
+/**
+ * A person chose one app from a combined view (AppGroupSection's "Open →"): leave All apps
+ * and pin that app, as picking it in the header switcher does. All-apps mode lives in
+ * storage, so a plain link to `?project=<id>` would land on the combined page again.
+ * Pair it with a link whose URL carries `?project=<id>` and no `?apps=all`.
+ */
+export function openAppOnly(projectId: string): void {
+  if (!isValidProjectId(projectId)) return
+  setStoredProjectScopeMode('project')
+  pickActiveProject(projectId)
 }
 
 /** A copy of `params` with `?apps=` set for `mode` (removed for one app). */

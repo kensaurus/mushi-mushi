@@ -1,17 +1,20 @@
 # @mushi-mushi/core
 
-> **Your AI wrote it. Mushi Mushi tells you why it broke.**
+> **Your AI built it. Mushi Mushi makes it better.**
 
 The shared types, API client and utilities under every [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) SDK.
 
 **You probably don't need to install this directly.** Run `npx mushi-mushi` and the wizard installs the SDK for your framework ([`react`](https://npmjs.com/package/@mushi-mushi/react), [`vue`](https://npmjs.com/package/@mushi-mushi/vue), [`svelte`](https://npmjs.com/package/@mushi-mushi/svelte), [`angular`](https://npmjs.com/package/@mushi-mushi/angular), [`react-native`](https://npmjs.com/package/@mushi-mushi/react-native), [`capacitor`](https://npmjs.com/package/@mushi-mushi/capacitor) or [`web`](https://npmjs.com/package/@mushi-mushi/web)), which depends on this one. Reach for `core` when you build your own adapter or need the types.
 
+The same code ships in the [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi) package: `npm install mushi-mushi`, then `import { createPreFilter } from 'mushi-mushi/core'`. This package keeps working and keeps getting updates.
+
 ```bash
-npm install @mushi-mushi/core
+npm install mushi-mushi   # then import from 'mushi-mushi/core'
+# or: npm install @mushi-mushi/core   # same code; import from '@mushi-mushi/core'
 ```
 
 ```ts
-import { createPreFilter, captureEnvironment } from '@mushi-mushi/core';
+import { createPreFilter, captureEnvironment } from 'mushi-mushi/core';
 
 const filter = createPreFilter();
 filter.check('asdf');      // { passed: false, reason: 'Too short (min 10 characters)' }
@@ -24,7 +27,7 @@ Mushi Mushi is built first for people who make apps with AI, mostly on their own
 
 ```mermaid
 flowchart LR
-    A["Framework SDK<br/>react, vue, web…"] --> B["@mushi-mushi/core<br/>types · API client · queue"] --> C["Mushi API"]
+    A["Framework SDK<br/>react, vue, web…"] --> B["@mushi-mushi/core<br/>types · API client · queue"] --> C["Mushi Mushi API"]
 ```
 
 ## What's inside
@@ -32,7 +35,7 @@ flowchart LR
 | Piece | What it does |
 | --- | --- |
 | Types | `MushiConfig`, `MushiReport`, `MushiEnvironment` and every shared interface |
-| API client (`createApiClient`) | Fetch with retry and backoff. Tags its own requests with `X-Mushi-Internal` so SDKs never report on Mushi |
+| API client (`createApiClient`) | Fetch with retry and backoff. Tags its own requests with `X-Mushi-Internal` so SDKs never report on Mushi Mushi |
 | Pre-filter (`createPreFilter`) | On-device spam and gibberish filter, before anything is sent |
 | Offline queue (`createOfflineQueue`) | IndexedDB queue that syncs on reconnect |
 | Environment (`captureEnvironment`) | Viewport, user agent and client hints, connection, accessibility preferences, page-load timing |
@@ -56,7 +59,7 @@ Pass `preset` instead of setting every `widget`, `capture` and `proactive` flag.
 The postures `production-calm`, `beta-loud`, `internal-debug` and `manual-only` also work. Precedence, highest first: **explicit config → `preset` → env vars (`NEXT_PUBLIC_MUSHI_*`, `VITE_MUSHI_*`) → SDK defaults.**
 
 ```typescript
-import { expandPreset, validateConfig } from '@mushi-mushi/core';
+import { expandPreset, validateConfig } from 'mushi-mushi/core';
 
 validateConfig(config);                // warns on typos or a bad preset, never throws (MUSHI_SILENT=1 hides it)
 const resolved = expandPreset(config); // preset → nested options, explicit values win

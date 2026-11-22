@@ -11,6 +11,7 @@
 
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReportDetail } from './types'
 
@@ -48,7 +49,8 @@ function report(overrides: Partial<ReportDetail>): ReportDetail {
 }
 
 function render(r: ReportDetail): string {
-  act(() => root.render(createElement(DiagnosisFixHero, { report: r })))
+  // Operator view: the model line is asserted below. The outside view has its own test.
+  act(() => root.render(createElement(MemoryRouter, null, createElement(DiagnosisFixHero, { report: r, showInternals: true }))))
   return container.textContent ?? ''
 }
 
@@ -75,16 +77,35 @@ describe('DiagnosisFixHero', () => {
     expect(text).toContain('82% confidence')
   })
 
+  // Re-audit 2026-11-11: "Model: precomputed" on a builder's first sample report.
+  it('outside operator accounts hides the model name, and calls the sample a sample', () => {
+    const stage2 = { rootCause: 'The minutes prop is stale.', confidence: 0.82 }
+    act(() => root.render(createElement(MemoryRouter, null, createElement(DiagnosisFixHero, { report: report({ stage2_model: 'claude-sonnet-4-6', stage2_analysis: stage2 }) }))))
+    expect(container.textContent).not.toContain('Model:')
+    expect(container.textContent).not.toContain('claude-sonnet-4-6')
+    act(() => root.render(createElement(MemoryRouter, null, createElement(DiagnosisFixHero, { report: report({ stage2_model: 'precomputed', stage2_analysis: stage2 }) }))))
+    expect(container.textContent).toContain('Sample explanation (written in advance)')
+    expect(container.textContent).not.toContain('precomputed')
+  })
+
   it('renders model text as text, never HTML', () => {
     render(report({ stage2_analysis: { rootCause: '<img src=x onerror=alert(1)>' } }))
     expect(container.querySelector('img')).toBeNull()
   })
 
+  // Sweep 2026-11-18: with no title the page heading is the summary, so this card does not repeat it.
+  it('says the summary only when the page heading does not', () => {
+    expect(render(report({ stage2_analysis: null }))).not.toContain('Lesson card shows the wrong duration')
+    expect(render(report({ stage2_analysis: null, title: 'Lesson time is wrong' }))).toContain('Lesson card shows the wrong duration')
+  })
+
   it('is honest when only the stage-1 classifier ran', () => {
-    const text = render(report({ stage2_analysis: null }))
+    const text = render(report({ stage2_analysis: null, title: 'Lesson time is wrong' }))
     expect(text).toContain('Lesson card shows the wrong duration')
     expect(text).toContain('Quick summary only.')
-    expect(text).toContain('the full diagnosis (why it broke and how to fix it) did not run')
+    // The why sits behind the info hint; the line itself is one sentence and a link.
+    expect(container.querySelector('[data-testid="stage2-absent"] [aria-label*="did not run"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="stage2-absent"] a')?.textContent).toBe('Change threshold')
     expect(text).not.toContain('classifier confident')
     expect(text).not.toContain('Why it broke')
   })

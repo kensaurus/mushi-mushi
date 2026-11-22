@@ -17,7 +17,7 @@ Add under the relevant category (Developer Tools / Monitoring). Ready-to-paste
 entry (alphabetical insertion — match surrounding format):
 
 ```md
-- [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) 🏎️ ☁️ - Your AI shipped it. Mushi Mushi tells you why it broke — plain diagnosis and a paste-ready fix prompt in Cursor. No second LLM key.
+- [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) 🏎️ ☁️ - One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code. Plain-English diagnosis and a fix prompt in Cursor or Claude Code.
 ```
 
 (Legend: 🏎️ = TypeScript/Node, ☁️ = cloud/remote available. Confirm the repo's
@@ -30,10 +30,12 @@ Repo: <https://github.com/jaw9c/awesome-remote-mcp-servers>
 PR [#428](https://github.com/jaw9c/awesome-remote-mcp-servers/pull/428) was **closed**
 because the MCP endpoint used a non-resolving hostname. Re-submitted as
 [#431](https://github.com/jaw9c/awesome-remote-mcp-servers/pull/431) with the Supabase
-Streamable HTTP URL below (matches `packages/mcp/server.json` `remotes`).
+Streamable HTTP URL. Since 2026-11-14 the row below uses the kensaur.us
+hosted URL, which is what `packages/mcp/server.json` `remotes` lists and the
+only host OAuth login works on (`canonical-urls.md`).
 
 ```md
-| Mushi Mushi | Debugging / Monitoring | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp?features=triage,fixes,inventory,setup,docs` | API Key | [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) |
+| Mushi Mushi | Debugging / Monitoring | `https://kensaur.us/mushi-mushi/hosted-mcp/` | OAuth | [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) |
 ```
 
 Re-open via:
@@ -42,10 +44,10 @@ Re-open via:
 node scripts/marketing/propose-awesome-pr.mjs \
   --upstream jaw9c/awesome-remote-mcp-servers \
   --section "## Remote MCP Server List" \
-  --entry "| Mushi Mushi | Debugging / Monitoring | \`https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp?features=triage,fixes,inventory,setup,docs\` | API Key | [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) |" \
+  --entry "| Mushi Mushi | Debugging / Monitoring | \`https://kensaur.us/mushi-mushi/hosted-mcp/\` | OAuth | [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) |" \
   --branch add-mushi-mushi-mcp \
   --pr-title "Add Mushi Mushi remote MCP server" \
-  --pr-body "Replaces closed #428 — previous row used a hostname that does not resolve. Hosted Streamable HTTP MCP on Supabase; API key auth. Live demo: https://kensaur.us/mushi-mushi/"
+  --pr-body "Replaces closed #428 — previous row used a hostname that does not resolve. Hosted Streamable HTTP MCP; OAuth sign-in. Live demo: https://kensaur.us/mushi-mushi/"
 ```
 
 (Verify the README section heading before running — adjust `--section` if the table moved.)

@@ -61,12 +61,23 @@ export const ANTHROPIC_HAIKU_LATEST = 'claude-haiku-5-5'
 
 // --- OpenAI (cross-vendor fallback) -----------------------------------------
 
-/** GPT-6.1 Sol ($2/$10 per MTok, 1M context, structured outputs, reasoning
- *  effort low…max; OpenAI pricing and model pages, read 2026-10-31). OpenAI's
+/** GPT-6.2 Sol (launched 2026-11-17; $2/$10 per MTok, the same as GPT-6.1
+ *  Sol, which this replaced on 2026-11-21 for the code tier; priced on kenji).
+ *  GPT-6.1 Sol was: $2/$10 per MTok, 1M context, structured outputs, reasoning
+ *  effort low…max (OpenAI pricing and model pages, read 2026-10-31). OpenAI's
  *  pick for the hardest coding work below GPT-6 Astra, and the closest to
- *  Claude Opus 5.5 ($4/$20) at half its price: the fallback for every stage,
- *  and the PR review's model when an organization runs AI on OpenAI. */
-export const OPENAI_PRIMARY = 'gpt-6.1-sol'
+ *  Claude Opus 5.5 ($4/$20) at half its price: the fix-worker fallback and the
+ *  PR review's model when an organization runs AI on OpenAI. Classification
+ *  and judging use Terra, and chat and summaries use Luna (2026-11-07). */
+export const OPENAI_PRIMARY = 'gpt-6.2-sol'
+
+/** GPT-6.1 Terra ($1/$5 per MTok, 1.05M context, structured outputs; OpenAI
+ *  model page and Terra launch post, read 2026-11-07). OpenAI's mid tier, which
+ *  its model-selection guide recommends for scoped code fixes. Half Sol's price
+ *  (owner, 2026-11-07: "use the middleground model ... geared for coding"), so it
+ *  runs classification, judging and the SQL planner. Sol stays on the stages
+ *  that write or grade shipped code: fix-worker and the agent PR review. */
+export const OPENAI_TERRA = 'gpt-6.1-terra'
 
 /** GPT-6 Luna ($0.10/$0.50 per MTok): OpenAI's cost-efficient model, the
  *  fast-filter and summary fallback (Haiku 5.5's counterpart). */
@@ -93,7 +104,7 @@ export const STAGE1_FALLBACK = OPENAI_MINI
  *  `resolveClaudeModel`). */
 export const STAGE2_MODEL = ANTHROPIC_SONNET_LATEST
 /** classify-report cross-vendor fallback. */
-export const STAGE2_FALLBACK = OPENAI_PRIMARY
+export const STAGE2_FALLBACK = OPENAI_TERRA
 
 /** judge-batch primary (`project_settings.judge_model` overrides).
  *
@@ -105,7 +116,7 @@ export const STAGE2_FALLBACK = OPENAI_PRIMARY
  * lifts that constraint for every model. */
 export const JUDGE_MODEL = ANTHROPIC_SONNET_LATEST
 /** judge-batch cross-vendor fallback (`project_settings.judge_fallback_model` overrides). */
-export const JUDGE_FALLBACK = OPENAI_PRIMARY
+export const JUDGE_FALLBACK = OPENAI_TERRA
 
 /** fix-worker primary (Anthropic path). */
 export const FIX_MODEL = ANTHROPIC_SONNET_LATEST
@@ -114,7 +125,7 @@ export const FIX_FALLBACK = OPENAI_PRIMARY
 
 /** intelligence-report weekly digest. */
 export const INTELLIGENCE_MODEL = ANTHROPIC_HAIKU_LATEST
-export const INTELLIGENCE_FALLBACK = OPENAI_PRIMARY
+export const INTELLIGENCE_FALLBACK = OPENAI_MINI
 
 /** generate-synthetic report generator. */
 export const SYNTHETIC_MODEL = ANTHROPIC_SONNET_LATEST
@@ -130,13 +141,18 @@ export const PROMPT_TUNE_FALLBACK = OPENAI_PRIMARY
 
 /** release-builder: the user-facing changelog draft. */
 export const RELEASE_NOTES_MODEL = ANTHROPIC_HAIKU_LATEST
-export const RELEASE_NOTES_FALLBACK = OPENAI_PRIMARY
+export const RELEASE_NOTES_FALLBACK = OPENAI_MINI
 
 /** story-mapper: crawled pages → a draft inventory.yaml. */
 export const STORY_MAP_MODEL = ANTHROPIC_SONNET_LATEST
+/** story-mapper on the OpenAI pool (Sonnet tier → Terra). */
+export const STORY_MAP_FALLBACK = OPENAI_TERRA
 
 /** inventory-propose: SDK observations → a draft inventory.yaml. */
 export const INVENTORY_PROPOSE_MODEL = ANTHROPIC_SONNET_LATEST
+/** inventory-propose on the app's own OpenAI key: Terra is the Sonnet-tier
+ *  model. Platform calls take the route's model (kensaurus_ai_routes). */
+export const INVENTORY_PROPOSE_FALLBACK = OPENAI_TERRA
 
 /** mistake-clusterer coherence check and mistake-summarizer lessons. */
 export const MISTAKE_MODEL = ANTHROPIC_HAIKU_LATEST
@@ -145,12 +161,12 @@ export const MISTAKE_MODEL = ANTHROPIC_HAIKU_LATEST
  *  scoped chat that answers questions about the current page. Haiku 5.5: these
  *  are short, page-grounded answers, and it costs a twentieth of Sonnet 5.5. */
 export const ASSIST_MODEL = ANTHROPIC_HAIKU_LATEST
-export const ASSIST_FALLBACK = OPENAI_PRIMARY
+export const ASSIST_FALLBACK = OPENAI_MINI
 
 /** Store review (Plan 020 §5.3): pull the claims out of a store listing. On
  *  demand, per release, never per push. */
 export const STORE_REVIEW_MODEL = ANTHROPIC_HAIKU_LATEST
-export const STORE_REVIEW_FALLBACK = OPENAI_PRIMARY
+export const STORE_REVIEW_FALLBACK = OPENAI_MINI
 
 /** Codebase Atlas Q&A (`codebase-understand`). */
 export const CODEBASE_ASSIST_MODEL = ANTHROPIC_HAIKU_LATEST
@@ -199,7 +215,7 @@ export const THINKING_HEADROOM_TOKENS = 4_000
 /** nl-query: SQL planner uses Sonnet (reasoning-heavy, through
  *  `claude-messages.ts`), summariser uses Haiku (fast, cheap, AI SDK v4). */
 export const NL_QUERY_PLANNER_MODEL = ANTHROPIC_SONNET_LATEST
-export const NL_QUERY_PLANNER_FALLBACK = OPENAI_PRIMARY
+export const NL_QUERY_PLANNER_FALLBACK = OPENAI_TERRA
 export const NL_QUERY_SUMMARY_MODEL = ANTHROPIC_HAIKU
 export const NL_QUERY_SUMMARY_FALLBACK = OPENAI_MINI
 
@@ -297,5 +313,6 @@ export const ALL_ACTIVE_CHAT_MODELS: readonly string[] = [
   ANTHROPIC_OPUS,
   ANTHROPIC_OPUS_LATEST,
   OPENAI_PRIMARY,
+  OPENAI_TERRA,
   OPENAI_MINI,
 ] as const

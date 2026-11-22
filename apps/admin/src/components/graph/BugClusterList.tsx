@@ -40,13 +40,16 @@ export function BugClusterList() {
   const { data, loading } = usePageData<{ groups: ClusterGroup[] }>('/v1/admin/groups')
   const clusters = (data?.groups ?? []).filter((g) => g.report_count > 1).sort((a, b) => b.report_count - a.report_count)
 
+  // Nothing shares a cause: no card at all. The status line above already says "0 bug groups"
+  // (round 3: the empty state was said three to five times on this page).
+  if (data && clusters.length === 0) return null
   return (
     <Section title="Bugs that share a cause" id="graph-clusters" icon={<IconNetwork />}>
       {loading && !data ? (
         <p className="text-xs text-fg-muted">Reading the clusters…</p>
       ) : clusters.length === 0 ? (
         <p className="text-xs text-fg-muted" data-testid="graph-clusters-empty">
-          No two bugs share a cause yet. Mushi groups reports with the same root cause as they are diagnosed.
+          No two bugs share a cause yet. Mushi Mushi groups reports with the same root cause as they are diagnosed.
         </p>
       ) : (
         <ul className="divide-y divide-edge-subtle" data-testid="graph-clusters">

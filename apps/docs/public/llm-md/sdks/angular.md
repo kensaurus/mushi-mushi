@@ -1,19 +1,19 @@
-# @mushi-mushi/angular
+# mushi-mushi/angular
 
 Source: https://kensaur.us/mushi-mushi/docs/sdks/angular
 
 ---
-title: '@mushi-mushi/angular'
-description: API reference for @mushi-mushi/angular, the Mushi Mushi Angular SDK. provideMushi(), MushiService, MushiErrorHandler and the MUSHI_CONFIG token in Angular 17+.
+title: 'mushi-mushi/angular'
+description: API reference for mushi-mushi/angular, the Mushi Mushi Angular SDK. provideMushi(), MushiService, MushiErrorHandler and the MUSHI_CONFIG token in Angular 17+.
 ---
 
-# `@mushi-mushi/angular`
+# `mushi-mushi/angular`
 
-The Mushi Mushi Angular service and error handler over [`@mushi-mushi/web`](/sdks/web). Shared
+The Mushi Mushi Angular service and error handler over [`mushi-mushi`](/sdks/web). Shared
 wrapper notes: [Framework wrappers](/sdks/framework-wrappers).
 
 ```bash
-npm install @mushi-mushi/angular
+npm install mushi-mushi
 ```
 
 See [Quickstart → Angular](/quickstart/angular) for the full setup walkthrough.
@@ -21,7 +21,7 @@ See [Quickstart → Angular](/quickstart/angular) for the full setup walkthrough
 ## API surface
 
 ```ts
-import { provideMushi, MushiService } from '@mushi-mushi/angular'
+import { provideMushi, MushiService } from 'mushi-mushi/angular'
 ```
 
 | Export | Purpose |
@@ -37,7 +37,7 @@ import { provideMushi, MushiService } from '@mushi-mushi/angular'
 ```ts
 // main.ts
 import { bootstrapApplication } from '@angular/platform-browser'
-import { provideMushi } from '@mushi-mushi/angular'
+import { provideMushi } from 'mushi-mushi/angular'
 import { AppComponent } from './app/app.component'
 import { environment } from './environments/environment'
 
@@ -57,7 +57,7 @@ On the server (Angular SSR) `MushiService` skips initialisation.
 
   ```ts snippet-skip="1.0.2 fallback; needs the reader's environment file"
   import { ErrorHandler } from '@angular/core'
-  import { MUSHI_CONFIG, MushiErrorHandler, MushiService, type MushiConfig } from '@mushi-mushi/angular'
+  import { MUSHI_CONFIG, MushiErrorHandler, MushiService, type MushiConfig } from 'mushi-mushi/angular'
 
   const providers = [
     { provide: MUSHI_CONFIG, useValue: { projectId: environment.mushiProjectId, apiKey: environment.mushiApiKey } },
@@ -73,7 +73,7 @@ On the server (Angular SSR) `MushiService` skips initialisation.
 
 ```ts
 import { Component, inject } from '@angular/core'
-import { MushiService } from '@mushi-mushi/angular'
+import { MushiService } from 'mushi-mushi/angular'
 
 @Component({ selector: 'app-feedback-button', template: '<button (click)="reportIssue()">Report</button>' })
 export class FeedbackButtonComponent {
@@ -91,13 +91,14 @@ Call `identify()` on `MushiService` when the signed-in user changes (1.0.3 and l
 
 ```ts
 import { inject } from '@angular/core'
-import { MushiService } from '@mushi-mushi/angular'
+import { MushiService } from 'mushi-mushi/angular'
 
 const mushi = inject(MushiService)
 mushi.identify(user.id, { email: user.email, name: user.name })
 ```
 
-On 1.0.2 and earlier, `MushiService` has no `identify()`. Use the web SDK
-instance instead: add `@mushi-mushi/web` to your own dependencies (pnpm will
+On `@mushi-mushi/angular` 1.0.2 and earlier, `MushiService` has no `identify()`.
+Use the web SDK instance instead: import `Mushi` from `mushi-mushi` (on the
+scoped packages, add `@mushi-mushi/web` to your own dependencies; pnpm will
 not resolve it through the Angular package), then call
 `Mushi.getInstance()?.setUser({ id: user.id, email: user.email })`.

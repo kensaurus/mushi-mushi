@@ -187,6 +187,8 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
   const [inboxReports, setInboxReports] = useState<MushiReporterReport[]>([])
   const [inboxLoaded, setInboxLoaded] = useState(false)
   const [inboxLoading, setInboxLoading] = useState(false)
+  // The list could not be loaded: say so (with Retry), never "no reports" (2026-11-16).
+  const [inboxFailed, setInboxFailed] = useState(false)
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null)
   const selectedRef = useRef<string | null>(null)
   const [threadItems, setThreadItems] = useState<MushiReporterTimelineItem[]>([])
@@ -224,7 +226,13 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
       if (!mushi?.listMyReports) return
       if (!opts.silent) setInboxLoading(true)
       try {
-        const rows = await mushi.listMyReports()
+        const rows = mushi.loadMyReports ? await mushi.loadMyReports() : await mushi.listMyReports()
+        if (rows === null) {
+          // Keep what is on screen; the error row offers Retry.
+          setInboxFailed(true)
+          return
+        }
+        setInboxFailed(false)
         setInboxReports(rows.filter((r) => !reporterStatus(r, locale).hidden))
         setInboxLoaded(true)
       } catch {
@@ -710,10 +718,25 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
     if (inboxLoading && !inboxLoaded) {
       return <Text style={[{ color: colors.muted }, font]}>{t.flows.reports.loading}</Text>
     }
+    const failedRow = inboxFailed ? (
+      <View key="inbox-error" style={s.errorRow} accessibilityLiveRegion="polite">
+        <Text style={[{ color: colors.error, flex: 1 }, font]} accessibilityRole="alert">
+          {rc.ui.loadError}
+        </Text>
+        <TouchableOpacity
+          onPress={() => void loadInbox()}
+          accessibilityRole="button"
+          style={[s.retryBtn, { borderColor: colors.border, borderRadius: radius }]}
+        >
+          <Text style={[{ color: colors.fg, fontWeight: '600' }, font]}>{rc.ui.retry}</Text>
+        </TouchableOpacity>
+      </View>
+    ) : null
+    if (inboxFailed && inboxReports.length === 0) return failedRow
     if (inboxReports.length === 0) {
       return <Text style={[{ color: colors.muted }, font]}>{rc.ui.empty}</Text>
     }
-    return inboxReports.map((r) => {
+    return [failedRow, ...inboxReports.map((r) => {
       const view = reporterStatus(r, locale)
       const unread = (r.unread_count ?? 0) > 0
       const title = (r.title ?? r.summary ?? r.description ?? 'Report').slice(0, 80)
@@ -739,7 +762,7 @@ export const MushiBottomSheet: FC<MushiBottomSheetProps> = ({
           ) : null}
         </TouchableOpacity>
       )
-    })
+    })]
   }
 
   return (

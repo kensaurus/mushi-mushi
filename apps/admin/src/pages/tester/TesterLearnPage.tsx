@@ -74,7 +74,7 @@ const GUIDE: GuideItem[] = [
     bullets: [
       'Notice at ~$400 redeemed gift cards in a calendar year.',
       'Brief W-9 / W-8BEN form in Settings; TIN is HMAC-hashed, not stored raw.',
-      'Mushi Pro credit redemptions skip this gate.',
+      'Mushi Mushi Pro credit redemptions skip this gate.',
     ],
     cta: { label: 'KYC in Settings', to: '/tester/settings#kyc' },
   },
@@ -162,7 +162,7 @@ function LearnEnrollStrip() {
             onChange={(e) => setTermsAccepted(e.target.checked)}
             className="mt-0.5 h-3.5 w-3.5 rounded-sm border-edge accent-brand"
           />
-          <span>I agree to the Mushi Bounties tester terms</span>
+          <span>I agree to the Mushi Mushi Bounties tester terms</span>
         </label>
       </div>
       <Btn variant="primary" loading={busy} onClick={handleEnroll} disabled={!termsAccepted}>
@@ -195,7 +195,7 @@ export function TesterLearnPage() {
       <TesterPointsEconomyStrip />
 
       <nav className={`${TESTER_PANEL} p-4`} aria-label="Guide topics">
-        <p className="mb-2 text-2xs font-semibold uppercase tracking-wide text-fg-muted">Jump to</p>
+        <p className="mb-2 text-2xs font-semibold text-fg-secondary">Jump to</p>
         <div className="flex flex-wrap gap-2">
           {GUIDE.map((s) => (
             <a

@@ -38,7 +38,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ProjectAccessReadError } from '../../supabase/functions/_shared/project-access.ts'
-import { sentryHonoErrorHandler } from '../../supabase/functions/_shared/sentry.ts'
+import { sentryHonoErrorHandler, withSentry } from '../../supabase/functions/_shared/sentry.ts'
+import { dbReadFailure, TransientDbError } from '../../supabase/functions/_shared/error-codes.ts'
 
 interface MinimalContext {
   req: { path: string; method: string }
@@ -191,5 +192,79 @@ describe('sentryHonoErrorHandler — status-0 RangeError contract (Sentry MUSHI-
     expect(res.status).toBe(500)
     const body = (await res.json()) as { error: { code: string } }
     expect(body.error.code).toBe('INTERNAL')
+  })
+
+  // Sentry 7821462678: merge-queue threw the whole Cloudflare 521 page.
+  const CF_521 =
+    '<!DOCTYPE html>\n<head><title>supabase.co | 521: Web server is down</title></head>' +
+    `<body><div id="cf-wrapper">${'z'.repeat(5000)}</div></body>`
+
+  it('does not report a TransientDbError thrown by a route', async () => {
+    const err = dbReadFailure('merge-queue read failed', { message: CF_521 })
+    expect(err).toBeInstanceOf(TransientDbError)
+    const res = sentryHonoErrorHandler(err, fakeContext('/merge-queue', 'POST') as never)
+    expect(res.status).toBe(500)
+    const body = (await res.json()) as { error: { code: string } }
+    expect(body.error.code).toBe('DB_ERROR')
+    const payload = JSON.parse(String(warnSpy.mock.calls[0][0])) as Record<string, unknown>
+    expect(payload.event).toBe('db_transient_error')
+    expect(String(payload.err_message)).toContain('521: Web server is down')
+    expect(errorSpy).not.toHaveBeenCalled()
+  })
+})
+
+describe('withSentry — outage throws (Sentry 7821462678)', () => {
+  const _console = (globalThis as unknown as { console: { warn: (...args: unknown[]) => void; error: (...args: unknown[]) => void } }).console
+  let warnSpy: ReturnType<typeof vi.spyOn>
+  let errorSpy: ReturnType<typeof vi.spyOn>
+
+  beforeEach(() => {
+    // withSentry calls ensureSentry, which reads Deno.env (no DSN here, so
+    // nothing is sent).
+    ;(globalThis as { Deno?: unknown }).Deno ??= { env: { get: (_k: string) => undefined } }
+    warnSpy = vi.spyOn(_console, 'warn').mockImplementation(() => {})
+    errorSpy = vi.spyOn(_console, 'error').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    warnSpy.mockRestore()
+    errorSpy.mockRestore()
+  })
+
+  const req = () => new Request('http://localhost/merge-queue', { method: 'POST' })
+
+  it('answers 503 with a warn, not a rethrow, for a TransientDbError', async () => {
+    const page = '<!DOCTYPE html><head><title>supabase.co | 521: Web server is down</title></head><body>x</body>'
+    const handler = withSentry('merge-queue', () => {
+      throw dbReadFailure('merge-queue read failed', { message: page })
+    })
+    const res = await handler(req())
+    expect(res.status).toBe(503)
+    const body = (await res.json()) as { error: { code: string; message: string } }
+    expect(body.error.code).toBe('DB_ERROR')
+    expect(body.error.message).not.toContain('<!DOCTYPE')
+    const payload = JSON.parse(String(warnSpy.mock.calls[0][0])) as Record<string, unknown>
+    expect(payload.event).toBe('db_transient_error')
+    expect(payload.function).toBe('merge-queue')
+    expect(String(payload.err_message)).not.toContain('<!DOCTYPE')
+  })
+
+  it('still rethrows a coded query failure, a statement timeout included', async () => {
+    const handler = withSentry('merge-queue', () => {
+      throw dbReadFailure('merge-queue read failed', {
+        message: 'canceling statement due to statement timeout',
+        code: '57014',
+      })
+    })
+    await expect(handler(req())).rejects.toThrow('merge-queue read failed: canceling statement due to statement timeout')
+    expect(warnSpy).not.toHaveBeenCalled()
+  })
+
+  it('still rethrows a plain Error whose text quotes HTML', async () => {
+    const handler = withSentry('merge-queue', () => {
+      throw new Error('<!DOCTYPE html><title>502 Bad Gateway</title> from api.github.com')
+    })
+    await expect(handler(req())).rejects.toThrow('502 Bad Gateway')
+    expect(warnSpy).not.toHaveBeenCalled()
   })
 })

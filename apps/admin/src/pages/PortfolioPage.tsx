@@ -8,6 +8,12 @@
  * grid: problems open in 2+ projects ("fix once"), SDK versions, and
  * integrations most siblings have but one lacks.
  *
+ * Signal pass (2026-11-18, the CI page's visual language): the headline is a
+ * ranking (lib/appSignals), the worst three apps lead as alert cards, and an
+ * apps × signals heat grid ("Table", the default) or the cards ("Cards", the
+ * choice kept in localStorage) follow. One HighlightProvider lights an app's
+ * alert, grid row and card together (key `app:<projectId>`).
+ *
  * Data: GET /v1/admin/orgs/:orgId/portfolio → PortfolioResponse
  *       GET /v1/admin/orgs/:orgId/portfolio/findings → PortfolioFindingsResponse
  *       GET /v1/admin/orgs/:orgId/releases (ReleasesCard)
@@ -22,20 +28,25 @@
  * read" (`card.unreadable`), never $0, "Not set" or "None yet".
  */
 
-import { Link, useSearchParams } from 'react-router-dom'
-import { useMemo } from 'react'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
+import { useCallback, useMemo, useState } from 'react'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { PageLoadError } from '../components/PageLoadError'
 import { PanelErrorBoundary } from '../components/PanelErrorBoundary'
-import { Badge, Btn, Callout, Card, CopyButton, EmptyState, FreshnessPill, Loading, PageStatus, Section } from '../components/ui'
+import { Btn, Card, EmptyState, FreshnessPill, Loading, PageStatus, SegmentedControl } from '../components/ui'
+import { TabbedSubNav } from '../components/TabbedSubNav'
 import { useActiveOrgId } from '../components/OrgSwitcher'
-import { usePageData, type PageDataState } from '../lib/usePageData'
+import { usePageData } from '../lib/usePageData'
+import { apiFetch } from '../lib/supabase'
 import { useAdminMode } from '../lib/mode'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
-import type { PortfolioCard, PortfolioFindingsResponse, PortfolioReadError, PortfolioResponse } from '../lib/portfolioTypes'
-import { appUrgency, findingGroupTitle, needsALook, portfolioStatusSentence, sortPortfolioCards } from '../components/portfolio/portfolioView'
-import { setActiveProjectIdSnapshot } from '../lib/activeProject'
+import type { PortfolioCard, PortfolioFindingsResponse, PortfolioResponse } from '../lib/portfolioTypes'
+import { appProblemList, needsALook, sortPortfolioCards, splitPublicDemo, type PortfolioSort } from '../components/portfolio/portfolioView'
+import { useReadTimedOut } from '../lib/ciReadTimeout'
+import { CiNotChecked } from '../components/ci/CiNotChecked'
+import { PortfolioFindings, ReadErrorsCallout } from '../components/portfolio/PortfolioFindings'
+import { appLink, openApp } from '../lib/openApp'
 import { DigestCard } from '../components/portfolio/DigestCard'
 import { ConnectorsCard } from '../components/portfolio/ConnectorsCard'
 import { MonetizationCard } from '../components/portfolio/MonetizationCard'
@@ -51,8 +62,53 @@ import { useProjectSnapshots } from '../lib/useProjectSnapshots'
 import { faviconSourceFromProject } from '../lib/resolveProjectDomain'
 import type { ProjectFaviconSource } from '@mushi-mushi/core'
 import { ProjectGroupsBar } from '../components/portfolio/ProjectGroupsBar'
+import { ProjectFavicon } from '../components/ProjectFavicon'
 import { readActiveGroup, useProjectGroups, writeActiveGroup } from '../lib/projectGroups'
 import { PROJECT_DIRECTORY_PATH, type ProjectDirectory } from '../lib/crossTeamProject'
+import { HighlightProvider } from '../components/signal/linkedHighlight'
+import { AlertCards } from '../components/signal/AlertCards'
+import { AppSignalGrid } from '../components/portfolio/AppSignalGrid'
+import { appAlerts, lastCheckIns, rankApps, rankingSentence } from '../lib/appSignals'
+import { withoutApps } from '../lib/groupAppFindings'
+import { isPublicDemo } from '../lib/publicDemo'
+
+/** Table (the heat grid) or Cards: remembered per browser. */
+type PortfolioView = 'table' | 'cards'
+const VIEW_STORAGE_KEY = 'mushi:portfolio:view'
+
+function readView(): PortfolioView {
+  try {
+    return localStorage.getItem(VIEW_STORAGE_KEY) === 'cards' ? 'cards' : 'table'
+  } catch {
+    return 'table'
+  }
+}
+
+/**
+ * The page's sections are real tabs on `?tab=` (2026-11-18; they used to be anchor links over
+ * one endless scroll). Apps is the default and drops the param; an unknown value is Apps.
+ */
+const PORTFOLIO_TABS = [
+  { id: 'apps', label: 'Apps' },
+  { id: 'releases', label: 'Releases' },
+  { id: 'payments', label: 'Payments' },
+  // "Spend", not "Spend & accounts": all five tabs fit a 390 px phone (round 2: Digest was off-screen).
+  { id: 'spend', label: 'Spend' },
+  { id: 'digest', label: 'Digest' },
+] as const
+type PortfolioTab = (typeof PORTFOLIO_TABS)[number]['id']
+
+function resolvePortfolioTab(param: string | null): PortfolioTab {
+  return PORTFOLIO_TABS.find((t) => t.id === param)?.id ?? 'apps'
+}
+
+function writeView(view: PortfolioView): void {
+  try {
+    localStorage.setItem(VIEW_STORAGE_KEY, view)
+  } catch {
+    /* Storage off (private window, blocked): the choice lasts this visit. */
+  }
+}
 
 export function PortfolioPage() {
   const orgId = useActiveOrgId()
@@ -71,6 +127,16 @@ export function PortfolioPage() {
 
 function OrgPortfolio({ orgId }: { orgId: string }) {
   const [searchParams, setSearchParams] = useSearchParams()
+  const location = useLocation()
+  const tab = resolvePortfolioTab(searchParams.get('tab'))
+  // Links, not replace: each tab is a history entry, so back and forward move between them.
+  const tabHref = (id: PortfolioTab) => {
+    const next = new URLSearchParams(searchParams)
+    if (id === 'apps') next.delete('tab')
+    else next.set('tab', id)
+    const qs = next.toString()
+    return `${location.pathname}${qs ? `?${qs}` : ''}`
+  }
   const groups = useProjectGroups(orgId)
   const groupList = groups.data?.groups ?? []
   const requested = searchParams.get('group') ?? readActiveGroup()
@@ -96,325 +162,397 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
   // portfolio reads start at once instead of queuing behind project-groups.
   const waitForGroups = requested != null && groups.loading && !groups.data
   const page = usePageData<PortfolioResponse>(waitForGroups ? null : path)
-  const findings = usePageData<PortfolioFindingsResponse>(waitForGroups ? null : `${base}/findings${query}`)
+  // Each tab reads only its own routes, and none waits for the portfolio read
+  // (about 8 s on a big team): Spend's, Payments' and Digest's cards mount at
+  // once and start beside it (2026-11-18). Fix once belongs to the Apps tab.
+  const findings = usePageData<PortfolioFindingsResponse>(waitForGroups || tab !== 'apps' ? null : `${base}/findings${query}`)
   const { isAdvanced } = useAdminMode()
-  const cards = useMemo(() => sortPortfolioCards(page.data?.cards ?? []), [page.data])
-  const names = useMemo(() => new Map((page.data?.cards ?? []).map((c) => [c.projectId, c.name])), [page.data])
-  const status = useMemo(() => portfolioStatusSentence(cards), [cards])
+  // Refresh also looks up the app icons again (a new store icon shows now,
+  // not after the daily check). The flagged request answers the whole
+  // portfolio, so the page shows that answer: ONE read per Refresh. It used
+  // to follow it with page.reload(), a second full read (2026-11-18). The
+  // flag stays out of the cached path; the newer of the two answers shows.
+  const [refreshed, setRefreshed] = useState<{ path: string; data: PortfolioResponse; at: string } | null>(null)
+  const [refreshingIcons, setRefreshingIcons] = useState(false)
+  const refresh = () => {
+    findings.reload()
+    setRefreshingIcons(true)
+    const forPath = path
+    const groupParam = group ? `&group=${encodeURIComponent(group)}` : ''
+    void apiFetch<PortfolioResponse>(`${base}?refreshIcons=1${groupParam}`, { cache: 'no-store' })
+      .then((res) => {
+        if (res.ok && res.data) setRefreshed({ path: forPath, data: res.data, at: new Date().toISOString() })
+        // The flagged read failed: the normal read still refreshes (and shows its error).
+        else page.reload()
+      })
+      .catch(() => page.reload())
+      .finally(() => setRefreshingIcons(false))
+  }
+  const freshWins = refreshed != null && refreshed.path === path && (page.lastFetchedAt == null || refreshed.at >= page.lastFetchedAt)
+  const portfolio = freshWins ? refreshed.data : page.data
+  const fetchedAt = freshWins ? refreshed.at : page.lastFetchedAt
+  // The public demo stays out of the cards and every count ("All 10 apps need you").
+  const { apps: ownCards, demo } = useMemo(() => splitPublicDemo(portfolio?.cards ?? []), [portfolio])
+  // Keep-but-hide (2026-11-18): the demo's id from the portfolio or, earlier, from the team's
+  // project list. Every per-app list on the tabs drops it here, once: Fix once, SDK versions,
+  // Missing setups, Across your apps and the Spend table.
+  const demoIds = useMemo(
+    () => new Set([...demo.map((c) => c.projectId), ...teamApps.filter((a) => isPublicDemo({ name: a.name, slug: null })).map((a) => a.projectId)]),
+    [demo, teamApps],
+  )
+  const ownFindingsData = useMemo(() => (findings.data ? withoutApps(findings.data, demoIds) : null), [findings.data, demoIds])
+  const ownFindings = { ...findings, data: ownFindingsData }
+  const cards = useMemo(() => sortPortfolioCards(ownCards), [ownCards])
+  // Names from the team's project list until the portfolio read lands, so the other tabs can draw first.
+  const names = useMemo(
+    () => new Map([...teamApps.map((a): [string, string] => [a.projectId, a.name]), ...(portfolio?.cards ?? []).map((c): [string, string] => [c.projectId, c.name])]),
+    [teamApps, portfolio],
+  )
   const openBugs = useMemo(() => cards.reduce((n, c) => n + c.openReports, 0), [cards])
-  const firstNext = status.first ? appUrgency(status.first).next : null
-  // Apps that need a look get a full card; the rest collapse to one row each.
-  const attention = useMemo(() => cards.filter(needsALook), [cards])
-  const healthy = useMemo(() => cards.filter((c) => !needsALook(c)), [cards])
-  const appList = useMemo(() => cards.map((c) => ({ projectId: c.projectId, name: c.name })), [cards])
-  // App icons: the team's project list knows each app's SDK origin and repo.
+  // App icons and SDK check-ins: the team's project list knows each app's SDK origin, repo and last call.
   const setup = useSetupStatus()
   const snapshots = useProjectSnapshots()
-  const faviconFor = (card: PortfolioCard): ProjectFaviconSource => {
-    const known = setup.data?.projects.find((p) => p.project_id === card.projectId)
-    const base = known
-      ? faviconSourceFromProject(known, snapshots.byId.get(card.projectId))
-      : { project_id: card.projectId, project_name: card.name, project_slug: card.slug ?? '' }
-    // The store icon from the portfolio read wins; the favicon and initials follow.
-    return card.iconUrl ? { ...base, icon_url: card.iconUrl } : base
+  const checkIns = useMemo(() => lastCheckIns(setup.data?.projects), [setup.data])
+  // Ages are measured from when the server answered (also the CI column's "today"), so render stays pure.
+  const now = portfolio ? Date.parse(portfolio.generatedAt) || 0 : 0
+  // The ranking behind the headline, the alert cards and the heat grid (lib/appSignals).
+  const ranked = useMemo(() => rankApps(cards, checkIns, now), [cards, checkIns, now])
+  const status = useMemo(() => rankingSentence(ranked), [ranked])
+  const firstReason = status.first?.reasons[0] ?? null
+  const alerts = useMemo(() => appAlerts(ranked, openApp), [ranked])
+  const [view, setViewState] = useState<PortfolioView>(readView)
+  const setView = (next: PortfolioView) => {
+    setViewState(next)
+    writeView(next)
   }
+  // Apps that need a look get a full card; the rest collapse to one row each.
+  // The status sentence always names the worst app; the grid and cards follow the toggle.
+  const sortBy: PortfolioSort = searchParams.get('sort') === 'name' ? 'name' : 'worst'
+  const setSortBy = (next: PortfolioSort) => {
+    const params = new URLSearchParams(searchParams)
+    if (next === 'name') params.set('sort', 'name')
+    else params.delete('sort')
+    setSearchParams(params, { replace: true })
+  }
+  const rankedShown = useMemo(() => (sortBy === 'worst' ? ranked : rankApps(cards, checkIns, now, 'name')), [sortBy, ranked, cards, checkIns, now])
+  const shown = useMemo(() => rankedShown.map((r) => r.card), [rankedShown])
+  const attention = useMemo(() => shown.filter(needsALook), [shown])
+  const healthy = useMemo(() => shown.filter((c) => !needsALook(c)), [shown])
+  // Every app the team can see; the per-app lists below use ownAppList (the demo kept but hidden).
+  // The team's project list stands in until the portfolio read lands.
+  const appList = useMemo(() => (portfolio ? portfolio.cards.map((c) => ({ projectId: c.projectId, name: c.name })) : teamApps), [portfolio, teamApps])
+  // The bill import picks among the team's own apps; the demo has no bills.
+  const ownAppList = useMemo(() => appList.filter((a) => !demoIds.has(a.projectId)), [appList, demoIds])
+  // Only a finished read that holds no app hides the tabs; while it runs, every tab but Apps draws.
+  const knownEmpty = portfolio != null && cards.length === 0
+  const faviconFor = useCallback(
+    (card: PortfolioCard): ProjectFaviconSource => {
+      const known = setup.data?.projects.find((p) => p.project_id === card.projectId)
+      const base = known
+        ? faviconSourceFromProject(known, snapshots.byId.get(card.projectId))
+        : { project_id: card.projectId, project_name: card.name, project_slug: card.slug ?? '' }
+      // The store icon from the portfolio read wins; the favicon and initials follow.
+      return card.iconUrl ? { ...base, icon_url: card.iconUrl } : base
+    },
+    [setup.data, snapshots.byId],
+  )
+  // An app's icon by id, for the grouped rows and matrices on every tab.
+  const cardById = useMemo(() => new Map((portfolio?.cards ?? []).map((c) => [c.projectId, c])), [portfolio])
+  const iconFor = useCallback(
+    (projectId: string): ProjectFaviconSource => {
+      const c = cardById.get(projectId)
+      return c ? faviconFor(c) : { project_id: projectId, project_name: names.get(projectId) ?? projectId.slice(0, 8), project_slug: '' }
+    },
+    [cardById, faviconFor, names],
+  )
+  const appOrder = useMemo(() => rankedShown.map((r) => r.card.projectId), [rankedShown])
+  // The "Fix once" count is the length of the one problem list the Apps tab draws, never the
+  // server's group count (9 groups beside 8 rows once two merged, round 2 2026-11-18).
+  const problemCount = useMemo(() => (ownFindingsData ? appProblemList(ownFindingsData, (id) => names.get(id) ?? id).length : null), [ownFindingsData, names])
+  // Never an endless "Reading each app's signals…": after 10 s it says "not checked" with Retry.
+  const appsWait = useReadTimedOut(tab === 'apps' && !portfolio && page.loading)
 
   return (
-    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-portfolio">
-      <PageHeaderBar
-        title="Apps"
-        description="All your apps in one place: what is broken, out of date or behind, and what to fix once for all of them."
-        helpTitle="About apps"
-        helpWhatIsIt="Each card is one app at a glance: what needs attention and why, its open reports, its Mushi SDK version and its risk checks. Below the cards are problems that show up in two or more apps, so you can fix them once."
-        helpHowToUse="Start with the first card: it lists what needs attention and what to do. Not checked yet means Mushi has not looked; it is never a pass. Copy a fix-once prompt into your editor to fix the same problem in every repo."
-        helpFlowPath="/portfolio"
-      >
-        <FreshnessPill at={page.lastFetchedAt} isValidating={page.isValidating} />
-        <Btn size="sm" variant="ghost" onClick={() => { page.reload(); findings.reload() }} loading={page.isValidating}>
-          Refresh
-        </Btn>
-      </PageHeaderBar>
+    <HighlightProvider>
+      <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-portfolio">
+        <PageHeaderBar
+          title="Apps"
+          description="All your apps in one place: what is broken, out of date or behind, and what to fix once for all of them."
+          helpTitle="About apps"
+          helpWhatIsIt="The worst apps lead as red and amber cards, each with one thing to do. Below, one row per app: open bugs, risks, SDK, release age, CI failures today and the SDK's last check-in, darker where it is worse. Cards shows the same apps as cards. Under them, Fix once is a problems × apps grid: a dot where a problem is open, one button that copies the fix for all of them. Releases, Payments, Spend and Digest are tabs. Accounts and resilience (on Spend) lists every account your apps depend on, who owns it, and who else can get in if that person cannot. It holds only what you declare: Mushi Mushi cannot see a provider's own settings."
+          helpHowToUse="Start with the first alert card. Point at a row, card or alert to light the same app everywhere; click a row to pin it (Esc clears). A hatched cell means no data, never a pass. Copy a fix-once prompt into your editor to fix the same problem in every repo."
+          helpFlowPath="/portfolio"
+        >
+          <FreshnessPill at={fetchedAt} isValidating={page.isValidating} />
+          <Btn size="sm" variant="ghost" onClick={refresh} loading={page.isValidating || refreshingIcons} title="Read every app again, and look up their store icons again">
+            Refresh
+          </Btn>
+        </PageHeaderBar>
 
-      <PagePosture
-        slots={[
-          {
-            priority: POSTURE_PRIORITY.heroOrSnapshot,
-            show: Boolean(page.data && page.data.cards.length > 0),
-            children: page.data ? (
-              <PageStatus
-                sentence={status.sentence}
-                tone={status.tone}
-                ariaLabel="Apps status"
-                metrics={[
-                  { label: 'Need you', value: cards.filter(needsALook).length, hint: 'Apps that are broken, have open bugs, or have a part to fix. SDK updates and Mushi setup chores do not count.' },
-                  { label: 'Open bugs', value: openBugs, hint: 'Open bug reports across these apps.' },
-                  { label: 'Fix once', value: page.data.repeatedGroups, hint: 'Problems open in two or more apps, fixed with one prompt.' },
-                ]}
-                action={
-                  status.first && firstNext ? (
-                    <Btn size="sm" variant="primary" to={firstNext.to} onClick={() => setActiveProjectIdSnapshot(status.first!.projectId)}>
-                      Fix {status.first.name}
-                    </Btn>
-                  ) : undefined
-                }
-              />
-            ) : null,
-          },
-        ]}
-      />
-
-      {groups.data && (
-        <ProjectGroupsBar
-          orgId={orgId}
-          groups={groupList}
-          apps={teamApps}
-          active={group}
-          onSelect={selectGroup}
-          onChanged={() => {
-            groups.reload()
-            page.reload()
-            findings.reload()
-          }}
+        <PagePosture
+          slots={[
+            {
+              priority: POSTURE_PRIORITY.heroOrSnapshot,
+              show: cards.length > 0,
+              children: portfolio ? (
+                <PageStatus
+                  sentence={status.top.length > 0 ? <WorstFirstChips status={status} faviconFor={faviconFor} /> : status.sentence}
+                  tone={status.tone}
+                  ariaLabel="Apps status"
+                  metrics={[
+                    { label: 'Need you', value: cards.filter(needsALook).length, hint: 'Apps that are broken, have open bugs, or have a part to fix. SDK updates and Mushi Mushi setup chores do not count.' },
+                    { label: 'Open bugs', value: openBugs, hint: 'Open bug reports across these apps.' },
+                    { label: 'Fix once', value: problemCount ?? portfolio.repeatedGroups, hint: 'Problems shared by your apps, each fixed with one action: the rows of Fix once on the Apps tab.' },
+                  ]}
+                  action={
+                    status.first && firstReason ? (
+                      <Btn size="sm" variant="primary" to={appLink(firstReason.to, status.first.card.projectId)} onClick={() => openApp(status.first!.card.projectId)}>
+                        Fix {status.first.card.name}
+                      </Btn>
+                    ) : undefined
+                  }
+                />
+              ) : null,
+            },
+          ]}
         />
-      )}
 
-      {/* The apps are known before their details: list them at once instead of
-          a bare spinner, which sat for 5 s on a first load (2026-10-28). */}
-      {page.loading && !page.data ? (
-        teamApps.length > 0 ? (
-          <Card className="px-3 py-1">
-            <ul className="divide-y divide-edge-subtle text-xs" aria-busy="true" data-testid="portfolio-loading-apps">
-              {teamApps.map((app) => (
-                <li key={app.projectId} className="flex items-center justify-between gap-3 py-2">
-                  <span className="font-medium text-fg">{app.name}</span>
-                  <span className="text-2xs text-fg-faint">Checking…</span>
-                </li>
-              ))}
-            </ul>
+        {groups.data && (
+          <ProjectGroupsBar
+            orgId={orgId}
+            groups={groupList}
+            apps={teamApps}
+            active={group}
+            onSelect={selectGroup}
+            onChanged={() => {
+              groups.reload()
+              page.reload()
+              findings.reload()
+            }}
+          />
+        )}
+
+        {page.error && (
+          <PageLoadError error={page.error} code={page.errorCode} resource="portfolio" endpoint={page.errorEndpoint} requestId={page.requestId} onRetry={page.reload} />
+        )}
+        {portfolio && portfolio.readErrors.length > 0 && <ReadErrorsCallout errors={portfolio.readErrors} />}
+        {knownEmpty && (
+          <Card className="px-4 py-8 text-center text-sm text-fg-faint">
+            <p className="font-medium text-fg-muted">{group ? 'No apps in this group yet' : 'No apps in this team yet'}</p>
+            <p className="mt-1 text-xs">
+              {group ? (
+                'Open Manage groups above to choose its apps.'
+              ) : (
+                <Link to="/onboarding" className="text-brand hover:underline">Connect your first app →</Link>
+              )}
+            </p>
           </Card>
-        ) : (
-          <Loading text="Checking each app…" />
-        )
-      ) : null}
-      {page.error && (
-        <PageLoadError error={page.error} code={page.errorCode} resource="portfolio" endpoint={page.errorEndpoint} requestId={page.requestId} onRetry={page.reload} />
-      )}
-      {page.data && page.data.readErrors.length > 0 && <ReadErrorsCallout errors={page.data.readErrors} />}
-      {page.data && page.data.cards.length === 0 && (
-        <Card className="px-4 py-8 text-center text-sm text-fg-faint">
-          <p className="font-medium text-fg-muted">{group ? 'No apps in this group yet' : 'No apps in this team yet'}</p>
-          <p className="mt-1 text-xs">
-            {group ? (
-              'Open Manage groups above to choose its apps.'
-            ) : (
-              <Link to="/onboarding" className="text-brand hover:underline">Connect your first app →</Link>
+        )}
+        {knownEmpty && demo.length > 0 && <PublicDemoLine demo={demo} />}
+        {!knownEmpty && (
+          <>
+            <TabbedSubNav
+              ariaLabel="Apps sections"
+              tabs={PORTFOLIO_TABS.map((t) => ({ to: tabHref(t.id), label: t.label, match: () => tab === t.id }))}
+            />
+            {tab === 'apps' && !portfolio && page.loading && appsWait.timedOut && (
+              <CiNotChecked
+                what="Apps"
+                testId="portfolio-apps-not-checked"
+                onRetry={() => {
+                  appsWait.restart()
+                  page.reload()
+                }}
+              />
             )}
-          </p>
-        </Card>
-      )}
-      {cards.length > 0 && page.data && (
-        <>
-          <PortfolioSectionNav />
-          <section id="portfolio-apps" aria-labelledby="portfolio-apps-title" className="scroll-mt-20 space-y-3">
-            <h2 id="portfolio-apps-title" className="text-sm font-semibold text-fg">Apps</h2>
-            <PanelErrorBoundary label="Portfolio cards">
-              {attention.length > 0 && (
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                  {attention.map((card) => (
-                    <PortfolioCardTile key={card.projectId} card={card} favicon={faviconFor(card)} showSpend={isAdvanced} />
-                  ))}
+            {tab === 'apps' && !portfolio && page.loading && !appsWait.timedOut && (
+              // The apps are known before their details: list them at once instead of
+              // a bare spinner, which sat for 5 s on a first load (2026-10-28).
+              <section aria-label="Apps" data-testid="portfolio-tab-apps">
+                {teamApps.length > 0 ? (
+                  <Card className="px-3 py-1">
+                    {/* One status line, then each app with placeholder cells shaped like the signal
+                        columns ("Checking…" on every row read as ten problems, fresh-eyes 2026-11-18). */}
+                    <p className="py-1.5 text-2xs text-fg-muted" role="status">Reading each app's signals…</p>
+                    <ul className="divide-y divide-edge-subtle text-xs" aria-busy="true" data-testid="portfolio-loading-apps">
+                      {teamApps.map((app) => (
+                        <li key={app.projectId} className="flex items-center justify-between gap-3 py-2">
+                          <span className="min-w-0 truncate font-medium text-fg">{app.name}</span>
+                          <span className="flex shrink-0 gap-1.5" aria-hidden="true">
+                            {[0, 1, 2, 3, 4, 5].map((i) => (
+                              <span key={i} className="h-3 w-10 rounded-sm bg-surface-overlay motion-safe:animate-pulse" />
+                            ))}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </Card>
+                ) : (
+                  <Loading text="Checking each app…" />
+                )}
+              </section>
+            )}
+            {tab === 'apps' && portfolio && (
+              <section id="portfolio-apps" aria-label="Apps" className="space-y-3" data-testid="portfolio-tab-apps">
+                {/* The worst apps lead the Apps tab, not the page: on the other tabs, and on a
+                    phone, the tabs sit right under the status strip (round 2: ~580 px of chrome
+                    stood before the tabs at 390 px). */}
+                {cards.length > 0 && (
+                  <AlertCards
+                    alerts={alerts}
+                    emptyText="No app needs you right now."
+                    label="Apps that need you"
+                    testIdPrefix="portfolio"
+                    // One card on a phone, so the grid below is in view (fresh-eyes 2026-11-18).
+                    narrowShown={1}
+                    keyLabel={(k) => names.get(k.replace(/^app:/, '')) ?? k}
+                  />
+                )}
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <SegmentedControl
+                    value={view}
+                    onChange={setView}
+                    size="sm"
+                    ariaLabel="Show the apps as"
+                    options={[
+                      { id: 'table', label: 'Table' },
+                      { id: 'cards', label: 'Cards' },
+                    ]}
+                  />
+                  <SegmentedControl
+                    value={sortBy}
+                    onChange={setSortBy}
+                    size="sm"
+                    ariaLabel="Order the apps"
+                    options={[
+                      { id: 'worst', label: 'Worst first' },
+                      { id: 'name', label: 'A to Z' },
+                    ]}
+                  />
                 </div>
-              )}
-              {healthy.length > 0 && (
-                <Card className="p-0">
-                  <p className="border-b border-edge px-3 py-2 text-2xs font-medium uppercase tracking-wide text-fg-muted">
-                    Nothing urgent ({healthy.length})
-                  </p>
-                  <ul className="divide-y divide-edge">
-                    {healthy.map((card) => (
-                      <PortfolioCompactRow key={card.projectId} card={card} favicon={faviconFor(card)} />
-                    ))}
-                  </ul>
-                </Card>
-              )}
-            </PanelErrorBoundary>
-            <PanelErrorBoundary label="Fix once">
-              <FindingsSections findings={findings} names={names} />
-            </PanelErrorBoundary>
-          </section>
+                <PanelErrorBoundary label="Portfolio cards">
+                  {view === 'table' && (
+                    <Card className="px-2.5 py-2">
+                      <AppSignalGrid rows={rankedShown} now={now} />
+                    </Card>
+                  )}
+                  {view === 'cards' && attention.length > 0 && (
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                      {attention.map((card) => (
+                        <PortfolioCardTile key={card.projectId} card={card} favicon={faviconFor(card)} showSpend={isAdvanced} />
+                      ))}
+                    </div>
+                  )}
+                  {view === 'cards' && healthy.length > 0 && (
+                    <Card className="p-0">
+                      <p className="border-b border-edge px-3 py-2 text-2xs font-semibold text-fg-secondary">
+                        Nothing urgent ({healthy.length})
+                      </p>
+                      <ul className="divide-y divide-edge">
+                        {healthy.map((card) => (
+                          <PortfolioCompactRow key={card.projectId} card={card} favicon={faviconFor(card)} />
+                        ))}
+                      </ul>
+                    </Card>
+                  )}
+                </PanelErrorBoundary>
+                <PanelErrorBoundary label="Fix once">
+                  <PortfolioFindings findings={ownFindings} iconFor={iconFor} appOrder={appOrder} />
+                </PanelErrorBoundary>
+              </section>
+            )}
 
-          <section id="portfolio-releases" aria-labelledby="portfolio-releases-title" className="scroll-mt-20 space-y-3">
-            <h2 id="portfolio-releases-title" className="text-sm font-semibold text-fg">Releases</h2>
-            <PanelErrorBoundary label="Releases">
-              <ReleasesCard orgId={orgId} />
-            </PanelErrorBoundary>
-            <PanelErrorBoundary label="Funnel across apps">
-              <FunnelCard orgId={orgId} />
-            </PanelErrorBoundary>
-            <PanelErrorBoundary label="CI runners">
-              <CiRunnersCard />
-            </PanelErrorBoundary>
-          </section>
+            {tab === 'releases' && (
+              <section id="portfolio-releases" aria-label="Releases" className="space-y-3" data-testid="portfolio-tab-releases">
+                <PanelErrorBoundary label="Releases">
+                  <ReleasesCard orgId={orgId} />
+                </PanelErrorBoundary>
+                <PanelErrorBoundary label="Funnel across apps">
+                  <FunnelCard orgId={orgId} />
+                </PanelErrorBoundary>
+                <PanelErrorBoundary label="CI runners">
+                  <CiRunnersCard />
+                </PanelErrorBoundary>
+              </section>
+            )}
 
-          <section id="portfolio-payments" aria-labelledby="portfolio-payments-title" className="scroll-mt-20 space-y-3">
-            <h2 id="portfolio-payments-title" className="text-sm font-semibold text-fg">Payments</h2>
-            <PanelErrorBoundary label="Payments across apps">
-              <MonetizationCard orgId={orgId} />
-            </PanelErrorBoundary>
-          </section>
+            {tab === 'payments' && (
+              <section id="portfolio-payments" aria-label="Payments" className="space-y-3" data-testid="portfolio-tab-payments">
+                <PanelErrorBoundary label="Payments across apps">
+                  <MonetizationCard orgId={orgId} iconFor={iconFor} />
+                </PanelErrorBoundary>
+              </section>
+            )}
 
-          <section id="portfolio-spend" aria-labelledby="portfolio-spend-title" className="scroll-mt-20 space-y-3">
-            <h2 id="portfolio-spend-title" className="text-sm font-semibold text-fg">Spend & accounts</h2>
-            <PanelErrorBoundary label="Spend per app">
-              <SpendLedgerCard orgId={orgId} projects={appList} />
-            </PanelErrorBoundary>
-            <PanelErrorBoundary label="Accounts and resilience">
-              <AccountsRegisterCard orgId={orgId} />
-            </PanelErrorBoundary>
-            <PanelErrorBoundary label="Shared resources">
-              <SharedResourcesCard orgId={orgId} names={names} />
-            </PanelErrorBoundary>
-            <PanelErrorBoundary label="Connected sources">
-              <ConnectorsCard orgId={orgId} projects={appList} />
-            </PanelErrorBoundary>
-          </section>
+            {tab === 'spend' && (
+              <section id="portfolio-spend" aria-label="Spend and accounts" className="space-y-3" data-testid="portfolio-tab-spend">
+                <PanelErrorBoundary label="Spend per app">
+                  <SpendLedgerCard orgId={orgId} projects={ownAppList} iconFor={iconFor} demoIds={demoIds} />
+                </PanelErrorBoundary>
+                <PanelErrorBoundary label="Accounts and resilience">
+                  <AccountsRegisterCard orgId={orgId} />
+                </PanelErrorBoundary>
+                <PanelErrorBoundary label="Shared resources">
+                  <SharedResourcesCard orgId={orgId} iconFor={iconFor} />
+                </PanelErrorBoundary>
+                <div id="portfolio-connectors" className="scroll-mt-20">
+                  <PanelErrorBoundary label="Connected sources">
+                    <ConnectorsCard orgId={orgId} projects={ownAppList} iconFor={iconFor} hiddenIds={demoIds} />
+                  </PanelErrorBoundary>
+                </div>
+              </section>
+            )}
 
-          <section id="portfolio-digest" aria-labelledby="portfolio-digest-title" className="scroll-mt-20 space-y-3">
-            <h2 id="portfolio-digest-title" className="text-sm font-semibold text-fg">Digest</h2>
-            <PanelErrorBoundary label="Daily digest">
-              <DigestCard orgId={orgId} projects={appList} />
-            </PanelErrorBoundary>
-          </section>
-        </>
-      )}
-    </div>
+            {tab === 'digest' && (
+              <section id="portfolio-digest" aria-label="Digest" className="space-y-3" data-testid="portfolio-tab-digest">
+                <PanelErrorBoundary label="Daily digest">
+                  <DigestCard orgId={orgId} projects={ownAppList} />
+                </PanelErrorBoundary>
+              </section>
+            )}
+          </>
+        )}
+      </div>
+    </HighlightProvider>
   )
 }
 
-/** In-page sub-nav: the page is five sections long, so jump instead of scrolling. */
-const PORTFOLIO_SECTIONS: ReadonlyArray<{ id: string; label: string }> = [
-  { id: 'portfolio-apps', label: 'Apps' },
-  { id: 'portfolio-releases', label: 'Releases' },
-  { id: 'portfolio-payments', label: 'Payments' },
-  { id: 'portfolio-spend', label: 'Spend & accounts' },
-  { id: 'portfolio-digest', label: 'Digest' },
-]
-
-function PortfolioSectionNav() {
+/**
+ * The headline as chips, not prose (2026-11-18): each of the worst apps as its icon and name,
+ * then "+N more". No bug count on the chip (round 2: 453 stood on the chip, the alert card and
+ * the grid); the alert cards and the grid carry the numbers. The sentence stays for screen readers; the chips
+ * are hidden from them, so nothing is read twice.
+ */
+function WorstFirstChips({ status, faviconFor }: { status: ReturnType<typeof rankingSentence>; faviconFor: (card: PortfolioCard) => ProjectFaviconSource }) {
   return (
-    <nav aria-label="On this page" className="sticky top-0 z-10 -mx-1 flex flex-wrap gap-x-4 gap-y-1 border-b border-edge bg-surface-root/95 px-1 py-2 text-xs backdrop-blur">
-      {PORTFOLIO_SECTIONS.map((s) => (
-        <a key={s.id} href={`#${s.id}`} className="text-fg-muted hover:text-fg hover:underline">
-          {s.label}
-        </a>
-      ))}
-    </nav>
+    <span data-testid="portfolio-worst-first">
+      <span className="sr-only">{status.sentence}</span>
+      <span aria-hidden="true" className="inline-flex flex-wrap items-center gap-1">
+        <span className="mr-0.5 text-2xs font-semibold text-fg-secondary">Worst first</span>
+        {status.top.map((r) => {
+          return (
+            <span
+              key={r.card.projectId}
+              className="inline-flex max-w-48 items-center gap-1 rounded-sm border border-edge bg-surface-root px-1 py-0.5 text-xs"
+              title={r.reasons.map((x) => x.short).join(' · ')}
+              data-testid={`worst-chip-${r.card.projectId}`}
+            >
+              <ProjectFavicon {...faviconFor(r.card)} size={12} />
+              <span className="truncate font-semibold text-fg">{r.card.name}</span>
+            </span>
+          )
+        })}
+        {status.more > 0 && <span className="font-mono text-2xs font-bold text-fg-secondary tabular-nums">+{status.more} more</span>}
+      </span>
+    </span>
   )
 }
 
-function FindingsSections({ findings, names }: { findings: PageDataState<PortfolioFindingsResponse>; names: Map<string, string> }) {
-  if (findings.loading && !findings.data) return <Loading text="Looking for problems shared across apps…" />
-  if (findings.error) {
-    return <PageLoadError error={findings.error} code={findings.errorCode} resource="shared problems" endpoint={findings.errorEndpoint} requestId={findings.requestId} onRetry={findings.reload} />
-  }
-  const data = findings.data
-  if (!data) return null
-  const name = (id: string) => names.get(id) ?? id.slice(0, 8)
-  const behind = data.sdkSkew.filter((e) => e.status !== 'current')
-  const failed = (part: PortfolioReadError['part']) => data.readErrors.find((e) => e.part === part && e.kind === 'failed')
-  const sdkFailed = failed('sdk')
-  const holesFailed = failed('integrations')
+/** The public demo on an otherwise empty page: one muted line, not a card that "needs you". */
+function PublicDemoLine({ demo }: { demo: readonly PortfolioCard[] }) {
   return (
-    <div className="flex flex-col gap-4">
-      {data.readErrors.length > 0 && <ReadErrorsCallout errors={data.readErrors} />}
-      <Section title="Fix once">
-        {data.groups.length === 0 ? (
-          <p className="text-sm text-fg-muted">No problem is open in two or more apps right now.</p>
-        ) : (
-          <ul className="flex flex-col gap-2">
-            {data.groups.map((g) => (
-              <li key={g.ruleId} className="flex flex-col gap-2 rounded-md border border-edge-subtle p-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0 space-y-0.5">
-                  <p className="text-sm font-medium text-fg" title={g.ruleId}>
-                    {findingGroupTitle(g)}
-                    <Badge tone={g.severity === 'error' ? 'dangerSubtle' : 'warnSubtle'} className="ml-2">
-                      {g.severity === 'error' ? 'Serious' : 'Look at'} · {g.projectIds.length} apps
-                    </Badge>
-                  </p>
-                  {g.title && g.sampleMessage && <p className="text-xs text-fg-secondary">{g.sampleMessage}</p>}
-                  <p className="text-xs text-fg-muted">
-                    {g.gateLabel ? `${g.gateLabel} · ` : ''}
-                    {g.projectIds.map(name).join(', ')}
-                  </p>
-                </div>
-                <CopyButton value={g.suggestedFix} label="Copy fix prompt" />
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-      {data.crossProject.length > 0 && (
-        <Section title="Across your apps">
-          <ul className="flex flex-col gap-2">
-            {data.crossProject.map((f) => (
-              <li key={f.id} className="flex flex-col gap-1 rounded-md border border-edge-subtle p-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <p className="text-sm text-fg">{f.message}</p>
-                  <p className="truncate text-xs text-fg-muted">{f.projectIds.map(name).join(', ')}</p>
-                </div>
-                {f.suggestedFix && <CopyButton value={`${f.message}\n\nFix: ${f.suggestedFix}`} label="Copy fix prompt" />}
-              </li>
-            ))}
-          </ul>
-        </Section>
-      )}
-      <Section title="Mushi SDK versions">
-        {sdkFailed ? (
-          <p className="text-sm text-danger" role="status">{sdkFailed.message}</p>
-        ) : behind.length === 0 ? (
-          <p className="text-sm text-fg-muted">Every app that reported is on the latest Mushi SDK.</p>
-        ) : (
-          <ul className="flex flex-col gap-1 text-sm">
-            {behind.map((e) => (
-              <li key={`${e.projectId}:${e.package ?? 'none'}`} className="flex flex-wrap gap-2">
-                <span className="font-medium text-fg">{name(e.projectId)}</span>
-                {e.package && <code className="font-mono text-xs text-fg-muted">{e.package}</code>}
-                <span className="text-fg-muted">{e.reason}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-      <Section title="Missing setups">
-        {holesFailed ? (
-          <p className="text-sm text-danger" role="status">{holesFailed.message}</p>
-        ) : data.holes.length === 0 ? (
-          <p className="text-sm text-fg-muted">No app is missing something most of your other apps have.</p>
-        ) : (
-          <ul className="flex flex-col gap-1 text-sm">
-            {data.holes.map((h) => (
-              <li key={`${h.projectId}:${h.integration}`}>
-                <span className="font-medium text-fg">{name(h.projectId)}</span>{' '}
-                <span className="text-fg-muted">{h.reason}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-    </div>
-  )
-}
-
-/** Reads the server could not finish: their columns are unknown, not empty or zero. */
-function ReadErrorsCallout({ errors }: { errors: PortfolioReadError[] }) {
-  return (
-    <Callout tone="warn" label="Some of this could not be read">
-      <ul className="flex list-disc flex-col gap-0.5 pl-4 text-xs text-fg-secondary" role="status">
-        {errors.map((e) => (
-          <li key={`${e.part}:${e.kind}`}>{e.message}</li>
-        ))}
-      </ul>
-      <p className="mt-1 text-xs text-fg-muted">Cells that depend on these read "Could not read". Refresh in a minute.</p>
-    </Callout>
+    <p className="px-1 text-2xs text-fg-muted" data-testid="portfolio-public-demo">
+      {demo.length === 1 ? "Mushi Mushi's public demo" : `Mushi Mushi's public demos (${demo.length})`} (sample data) · powers the docs try-it page
+    </p>
   )
 }

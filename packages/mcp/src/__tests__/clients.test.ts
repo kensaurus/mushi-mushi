@@ -36,8 +36,21 @@ const ORG_INPUT = {
 }
 
 describe('MCP_CLIENTS registry', () => {
-  it('exports exactly 9 clients', () => {
-    expect(MCP_CLIENTS).toHaveLength(9)
+  it('exports exactly 10 clients', () => {
+    expect(MCP_CLIENTS).toHaveLength(10)
+  })
+
+  it('Lovable is keyless: the hosted OAuth URL and steps, no key anywhere', () => {
+    const lovable = getMcpClient('lovable')
+    expect(lovable.keyless).toBe(true)
+    const result = lovable.build(SAMPLE_INPUT)
+    expect(result.kind).toBe('remote-url')
+    if (result.kind === 'remote-url') {
+      expect(result.url).toMatch(/^https:\/\/kensaur\.us\/mushi-mushi\/hosted-mcp\//)
+      expect(result.headerSnippet).toBe('')
+      expect(result.steps?.length).toBeGreaterThan(2)
+      expect(JSON.stringify(result)).not.toContain(SAMPLE_INPUT.apiKey)
+    }
   })
 
   it('has no duplicate ids', () => {
@@ -208,6 +221,20 @@ describe('Claude Code builder', () => {
     const result = cc.build(SAMPLE_INPUT)
     if (result.kind !== 'command') throw new Error('expected command')
     expect(result.text).toContain(SAMPLE_INPUT.apiKey)
+  })
+
+  it('leads with the keyless OAuth install; the key command is the CI variant', () => {
+    const cc = getMcpClient('claude-code')
+    expect(cc.oauthDefault).toBe(true)
+    expect(MCP_OAUTH_CLIENT_IDS).toContain(cc.id)
+    const oauth = buildOAuthInstall('claude-code', { mcpOAuthUrl: 'https://kensaur.us/mushi-mushi/hosted-mcp/' })
+    if (oauth.kind !== 'command') throw new Error('expected command')
+    expect(oauth.text).toBe('claude mcp add --transport http mushi https://kensaur.us/mushi-mushi/hosted-mcp/')
+    expect(oauth.text).not.toMatch(/--header|Authorization|Bearer/)
+    // No other client claims it without a URL-only install to back it.
+    for (const c of MCP_CLIENTS) {
+      if (c.oauthDefault) expect(MCP_OAUTH_CLIENT_IDS as readonly string[]).toContain(c.id)
+    }
   })
 })
 

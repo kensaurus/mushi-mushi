@@ -242,8 +242,8 @@ export function LinearIntegrationCard({
           <ul className="text-fg-secondary leading-relaxed space-y-0.5 ml-2">
             <li>✓ Auto-create issues for triaged bugs</li>
             <li>✓ Two-way status sync (issue resolved → report resolved)</li>
-            <li>✓ Mushi available as a Linear AI Agent</li>
-            <li>✓ Linear tools available in Mushi MCP server</li>
+            <li>✓ Mushi Mushi available as a Linear AI Agent</li>
+            <li>✓ Linear tools available in Mushi Mushi MCP server</li>
           </ul>
         </div>
       )}
@@ -306,7 +306,7 @@ export function LinearIntegrationCard({
       {confirmDisconnect && (
         <ConfirmDialog
           title="Disconnect Linear?"
-          body="Mushi forgets this project's Linear credentials. New reports stop creating Linear issues and status sync stops until you reconnect. Issues already in Linear stay there."
+          body="Mushi Mushi forgets this project's Linear credentials. New reports stop creating Linear issues and status sync stops until you reconnect. Issues already in Linear stay there."
           confirmLabel="Disconnect"
           cancelLabel="Keep connected"
           tone="danger"

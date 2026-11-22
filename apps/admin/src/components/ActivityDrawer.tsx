@@ -482,7 +482,7 @@ export function ActivityDrawer({ open, onClose, onUnreadChange }: Props) {
         {!loading && !error && events.length === 0 && (
           <EmptyState
             title="No recent activity"
-            description="Connected and listening. The feed lights up the moment Mushi dispatches a fix, opens a PR, or resolves CI."
+            description="Connected and listening. The feed lights up the moment Mushi Mushi dispatches a fix, opens a PR, or resolves CI."
           />
         )}
 
@@ -510,7 +510,7 @@ export function ActivityDrawer({ open, onClose, onUnreadChange }: Props) {
                 <header className="flex items-center gap-1.5 mb-1 sticky top-0 bg-surface-root/95 backdrop-blur-sm py-0.5 z-1">
                   <h3
                     id={`activity-bucket-${b.bucket}`}
-                    className="text-2xs uppercase tracking-wider text-fg-faint font-semibold"
+                    className="text-2xs text-fg-secondary font-semibold"
                   >
                     {BUCKET_LABEL[b.bucket]}
                   </h3>
@@ -567,7 +567,7 @@ function ActivityKpi({
       className={`rounded-sm border ${RING[tone]} px-2 py-1.5`}
       title={hint}
     >
-      <p className="text-2xs uppercase tracking-wider text-fg-faint font-semibold leading-none">{label}</p>
+      <p className="text-2xs text-fg-secondary font-semibold leading-none">{label}</p>
       <p className="mt-1 text-base font-semibold text-fg tabular-nums leading-none">{value}</p>
     </div>
   )

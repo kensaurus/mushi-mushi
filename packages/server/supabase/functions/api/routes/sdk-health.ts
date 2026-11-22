@@ -45,7 +45,7 @@ import {
   cspTaskReport,
   detectAppTarget,
   installTaskReport,
-  isSdkPackage,
+  isSdkDependency,
   metaCspValues,
   mushiDeps,
   packageJsonPaths,
@@ -375,8 +375,8 @@ export function registerSdkHealthRoutes(app: Hono<{ Variables: Variables }>): vo
         return c.json({ ok: false, error: { code: 'REPO_UNREADABLE', message: `Could not read the repo: ${reason(err)}` } }, 502)
       }
       const appFiles = appPackageFiles(read.files)
-      if (mushiDeps(appFiles).some((d) => isSdkPackage(d.name))) {
-        return c.json({ ok: false, error: { code: 'ALREADY_INSTALLED', message: 'The repo already lists a @mushi-mushi package. Reload SDK health.' } }, 409)
+      if (mushiDeps(appFiles).some(isSdkDependency)) {
+        return c.json({ ok: false, error: { code: 'ALREADY_INSTALLED', message: 'The repo already lists a Mushi Mushi package (mushi-mushi or @mushi-mushi/*). Reload SDK health.' } }, 409)
       }
       return fileTask(c, db, a.projectId, taskKind, installTaskReport({
         appName,

@@ -85,6 +85,8 @@ export interface SentryRestIssue {
   platform?: string;
   status?: string;
   project?: { id?: string; slug?: string } | null;
+  /** The issue's activity feed, newest first, as the issue details endpoint returns it. */
+  activity?: Array<{ type?: string; user?: unknown; dateCreated?: string }> | null;
 }
 
 interface SentryRestFrame {
@@ -286,6 +288,19 @@ export async function archiveSentryIssue(
   await sentryJson<unknown>(fetchImpl, token, `/organizations/${seg(org)}/issues/${seg(issueId)}/`, {
     method: 'PUT',
     body: JSON.stringify({ status: 'ignored', substatus: 'archived_until_escalating' }),
+  });
+}
+
+/** Reopen an issue (undoes a resolve or an archive). */
+export async function unresolveSentryIssue(
+  token: string,
+  org: string,
+  issueId: string,
+  fetchImpl: FetchLike = defaultFetch,
+): Promise<void> {
+  await sentryJson<unknown>(fetchImpl, token, `/organizations/${seg(org)}/issues/${seg(issueId)}/`, {
+    method: 'PUT',
+    body: JSON.stringify({ status: 'unresolved' }),
   });
 }
 

@@ -98,7 +98,7 @@ const NUDGE_COPY: Record<FeatureFlag, { tagline: string; pillLabel: string }> = 
     pillLabel: 'ENT',
   },
   marketplace_publish: {
-    tagline: 'Publishing to the Mushi Marketplace requires Pro.',
+    tagline: 'Publishing to the Mushi Mushi Marketplace requires Pro.',
     pillLabel: 'PRO',
   },
 }
@@ -210,7 +210,7 @@ interface PillProps {
 }
 
 const PILL_BASE =
-  'inline-flex items-center rounded-sm px-1 py-px text-3xs font-semibold tracking-wider uppercase border-0 bg-transparent text-brand/80 hover:text-brand motion-safe:transition-opacity'
+  'inline-flex items-center rounded-sm px-1 py-px text-3xs font-semibold border-0 bg-transparent text-brand/80 hover:text-brand motion-safe:transition-opacity'
 
 export function UpgradePill({ flag, alwaysShow, className = '', as = 'auto' }: PillProps) {
   const ent = useEntitlements()

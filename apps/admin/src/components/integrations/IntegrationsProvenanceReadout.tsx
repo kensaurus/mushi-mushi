@@ -68,8 +68,8 @@ export function IntegrationsProvenanceReadout({
   return (
     <ReadoutPanel title="Integration provenance" freshness={{ at: fetchedAt, isValidating: validating }}>
       <p className="mb-4 text-xs leading-relaxed text-fg-muted">
-        Where platform credentials land and how probe health maps to the cards below.
-        Paste the GitHub repo URL into the GitHub card if it differs from your primary repo.
+        Where platform credentials come from and how check health maps to the tiles above.
+        If the GitHub repo URL differs from your primary repo, set it in GitHub&apos;s settings (the GitHub tile).
       </p>
       <div className="grid gap-4 lg:grid-cols-2">
         <ReadoutSection title="Endpoints" icon={<IconGlobe size={14} aria-hidden />}>
@@ -80,7 +80,7 @@ export function IntegrationsProvenanceReadout({
             </div>
           ) : null}
           <div className="mt-2 rounded-md border border-edge-subtle bg-surface-root/40 px-3 py-2">
-            <div className="mb-1 flex items-center gap-1.5 text-3xs font-medium uppercase tracking-wider text-fg-faint">
+            <div className="mb-1 flex items-center gap-1.5 text-3xs font-semibold text-fg-secondary">
               <IconGit size={12} aria-hidden />
               Probe example
             </div>

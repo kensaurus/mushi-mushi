@@ -124,7 +124,7 @@ describe('Settings tab labels', () => {
       'Firecrawl reads public web pages while diagnosing; Browserbase runs scheduled tests in a cloud browser',
     )
     expect(SETTINGS_TAB_DESCRIPTIONS.sdk).toBe(
-      'Install the bug widget, check it can reach Mushi, send a test bug, and turn on debug logging',
+      'Install the bug widget, check it can reach Mushi Mushi, send a test bug, and turn on debug logging',
     )
   })
 

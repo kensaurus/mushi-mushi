@@ -5,6 +5,9 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/iterate
 ---
 title: Improvement runs
 description: The Improvement runs page in Mushi Mushi queues runs where one AI critiques a live URL against your goal and a second scores it, iteration by iteration.
+robots:
+  index: false
+  follow: true
 ---
 
 # Improvement runs
@@ -138,5 +141,5 @@ POST   /v1/admin/pdca/<id>/trigger (manually trigger queued run)
 ## Related pages
 
 - [Schema changes](/admin/drift) — check for regressions before starting an iteration loop
-- [Mushi health](/admin/health) — verify LLM keys are working before queuing a run
+- [Mushi Mushi health](/admin/health) — verify LLM keys are working before queuing a run
 - [Fixes](/admin/fixes) — dispatch individual fixes outside the PDCA loop

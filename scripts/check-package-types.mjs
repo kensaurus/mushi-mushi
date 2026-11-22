@@ -35,6 +35,9 @@ export const PACKAGES = [
   { dir: 'packages/core', profile: 'strict' },
   { dir: 'packages/web', profile: 'strict' },
   { dir: 'packages/react', profile: 'strict' },
+  // The one package users install (ADR 0060): every subpath has ESM + CJS
+  // types and a typesVersions entry, so node10 consumers resolve them too.
+  { dir: 'packages/launcher', profile: 'strict' },
   {
     dir: 'packages/node',
     // ./express, ./fastify and ./hono have no typesVersions fallback, so a

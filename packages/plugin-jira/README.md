@@ -1,6 +1,8 @@
 # `@mushi-mushi/plugin-jira`
 
-> **Your AI wrote it. Mushi Mushi tells you why it broke.**
+> **Your AI built it. Mushi Mushi makes it better.**
+
+**Self-host only:** you need this only when you run your own Mushi Mushi server. To add Mushi Mushi to an app, install [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi).
 
 For teams that track bugs in Jira Cloud. This opens a Jira issue for each new
 Mushi Mushi bug report, moves it through your Jira workflow as the report
@@ -9,9 +11,9 @@ the small server around it.
 
 **Do you need this package?** Not on Mushi Mushi Cloud: add Jira on the
 **Integrations** page of the console (base URL, email, API token, project
-key) and Mushi opens and resolves Jira issues itself, on any plan. The
+key) and Mushi Mushi opens and resolves Jira issues itself, on any plan. The
 console's Marketplace has no Jira listing (checked 2026-10-29), so this package only
-receives events from a Mushi server you run yourself, once you add a
+receives events from a Mushi Mushi server you run yourself, once you add a
 `plugin_registry` row for it.
 
 ```bash
@@ -89,16 +91,16 @@ app.post('/mushi/webhook', expressMiddleware(handler))
 | `report.status_changed`   | Moves the issue with the transition named in `statusToTransition`. |
 | `fix.applied`             | Adds a comment with the fix's pull request link, when there is one. |
 
-Other Mushi events are ignored.
+Other Mushi Mushi events are ignored.
 
 The report → issue key map lives in memory. After a restart,
 `report.status_changed` and `fix.applied` for reports created before it do
-nothing. Jira → Mushi sync (closing the Mushi report from Jira) is not part
+nothing. Jira → Mushi Mushi sync (closing the Mushi Mushi report from Jira) is not part
 of this package's exports.
 
 ## Status mapping defaults
 
-| Mushi status   | Jira transition   |
+| Mushi Mushi status   | Jira transition   |
 | -------------- | ----------------- |
 | `pending`      | `To Do`           |
 | `classified`   | `To Do`           |
@@ -117,4 +119,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 77 edge functions · 546 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 78 edge functions · 583 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

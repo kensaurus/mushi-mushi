@@ -70,7 +70,7 @@ export const INTEGRATIONS: Integration[] = [
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'APM & Telemetry',
-    description: 'Forward APM alerts and metric spikes as Mushi reports.',
+    description: 'Forward APM alerts and metric spikes as Mushi Mushi reports.',
   },
   {
     name: 'New Relic',
@@ -78,7 +78,7 @@ export const INTEGRATIONS: Integration[] = [
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'APM & Telemetry',
-    description: 'Route New Relic incident alerts to the Mushi report feed.',
+    description: 'Route New Relic incident alerts to the Mushi Mushi report feed.',
   },
   {
     name: 'Honeycomb',
@@ -93,7 +93,7 @@ export const INTEGRATIONS: Integration[] = [
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'APM & Telemetry',
-    description: 'Forward Loki log alerts as enriched Mushi reports.',
+    description: 'Forward Loki log alerts as enriched Mushi Mushi reports.',
   },
   {
     name: 'CloudWatch',
@@ -101,7 +101,7 @@ export const INTEGRATIONS: Integration[] = [
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'APM & Telemetry',
-    description: 'Import AWS CloudWatch alarms directly into Mushi.',
+    description: 'Import AWS CloudWatch alarms directly into Mushi Mushi.',
   },
   {
     name: 'Sentry',
@@ -125,7 +125,7 @@ export const INTEGRATIONS: Integration[] = [
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'Error Monitoring',
-    description: 'Send Rollbar occurrences into your Mushi reports inbox.',
+    description: 'Send Rollbar occurrences into your Mushi Mushi reports inbox.',
   },
   {
     name: 'Crashlytics',
@@ -149,7 +149,7 @@ export const INTEGRATIONS: Integration[] = [
     pkg: '@mushi-mushi/adapters',
     direction: 'inbound',
     category: 'Project Management',
-    description: 'Convert OpsGenie alerts into triaged Mushi reports.',
+    description: 'Convert OpsGenie alerts into triaged Mushi Mushi reports.',
   },
   // ── Outbound plugins ──────────────────────────────────────────────────
   {
@@ -158,7 +158,7 @@ export const INTEGRATIONS: Integration[] = [
     pkg: '@mushi-mushi/plugin-sentry',
     direction: 'outbound',
     category: 'Error Monitoring',
-    description: 'Resolve Sentry issues when Mushi fixes land in production.',
+    description: 'Resolve Sentry issues when Mushi Mushi fixes land in production.',
   },
   {
     name: 'Bugsnag',
@@ -166,7 +166,7 @@ export const INTEGRATIONS: Integration[] = [
     pkg: '@mushi-mushi/plugin-bugsnag',
     direction: 'outbound',
     category: 'Error Monitoring',
-    description: 'Close Bugsnag errors when Mushi confirms the fix is live.',
+    description: 'Close Bugsnag errors when Mushi Mushi confirms the fix is live.',
   },
   {
     name: 'Rollbar',
@@ -174,7 +174,7 @@ export const INTEGRATIONS: Integration[] = [
     pkg: '@mushi-mushi/plugin-rollbar',
     direction: 'outbound',
     category: 'Error Monitoring',
-    description: 'Mark Rollbar items resolved when Mushi deploys a fix.',
+    description: 'Mark Rollbar items resolved when Mushi Mushi deploys a fix.',
   },
   {
     name: 'Crashlytics',
@@ -206,7 +206,7 @@ export const INTEGRATIONS: Integration[] = [
     pkg: '@mushi-mushi/plugin-msteams',
     direction: 'outbound',
     category: 'Chat & Notifications',
-    description: 'Route Mushi alerts to Microsoft Teams channels.',
+    description: 'Route Mushi Mushi alerts to Microsoft Teams channels.',
   },
   {
     name: 'Jira',
@@ -246,14 +246,14 @@ export const INTEGRATIONS: Integration[] = [
     pkg: '@mushi-mushi/plugin-zapier',
     direction: 'outbound',
     category: 'Project Management',
-    description: 'Connect Mushi to 6 000+ apps via Zapier webhooks.',
+    description: 'Connect Mushi Mushi to 6 000+ apps via Zapier webhooks.',
   },
   {
     name: 'Plugin SDK',
     pkg: '@mushi-mushi/plugin-sdk',
     direction: 'sdk',
     category: 'APM & Telemetry',
-    description: 'Build custom inbound or outbound integrations with the Mushi plugin SDK.',
+    description: 'Build custom inbound or outbound integrations with the Mushi Mushi plugin SDK.',
   },
 ]
 

@@ -30,13 +30,13 @@ which defaults to `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api`,
 and every region resolves to that endpoint today. API keys use one `mushi_…`
 format in every region.
 
-`@mushi-mushi/core` also exports `resolveRegionEndpoint`, which asks the
+`mushi-mushi/core` also exports `resolveRegionEndpoint`, which asks the
 gateway which endpoint serves a project and caches the answer in
 `localStorage` for 24 hours. Until regional clusters ship it returns the same
 endpoint.
 
 ```ts
-import { resolveRegionEndpoint } from '@mushi-mushi/core'
+import { resolveRegionEndpoint } from 'mushi-mushi/core'
 
 const endpoint = await resolveRegionEndpoint({
   projectId: 'YOUR_PROJECT_ID',

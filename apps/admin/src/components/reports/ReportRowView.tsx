@@ -16,6 +16,7 @@ import { memo, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { Tooltip } from '../ui'
 import { closedRowAction } from './reportRowAction'
+import { variantChip } from './reportDisplayRows'
 import { useRowFlash } from '../../lib/useRowFlash'
 import { useStaggeredAppear } from '../../lib/useStaggeredAppear'
 import { reportDetailPath, reportPermalink } from '../../lib/reportUrl'
@@ -27,7 +28,8 @@ import { DispatchFixPreflight } from './DispatchFixPreflight'
 import type { PreflightState } from '../../lib/useDispatchPreflight'
 import { IconShare, IconExternalLink, IconClose } from '../icons'
 import { CHIP_TONE } from '../../lib/chipTone'
-import { isSampleReport } from '../../lib/diagnosisViewed'
+import { ReportSourceTag } from './ReportSourceTag'
+import { reportSourceKind, showsSeverity } from '../../lib/reportSourceKind'
 import { isLocalDevUrl, LOCAL_DEV_TOOLTIP } from '../../lib/reportOrigin'
 import {
   DISPATCH_ELIGIBLE_STATUSES,
@@ -47,6 +49,8 @@ import {
   TableConfidenceCell,
   TableSeverityCell,
 } from './ReportMetricCells'
+import { reportHeadline } from '../../lib/format'
+import { VitalText } from '../signal/VitalText'
 
 interface Props {
   row: ReportRow
@@ -57,6 +61,8 @@ interface Props {
   /** When >1, this row is the canonical (newest) of a fingerprint group with
    *  N siblings. Renders the expand chevron + "+N variants" chip. */
   variantCount?: number
+  /** Apps the group spans (canonical rows only). */
+  appCount?: number
   /** Whether the canonical row's siblings are currently expanded. */
   expanded?: boolean
   /** True when this row is rendered as a variant under an expanded canonical. */
@@ -85,6 +91,7 @@ function ReportRowViewInner({
   isCursor,
   dispatchBusy = false,
   variantCount,
+  appCount = 1,
   expanded = false,
   isVariant = false,
   onToggleGroup,
@@ -216,17 +223,14 @@ function ReportRowViewInner({
             >
               <div className="w-full min-w-0 flex-1 min-w-0">
                 {/* Primary display: friendly title (non-engineer headline) */}
+                {/* Two lines, then clipped: one line cut titles mid-word
+                    ("…projects-to-organizations relatio…", R2 sweep 2026-11-18). */}
                 <div
-                  className="truncate text-sm font-medium leading-snug text-fg"
+                  className="line-clamp-2 break-words text-sm font-medium leading-snug text-fg"
                   title={typeof displayTitle === 'string' ? displayTitle : undefined}
                 >
-                  {isSampleReport({ source: row.metadata_source }) && (
-                    <Tooltip content={'A sample report from "Send a test report", not from a user. Dismiss it when you\'re done.'}>
-                      <span className={`mr-1.5 inline-flex items-center rounded-sm px-1.5 py-px align-middle text-2xs font-medium ${CHIP_TONE.neutral}`}>
-                        Test report
-                      </span>
-                    </Tooltip>
-                  )}
+                  {/* Where it came from: a user, Sentry, an alarm, a setup task, a test or a check. */}
+                  <ReportSourceTag report={row} className="mr-1.5 align-middle" />
                   {isLocalDevUrl(row.environment?.url) && (
                     <Tooltip content={LOCAL_DEV_TOOLTIP}>
                       <span className={`mr-1.5 inline-flex items-center rounded-sm px-1.5 py-px align-middle text-2xs font-medium ${CHIP_TONE.neutral}`}>
@@ -234,7 +238,7 @@ function ReportRowViewInner({
                       </span>
                     </Tooltip>
                   )}
-                  {displayTitle}
+                  {typeof displayTitle === 'string' ? <VitalText text={reportHeadline(displayTitle)} /> : displayTitle}
                 </div>
                 {/* Subtext: technical summary, only when title differs (i.e. title exists) */}
                 {row.title && summary && row.title !== summary && (
@@ -242,7 +246,7 @@ function ReportRowViewInner({
                     className="mt-0.5 truncate text-xs leading-snug text-fg-faint"
                     title={typeof summary === 'string' ? summary : undefined}
                   >
-                    {summary}
+                    {typeof summary === 'string' ? <VitalText text={summary} /> : summary}
                   </div>
                 )}
               </div>
@@ -260,15 +264,15 @@ function ReportRowViewInner({
               )}
               {reporterReplied && (
                 <Tooltip portal content="Reporter replied — open thread">
-                  <span className="shrink-0 rounded-full border border-accent/35 bg-accent-muted/70 px-1.5 py-0.5 text-2xs font-medium text-accent-foreground cursor-help">
+                  <span className="shrink-0 rounded-sm bg-accent-muted/70 px-1.5 py-px text-2xs font-medium text-accent-foreground cursor-help">
                     reply
                   </span>
                 </Tooltip>
               )}
               {variantCount && variantCount > 1 && !isVariant && (
-                <Tooltip portal content={`${variantCount - 1} sibling reports share this fingerprint`}>
-                  <span className="shrink-0 rounded-full border border-edge-subtle px-1.5 py-0.5 text-2xs font-mono text-fg-muted cursor-help">
-                    +{variantCount - 1}
+                <Tooltip portal content={variantChip(variantCount, appCount).tooltip}>
+                  <span className="shrink-0 whitespace-nowrap rounded-sm px-1.5 py-px text-2xs text-fg-muted cursor-help">
+                    {variantChip(variantCount, appCount).label}
                   </span>
                 </Tooltip>
               )}
@@ -292,7 +296,8 @@ function ReportRowViewInner({
       </td>
       <td className={`reports-metric-cell ${REPORTS_TABLE_COL.severity} ${TABLE_CELL.pxMeta}`}>
         <div className="reports-metric-cell-slot">
-          <TableSeverityCell severity={row.severity} />
+          {/* A setup task or a test is not a bug: no bug severity. */}
+          <TableSeverityCell severity={showsSeverity(reportSourceKind(row)) ? row.severity : null} />
         </div>
       </td>
       <td className={`reports-metric-cell reports-metric-cell--confidence ${REPORTS_TABLE_COL.confidence} ${TABLE_CELL.pxMeta}`}>

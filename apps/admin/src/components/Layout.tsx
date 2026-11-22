@@ -10,7 +10,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   IconMenu, IconClose,
-  IconSignOut, IconBell, IconEye, IconChevronRight,
+  IconSignOut, IconBell, IconEye, IconChevronRight, IconSidebar,
 } from './icons'
 import { useNavCounts, toneForBacklog } from '../lib/useNavCounts'
 import { navSlicesForPaths, renderNavBadge, resolveNavBadge } from '../lib/navBadges'
@@ -28,10 +28,10 @@ import { OrgSwitcher } from './OrgSwitcher'
 import { useMediaQuery } from '../lib/useMediaQuery'
 import { stageForPath, type PdcaStageId } from '../lib/pdca'
 import { NAV_ITEM_BY_PATH, buildOperatorNav, type BuiltNavItem, type BuiltNavSection } from '../lib/buildNav'
-import { CORE_NAV_PATHS } from '../lib/navRegistry'
+import { coreNavPathsFor } from '../lib/navRegistry'
 import { LAB_FEATURES, useLabs } from '../lib/labs'
-import { NAV_CHILDREN, activeParent, isNavPathActive, morePages } from '../lib/sidebarTree'
-import { Tooltip, Btn } from './ui'
+import { NAV_CHILDREN, NAV_CHILD_GROUPS, activeParent, isNavPathActive, morePages } from '../lib/sidebarTree'
+import { Tooltip, Btn, Badge } from './ui'
 import { RouteProgress } from './RouteProgress'
 import { PAGE_FOOT_SLOT_ID } from './readout/ReadoutPanel'
 import { ChromeBreadcrumb } from './ChromeBreadcrumb'
@@ -42,6 +42,7 @@ import { HotkeysModal } from './HotkeysModal'
 import { ActivityDrawer } from './ActivityDrawer'
 import { DisplayPreferences } from './DisplayPreferences'
 import { SidebarUserCard, SignOutAllDialog } from './SidebarUserCard'
+import { SidebarBuildStamp } from './SidebarBuildStamp'
 import { PrivacyPostureBadge } from './PrivacyPostureBadge'
 import { DemoProjectHint } from './DemoProjectHint'
 import { useSetupStatus } from '../lib/useSetupStatus'
@@ -63,6 +64,8 @@ import { PAGE_SHELL_CLASS, pageLayoutWidthForPath } from '../lib/pageLayout'
 import { AnimatedDisclosure } from './motion/AnimatedDisclosure'
 import { NavSectionStagger } from './motion/NavSectionStagger'
 import { CHIP_TONE } from '../lib/chipTone'
+import { MUSHI_CANONICAL_URLS } from '@mushi-mushi/brand'
+import brandMark from '../assets/brand/mushi-mark.webp'
 
 type NavItem = BuiltNavItem
 
@@ -340,7 +343,8 @@ export function Layout({ children }: { children: ReactNode }) {
         .filter((i): i is NavItem => i != null)
         .filter(visibleByRole)
         .filter(visibleByFeature)
-    const core = pick(CORE_NAV_PATHS)
+    // A builder gets the short sidebar; operators keep the full one (audit 2026-11-11).
+    const core = pick(coreNavPathsFor({ isOperator }))
     const labItems = pick(LAB_FEATURES.filter((f) => labs.isEnabled(f.id)).map((f) => f.paths[0]))
     const sections: NavSection[] = [{ id: 'core', title: 'Pages', hint: 'The pages every account has.', items: core }]
     if (labItems.length > 0) {
@@ -376,6 +380,17 @@ export function Layout({ children }: { children: ReactNode }) {
       .filter(visibleByRole)
       .filter(visibleByFeature)
   }, [openParent, isSuperAdmin, isOperator, has])
+  // Headed groups (Checks › Your app / Builds & tests (CI) / Mushi Mushi
+  // itself); a group the viewer can see nothing in is dropped.
+  const childGroups = useMemo(() => {
+    if (!openParent) return null
+    const groups = NAV_CHILD_GROUPS[openParent]
+    if (!groups) return null
+    const visible = new Map(childItems.map((i) => [i.path, i]))
+    return groups
+      .map((g) => ({ id: g.id, title: g.title, items: g.paths.map((p) => visible.get(p)).filter((i): i is NavItem => i != null) }))
+      .filter((g) => g.items.length > 0)
+  }, [openParent, childItems])
   const moreGroups = useMemo(
     () =>
       morePages({ isOperator, isSuperAdmin }, labs.enabled).map((g) => ({
@@ -463,28 +478,112 @@ export function Layout({ children }: { children: ReactNode }) {
     return compact ? renderRailLink(item) : renderFullNavLink(item)
   }
 
+  // Desktop collapse / expand toggle. It lives at the TOP of the sidebar, by
+  // the brand, as in Linear, Notion and GitHub (owner, 2026-11-20: "collapse
+  // and expand button is too near logout"). It used to be a full-width row
+  // under the account card, about 60px below the red sign-out icon. Expanded,
+  // it is an icon button at the right of the brand row; collapsed, it is the
+  // first rail tile under the mark, so expanding stays one obvious click.
+  // `[` toggles it from anywhere (the hotkey above).
+  const renderSidebarToggle = (compact: boolean) => (
+    <Tooltip
+      side="right"
+      portal
+      content={
+        <NavRailFlyout
+          title={compact ? 'Expand sidebar' : 'Collapse sidebar'}
+          description={
+            compact
+              ? 'Brings back the full nav with section names and labels.'
+              : 'Shrinks the nav to an icon rail.'
+          }
+          hint="Press [ to toggle"
+        />
+      }
+    >
+      <button
+        type="button"
+        onClick={() => setSidebarCollapsed((value) => !value)}
+        aria-expanded={!compact}
+        aria-controls="desktop-sidebar"
+        aria-keyshortcuts="["
+        aria-label={compact ? 'Expand sidebar' : 'Collapse sidebar'}
+        data-testid="sidebar-toggle"
+        className={
+          compact
+            ? 'nav-rail-item'
+            : 'ml-auto inline-flex size-7 shrink-0 items-center justify-center rounded-md text-fg-muted hover:bg-surface-overlay/40 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand'
+        }
+      >
+        <IconSidebar className={compact ? 'nav-rail-icon' : 'h-4 w-4'} />
+      </button>
+    </Tooltip>
+  )
+
   // `compact` collapses the sidebar to an icon rail (~48px wide) — same
   // content tree, but section headers, item labels, mode toggle, and most
   // footer chrome are hidden in favour of `title` tooltips. Mobile always
-  // gets `compact: false` because the mobile sidebar is a full overlay.
-  const renderSidebarContent = (compact: boolean) => (
+  // gets `compact: false` because the mobile sidebar is a full overlay, and
+  // `desktop: false` because the drawer has its own close button instead of
+  // the collapse toggle.
+  const renderSidebarContent = (compact: boolean, desktop = false) => (
     <>
-      {/* Brand — collapses to a single "M" stamp in compact mode so the
-          rail still has a recognisable identity at the top. */}
+      {/* Brand — the mark (a magnifier over a ladybug on the vermillion tile,
+          a small Mushi-chan face peeking in; it stays readable at 24 px, where
+          the old full-face mark smeared, 2026-11-17) and the wordmark, linking back to the landing
+          page (owner, 2026-11-14). The compact rail keeps only the mark.
+          A plain <a>: the landing is a
+          different site, not a console route. */}
       <div className="border-b border-edge/60 overflow-visible shrink-0">
         <div className={`chrome-top-row ${compact ? 'px-2 justify-center' : 'px-4'}`}>
           {compact ? (
-            <h1 className="text-sm font-bold tracking-tight leading-none text-center" aria-label="mushi mushi admin console">
-              <span className="text-brand">m</span>
-              <span className="text-fg-secondary">m</span>
+            <h1 className="leading-none">
+              <a
+                href={MUSHI_CANONICAL_URLS.home}
+                aria-label="Mushi Mushi home"
+                title="Mushi Mushi home"
+                data-testid="brand-home-link"
+                className="flex rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              >
+                <img src={brandMark} alt="" aria-hidden="true" width={28} height={28} className="size-7" draggable={false} />
+              </a>
             </h1>
           ) : (
-            <h1 className="text-sm font-bold tracking-tight leading-none">
-              <span className="text-brand">mushi</span>
-              <span className="text-fg-secondary">mushi</span>
-            </h1>
+            <div className="flex w-full items-center gap-2">
+              <h1 className="text-sm font-bold tracking-tight leading-none">
+                <a
+                  href={MUSHI_CANONICAL_URLS.home}
+                  aria-label="Mushi Mushi home"
+                  data-testid="brand-home-link"
+                  className="flex items-center gap-2 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                >
+                  <img src={brandMark} alt="" aria-hidden="true" width={24} height={24} className="size-6 shrink-0" draggable={false} />
+                  <span>
+                    <span className="text-brand">mushi</span>
+                    <span className="text-fg-secondary">mushi</span>
+                  </span>
+                </a>
+              </h1>
+              {/* Mushi Mushi is in beta (owner, 2026-11-07). The chip says so and
+                  asks for feedback in the same click: Help & support sends a bug
+                  to the dogfood widget and an idea to the team. */}
+              <Link
+                to="/feedback"
+                title="Mushi Mushi is in beta. Tell us what broke or what's missing."
+                aria-label="Beta: send feedback"
+                className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              >
+                <Badge tone="brandSubtle" className="hover:brightness-110">Beta</Badge>
+              </Link>
+              {desktop && renderSidebarToggle(false)}
+            </div>
           )}
         </div>
+        {/* The rail has no room beside the mark, so Expand is the first tile
+            under it: top of the rail, far from sign-out at the bottom. */}
+        {desktop && compact && (
+          <div className="px-2.5 pb-2">{renderSidebarToggle(true)}</div>
+        )}
       </div>
 
       {/* Navigation — ghost scrollbar at rest; thin bar on hover/focus only. */}
@@ -531,7 +630,16 @@ export function Layout({ children }: { children: ReactNode }) {
                       {renderNavLink(item, compact)}
                       {!compact && item.path === openParent && childItems.length > 0 ? (
                         <div className="ml-3 space-y-0.5 border-l border-edge/40 pl-2" data-testid="nav-children">
-                          {childItems.map((child) => renderNavLink(child, false))}
+                          {childGroups
+                            ? childGroups.map((group) => (
+                                <div key={group.id} className="space-y-0.5" data-testid={`nav-child-group-${group.id}`}>
+                                  <p className="px-2 pt-1.5 text-3xs font-semibold uppercase tracking-wider text-fg-secondary">
+                                    {group.title}
+                                  </p>
+                                  {group.items.map((child) => renderNavLink(child, false))}
+                                </div>
+                              ))
+                            : childItems.map((child) => renderNavLink(child, false))}
                         </div>
                       ) : null}
                       {/* The icon rail has no room for the list: it shows
@@ -588,7 +696,7 @@ export function Layout({ children }: { children: ReactNode }) {
                         <div id="nav-more-pages" className="ml-3 space-y-1.5 border-l border-edge/40 pl-2" data-testid="nav-more-pages">
                           {moreGroups.map((group) => (
                             <div key={group.sectionId} className="space-y-0.5">
-                              <p className="px-2 pt-1 text-3xs font-medium uppercase tracking-wider text-fg-faint">{group.title}</p>
+                              <p className="px-2 pt-1 text-3xs font-semibold text-fg-secondary">{group.title}</p>
                               {group.items.map((item) => renderNavLink(item, false))}
                             </div>
                           ))}
@@ -632,6 +740,7 @@ export function Layout({ children }: { children: ReactNode }) {
           </Link>
         )}
         <PrivacyPostureBadge compact={compact} />
+        <SidebarBuildStamp compact={compact} />
         {compact && (
           <Tooltip
             side="right"
@@ -730,12 +839,14 @@ export function Layout({ children }: { children: ReactNode }) {
       </a>
 
       {/* Desktop sidebar — `sidebarCollapsed` toggles between a 240px nav
-          (w-60) and a 48px icon rail (w-12). Toggle button is rendered
-          INSIDE the sidebar (sticky bottom) so it survives both states.
-          Hidden entirely in focus mode; the floating exit pill below
-          replaces all sidebar affordances when focus mode is on. */}
+          (w-60) and a 64px icon rail (w-16). The toggle sits at the top, in
+          the brand area (renderSidebarToggle), so it survives both states
+          and stays away from sign-out at the bottom. Hidden entirely in
+          focus mode; the floating exit pill below replaces all sidebar
+          affordances when focus mode is on. */}
       {!focusMode && (
         <aside
+          id="desktop-sidebar"
           // Collapsed rail is w-16 (64px): a 44px hit area (WCAG 2.5.5) plus
           // 10px gutters either side. At the old w-14 the row cleared the rail
           // border by 6px, which is what made an otherwise fine icon column
@@ -743,47 +854,7 @@ export function Layout({ children }: { children: ReactNode }) {
           className={`hidden md:flex flex-shrink-0 min-h-0 border-r border-edge/60 bg-surface-root flex-col motion-safe:transition-[width] motion-safe:duration-base ${sidebarCollapsed ? 'w-16' : 'w-60'}`}
           data-collapsed={sidebarCollapsed ? 'true' : 'false'}
         >
-          {renderSidebarContent(sidebarCollapsed)}
-          {/* Collapse toggle — pinned to the bottom of the rail so the
-              affordance is always findable in either state. Uses the same
-              chevron icon component as the rest of the app's icon buttons
-              (rotated per state) instead of a bare text glyph, and a rich
-              Tooltip instead of a native `title` so it reads as a real
-              button and matches every other collapsed-rail control. The
-              `[` hotkey mirrors Linear's. */}
-          <Tooltip
-            side="right"
-            portal
-            content={
-              sidebarCollapsed ? (
-                <NavRailFlyout
-                  title="Expand sidebar"
-                  description="Brings back the full nav with section names and labels."
-                  hint="Press [ to toggle"
-                />
-              ) : (
-                'Collapse to icon rail  ·  ['
-              )
-            }
-          >
-            {/* mushi-ui: chrome icon button — Btn variant TBD (collapse row uses nav-link density + chevron label) */}
-            <button
-              type="button"
-              onClick={() => setSidebarCollapsed((value) => !value)}
-              aria-pressed={sidebarCollapsed}
-              aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              className={`group flex w-full items-center gap-2 border-t border-edge/60 text-2xs text-fg-faint hover:text-fg-muted hover:bg-surface-overlay/40 motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset ${sidebarCollapsed ? 'h-11 justify-center px-2.5' : 'justify-between px-3 py-1.5'}`}
-            >
-              <IconChevronRight
-                className={`h-3.5 w-3.5 shrink-0 motion-safe:transition-transform ${sidebarCollapsed ? '' : 'rotate-180'}`}
-              />
-              {!sidebarCollapsed && (
-                <span className="font-mono text-2xs uppercase tracking-wider text-fg-faint">
-                  Collapse
-                </span>
-              )}
-            </button>
-          </Tooltip>
+          {renderSidebarContent(sidebarCollapsed, true)}
         </aside>
       )}
 
@@ -843,7 +914,10 @@ export function Layout({ children }: { children: ReactNode }) {
         {/* Phone header is ONE row (B26): menu, team, project, search. The
             two-row version with the wordmark took a third of a 390px screen
             once the page banners stacked under it; the wordmark lives in the
-            menu drawer. The switchers truncate instead of overflowing. */}
+            menu drawer. The switchers truncate instead of overflowing.
+            This header paints over the drawer's brand row, so the mark
+            (the home link) sits here, beside the menu button: a 24 px mark in a
+            32 px hit area like its neighbours, no wordmark (2026-11-14). */}
         <header className={`md:hidden flex items-center gap-1.5 px-3 py-1.5 border-b border-edge/60 ${appChromeHeaderClass}`}>
           <Btn
             type="button"
@@ -855,6 +929,14 @@ export function Layout({ children }: { children: ReactNode }) {
           >
             <IconMenu size={18} />
           </Btn>
+          <a
+            href={MUSHI_CANONICAL_URLS.home}
+            aria-label="Mushi Mushi home"
+            data-testid="brand-home-link-mobile"
+            className="flex size-8 shrink-0 items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          >
+            <img src={brandMark} alt="" aria-hidden="true" width={24} height={24} className="size-6" draggable={false} />
+          </a>
           <div className="flex min-w-0 flex-1 items-center gap-1.5 [&>*]:min-w-0">
             {!isDesktopHeader && (
               <>

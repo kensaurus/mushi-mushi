@@ -1,5 +1,5 @@
 /**
- * Root layout for the Mushi Bounties tester marketplace.
+ * Root layout for the Mushi Mushi Bounties tester marketplace.
  * Dark editorial theme via --mushi-* brand tokens (Bounties is always dark).
  */
 import type { Metadata, Viewport } from 'next'
@@ -15,11 +15,11 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL('https://kensaur.us/mushi-mushi'),
   title: {
-    default: 'Mushi Bounties — get paid to find bugs',
-    template: '%s · Mushi Bounties',
+    default: 'Mushi Mushi Bounties — get paid to find bugs',
+    template: '%s · Mushi Mushi Bounties',
   },
   description:
-    'Browse apps, find bugs, earn mushi-points redeemable for Mushi Pro credit or gift cards.',
+    'Browse apps, find bugs, earn mushi-points redeemable for gift cards or Mushi Mushi plan credit.',
   robots: { index: true, follow: true },
   // No `alternates.canonical` here — metadata inheritance would stamp the
   // homepage canonical onto every page that doesn't override it. Each page
@@ -28,7 +28,7 @@ export const metadata: Metadata = {
   // root-relative URLs, which would double the /mushi-mushi prefix.
   icons: { icon: [{ url: `${SITE}/favicon.svg`, type: 'image/svg+xml' }] },
   openGraph: {
-    siteName: 'Mushi Bounties',
+    siteName: 'Mushi Mushi Bounties',
     type: 'website',
     url: `${SITE}/`,
     // The card lives in the docs build (scripts/sync-docs-og-card.mjs); this app has none,

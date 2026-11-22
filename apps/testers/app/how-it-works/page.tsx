@@ -1,5 +1,5 @@
 /**
- * /how-it-works — editorial explainer for the Mushi Bounties program.
+ * /how-it-works — editorial explainer for the Mushi Mushi Bounties program.
  * Six sections covering the full loop, bounty math, KYC, anti-fraud, and OFAC.
  */
 import type { Metadata } from 'next'
@@ -7,9 +7,9 @@ import Link from 'next/link'
 import { TestersPageShell } from '../components/TestersPageShell'
 
 export const metadata: Metadata = {
-  title: 'How Mushi Bounties Works',
+  title: 'How Mushi Mushi Bounties Works',
   description:
-    'Learn how to earn mushi-points by finding real bugs, and how to redeem them for Mushi Pro credit or gift cards.',
+    'Learn how to earn mushi-points by finding real bugs, and how to redeem them for gift cards or Mushi Mushi plan credit.',
   alternates: { canonical: 'https://kensaur.us/mushi-mushi/testers/how-it-works/' },
 }
 
@@ -18,7 +18,7 @@ const SECTIONS = [
     icon: '🔄',
     title: 'The loop',
     body: [
-      'Developers publish their app or website to the Mushi Bounties marketplace. They set a bounty schedule — how many mushi-points each severity of bug is worth.',
+      'Developers publish their app or website to the Mushi Mushi Bounties marketplace. They set a bounty schedule — how many mushi-points each severity of bug is worth.',
       'You browse the marketplace, join an app, and use it as a real user. When you find something broken, you submit a report with steps to reproduce, expected vs actual behavior, and any screenshots.',
       'The developer reviews your submission in their Mushi console. If it is accepted, your mushi-points balance increases immediately. If the developer marks it as a duplicate or not reproducible, you can see their feedback and improve your next report.',
     ],
@@ -36,7 +36,7 @@ const SECTIONS = [
     icon: '💰',
     title: 'The bounty math',
     body: [
-      '1,000 mushi-points = $10 as a gift card (at 1.0× face value) or $13 as Mushi Pro account credit (at a 1.3× premium).',
+      '1,000 mushi-points = $10 as a gift card (at 1.0× face value) or $13 as credit toward a paid Mushi Mushi plan, Builder or Studio (at a 1.3× premium).',
       'Point values are set per app by the developer. A critical crash bug might be worth 2,500 points. A minor UI inconsistency might be worth 100. Developers can also award discretionary bonus points for exceptionally clear or high-impact reports.',
       'There is no subscription or fee to participate as a tester. You earn points by contributing, not by paying.',
     ],
@@ -47,7 +47,7 @@ const SECTIONS = [
     body: [
       'To comply with US tax regulations, we are required to collect tax identification information from testers who receive more than $599 in gift cards in a calendar year.',
       'When your cumulative gift card redemptions approach this threshold, you will see a notice on your wallet page asking you to complete a brief KYC form — providing your legal name, jurisdiction, and a tax ID number (W-9 for US persons, W-8BEN for non-US persons).',
-      'Until KYC is cleared, additional gift card redemptions above the threshold are held. Mushi Pro credit redemptions are not subject to the KYC gate since they are not taxable income — they are treated as a platform credit.',
+      'Until KYC is cleared, additional gift card redemptions above the threshold are held. Plan credit redemptions are not subject to the KYC gate since they are not taxable income — they are treated as a platform credit.',
       'Your raw TIN is hashed client-side before it is sent to our servers. We do not store or log your unencrypted tax ID.',
     ],
   },
@@ -64,8 +64,8 @@ const SECTIONS = [
     icon: '🌍',
     title: 'OFAC and sanctions compliance',
     body: [
-      'Mushi Bounties is not available in jurisdictions subject to US OFAC sanctions, including Cuba, Iran, North Korea, Russia (payment services), Syria, and the Crimea/Donetsk/Luhansk regions.',
-      'If your account is associated with a restricted region, gift card and Pro credit redemptions will be declined. You can still browse the marketplace and submit reports, but payouts are blocked.',
+      'Mushi Mushi Bounties is not available in jurisdictions subject to US OFAC sanctions, including Cuba, Iran, North Korea, Russia (payment services), Syria, and the Crimea/Donetsk/Luhansk regions.',
+      'If your account is associated with a restricted region, gift card and plan credit redemptions will be declined. You can still browse the marketplace and submit reports, but payouts are blocked.',
       'If you believe your region was incorrectly flagged, contact support with proof of your location. We review appeals within 5 business days.',
     ],
   },
@@ -76,7 +76,7 @@ export default function HowItWorksPage() {
     <TestersPageShell>
       <div className="mx-auto max-w-3xl px-4 py-12">
         <div className="mb-12 text-center">
-          <p className="testers-kicker mb-3">Mushi Bounties</p>
+          <p className="testers-kicker mb-3">Mushi Mushi Bounties</p>
           <h1 className="mb-4 text-4xl font-bold">How it works</h1>
           <p className="testers-muted text-lg">
             A complete guide to earning and redeeming mushi-points through the Bounties marketplace.
@@ -90,7 +90,7 @@ export default function HowItWorksPage() {
           </div>
           <div className="border-x border-[var(--mushi-rule)] text-center">
             <p className="testers-brand-mark text-2xl font-bold">1.3×</p>
-            <p className="testers-muted mt-1 text-xs">premium for Mushi Pro credit</p>
+            <p className="testers-muted mt-1 text-xs">premium for plan credit</p>
           </div>
           <div className="text-center">
             <p className="testers-brand-mark text-2xl font-bold">$599</p>

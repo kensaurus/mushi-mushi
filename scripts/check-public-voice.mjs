@@ -52,7 +52,6 @@ const LANDING_PATHS = [
   'apps/docs/components/OssTrustStrip.tsx',
   'apps/docs/components/ComparisonTable.tsx',
   'apps/docs/app/connect/page.tsx',
-  'packages/marketing-ui/src/Hero.tsx',
 ]
 
 const PUBLIC_PATHS = [
@@ -149,7 +148,6 @@ const PUBLIC_PATHS = [
   'apps/docs/content/admin/storage.mdx',
   'apps/docs/content/admin/teams.mdx',
   'apps/docs/content/admin/users.mdx',
-  'packages/marketing-ui/src/canvas/data.ts',
   // Onboarding pass (2026-10-27): the bug-loop row, the hero start, the
   // three-step strip and the quickstart path's framework picker.
   'packages/marketing-ui/src/pipeline/stages.ts',
@@ -157,9 +155,6 @@ const PUBLIC_PATHS = [
   'apps/docs/components/landing/LandingInstallStrip.tsx',
   'apps/docs/components/FrameworkPicker.tsx',
   'apps/docs/content/quickstart/cli-console-loop.mdx',
-  'packages/marketing-ui/src/PersonaTrack.tsx',
-  'packages/marketing-ui/src/PrivacyPosture.tsx',
-  'packages/marketing-ui/src/ClosingCta.tsx',
   'apps/admin/src/lib/public-copy-shared.ts',
   'apps/admin/src/pages/LoginPage.tsx',
   'apps/admin/src/components/connect/ConnectStudio.tsx',
@@ -222,10 +217,10 @@ for (const rel of ALL_SCAN_PATHS) {
 const indexMdx = read('apps/docs/content/index.mdx')
 if (
   indexMdx !== null &&
-  !(indexMdx.includes('Your AI wrote it') && indexMdx.includes('why it broke'))
+  !(indexMdx.includes('Your AI built it') && indexMdx.includes('makes it better'))
 ) {
   failures.push(
-    'apps/docs/content/index.mdx\n      missing v2 hero H1 fragments:\n      "Your AI wrote it" + "why it broke"',
+    'apps/docs/content/index.mdx\n      missing v2 hero H1 fragments:\n      "Your AI built it" + "makes it better"',
   )
 }
 

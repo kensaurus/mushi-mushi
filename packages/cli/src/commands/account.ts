@@ -13,6 +13,8 @@ import type { FrameworkId } from '../detect.js';
 import { assertEndpoint } from '../endpoint.js';
 import { apiCall, die, requireConfig, pad, probeEndpointHealth } from '../cli-shared.js';
 import type { WhoamiData, StatsData, ActivationData } from '../cli-types.js';
+import { envKeyOverrideLines } from '../env-key-override.js';
+import { tryLoadKeyFromKeychain } from '../keychain.js';
 
 export function registerAccountCommands(program: Command): void {
 // ─── init ────────────────────────────────────────────────────────────────────
@@ -28,6 +30,7 @@ program
   .option('--endpoint <url>', 'Override the Mushi API endpoint (self-hosted)')
   .option('--skip-test-report', 'Skip the end-of-wizard "send a test report" prompt')
   .option('--audit', 'Audit an existing install (doctor checks) instead of running the wizard')
+  .option('--dry-run', 'Print what the wizard would install and write, then stop (changes nothing)')
   .action(async (opts: {
     projectId?: string
     apiKey?: string
@@ -38,6 +41,7 @@ program
     endpoint?: string
     skipTestReport?: boolean
     audit?: boolean
+    dryRun?: boolean
   }) => {
     await runInit({
       projectId: opts.projectId,
@@ -49,6 +53,7 @@ program
       endpoint: opts.endpoint,
       sendTestReport: opts.skipTestReport ? false : undefined,
       audit: opts.audit,
+      dryRun: opts.dryRun,
     })
   })
 
@@ -114,6 +119,7 @@ Useful after 'mushi login' to confirm credentials are correct.`)
           console.log('    Mint one on the console MCP page, or run `mushi login`.')
         }
       }
+      for (const line of envKeyOverrideLines(process.env, tryLoadKeyFromKeychain() ?? undefined)) console.log(`  ${line}`)
     }
   })
 

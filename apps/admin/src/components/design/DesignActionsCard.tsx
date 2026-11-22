@@ -102,7 +102,7 @@ export function DesignActionsCard({ projectId, score }: { projectId: string; sco
     <Section title="When the score is too high">
       <div className="flex flex-col gap-3">
         <p className="text-xs text-fg-secondary">
-          Off by default. Above the threshold, Mushi can fail your CI check and dispatch a fix for drift that is new since the last scan.
+          Off by default. Above the threshold, Mushi Mushi can fail your CI check and dispatch a fix for drift that is new since the last scan.
         </p>
         {error && <ErrorAlert message={error} endpoint={path} onRetry={reload} />}
         {loading && !data && <Loading text="Reading design settings…" />}
@@ -193,7 +193,7 @@ export function DesignActionsCard({ projectId, score }: { projectId: string; sco
         {confirmSend && (
           <ConfirmDialog
             title="Send design findings to an agent?"
-            body={`Mushi opens one report for each of up to ${FILES_PER_SEND} files from the latest scan and dispatches a fix for each. Autofix's spend and per-day caps apply.`}
+            body={`Mushi Mushi opens one report for each of up to ${FILES_PER_SEND} files from the latest scan and dispatches a fix for each. Autofix's spend and per-day caps apply.`}
             confirmLabel="Send findings"
             loading={busy}
             onConfirm={sendFindings}

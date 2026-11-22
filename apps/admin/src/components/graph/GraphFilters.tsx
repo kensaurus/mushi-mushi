@@ -7,6 +7,7 @@
 
 import { DisclosurePanel, Input } from '../ui'
 import { NODE_COLORS } from '../../lib/tokens'
+import type { IsolatedToggleState } from './isolatedNodes'
 import {
   EDGE_LABELS,
   EDGE_TYPES,
@@ -25,7 +26,8 @@ const QUICK_VIEWS = [
 export type QuickView = (typeof QUICK_VIEWS)[number]['key']
 
 interface QuickViewsProps {
-  hideSingletons: boolean
+  /** The box's effective state (isolatedToggleState): what the map actually does. */
+  isolatedToggle: IsolatedToggleState
   singletonCount: number
   onApplyView: (preset: QuickView) => void
   onToggleSingletons: (next: boolean) => void
@@ -33,7 +35,7 @@ interface QuickViewsProps {
 }
 
 export function QuickViewsRow({
-  hideSingletons,
+  isolatedToggle,
   singletonCount,
   onApplyView,
   onToggleSingletons,
@@ -41,7 +43,7 @@ export function QuickViewsRow({
 }: QuickViewsProps) {
   return (
     <div className="flex flex-wrap gap-1.5 mb-2 items-center">
-      <span className="text-2xs text-fg-faint uppercase tracking-wider mr-1">Quick views:</span>
+      <span className="text-2xs text-fg-secondary mr-1 font-semibold">Quick views:</span>
       {QUICK_VIEWS.map((v) => (
         <button
           key={v.key}
@@ -53,14 +55,22 @@ export function QuickViewsRow({
         </button>
       ))}
       <span className="ml-auto inline-flex items-center gap-2">
-        <label className="inline-flex items-center gap-1.5 cursor-pointer text-2xs text-fg-muted">
+        <label
+          className={`inline-flex items-center gap-1.5 text-2xs whitespace-nowrap ${
+            isolatedToggle.disabled ? 'cursor-not-allowed text-fg-faint' : 'cursor-pointer text-fg-muted'
+          }`}
+        >
           <input
             type="checkbox"
-            checked={hideSingletons}
+            checked={isolatedToggle.checked}
+            disabled={isolatedToggle.disabled}
             onChange={(e) => onToggleSingletons(e.target.checked)}
             className="h-3 w-3 accent-brand"
+            data-testid="graph-hide-isolated"
           />
-          Hide isolated nodes{singletonCount > 0 ? ` (${singletonCount})` : ''}
+          Hide isolated nodes
+          {singletonCount > 0 ? <span className="tabular-nums">({singletonCount})</span> : null}
+          {isolatedToggle.reason ? <span>· {isolatedToggle.reason}</span> : null}
         </label>
         <button
           type="button"
@@ -73,6 +83,12 @@ export function QuickViewsRow({
       </span>
     </div>
   )
+}
+
+/** "12/12 · 19/19" read as nothing; name what is counted, and say "all" when nothing is filtered. @internal Exported for tests. */
+export function typeCountsLabel(nodeOn: number, nodeAll: number, edgeOn: number, edgeAll: number): string {
+  if (nodeOn === nodeAll && edgeOn === edgeAll) return 'All item and link types'
+  return `${nodeOn} of ${nodeAll} item types · ${edgeOn} of ${edgeAll} link types`
 }
 
 interface FilterChipsProps {
@@ -107,9 +123,16 @@ export function GraphFilterChips({
       <DisclosurePanel
         title="Node and edge types"
         trailing={
-          <span className="text-2xs font-normal text-fg-faint">
-            {NODE_TYPES.filter((t) => enabledNodeTypes.has(t)).length}/{NODE_TYPES.length} node ·{' '}
-            {EDGE_TYPES.filter((t) => enabledEdgeTypes.has(t)).length}/{EDGE_TYPES.length} edge
+          <span
+            className="text-2xs font-normal text-fg-faint whitespace-nowrap tabular-nums"
+            data-testid="graph-type-counts"
+          >
+            {typeCountsLabel(
+              NODE_TYPES.filter((t) => enabledNodeTypes.has(t)).length,
+              NODE_TYPES.length,
+              EDGE_TYPES.filter((t) => enabledEdgeTypes.has(t)).length,
+              EDGE_TYPES.length,
+            )}
           </span>
         }
       >
@@ -179,7 +202,7 @@ interface FilterChipGroupProps {
 function FilterChipGroup({ label, allActive, children }: FilterChipGroupProps) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="text-2xs uppercase tracking-wider text-fg-faint min-w-[6.5rem]">
+      <span className="text-2xs text-fg-secondary min-w-[6.5rem] font-semibold">
         {label}
         {allActive && (
           <span className="ml-1 text-2xs text-fg-faint/60 normal-case tracking-normal">

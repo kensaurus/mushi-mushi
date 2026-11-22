@@ -48,8 +48,8 @@ npx mushi-mushi --yes
 
 What it does: detects the framework and package manager, opens a browser
 sign-in (device auth — no copy-paste) and waits for approval, picks the
-project named after this app (or creates it), installs the matching
-`@mushi-mushi/*` SDK, writes framework-prefixed env vars (e.g.
+project named after this app (or creates it), installs the `mushi-mushi`
+package, writes framework-prefixed env vars (e.g.
 `VITE_MUSHI_PROJECT_ID` / `VITE_MUSHI_API_KEY`, or `NEXT_PUBLIC_MUSHI_*`) to
 `.env.local`, and prints the init snippet to paste.
 
@@ -81,25 +81,31 @@ Already installed? Health-check instead of re-running the wizard:
 npx mushi-mushi --audit
 ```
 
-### Framework → package decision tree
+### Framework → import decision tree
 
-The wizard applies this mapping automatically (`--framework <id>` forces one).
-Use it when installing manually or reviewing what the wizard chose:
+Every web and Node app installs one package, `mushi-mushi`, and imports the
+subpath for its framework. Only React Native and Capacitor use a scoped
+package, because their native code must be a top-level dependency. The wizard
+applies this mapping automatically (`--framework <id>` forces one). Use it when
+installing by hand or reviewing what the wizard chose:
 
-| If the project has… | Framework | SDK package |
-|---------------------|-----------|-------------|
-| `next` | Next.js | `@mushi-mushi/react` |
-| `react` + `vite` (incl. a **Lovable export**) | Vite + React | `@mushi-mushi/react` |
-| `react` (no meta-framework) / `react-scripts` / `@remix-run/*` | React / CRA / Remix | `@mushi-mushi/react` |
-| `vue` v3 | Vue 3 | `@mushi-mushi/vue` |
-| `nuxt` | Nuxt | `@mushi-mushi/vue` |
-| `svelte` / `@sveltejs/kit` | Svelte / SvelteKit | `@mushi-mushi/svelte` |
-| `@angular/core` | Angular | `@mushi-mushi/angular` |
-| `astro` / `solid-js` | Astro / Solid | `@mushi-mushi/web` |
-| `expo` / `react-native` | Expo / React Native | `@mushi-mushi/react-native` |
-| `@capacitor/core` | Capacitor (Ionic) | `@mushi-mushi/capacitor` |
-| none of the above | Vanilla JS | `@mushi-mushi/web` |
-| Node server (Express/Fastify/Hono) | Server | `@mushi-mushi/node` |
+| If the project has… | Framework | Install | Import from |
+|---------------------|-----------|---------|-------------|
+| `next` | Next.js | `mushi-mushi` | `mushi-mushi/react` |
+| `react` + `vite` (incl. a **Lovable export**) | Vite + React | `mushi-mushi` | `mushi-mushi/react` |
+| `react` (no meta-framework) / `react-scripts` / `@remix-run/*` | React / CRA / Remix | `mushi-mushi` | `mushi-mushi/react` |
+| `vue` v3 / `nuxt` | Vue 3 / Nuxt | `mushi-mushi` | `mushi-mushi/vue` |
+| `svelte` / `@sveltejs/kit` | Svelte / SvelteKit | `mushi-mushi` | `mushi-mushi/svelte` |
+| `@angular/core` | Angular | `mushi-mushi` | `mushi-mushi/angular` |
+| `astro` / `solid-js` / none of these | Astro / Solid / vanilla JS | `mushi-mushi` | `mushi-mushi` |
+| Node server (Express/Fastify/Hono) | Server | `mushi-mushi` | `mushi-mushi/node` |
+| `expo` / `react-native` | Expo / React Native | `@mushi-mushi/react-native` | `@mushi-mushi/react-native` |
+| `@capacitor/core` | Capacitor (Ionic) | `@mushi-mushi/capacitor` | `@mushi-mushi/capacitor` |
+
+An app that already uses a scoped package (`@mushi-mushi/react`,
+`@mushi-mushi/web`, …) keeps working; moving it to `mushi-mushi` is covered in
+[`mushi-sdk-upgrade`](../mushi-sdk-upgrade/SKILL.md). A `mushi-mushi`
+devDependency pinned at 0.x is only the old setup command, not the SDK.
 
 Coming from Sentry? Don't remove it — see the
 [Sentry + Mushi guide](https://kensaur.us/mushi-mushi/docs/migrations/sentry-to-mushi)
@@ -168,6 +174,7 @@ guessing: `search_mushi_docs { query: "<the FAIL line>" }`.
 
 ## Handoffs
 
-- Pipeline health after setup → [`mushi-health`](../mushi-health/SKILL.md)
-- Ingest/MCP/pipeline failures → [`mushi-debug`](../mushi-debug/SKILL.md)
-- Two-way loop, lessons, fix dispatch → [`mushi-integration`](../mushi-integration/SKILL.md)
+- Is it working, and what is broken → [`mushi-debug`](../mushi-debug/SKILL.md)
+- A first bug to triage from the editor → [`mushi-triage`](../mushi-triage/SKILL.md)
+- Generated tests and the end-to-end smoke test → [`mushi-test`](../mushi-test/SKILL.md)
+- Upgrading or moving off the scoped packages → [`mushi-sdk-upgrade`](../mushi-sdk-upgrade/SKILL.md)

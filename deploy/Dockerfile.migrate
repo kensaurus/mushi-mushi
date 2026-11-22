@@ -1,0 +1,14 @@
+# FILE: deploy/Dockerfile.migrate
+# PURPOSE: One-shot migrator for installs without a repo clone
+#          (ghcr.io/<owner>/mushi-mushi-migrate, used by deploy/selfhost).
+#          Runs deploy/db/migrate.sh against the migrations baked in here:
+#          applies new files, records them in supabase_migrations.schema_migrations,
+#          points mushi_runtime_config at the gateway, lifts plan limits.
+#          deploy/docker-compose.yml mounts the same script and folder instead.
+FROM postgres:17-alpine
+RUN apk add --no-cache bash
+COPY packages/server/supabase/migrations/ /migrations/
+COPY deploy/db/migrate.sh /deploy/db/migrate.sh
+ENV MIGRATIONS_DIR=/migrations
+USER postgres
+ENTRYPOINT ["bash", "/deploy/db/migrate.sh"]

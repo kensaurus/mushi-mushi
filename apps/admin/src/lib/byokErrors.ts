@@ -21,7 +21,7 @@ interface ByokErrorView {
 }
 
 const SESSION_EXPIRED_MESSAGE = 'Your session expired — sign in again.';
-const NETWORK_MESSAGE = "Couldn't reach Mushi — check your connection and retry.";
+const NETWORK_MESSAGE = "Couldn't reach Mushi Mushi — check your connection and retry.";
 
 /** A server message worth showing as-is: a sentence, not a bare code. */
 function sentence(error: ByokApiError | undefined): string | null {
@@ -61,13 +61,13 @@ export function describeByokError(
       };
     case 'VAULT_WRITE_FAILED':
       return {
-        message: "Mushi couldn't store the key securely, so nothing was saved. Retry in a moment.",
+        message: "Mushi Mushi couldn't store the key securely, so nothing was saved. Retry in a moment.",
         where: 'form',
       };
     case 'VAULT_READ_FAILED':
       return {
         message:
-          "Mushi couldn't read the stored key. Retry; if it keeps failing, remove the key and add it again.",
+          "Mushi Mushi couldn't read the stored key. Retry; if it keeps failing, remove the key and add it again.",
         where: 'form',
       };
     case 'BAD_PROVIDER':
@@ -201,7 +201,7 @@ export function describeByokTestResult(
     case 'error_network':
       return {
         ok: false,
-        message: clue ?? `Mushi couldn't reach ${providerName}. Test again in a minute.`,
+        message: clue ?? `Mushi Mushi couldn't reach ${providerName}. Test again in a minute.`,
       };
     default:
       return {

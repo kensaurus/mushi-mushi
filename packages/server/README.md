@@ -1,6 +1,6 @@
 # @mushi-mushi/server
 
-> **Your AI wrote it. Mushi Mushi tells you why it broke.**
+> **Your AI built it. Mushi Mushi makes it better.**
 
 Supabase edge functions and admin API — self-host the comprehension layer.
 
@@ -253,6 +253,40 @@ pnpm db:push                    # Run migrations
 pnpm deploy                     # Deploy all Edge Functions
 ```
 
+### Migration rule: no primary key on `organization_id` + `project_id`
+
+Give such a table an `id` primary key and make the pair `UNIQUE`:
+
+```sql
+CREATE TABLE public.example (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL REFERENCES public.organizations (id),
+  project_id uuid REFERENCES public.projects (id),
+  UNIQUE (organization_id, project_id)
+);
+```
+
+Why: `projects` already points at `organizations`. A table whose primary key
+is those two foreign keys looks like a many-to-many link between them, so the
+REST layer (PostgREST) finds two ways to join the tables. Every
+`projects?select=…,organizations(…)` read then fails with `PGRST201`. On
+2026-11-17 `ops_mutes` did this. For a day the organization's **Run AI on:
+OpenAI** setting read as Claude and billing reads failed. An upsert with
+`onConflict: 'organization_id,project_id'` still works on the `UNIQUE` pair.
+
+`src/__tests__/migration-no-org-project-junction.test.ts` replays every
+migration and fails when a table is left with that key. To check a deployed
+database, run this with the publishable key:
+
+```bash
+curl "$SUPABASE_URL/rest/v1/projects?select=id,organizations(id)&limit=1" \
+  -H "apikey: $SUPABASE_PUBLISHABLE_KEY"
+```
+
+A `42501` permission error means the join is fine. `PGRST201` means it is
+ambiguous. In code, pin the join so a second relationship can't break it:
+`organizations!projects_organization_id_fkey(...)`.
+
 ### Environment Variables
 
 Set these as Supabase secrets:
@@ -302,39 +336,38 @@ All routes are served from the `api` function under `/v1/`:
 - `GET | POST | DELETE /v1/admin/integrations[/:type]` — Integration credentials CRUD. `GET` masks secrets; `POST` merges with existing masked values so partial updates don't drop tokens
 - `GET | POST /v1/admin/sso`, `DELETE /v1/admin/sso/:id` — SAML provider self-service via Supabase Auth Admin API. Returns ACS URL + Entity ID for IdP setup. OIDC currently writes config and returns a hint pending GoTrue admin OIDC support
 - `GET/POST /v1/admin/plugins` — Marketplace registry CRUD
-- `POST /v1/admin/ask-mushi/messages` — Ask Mushi single-shot (non-streaming) turn. Accepts `{ threadId?, route, intent?, context?, messages[] }`, returns the assistant reply with LLM telemetry (`model`, `latencyMs`, `inputTokens`, `outputTokens`, `costUsd`). Rate-limited to 300 rq/hr per user via `scoped_rate_limit_claim`
-- `POST /v1/admin/ask-mushi/messages/stream` — Ask Mushi SSE streaming variant. Same payload as above, returns `event: start/delta/meta/done/error` over `text/event-stream`. Same 300 rq/hr rate limit
+- `POST /v1/admin/ask-mushi/messages` — Ask Mushi Mushi single-shot (non-streaming) turn. Accepts `{ threadId?, route, intent?, context?, messages[] }`, returns the assistant reply with LLM telemetry (`model`, `latencyMs`, `inputTokens`, `outputTokens`, `costUsd`). Rate-limited to 300 rq/hr per user via `scoped_rate_limit_claim`
+- `POST /v1/admin/ask-mushi/messages/stream` — Ask Mushi Mushi SSE streaming variant. Same payload as above, returns `event: start/delta/meta/done/error` over `text/event-stream`. Same 300 rq/hr rate limit
 - `GET /v1/admin/ask-mushi/threads` — List conversation threads for the authenticated user. Supports a `?route=` filter and `?limit=` (default 20, max 100); there is no `?offset=`
 - `GET /v1/admin/ask-mushi/threads/:id` — Retrieve all messages in a thread
 - `DELETE /v1/admin/ask-mushi/threads/:id` — Delete a thread and all its messages (PII purge). Owner-scoped via RLS
-- `GET /v1/admin/ask-mushi/mentions?q=...` — Search reports, fixes, and branches for the `@` mention typeahead in the Ask Mushi composer
-- `POST /v1/admin/assist` — Back-compat shim that internally transforms the legacy payload and forwards to the `/ask-mushi/messages` handler. Will be removed after one release cycle
+- `GET /v1/admin/ask-mushi/mentions?q=...` — Search reports, fixes, and branches for the `@` mention typeahead in the Ask Mushi Mushi composer
 - `GET /.well-known/agent-card` — A2A agent card
 - `GET /v1/admin/auth/manifest` — RFC 8414-style discovery doc for A2A clients. Lists every advertised endpoint + supported `grant_types`. contract test (`src/__tests__/manifest-contract.test.ts`) asserts every URL listed here is registered as a Hono route, so the manifest can never advertise a 404 again
 - `POST /v1/admin/auth/token`— OAuth-style endpoint with two modes: (1) `grant_type=refresh_token` + `refresh_token` body → calls `auth.refreshSession` and returns a fresh access token + expiry, (2) `Authorization: Bearer <jwt>` only → returns RFC 7662-shape `{ active, sub, email }` introspection for an A2A client to validate a token. Without these the manifest was lying to clients
 - `POST /v1/admin/projects/:id/keys/rotate`— rotates ONE key named by `{ keyId }` (required; 400 `KEY_ID_REQUIRED` otherwise). Mints the replacement first with the old key's scopes and label, then revokes only that key (audit-logged with its prefix), and returns the new key once (`mushi_<32hex>`, 201). Other keys on the project keep working. Owner/admin only.
 - `GET | PUT | DELETE /v1/admin/migrations/progress[/:guide_slug]` — Migration Hub Phase 2 sync endpoints (`supabase/functions/api/routes/migration-progress.ts`). `GET` returns the caller's account-scoped rows plus any project-scoped rows they can read via `userCanAccessProject`, in one envelope, alongside the catalog's `knownGuideSlugs` so the docs sync hook can locally validate. `PUT /:guide_slug` accepts `{ completed_step_ids[], required_step_count?, completed_required_count?, source?, project_id?, client_updated_at? }`, runs through `migration-progress-helpers.ts > normalizeProgressUpsert` (sort + dedupe step ids, slug + UUID + source validation), and upserts via the partial-unique indexes on `(user_id, guide_slug) WHERE project_id IS NULL` / `(user_id, project_id, guide_slug) WHERE project_id IS NOT NULL`. `DELETE` clears one slug's remote row without touching the docs `localStorage` cache. **CORS exception:** these routes are the only `/v1/admin/*` surface that also accept the docs origin (`apps/docs` → `kensaur.us` / `docs.mushimushi.dev` / `localhost:3000-3001`); the per-route `app.use('/v1/admin/migrations/*', cors({ origin: MIGRATIONS_PROGRESS_ORIGINS, allowHeaders: ['Content-Type', 'Authorization', 'X-Mushi-Project-Id', 'X-Mushi-Org-Id'], ... }))` block in `index.ts` is registered BEFORE the general `/v1/admin/*` block so Hono's first-match-wins ordering keeps the rest of the admin surface pinned to the admin allowlist. Both `X-Mushi-Project-Id` and `X-Mushi-Org-Id` are in the allowlist because the admin's `apiFetch` (`apps/admin/src/lib/supabase.ts`) appends both whenever a project / org is active — omitting either header from the allowlist made every preflight from the admin's `/projects` page fail until 2026-05-05. Pure helper logic is unit-tested in `src/__tests__/migration-progress-helpers.test.ts`; the live RLS contract is pinned by `supabase/tests/rls_migration_progress.test.sql`
-- `POST /v1/sdk/discovery` — Mushi v2.1 SDK passive-discovery ingest. Public-API-key authed, accepts a `MushiDiscoveryEventPayload` (route template, page title, `[data-testid]` values, recent fetch paths, query-param **keys only**, sha256 user/session hash). Tagged `X-Mushi-Internal: discovery` so the SDK's own emissions don't trip the self-cascade detector. Validated by `_shared/schemas.ts::discoveryEventSchema` and inserted into `discovery_events`; the `discovery_observed_inventory` view aggregates 30 days into the per-route summary the proposer reads
+- `POST /v1/sdk/discovery` — Mushi Mushi v2.1 SDK passive-discovery ingest. Public-API-key authed, accepts a `MushiDiscoveryEventPayload` (route template, page title, `[data-testid]` values, recent fetch paths, query-param **keys only**, sha256 user/session hash). Tagged `X-Mushi-Internal: discovery` so the SDK's own emissions don't trip the self-cascade detector. Validated by `_shared/schemas.ts::discoveryEventSchema` and inserted into `discovery_events`; the `discovery_observed_inventory` view aggregates 30 days into the per-route summary the proposer reads
 - `POST | GET | PATCH /v1/admin/inventory/:projectId` — ingest, read, partial-update the project's `inventory.yaml`. `POST` accepts the raw YAML string, validates it through `@mushi-mushi/inventory-schema`, and replaces the active inventory in one transaction. Read returns the parsed object plus stats (`pages`, `actions`, `coverage`)
 - `GET /v1/admin/inventory/:projectId/user-stories` — flat user-story list with derived status (`stub` / `mocked` / `wired` / `verified` / `regressed`) per action, used by the `UserStoryMap` panel
 - `GET /v1/admin/inventory/:projectId/diff` — drift between the accepted inventory and the most recent crawl/SDK observations. Powers the `DriftDiffPanel`
 - `GET /v1/admin/inventory/:projectId/findings` — gate findings filtered by `?gate=` / `?status=`. Each row carries the `GateFindingCard` payload (locator, suggested fix, deep-link)
 - `POST /v1/admin/inventory/:projectId/reconcile` — kicks the `status-reconciler` Edge Function for the project; returns the new derived statuses inline
 - `POST /v1/admin/inventory/:projectId/gates/run` — runs Gates 3 + 4 + 5 server-side and persists `gate_runs` / `gate_findings`. Body accepts `{ commit_sha?, pr_number?, gates?: string[], story_node_id?, findings?, discovered_apis?, spec_diff_findings? }` (the CI evidence is validated and size-capped in `_shared/gate-evidence.ts`, then forwarded to `inventory-gates`); answers `{ ok, data: { runs, overall } }`. Called by `@mushi-mushi/mcp-ci` (`gates`, `discover-api`, `spec-drift`)
-- `GET /v1/admin/inventory/:projectId/discovery` — Mushi v2.1. Aggregates `discovery_observed_inventory` into `{ routes, total_events, ready_to_propose }` for the `/inventory ▸ Discovery` lifecycle stepper + observed-route cards. `ready_to_propose` flips true once the project has a defensible-sized sample
-- `POST /v1/admin/inventory/:projectId/propose` — Mushi v2.1. Forwards to the `inventory-propose` Edge Function (Claude Sonnet 4.6). Returns `{ proposalId, storyCount, pageCount }` so a CI step can chain `mushi-mushi-gates propose` into a PR-comment job
+- `GET /v1/admin/inventory/:projectId/discovery` — Mushi Mushi v2.1. Aggregates `discovery_observed_inventory` into `{ routes, total_events, ready_to_propose }` for the `/inventory ▸ Discovery` lifecycle stepper + observed-route cards. `ready_to_propose` flips true once the project has a defensible-sized sample
+- `POST /v1/admin/inventory/:projectId/propose` — Mushi Mushi v2.1. Forwards to the `inventory-propose` Edge Function (Claude Sonnet 4.6). Returns `{ proposalId, storyCount, pageCount }` so a CI step can chain `mushi-mushi-gates propose` into a PR-comment job
 - `GET /v1/admin/inventory/:projectId/proposals[/:id]` — list / read LLM-drafted `inventory.yaml` proposals (`status: 'draft' | 'accepted' | 'discarded'`) for the `ProposalReviewModal`. Includes `proposed_yaml`, `proposed_parsed`, and `rationale_by_story` so the modal's Stories / Why these stories / YAML tabs render from one round-trip
 - `PATCH /v1/admin/inventory/:projectId/proposals/:id` — edit a draft proposal's YAML in-place before accepting (re-validates through `@mushi-mushi/inventory-schema`)
 - `POST /v1/admin/inventory/:projectId/proposals/:id/accept` — replaces the project's active inventory with the proposal's parsed YAML and marks the proposal `accepted`. Idempotent; returns the new inventory snapshot
 - `POST /v1/admin/inventory/:projectId/proposals/:id/discard` — marks the proposal `discarded` (used for malformed LLM outputs or stale drafts)
-- `GET | PATCH /v1/admin/inventory/:projectId/settings` — Mushi v2.1. Project-scoped crawler / synthetic-monitor configuration: `crawler_base_url`, `crawler_auth_config` (cookie blob, `crawler_auth_runner` writes here), `synthetic_monitor_enabled`, `synthetic_monitor_target_url`, `synthetic_monitor_allow_mutations` (false by default — opt-in to allow non-safe HTTP verbs against the configured target; whitepaper §4.4). `PATCH` SSRF-validates `crawler_base_url` and `synthetic_monitor_target_url` at write time so misconfigured hosts (private IPs, cloud-metadata endpoints, embedded credentials) are rejected before the cron picks them up. Same endpoint `@mushi-mushi/inventory-auth-runner` POSTs the freshly-captured cookie back to
+- `GET | PATCH /v1/admin/inventory/:projectId/settings` — Mushi Mushi v2.1. Project-scoped crawler / synthetic-monitor configuration: `crawler_base_url`, `crawler_auth_config` (cookie blob, `crawler_auth_runner` writes here), `synthetic_monitor_enabled`, `synthetic_monitor_target_url`, `synthetic_monitor_allow_mutations` (false by default — opt-in to allow non-safe HTTP verbs against the configured target; whitepaper §4.4). `PATCH` SSRF-validates `crawler_base_url` and `synthetic_monitor_target_url` at write time so misconfigured hosts (private IPs, cloud-metadata endpoints, embedded credentials) are rejected before the cron picks them up. Same endpoint `@mushi-mushi/inventory-auth-runner` POSTs the freshly-captured cookie back to
 - `POST /v1/admin/fixes/dispatch` — agentic fix orchestrator dispatch. Body now optionally accepts `inventoryActionNodeId` (UUID-validated) so callers that already know the inventory `Action` they want repaired can pass it directly; the worker falls back to walking the `reports_against` graph edge when omitted (whitepaper §2.10 spec-traceability)
 - `GET /v1/admin/fixes/dispatch/:id/stream` — AG-UI v0.4 SSE stream of fix dispatch events (`run.started` / `run.status` / `run.completed` / `run.failed`). **Auth swapped from JWT-only to `adminOrApiKey({ scope: 'mcp:read' })` on 2026-05-09** so API-key orchestrators can subscribe (was the single biggest unblock for non-browser clients). Sanitised against CVE-2026-29085
 - `POST /v1/a2a/tasks` — Google A2A v1.0.0 task delegation. Wraps `fix_dispatch_jobs` rows as A2A `Task` resources; body shape `{ skill: 'dispatch_fix', input: { reportId, projectId, inventoryActionNodeId? } }`. Auth: `adminOrApiKey({ scope: 'mcp:write' })`
 - `GET /v1/a2a/tasks/:id` — fetch A2A task state. Status names translated at the edge (`fix_dispatch_jobs.status='queued'` → A2A `state='submitted'`, `running` → `working`, `cancelled` → `canceled`, etc.). Includes a `metadata.inventoryActionNodeId` so external orchestrators can fetch the spec context via the MCP `get_fix_context` tool
 - `POST /v1/a2a/tasks/:id:cancel` — A2A task cancellation (Hono path uses the regex constraint `:id{[^:]+}:cancel` to keep the literal colon-suffix verb intact)
 - `GET /v1/a2a/tasks/:id:subscribe` — SSE stream of A2A `task.updated` / `task.terminal` events. Same back-pressure + heartbeat semantics as the AG-UI stream
-- `GET /openapi.json` (alias `/v1/openapi.json`) — hand-curated OpenAPI 3.1 specification for the public REST surface (fixes dispatch, reports, inventory, A2A tasks, auth token). Referenced from the agent card so LangGraph code-gen, generic OpenAPI clients, and A2A skill negotiators can auto-generate Mushi clients
+- `GET /openapi.json` (alias `/v1/openapi.json`) — hand-curated OpenAPI 3.1 specification for the public REST surface (fixes dispatch, reports, inventory, A2A tasks, auth token). Referenced from the agent card so LangGraph code-gen, generic OpenAPI clients, and A2A skill negotiators can auto-generate Mushi Mushi clients
 - `GET /v1/schemas` / `GET /v1/schemas/:name` — JSON Schemas (draft-07) for the public agent contracts: `fix-context.json`, `fix-result.json`, `sandbox-provider.json`, `expected-outcome.json`. Mirrored from `@mushi-mushi/agents` so non-TS orchestrators (Python LangGraph, Go agents, A2A skill cards) can implement the contract without typing-by-hand
 - See `supabase/functions/api/index.ts` and `supabase/functions/api/routes/*.ts` for the full route table
 
@@ -496,4 +529,4 @@ Admin pages subscribe to these tables via Supabase Realtime (`apps/admin/src/lib
 
 ## License
 
-[AGPLv3](./LICENSE) — true OSI open source: self-host it, fork it, modify it for your own org. If you offer a modified server as a hosted service, publish your changes (§13) or obtain a [commercial license](../../COMMERCIAL-LICENSE.md). A small enterprise-edition boundary ([`./ee/`](./ee/README.md)) is source-available but commercial for production use.
+[AGPLv3](./LICENSE) — true OSI open source: self-host it, fork it, modify it for your own org. If you offer a modified server as a hosted service, publish your changes (§13) or obtain a [commercial license](../../docs/legal/COMMERCIAL-LICENSE.md). A small enterprise-edition boundary ([`./ee/`](./ee/README.md)) is source-available but commercial for production use.

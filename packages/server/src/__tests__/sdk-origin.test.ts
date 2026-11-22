@@ -101,6 +101,14 @@ describe('classifySdkOrigin', () => {
     }
   })
 
+  it('never counts the setup wizard (cli://) or another non-web scheme as a live site', () => {
+    for (const origin of ['cli://wizard', 'cli://', 'vscode-webview://abc', 'ws://example.com']) {
+      const out = classifySdkOrigin({ origin, userAgent: 'mushi-wizard/win32-x64' })
+      expect(out.kind, origin).toBe('unknown')
+      expect(funnelStepForOriginKind(out.kind), origin).toBeNull()
+    }
+  })
+
   it('keeps no sample for server or unknown check-ins without an Origin', () => {
     expect(classifySdkOrigin({ origin: null, userAgent: 'curl/8' }).sample).toBeNull()
     expect(classifySdkOrigin({ origin: null, userAgent: 'okhttp/4' }).sample).toBeNull()

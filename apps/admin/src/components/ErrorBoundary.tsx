@@ -32,6 +32,7 @@ import type { ReactNode, ErrorInfo } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Sentry } from '../lib/sentry'
 import { EditorialErrorState } from './EditorialErrorState'
+import { CRASH_GUIDE } from '../lib/fieldGuide'
 
 interface Props {
   children: ReactNode
@@ -109,6 +110,7 @@ export class ErrorBoundary extends Component<Props, State> {
           // claim `<main>` here.
           as={this.props.source === 'app-shell' ? 'main' : 'section'}
           eyebrow="Error · render"
+          mascot={CRASH_GUIDE}
           headline={
             <>
               Something <em>broke</em> on this page.

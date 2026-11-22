@@ -25,7 +25,6 @@ import { Section,
   SegmentedControl,
   FreshnessPill, } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
-import { PdcaContextHint } from '../components/PdcaContextHint'
 import { IterateStatusBanner } from '../components/iterate/IterateStatusBanner'
 import { IterateSnapshotStrip } from '../components/iterate/IterateSnapshotStrip'
 import { IterateReadout } from '../components/iterate/IterateReadout'
@@ -122,6 +121,9 @@ export function IteratePage() {
   const runsEnvelope = pdcaRunsFromEnvelope(runs)
   const runList = runsEnvelope.runs
   const runsTotal = runsEnvelope.total ?? runList.length
+  // No runs yet: the status block's "Start a run" is the one way in, so the header button and
+  // the Runs | New Run tab bar would repeat it; both come back once a run exists or New Run is open.
+  const noRunsFirstStep = runsTotal === 0 && activeTab === 'runs' && !ux.hideIterateSnapshot && !runsLoading
 
   useEffect(() => {
     setRunsPage(1)
@@ -299,7 +301,6 @@ export function IteratePage() {
         title={copy?.title ?? 'Improvement runs'}
         projectScope={stats.projectName ?? projectName ?? undefined}
 
-        contextChip={<PdcaContextHint stage="act" />}
         helpTitle={copy?.help?.title ?? 'About improvement runs'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
@@ -320,15 +321,18 @@ export function IteratePage() {
         {!ux.hideOverviewChrome && (
           <>
             <FreshnessPill at={statsFetchedAt} isValidating={statsValidating || runsValidating} />
-            <Btn
-              size="sm"
-              variant="primary"
-              onClick={() => setActiveTab('new')}
-              disabled={!activeProjectId}
-              title={!activeProjectId ? 'Select a project first' : undefined}
-            >
-              + New Run
-            </Btn>
+            {!noRunsFirstStep && (
+              <Btn
+                size="sm"
+                variant="primary"
+                className="whitespace-nowrap"
+                onClick={() => setActiveTab('new')}
+                disabled={!activeProjectId}
+                title={!activeProjectId ? 'Select a project first' : undefined}
+              >
+                + New Run
+              </Btn>
+            )}
           </>
         )}
       </PageHeaderBar>
@@ -364,7 +368,7 @@ export function IteratePage() {
         ]}
       />
 
-      {!ux.hideTabs && (
+      {!ux.hideTabs && !noRunsFirstStep && (
       <SegmentedControl<IterateTabId>
         size="sm"
         scrollable
@@ -453,7 +457,7 @@ export function IteratePage() {
       {abortTarget && (
         <ConfirmDialog
           title="Stop this improvement run?"
-          body={`Mushi stops the run on ${abortTarget.target_url} after the current step. Iterations already scored stay in history. An aborted run cannot be resumed: queue a new one to try again.`}
+          body={`Mushi Mushi stops the run on ${abortTarget.target_url} after the current step. Iterations already scored stay in history. An aborted run cannot be resumed: queue a new one to try again.`}
           confirmLabel="Abort run"
           cancelLabel="Keep running"
           tone="danger"

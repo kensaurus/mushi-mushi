@@ -23,7 +23,7 @@ import { fileURLToPath, pathToFileURL } from 'url'
 const __dir = fileURLToPath(new URL('.', import.meta.url))
 const ROOT = join(__dir, '..')
 
-const CANONICAL_V2 = 'Your AI wrote it. Mushi Mushi tells you why it broke.'
+const CANONICAL_V2 = 'Your AI built it. Mushi Mushi makes it better.'
 const CANONICAL_LEGACY =
   'Sentry sees what code throws. Mushi sees what users feel — and closes the loop with AI.'
 
@@ -32,6 +32,8 @@ const STALE_VARIANTS = [
   'Sentry sees what code throws. Mushi sees what users feel — and encodes every fix into the codebase genome.',
   'Sentry sees what your code throws. Mushi sees what your users feel.',
   'Your users feel a bug. You see a fix.',
+  // The bug-only hero, retired by ADR 0058 (owner, 2026-11-13).
+  'Your AI wrote it. Mushi Mushi tells you why it broke.',
 ]
 
 const SDK_DIRS = [

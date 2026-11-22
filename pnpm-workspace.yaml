@@ -125,6 +125,13 @@ auditConfig:
     # a release-time dev tool that globs our own package names. Never in a
     # published package or an edge function. Remove when braces ships a fix.
     - 'GHSA-vfj7-8cjw-p6xm'
+    # picomatch <=4.0.7 (GHSA-fc5q-39xc-vjpf, high): ReDoS through repeated
+    # extglobs; no fixed release exists (2026-11-18). Reachability: build and
+    # test tools only (vite, vitest, knip, tinyglobby, fdir, @rollup/pluginutils,
+    # micromatch via @changesets/cli, and @expo/cli + metro in the docs build),
+    # all matching our own repo paths. No published package depends on it and
+    # the edge functions' deno.lock has no copy. Remove when picomatch ships a fix.
+    - 'GHSA-fc5q-39xc-vjpf'
     # @ai-sdk/provider-utils <3.0.28 (GHSA-866g-f22w-33x8, low): unbounded
     # response-body reads in the provider response handlers. 2.2.8 comes from
     # ai@4 / @ai-sdk/ui-utils@1: a packages/server test devDep here, and the

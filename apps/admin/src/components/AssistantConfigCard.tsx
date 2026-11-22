@@ -82,7 +82,7 @@ export function AssistantConfigCard({ projectId }: { projectId: string }) {
         }
       })
       .catch(() => {
-        setLoadError('Could not reach the Mushi API. Check your connection and retry.')
+        setLoadError('Could not reach the Mushi Mushi API. Check your connection and retry.')
       })
       .finally(() => setLoading(false))
   }, [projectId])

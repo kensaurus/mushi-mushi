@@ -53,22 +53,19 @@ export function ProjectsCreatePanel({
 }: ProjectsCreatePanelProps) {
   const navigate = useNavigate()
   return (
-    <Section title="Create a project">
+    <Section title="Add an app">
       {createdProject ? (
         <ProjectCreatedSuccessPanel project={createdProject} onDismiss={onDismissCreated} />
       ) : (
         <>
-          <ContainedBlock tone="muted" className="mb-3">
-            <p className="text-2xs leading-relaxed text-fg-muted">
-              One project per app or environment — your API key and setup command appear on the next screen.
+          {/* No grey box beside the field's ⓘ (round 3): "one per app or environment" is in the ⓘ;
+              which team it lands in stays as one plain line. */}
+          {teamName && (
+            <p className="mb-2 text-2xs leading-relaxed text-fg-muted" data-testid="create-project-team">
+              It goes into team <strong className="text-fg-secondary">{teamName}</strong>, so everyone in that team sees it.
+              Switch team at the top to put it somewhere else.
             </p>
-            {teamName && (
-              <p className="mt-1 text-2xs leading-relaxed text-fg-muted" data-testid="create-project-team">
-                It goes into team <strong className="text-fg-secondary">{teamName}</strong>, so everyone in that team sees it.
-                Switch team at the top to put it somewhere else.
-              </p>
-            )}
-          </ContainedBlock>
+          )}
           {orgDataLoaded && !canManageProjects && (
             <ContainedBlock tone="warn" className="mb-3">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -80,8 +77,8 @@ export function ProjectsCreatePanel({
                   </p>
                   <p className="mt-0.5 text-2xs text-fg-muted">
                     {activeOrgRole === 'member' || activeOrgRole === 'viewer'
-                      ? 'Ask your team owner or admin to create projects, or create your own team.'
-                      : 'You need to be part of a team to create projects. Create a personal workspace first.'}
+                      ? 'Ask your team owner or admin to add apps, or create your own team.'
+                      : 'You need to be part of a team to add apps. Create a personal workspace first.'}
                   </p>
                 </div>
                 <Btn size="sm" variant="ghost" onClick={onNavigateTeam}>
@@ -94,10 +91,10 @@ export function ProjectsCreatePanel({
             <div className="flex gap-2 items-end">
               <div className="flex-1">
                 <Input
-                  label="Project name"
+                  label="App name"
                   helpId="projects.create_project"
                   type="text"
-                  placeholder="New project name (e.g. Acme iOS app)"
+                  placeholder="App name (e.g. Acme iOS app)"
                   value={newName}
                   onChange={(e) => {
                     onNewNameChange(e.target.value)
@@ -119,13 +116,13 @@ export function ProjectsCreatePanel({
                 loading={!orgDataLoaded && !creating}
                 title={
                   orgDataLoaded && !canManageProjects
-                    ? 'Only owners or admins can create projects — ask your team admin'
+                    ? 'Only owners or admins can add apps — ask your team admin'
                     : !newName.trim()
-                      ? 'Enter a project name to continue'
+                      ? 'Enter an app name to continue'
                       : undefined
                 }
               >
-                {creating ? 'Creating...' : 'Create project'}
+                {creating ? 'Adding…' : 'Add app'}
               </Btn>
             </div>
             {createError && (
@@ -140,7 +137,7 @@ export function ProjectsCreatePanel({
                         ? 'Not allowed in this team'
                         : createError.code === 'NETWORK_ERROR'
                           ? 'Couldn\u2019t reach the server'
-                          : 'Couldn\u2019t create project'
+                          : 'Couldn\u2019t add the app'
                   }
                   message={createError.message}
                   code={createError.code}

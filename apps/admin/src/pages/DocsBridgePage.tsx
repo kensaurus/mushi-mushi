@@ -26,7 +26,7 @@
  *     the refresh token. Docs sessions expire with the tab.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
 import { useAuth } from '../lib/auth'
@@ -35,7 +35,8 @@ import { RESOLVED_API_URL } from '../lib/env'
 import { getActiveProjectIdSnapshot } from '../lib/activeProject'
 import { getActiveOrgIdSnapshot } from '../lib/activeOrg'
 import { docsBridgeAllowedOrigins, normalizeOrigin } from '../lib/docsBridgeOrigins'
-import { ContainedBlock, SignalChip } from '../components/report-detail/ReportSurface'
+import { SignalChip } from '../components/report-detail/ReportSurface'
+import { docsUrl } from '../lib/docsUrl'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { Btn } from '../components/ui'
 
@@ -171,6 +172,10 @@ export function DocsBridgePage() {
   // `supabase.auth.getSession()` when the user presses Allow, so a click
   // after this refresh has finished sends the refreshed token. A token with
   // more than 5min left is never refreshed here and is sent as is.
+  // Back to the docs that opened this window when that site is allowed;
+  // otherwise the hosted docs home (never an unvetted origin).
+  const backToDocsHref = returnOrigin && ALLOWED_DOCS_ORIGINS.has(returnOrigin) ? returnOrigin : docsUrl()
+
   const refreshedOnceRef = useRef(false)
   useEffect(() => {
     if (refreshedOnceRef.current) return
@@ -186,7 +191,7 @@ export function DocsBridgePage() {
   }, [loading, session])
 
   return (
-    <div className="min-h-screen bg-surface p-6 space-y-4">
+    <div className="space-y-4">
       <PageHeaderBar
         title="Docs bridge"
 
@@ -200,28 +205,26 @@ export function DocsBridgePage() {
         showCopyLink={false}
       />
     <main className="grid place-items-center">
+      {/* One level of box (2026-11-18 sweep): the card holds plain text, not
+          tinted boxes, and every dead end offers the way back to the docs. */}
       <div className="max-w-md rounded-xl border border-edge bg-surface p-6 text-center shadow-sm space-y-3">
         {status === 'pending' && (
           <>
             <SignalChip tone="brand">Docs bridge</SignalChip>
-            <ContainedBlock tone="muted">
-              <p className="text-sm text-fg-muted">Connecting your Mushi account to the docs…</p>
-            </ContainedBlock>
+            <p className="text-sm text-fg-muted">Connecting your Mushi Mushi account to the docs…</p>
           </>
         )}
         {status === 'awaiting_consent' && (
           <>
             <SignalChip tone="brand">Docs sign-in</SignalChip>
             <p className="text-base font-medium text-fg">
-              Sign in to the docs as {session?.user?.email ?? 'your Mushi account'}?
+              Sign in to the docs as {session?.user?.email ?? 'your Mushi Mushi account'}?
             </p>
-            <ContainedBlock tone="muted">
-              <p className="text-sm text-fg-muted">
-                <span className="font-mono text-fg">{returnOrigin}</span> is asking to use your Mushi
-                sign-in so it can sync your migration checklist. Only allow this if you opened it from
-                the Mushi docs.
-              </p>
-            </ContainedBlock>
+            <p className="text-sm text-fg-muted">
+              <span className="font-mono text-fg">{returnOrigin}</span> is asking to use your Mushi Mushi
+              sign-in so it can sync your migration checklist. Only allow this if you opened it from
+              the Mushi Mushi docs.
+            </p>
             <div className="flex justify-center gap-2">
               <Btn variant="ghost" size="sm" onClick={cancel}>
                 Cancel
@@ -233,53 +236,53 @@ export function DocsBridgePage() {
           </>
         )}
         {status === 'cancelled' && (
-          <ContainedBlock tone="muted">
-            <p className="text-sm text-fg">
-              Cancelled. The docs did not get your sign-in. You can close this window.
-            </p>
-          </ContainedBlock>
+          <p className="text-sm text-fg">
+            Cancelled. The docs did not get your sign-in. You can close this window.
+          </p>
         )}
         {status === 'sent' && (
           <>
             <SignalChip tone="ok">Connected</SignalChip>
             <p className="text-base font-medium text-fg">Docs sync connected</p>
-            <ContainedBlock tone="muted">
-              <p className="text-sm text-fg-muted">
-                You can close this window. Your migration checklist progress will sync automatically.
-              </p>
-            </ContainedBlock>
+            <p className="text-sm text-fg-muted">
+              You can close this window. Your migration checklist progress will sync automatically.
+            </p>
           </>
         )}
         {status === 'no_session' && (
-          <ContainedBlock tone="warn">
-            <p className="text-sm text-fg">
-              Sign in to your Mushi account in this browser, then re-open this window from the docs.
-            </p>
-          </ContainedBlock>
+          <BridgeDeadEnd backHref={backToDocsHref}>
+            Sign in to your Mushi Mushi account in this browser, then open this again from the docs.
+          </BridgeDeadEnd>
         )}
         {status === 'no_nonce' && (
-          <ContainedBlock tone="warn">
-            <p className="text-sm text-fg">This window is missing a sign-in nonce; close it and try again from the docs.</p>
-          </ContainedBlock>
+          <BridgeDeadEnd backHref={backToDocsHref}>
+            This sign-in link has expired. Open it again from the docs.
+          </BridgeDeadEnd>
         )}
         {status === 'invalid_origin' && (
-          <ContainedBlock tone="warn">
-            <p className="text-sm text-fg">
-              The docs site that requested this sign-in isn't on the allowlist. Close this window —
-              this is a safety check.
-            </p>
-          </ContainedBlock>
+          <BridgeDeadEnd backHref={backToDocsHref}>
+            This sign-in came from a site Mushi Mushi doesn't recognise, so it was blocked.
+          </BridgeDeadEnd>
         )}
         {status === 'missing_opener' && (
-          <ContainedBlock tone="warn">
-            <p className="text-sm text-fg">
-              We can't talk back to the docs window. Re-open this from the docs site so the bridge
-              can post the token securely.
-            </p>
-          </ContainedBlock>
+          <BridgeDeadEnd backHref={backToDocsHref}>
+            The docs window that asked for this sign-in is gone. Open it again from the docs.
+          </BridgeDeadEnd>
         )}
       </div>
     </main>
+    </div>
+  )
+}
+
+/** A state the user can't finish here: one plain line and the way back. */
+function BridgeDeadEnd({ children, backHref }: { children: ReactNode; backHref: string }) {
+  return (
+    <div className="space-y-3" data-testid="docs-bridge-dead-end">
+      <p className="text-sm text-fg">{children}</p>
+      <Btn href={backHref} variant="primary" size="sm" className="whitespace-nowrap">
+        Back to docs
+      </Btn>
     </div>
   )
 }

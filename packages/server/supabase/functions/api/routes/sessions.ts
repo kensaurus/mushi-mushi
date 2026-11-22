@@ -120,7 +120,7 @@ export function registerSessionRoutes(app: Hono<{ Variables: Variables }>): void
 
     const event: SessionEvent = parsed.data;
     const db = getServiceClient();
-    const ts = event.ts ?? new Date().toISOString();
+    const ts = sessionEventTime(event.ts, new Date());
     // The SDK copies navigator.userAgent into every event; fall back to the
     // request header for clients that omit it.
     const automated = isAutomatedUserAgent(event.user_agent ?? c.req.header('user-agent'));
@@ -223,6 +223,22 @@ export function registerSessionRoutes(app: Hono<{ Variables: Variables }>): void
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/** A client clock may be ahead by up to this much before its time is ignored. */
+export const MAX_CLOCK_SKEW_MS = 5 * 60_000;
+
+/**
+ * The event's time: the client's, unless it is missing or ahead of the server
+ * by more than MAX_CLOCK_SKEW_MS. A device with a wrong clock stored page
+ * views weeks in the future (yen-yen, 2026-12-03 rows seen on 2026-11-13),
+ * which time-windowed reads (Journeys, Activity) then counted.
+ */
+export function sessionEventTime(clientTs: string | undefined, now: Date): string {
+  if (!clientTs) return now.toISOString();
+  const t = Date.parse(clientTs);
+  if (!Number.isFinite(t) || t > now.getTime() + MAX_CLOCK_SKEW_MS) return now.toISOString();
+  return clientTs;
+}
 
 /** Strip query string and fragment from a route to avoid storing URL-embedded PII. */
 function sanitiseRoute(route: string | null | undefined): string | null {

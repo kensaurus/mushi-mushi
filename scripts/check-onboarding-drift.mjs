@@ -21,11 +21,10 @@ const SCAN_PATHS = [
   'docs/DEPLOYMENT.md',
   'AGENTS.md',
   'README.md',
-  'CONTRIBUTING.md',
+  '.github/CONTRIBUTING.md',
   'packages/cli/README.md',
   'packages/mcp/README.md',
   'skills',
-  '.cursor/skills',
 ]
 
 const EXT = new Set(['.md', '.mdx'])

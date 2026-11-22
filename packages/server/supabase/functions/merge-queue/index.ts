@@ -48,6 +48,7 @@ import { cursorKeyById, cursorModelsCached, loadFollowupSettings } from '../_sha
 import { validateCursorModel } from '../_shared/review-followup.ts'
 import { createCursorAgentV1, getCursorAgent, getCursorRun } from '../_shared/cursor-cloud.ts'
 import { checksView, type ChecksView } from '../_shared/merge-queue.ts'
+import { failedWorkflowRunIds } from '../_shared/merge-train.ts'
 import { runMergeQueue, type MergeQueueDeps } from './worker.ts'
 import { createHealthGate } from '../_shared/health-gate.ts'
 import { runAutoDecide } from './auto-decide.ts'
@@ -157,6 +158,18 @@ const trainDeps: NonNullable<MergeQueueDeps['train']> = {
   closePr: async (token, ref, n, comment) => {
     await gh(token, 'POST', `/repos/${ref.owner}/${ref.repo}/issues/${n}/comments`, { body: comment })
     await gh(token, 'PATCH', `/repos/${ref.owner}/${ref.repo}/pulls/${n}`, { state: 'closed' })
+  },
+  rerunFailed: async (token, ref, sha) => {
+    // A red train's failed Actions runs, re-run once before any member is blamed.
+    const res = await gh(token, 'GET', `/repos/${ref.owner}/${ref.repo}/commits/${sha}/check-runs?per_page=100`)
+    if (!res.ok) return 0
+    const body = (await res.json()) as { check_runs?: Array<{ conclusion?: string | null; details_url?: string | null }> }
+    let n = 0
+    for (const id of failedWorkflowRunIds(body.check_runs ?? [])) {
+      const r = await gh(token, 'POST', `/repos/${ref.owner}/${ref.repo}/actions/runs/${id}/rerun-failed-jobs`)
+      if (r.status === 201) n++
+    }
+    return n
   },
   deleteBranch: async (token, ref, branch) => {
     // Only Mushi's own train branches are ever deleted.

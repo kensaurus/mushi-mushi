@@ -26,8 +26,19 @@ vi.mock('../../supabase/functions/_shared/auth.ts', () => {
     c.set('projectName', 'App')
     await next()
   }
-  return { apiKeyAuth: pass, requireApiKeyScope: () => async (_c: unknown, next: () => Promise<void>) => next() }
+  return {
+    apiKeyAuth: pass,
+    adminOrApiKey: () => pass,
+    requireApiKeyScope: () => async (_c: unknown, next: () => Promise<void>) => next(),
+  }
 })
+// The account key may read project P only.
+vi.mock('../../supabase/functions/api/shared.ts', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  callerCanAccessProject: async (_c: unknown, _db: unknown, _user: string, projectId: string) => ({
+    allowed: projectId === P,
+  }),
+}))
 
 let app: Hono
 beforeAll(async () => {
@@ -60,6 +71,56 @@ describe('GET /v1/sync/whoami', () => {
     const res = await get('/v1/sync/whoami')
     expect(res.status).toBe(500)
     expect(res.json.ok).toBe(false)
+  })
+
+  it('answers 500 when the linked repos cannot be read', async () => {
+    failing = 'project_repos'
+    const res = await get('/v1/sync/whoami')
+    expect(res.status).toBe(500)
+    expect(res.json.ok).toBe(false)
+  })
+
+  it('returns the project linked repos, primary first, without blanks', async () => {
+    db = makeFakeDb({
+      reports: [],
+      project_repos: [
+        { project_id: P, repo_url: 'https://github.com/acme/web', is_primary: false, created_at: '2026-10-01' },
+        { project_id: P, repo_url: 'https://github.com/acme/app', is_primary: true, created_at: '2026-10-05' },
+        { project_id: P, repo_url: '  ', is_primary: false, created_at: '2026-10-06' },
+        { project_id: 'other-project', repo_url: 'https://github.com/acme/other', is_primary: true, created_at: '2026-10-01' },
+      ],
+    })
+    const res = await get('/v1/sync/whoami')
+    expect(res.status).toBe(200)
+    expect(res.json.data.repo_urls).toEqual(['https://github.com/acme/app', 'https://github.com/acme/web'])
+  })
+
+  it('returns an empty repo list when the project links none', async () => {
+    const res = await get('/v1/sync/whoami')
+    expect(res.status).toBe(200)
+    expect(res.json.data.repo_urls).toEqual([])
+  })
+})
+
+describe('GET /v1/admin/projects/:id/ingest-setup', () => {
+  // The SDK route refuses account keys, so MCP diagnose_setup on one used to
+  // fail with ORG_KEY_NOT_ALLOWED instead of diagnosing.
+  it('gives an account key the ingest steps of a project it can read', async () => {
+    db = makeFakeDb({
+      reports: [{ id: 'r1', project_id: P, environment: {}, created_at: '2026-10-01' }],
+      project_api_keys: [],
+      projects: [{ id: P, name: 'App', slug: 'app' }],
+    })
+    const res = await get(`/v1/admin/projects/${P}/ingest-setup`)
+    expect(res.status).toBe(200)
+    expect(res.json.data).toMatchObject({ project_id: P, project_name: 'App', project_slug: 'app', ready: false })
+    const steps = Object.fromEntries((res.json.data.steps as Array<{ id: string; complete: boolean }>).map((s) => [s.id, s.complete]))
+    expect(steps).toMatchObject({ first_report_received: true, api_key_generated: false })
+  })
+
+  it('answers 404 for a project the key cannot read, and 400 for a non-UUID', async () => {
+    expect((await get('/v1/admin/projects/2000000b-0000-4000-8000-000000000000/ingest-setup')).status).toBe(404)
+    expect((await get('/v1/admin/projects/not-a-uuid/ingest-setup')).status).toBe(400)
   })
 })
 

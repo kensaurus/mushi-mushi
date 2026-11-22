@@ -108,7 +108,7 @@ export function DangerConfirm({
 
         {consequences.length > 0 && (
           <div className="rounded-sm border border-danger/30 bg-danger-muted/10 px-3 py-2 space-y-1">
-            <p className="text-3xs font-medium uppercase tracking-wide text-danger">
+            <p className="text-3xs font-semibold text-danger">
               This will permanently delete
             </p>
             <ul className="space-y-0.5">

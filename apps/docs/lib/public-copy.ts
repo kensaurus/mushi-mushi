@@ -16,15 +16,15 @@ export const PUBLIC_FAQ: readonly PublicFaqItem[] = [
   },
   {
     q: 'Reports return 401 or never show up',
-    a: 'Check that your project ID and ingest key match the console. Run mushi ping and Send test report on Projects. Use the SDK ingest key — not your editor MCP key.',
+    a: 'Check that your project ID and SDK key match the console. Run mushi ping, then press Send test report on the Set up page (Test it tab). Use the SDK key, not the key your editor uses.',
   },
   {
     q: 'MCP tools list is empty in Cursor',
-    a: 'Restart Cursor after editing .cursor/mcp.json. Pass MUSHI_PROJECT_ID in env. Mint an MCP read key in the console if you have not already.',
+    a: 'Restart Cursor after editing .cursor/mcp.json. If you signed in through the browser, you need no key: open Cursor\'s MCP settings and sign in to mushi again. Only the local setup (a command with MUSHI_API_KEY) needs a key and MUSHI_PROJECT_ID in env; mint that key on Manage apps.',
   },
   {
     q: 'Widget shows but classification stays pending',
-    a: 'Add your Anthropic or OpenAI key under Settings → API Keys. Self-hosters: confirm migrations are applied and the classify worker is deployed.',
+    a: 'On Mushi Mushi Cloud you need no AI key: open Billing and check whether this app has reached its diagnoses for the month. Self-hosters: add your Anthropic or OpenAI key under Settings → AI keys, and confirm migrations are applied and the classify worker is deployed.',
   },
 ] as const
 
@@ -32,7 +32,7 @@ export const PUBLIC_FAQ_MCP: readonly PublicFaqItem[] = [
   ...PUBLIC_FAQ,
   {
     q: 'Cursor says it cannot reach the Mushi Mushi server',
-    a: 'Check the MCP endpoint URL and that your API key is active. Run npx mushi-mushi setup --ide cursor again to rewrite the config.',
+    a: 'Run npx mushi-mushi setup --ide cursor again to rewrite the config, then restart Cursor and sign in when the browser opens. If you use the local setup with a key instead, check on Manage apps that the key is still active.',
   },
   {
     q: 'Claude Code says "HTTP 404 dialing" the Mushi Mushi server',
@@ -53,9 +53,9 @@ export const PRICING_LEDE = DIAGNOSIS_PLAIN
  * at click time.
  */
 export const PRICING_CTA = {
-  label: 'Start free — 1 app, 100 diagnoses/mo, no card',
+  label: 'Start free — 3 apps, 300 diagnoses/mo, no card',
   href: `${ADMIN_DEMO_BASE}/signup?src=pricing`,
-  note: 'Move to Builder for a second app. Upgrade from Billing, no sales call.',
+  note: 'Move to Builder for 1,000 diagnoses a month. Upgrade from Billing, no sales call.',
 } as const
 
 export interface PricingTierCta {
@@ -87,17 +87,17 @@ export const PRICING_TIER_CTAS: Readonly<Record<string, PricingTierCta>> = {
   // sales-led (owner decision 2026-10-10): no self-serve checkout.
   enterprise: {
     label: 'From $499/mo — contact us',
-    href: 'mailto:kensaurus@gmail.com?subject=Mushi%20Enterprise%20inquiry',
+    href: 'mailto:kensaurus@gmail.com?subject=Mushi%20Mushi%20Enterprise%20inquiry',
     external: true,
   },
 }
 
 export const CLOUD_INTRO = {
-  lead: 'Mushi Cloud at kensaur.us/mushi-mushi is the hosted version of Mushi Mushi. It runs the same code as the public repo, including the source-available enterprise folder; we run it, and you pay per diagnosis.',
+  lead: 'Mushi Mushi Cloud at kensaur.us/mushi-mushi is the hosted version. It runs the same code as the public repo, including the source-available enterprise folder. We run it; you pay by the number of apps, with one diagnosis allowance shared by your whole team.',
   diagnosisNote:
     'A diagnosis = one finished plain-English root cause written to your queue. Filtered noise and deduplicated groups do not count.',
   meteredWhy:
-    'A plan is the number of apps you watch; diagnoses are the allowance under it. Free covers one app and 100 diagnoses a month, Builder three apps, Studio ten. Bug signals are bursty, so past the allowance each diagnosis is a few cents, with a monthly overage cap you set. Duplicate reports collapse, so you pay once per root cause.',
+    'A plan sets how many apps your team can have; diagnoses are the allowance under it. Free covers three apps and 300 diagnoses a month, Builder three apps and 1,000, Studio ten apps and 3,000. Bug signals are bursty, so past the allowance each diagnosis is a few cents, with a monthly overage cap you set for the team. Duplicate reports collapse, so you pay once per root cause.',
 } as const
 
 export const CONNECT_SKILLS = {
@@ -108,6 +108,20 @@ export const CONNECT_SKILLS = {
     'SKILL.md playbooks live in GitHub repos and sync into Mushi Mushi so the right playbook surfaces when a report lands. Your agent reads them — nothing runs automatically.',
   learnMoreHref: 'https://kensaur.us/mushi-mushi/docs/sdks/skills',
   learnMoreLabel: 'Learn about skills →',
+  /**
+   * The skills `npx skills add kensaurus/mushi-mushi` installs, in the order
+   * the Connect lane lists them. scripts/sync-skills.mjs --check fails when
+   * this list and the repo's skills/ folder disagree.
+   */
+  skillNames: [
+    'mushi-mushi',
+    'mushi-setup',
+    'mushi-triage',
+    'mushi-debug',
+    'mushi-test',
+    'mushi-sdk-upgrade',
+    'mushi-check-live-app',
+  ],
 } as const
 
 export const QUICKSTART_HUB_LEDE =
@@ -146,6 +160,8 @@ export interface PricingTierRow {
   highlights: string
   /** Shorter notes column on /cloud */
   cloudNotes?: string
+  /** One plain sentence for the plan cards at the top of /pricing (self-serve plans only). */
+  plain?: string
 }
 
 /** Single source of truth for plan rows on /pricing and /cloud. */
@@ -163,14 +179,23 @@ export const PRICING_TIERS: readonly PricingTierRow[] = [
   {
     id: 'free',
     name: 'Free',
-    apps: '1',
+    apps: '3',
     monthly: '$0',
     cloudCost: '$0 / mo',
-    diagnoses: '100 / mo',
-    retention: '14 days',
+    diagnoses: '300 / mo',
+    retention: '30 days',
     seats: '1',
-    highlights: 'One app, the whole loop once: plain-English diagnosis and a fix packet in your editor; agent fix PRs once you connect GitHub. Hard stop at the limit',
-    cloudNotes: 'All SDKs, hosted console, your own AI and Cursor keys, community support in GitHub Discussions'
+    highlights: 'Three apps and the whole loop: plain-English diagnosis and a fix packet in your editor, plugins and usage alerts; agent fix PRs once you connect GitHub. Hard stop at the limit, no limit with your own AI key',
+    // No AI or Cursor key is needed: diagnoses run on Mushi Mushi's key when the
+    // app has none (_shared/byok.ts resolves the platform key last). Your own
+    // key is optional (pricing_plans.feature_flags.byok is true on Free).
+    // Caveat: classify-report is on the debited list in
+    // _shared/hosted-llm-billing.README.md, so with MUSHI_HOSTED_LLM_BILLING=on
+    // an empty wallet could refuse a platform-key diagnosis. Keep this claim in
+    // step with that flag.
+    cloudNotes:
+      'All SDKs, the hosted console, plugins and usage alerts. No AI key needed; with your own Anthropic or OpenAI key there is no diagnosis cap. Community support in GitHub Discussions',
+    plain: 'Up to 3 apps. Up to 300 bugs explained a month. No card, no AI key.',
   },
   {
     id: 'indie',
@@ -183,9 +208,10 @@ export const PRICING_TIERS: readonly PricingTierRow[] = [
     retention: '90 days',
     seats: '1',
     highlights:
-      'Three apps, plugins from the marketplace, usage alerts and an audit log; then $0.03/diagnosis with a $50 overage cap you set',
+      '1,000 diagnoses, 90 days of history, an audit log and email support; then $0.03/diagnosis with a $50 overage cap you set',
     cloudNotes:
-      'Three apps, plugin marketplace, usage alerts, email support; $0.03 per extra diagnosis'
+      'Three apps, 1,000 diagnoses, audit log, email support; $0.03 per extra diagnosis',
+    plain: 'Up to 3 apps. 1,000 bugs explained a month, shared by every app in your team. Adds 90 days of history, an audit log and email support.',
   },
   {
     id: 'pro',
@@ -199,8 +225,18 @@ export const PRICING_TIERS: readonly PricingTierRow[] = [
     seats: '5',
     highlights:
       'A portfolio of apps: 5 seats, the weekly report across your apps, longer history; then $0.03/diagnosis up to a $200 cap',
+    // Integrations (Sentry, Linear, Jira, Slack, GitHub) are on every plan:
+    // api/routes/integrations.ts has no plan gate. Studio's own flags are
+    // teams, shared_views and intelligence_reports (the weekly report).
+    // Your own AI key is on every plan (pricing_plans.feature_flags.byok,
+    // migration 20261028180000), so no row lists it as a plan feature.
+    // A subscription belongs to the team (billing_subscriptions.organization_id;
+    // _shared/org-billing.ts resolves every plan limit per organization and
+    // _shared/quota.ts counts diagnoses across the team's apps), so the plan's
+    // diagnoses, app limit, seats, retention and plugins are all the team's.
     cloudNotes:
-      'Ten apps, 5 seats, weekly report, shared views, Sentry / Linear / Jira — $0.03 / extra diagnosis'
+      'Ten apps, 5 seats, weekly report, shared views; $0.03 per extra diagnosis',
+    plain: 'Up to 10 apps and 5 people on your team. 3,000 bugs explained a month, shared by every app, with a weekly report.',
   },
   {
     id: 'enterprise',
@@ -219,6 +255,6 @@ export const PRICING_TIERS: readonly PricingTierRow[] = [
     // here. SCIM is omitted: no provisioning endpoint exists yet.
     highlights: 'SAML SSO, SOC 2 evidence collection (not a certification), priority support',
     cloudNotes:
-      'SAML SSO, SOC 2 evidence collection, your own LLM keys, 365-day retention, help running it on your own servers',
+      'SAML SSO, SOC 2 evidence collection, 365-day retention, help running it on your own servers',
   },
 ] as const

@@ -5,15 +5,18 @@
  */
 
 import type { ReactNode, RefObject } from 'react'
+import { PhoneCollapse } from './PhoneCollapse'
 import { FilterSelect, Input, FILTER_SELECT_CLASS } from '../ui'
 import { ActiveFiltersRail, type ActiveFilter } from '../ActiveFiltersRail'
 import { FILTER_OPTIONS, severityLabel } from '../../lib/tokens'
 import { ORIGIN_FILTER_OPTIONS } from '../../lib/reportOrigin'
+import { REPORT_SOURCE_FILTER_OPTIONS } from '../../lib/reportSourceKind'
 import {
   PLATFORM_FILTER_OPTIONS,
   SDK_FILTER_OPTIONS,
   optionLabel,
   statusFilterLabel,
+  DEFAULT_REPORT_STATUS,
 } from '../../lib/reportsListFilters'
 
 export interface ContextChip {
@@ -35,6 +38,8 @@ interface Props {
   sdkPackage?: string
   /** `deployed` or `local`: sent from the deployed app or a developer's machine. */
   origin?: string
+  /** Where the bug came from (lib/reportSourceKind.ts). */
+  source?: string
   /** Created in the last N days (`days` param), e.g. from a KPI tile. */
   days?: string
   contextChips: ContextChip[]
@@ -43,6 +48,11 @@ interface Props {
   onClearAll: () => void
   /** Saved views chip row — rendered in the control bar action slot. */
   savedViews?: ReactNode
+  /**
+   * The status and severity chips. They lead the same row as search and the
+   * selects: one filter row, not two (owner, 2026-11-18).
+   */
+  quickFilters?: ReactNode
 }
 
 export function ReportsFilterBar({
@@ -55,23 +65,26 @@ export function ReportsFilterBar({
   platform = '',
   sdkPackage = '',
   origin = '',
+  source = '',
   days = '',
   contextChips,
   hasFilters,
   onSetFilter,
   onClearAll,
   savedViews,
+  quickFilters,
 }: Props) {
   // Compose the rail data: select-driven filters + bridged context chips.
   // Tone'd by semantic — severity uses warn/danger so a glance shows the
   // urgency band already applied; status uses neutral so the eye reads
   // the value first.
   const railFilters: ActiveFilter[] = [
-    status && {
+    // Open is the default list, not a filter the user applied.
+    status && status !== DEFAULT_REPORT_STATUS && {
       key: 'status',
       label: 'Status',
       value: statusFilterLabel(status),
-      onClear: () => onSetFilter('status', ''),
+      onClear: () => onSetFilter('status', DEFAULT_REPORT_STATUS),
       tone: 'info' as const,
     },
     category && {
@@ -109,6 +122,13 @@ export function ReportsFilterBar({
       onClear: () => onSetFilter('origin', ''),
       tone: 'neutral' as const,
     },
+    source && {
+      key: 'source',
+      label: 'From',
+      value: optionLabel(REPORT_SOURCE_FILTER_OPTIONS, source),
+      onClear: () => onSetFilter('source', ''),
+      tone: 'neutral' as const,
+    },
     days && {
       key: 'days',
       label: 'Created',
@@ -125,9 +145,25 @@ export function ReportsFilterBar({
     })),
   ].filter(Boolean) as ActiveFilter[]
 
+  // Filters the user applied (the active rail lists them), shown on the
+  // phone's collapsed "Filters" line.
+  const activeCount = railFilters.length + (searchInput ? 1 : 0)
+
   return (
     <div className="mb-3 space-y-2">
-      <div className="flex flex-wrap gap-2 items-center">
+      <PhoneCollapse label="Filters" hint={activeCount > 0 ? `${activeCount} on` : null} testId="reports-filters-collapse">
+      {/* One row: chips, search, selects. Sticky from lg, where it stays one or
+          two lines; on a phone it would take the screen. */}
+      <div
+        className={
+          quickFilters
+            ? 'z-10 -mx-1 flex flex-wrap items-center gap-2 rounded-sm border border-edge-subtle/60 bg-surface/95 px-2 py-1.5 backdrop-blur-sm lg:sticky lg:top-0'
+            : 'flex flex-wrap gap-2 items-center'
+        }
+        data-testid="reports-filter-row"
+      >
+        {quickFilters}
+        {quickFilters ? <span aria-hidden className="hidden h-4 w-px shrink-0 bg-edge/60 sm:inline-block" /> : null}
         <Input
           ref={searchInputRef}
           type="search"
@@ -142,7 +178,7 @@ export function ReportsFilterBar({
           aria-label="Search reports by summary or description"
           className="w-64"
         />
-        {/* Status and severity are filtered by the quick-filter chips above. */}
+        {/* Status and severity are filtered by the quick-filter chips. */}
         <FilterSelect
           label="Category"
           value={category}
@@ -192,6 +228,21 @@ export function ReportsFilterBar({
             ))}
           </select>
         </label>
+        <label className="inline-flex flex-col gap-0.5">
+          <span className="sr-only">From</span>
+          <select
+            value={source}
+            onChange={(e) => onSetFilter('source', e.currentTarget.value)}
+            aria-label="Filter by where the bug came from"
+            title="User reports, Sentry, alarms, setup tasks, Mushi Mushi checks or tests."
+            className={FILTER_SELECT_CLASS}
+          >
+            <option value="">Every source</option>
+            {REPORT_SOURCE_FILTER_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </label>
         {savedViews ? (
           <div className="flex flex-wrap items-center gap-1 min-w-0">{savedViews}</div>
         ) : null}
@@ -205,6 +256,7 @@ export function ReportsFilterBar({
           </button>
         )}
       </div>
+      </PhoneCollapse>
       <ActiveFiltersRail
         filters={railFilters}
         onClearAll={onClearAll}

@@ -8,8 +8,8 @@
 # - Builds the Next.js app with `output: 'export'` and basePath
 #   /mushi-mushi/testers (see apps/testers/next.config.mjs)
 # - Syncs immutable assets (JS/CSS) with long cache, HTML with short cache
-# - Deploys the shared CloudFront SPA router function (idempotent — also
-#   deployed by deploy-admin.yml / deploy-docs.yml on the same script change)
+# - Publishes no CloudFront Function: /mushi-mushi/testers routing is owned by
+#   kensaurus/kensaur.us `infra/edge/`
 # - Invalidates CloudFront cache and runs a health check on
 #   /mushi-mushi/testers/
 #
@@ -34,9 +34,6 @@ on:
     branches: [master]
     paths:
       - 'apps/testers/**'
-      - 'scripts/cloudfront-mushi-spa-router.js'
-      - 'scripts/cloudfront-mushi-spa-response.js'
-      - 'scripts/aws-attach-apex-redirect.mjs'
   workflow_dispatch:
 
 concurrency:
@@ -165,38 +162,8 @@ jobs:
             --cache-control "public, max-age=0, must-revalidate" \
             --content-type "application/json"
 
-      - name: Build CloudFront Function artifacts (comment-strip + size gate)
-        # CloudFront Functions reject code >= 10,240 bytes
-        # (FunctionSizeLimitExceeded). Deploy stripped artifacts so source
-        # comments never break deploys; fails here with headroom instead.
-        run: node scripts/build-cf-function.mjs scripts/cloudfront-mushi-spa-router.js
-
-      - name: Deploy CloudFront spa router function
-        # Idempotent — deploy-admin.yml and deploy-docs.yml already deploy this
-        # shared function on any scripts/cloudfront-mushi-spa-router.js change.
-        # Kept here too so a testers-only PR that edits the router still ships it.
-        run: |
-          FUNC_NAME="mushi-mushi-spa-router"
-          EXISTING_ETAG=$(aws cloudfront describe-function --name "$FUNC_NAME" --region us-east-1 \
-            --query 'ETag' --output text 2>/dev/null || echo "")
-          if [ -z "$EXISTING_ETAG" ] || [ "$EXISTING_ETAG" = "None" ]; then
-            aws cloudfront create-function \
-              --name "$FUNC_NAME" \
-              --function-config '{"Comment":"SPA + docs + testers routing under /mushi-mushi/*","Runtime":"cloudfront-js-2.0"}' \
-              --function-code fileb://scripts/.cf-dist/cloudfront-mushi-spa-router.js \
-              --region us-east-1
-          else
-            aws cloudfront update-function \
-              --name "$FUNC_NAME" \
-              --if-match "$EXISTING_ETAG" \
-              --function-config '{"Comment":"SPA + docs + testers routing under /mushi-mushi/*","Runtime":"cloudfront-js-2.0"}' \
-              --function-code fileb://scripts/.cf-dist/cloudfront-mushi-spa-router.js \
-              --region us-east-1
-          fi
-          ETAG=$(aws cloudfront describe-function --name "$FUNC_NAME" --region us-east-1 \
-            --query 'ETag' --output text)
-          aws cloudfront publish-function --name "$FUNC_NAME" --if-match "$ETAG" --region us-east-1
-
+      # The mushi-mushi-spa-router function that routes /mushi-mushi/testers is
+      # owned by kensaurus/kensaur.us `infra/edge/`.
       - name: Invalidate CloudFront cache
         run: |
           aws cloudfront create-invalidation \

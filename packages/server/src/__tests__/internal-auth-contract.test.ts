@@ -76,6 +76,11 @@ const PUBLIC_BY_DESIGN: Record<string, string> = {
   //   (HMAC-SHA256 over the raw body with the per-project derived secret)
   //   constant-time before reading anything from the payload.
   'cursor-webhook': 'Cursor v0 webhook HMAC (X-Webhook-Signature) verified in handler',
+  // webhooks-cloudwatch: Amazon SNS HTTPS deliveries (ADR 0061). SNS cannot
+  //   send a Supabase JWT; _shared/sns-verify.ts checks the bound TopicArn,
+  //   pins SigningCertURL to sns.<region>.amazonaws.com and verifies the
+  //   SignatureVersion 1/2 RSA signature before anything is read or fetched.
+  'webhooks-cloudwatch': 'Amazon SNS message signature (bound topic, pinned cert host) verified in handler',
   // Deliberately unauthenticated liveness/readiness surface. It returns only
   // process/DB health and a version, never tenant data.
   healthz: 'Public liveness probe — exposes only status, DB health, and version',

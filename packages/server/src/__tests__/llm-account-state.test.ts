@@ -104,10 +104,22 @@ describe('call sites skip Sentry for an account state', () => {
 
   it('mistake-clusterer skips a cluster with no usable key at warn level (3K)', () => {
     const src = read('mistake-clusterer/index.ts')
-    expect(src).toContain('if (!anthropicKey) throw new NoProjectLlmKeyError()')
+    expect(src).toContain("err.code === 'NO_KEYS_CONFIGURED') throw new NoProjectLlmKeyError()")
     const skipAt = src.indexOf('if (err instanceof NoProjectLlmKeyError)')
     expect(skipAt).toBeGreaterThan(-1)
     expect(skipAt).toBeLessThan(src.indexOf("log.error('coherence judge failed'"))
     expect(src.slice(skipAt, src.indexOf("log.error('coherence judge failed'"))).toContain('log.warn(')
+  })
+
+  it('mistake-clusterer skips a cluster at warn level when the provider refuses for quota (7816015462)', () => {
+    const src = read('mistake-clusterer/index.ts')
+    expect(src).toContain("import { isQuotaMessage } from '../_shared/llm-quota.ts'")
+    const quotaAt = src.indexOf('if (isLlmBudgetExceeded(err) || isQuotaMessage(errText))')
+    expect(quotaAt).toBeGreaterThan(-1)
+    const errorAt = src.indexOf("log.error('coherence judge failed'")
+    expect(quotaAt).toBeLessThan(errorAt)
+    expect(src.slice(quotaAt, errorAt)).toMatch(/log\.warn\([\s\S]*continue/)
+    // The message no longer names only Anthropic (7818381614).
+    expect(src).not.toContain("'No Anthropic key for this project'")
   })
 })

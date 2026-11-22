@@ -2,7 +2,7 @@
 
 Status: Accepted 2026-10-27 (owner approved after the critical audit). Date: 2026-10-27
 
-Related: [`VISION.md`](../../VISION.md) §1 and §2.1, ADR
+Related: [`docs/VISION.md`](../VISION.md) §1 and §2.1, ADR
 [0016](0016-mushi-as-the-app-recipe-control-plane.md) and
 [0017](0017-strike-the-plan-019-020-sequencing-gate.md) (the recipe and
 portfolio features that never lead a public surface), `apps/docs/content/index.mdx`,
@@ -55,7 +55,7 @@ The critical audit of 2026-10-27 measured the front door:
   quickstarts.
 - **Unchanged.** The tagline ("Your AI wrote it. Mushi Mushi tells you why it
   broke."), the north-star sentence, the category line and the buyer stay as
-  `VISION.md` §1 states them. The one job is a compression of the north star.
+  `docs/VISION.md` §1 states them. The one job is a compression of the north star.
 
 ## Rejected
 

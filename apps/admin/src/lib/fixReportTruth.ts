@@ -14,9 +14,11 @@
  */
 
 import { humanizeFixError } from './humanizeFixError'
+import { isAgentOutOfUsageError } from './agentOutOfUsage'
 import { isFixMerged } from './mergeFix'
 import { fixFailureBucket } from './pdcaAct'
 import type { FixAttempt } from '../components/fixes/types'
+import { reportHeadline } from './format'
 
 const PROVIDER_LABEL: Record<string, string> = {
   openai: 'OpenAI',
@@ -50,7 +52,12 @@ export function supersededLabel(fix: FixAttempt): string {
   return 'Report fixed'
 }
 
-/** One entry per report that a retry can clear right now. */
+/**
+ * One entry per report that a retry can clear right now. While the agents
+ * are out of credits there is none (2026-11-11: "Retry 53" on 53 runs the
+ * account refused); FixesPage reads that live (lib/agentCredits.ts), so the
+ * refused runs can be retried again once the credits are back.
+ */
 export function retryCandidates(fixes: FixAttempt[]): FixAttempt[] {
   const seen = new Set<string>()
   const out: FixAttempt[] = []
@@ -114,7 +121,7 @@ export function credentialAdvice(fix: FixAttempt): CredentialAdvice | null {
   }
   return {
     provider: block.provider,
-    message: `${name} rejected the key, and Mushi has not checked a newer one yet. Check the key, then retry.`,
+    message: `${name} rejected the key, and Mushi Mushi has not checked a newer one yet. Check the key, then retry.`,
     retryNow: false,
     to,
     linkLabel,
@@ -134,12 +141,19 @@ export interface FailureHeadline {
 export function failureHeadline(fix: FixAttempt): FailureHeadline | null {
   const firstLine = fix.error ? fix.error.split('\n')[0].trim().slice(0, 240) : null
   if (!fix.error) return null
+  if (isAgentOutOfUsageError(fix.error)) {
+    return {
+      title: "The coding agent's account was out of credits.",
+      hint: 'Retry once the credits are back (Spend credits shows when; Retry stays hidden until then), or fix it now with Claude Code on your own computer.',
+      firstLine,
+    }
+  }
   const h = humanizeFixError(fix.error, { agent: fix.agent, category: fix.failure_category })
   if (!h) return null
   if (h.known === false) {
     return {
       title: firstLine ?? h.title,
-      hint: 'Mushi does not recognise this error yet. Read the details, then retry or fix it in your editor.',
+      hint: 'Mushi Mushi does not recognise this error yet. Read the details, then retry or fix it in your editor.',
       firstLine,
     }
   }
@@ -159,7 +173,7 @@ export function failureCause(fix: FixAttempt): string {
 
 /** Report title for a row, never a raw id. */
 export function fixReportLabel(fix: FixAttempt): string {
-  return fix.report_title?.trim() || 'Untitled report'
+  return reportHeadline(fix.report_title?.trim() ?? '') || 'Untitled report'
 }
 
 /**
@@ -202,6 +216,7 @@ const CAUSE_LABELS: Record<string, string> = {
   ci_failed: 'CI failed',
   ci_infra: CI_INFRA_STOPPED_LABEL,
   pr_closed_unmerged: 'PR closed without merge',
+  agent_out_of_usage: 'Coding agent out of credits',
   unknown: 'Unrecognised error',
 }
 

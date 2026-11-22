@@ -49,7 +49,7 @@ export function ModernizationFindings({
   return (
     <Card className="overflow-hidden p-0">
       <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-edge-subtle px-3 py-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-fg-secondary">
+        <h3 className="text-xs font-semibold text-fg-secondary">
           Library modernization
           <Badge className={`ml-2 ${CHIP_TONE.warnSubtle}`}>{findings.length}</Badge>
         </h3>

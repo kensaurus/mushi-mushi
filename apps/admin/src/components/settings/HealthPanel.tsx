@@ -7,6 +7,8 @@
  *            Where your data lives  Mushi Cloud or your own Supabase
  *            Install the widget     per-framework install snippet
  *            API address            the URL your SDK sends reports to
+ *          Above them, on a self-hosted server only, the Self-host setup
+ *          checklist (SelfHostSetupChecklist).
  */
 
 import { useState } from 'react'
@@ -19,6 +21,7 @@ import { usePersistentState } from '../../lib/usePersistentState'
 import { ConnectionStatus as BackendDiagnostics } from '../ConnectionStatus'
 import { BackendModePanel, currentBackendLabel } from './BackendModePanel'
 import { SettingsList, SettingsRow, type RowStatusValue } from './SettingsRow'
+import { SelfHostSetupChecklist } from './SelfHostSetupChecklist'
 
 interface HealthPanelProps {
   projectId: string
@@ -39,15 +42,16 @@ export function HealthPanel({ projectId, projectName }: HealthPanelProps) {
 
   return (
     <>
+      <SelfHostSetupChecklist />
       <SettingsList
         title="Check the connection"
-        description={`Check that bug reports from ${project.name} reach Mushi and come out the other end.`}
+        description={`Check that bug reports from ${project.name} reach Mushi Mushi and come out the other end.`}
       >
         <QuickTestRow project={project} />
 
         <SettingsRow
           icon={<IconHealth size={16} />}
-          title="Connection to Mushi"
+          title="Connection to Mushi Mushi"
           purpose="Checks that this browser can reach the database, sign-in and report services."
           status={<BackendDiagnostics compact />}
           action={
@@ -62,7 +66,7 @@ export function HealthPanel({ projectId, projectName }: HealthPanelProps) {
         <SettingsRow
           icon={<IconStorage size={16} />}
           title="Where your data lives"
-          purpose={`Now: ${currentBackendLabel()}. Change it only if you run your own Mushi backend.`}
+          purpose={`Now: ${currentBackendLabel()}. Change it only if you run your own Mushi Mushi backend.`}
           action={
             <Btn size="sm" variant="ghost" aria-expanded={showBackend} onClick={() => setShowBackend(!showBackend)}>
               {showBackend ? 'Cancel' : 'Change'}
@@ -73,7 +77,7 @@ export function HealthPanel({ projectId, projectName }: HealthPanelProps) {
         </SettingsRow>
       </SettingsList>
 
-      <SettingsList title="Install the bug widget" description="The install lives on one page so the snippet, the keys and the preview never drift.">
+      <SettingsList title="Install the bug widget">
         <SettingsRow
           icon={<IconTerminal size={16} />}
           title="Install command and setup code"
@@ -111,7 +115,8 @@ function QuickTestRow({ project }: { project: { id: string; name: string } }) {
   const status: RowStatusValue = running
     ? { state: 'checking', label: 'Sending…', detail: 'Sending a test report.' }
     : !result
-      ? { state: 'checking', detail: 'Send one to see the whole path work.' }
+      ? // One "Not checked yet" pill; the button beside it does the rest (round-3 review 2026-11-19).
+        { state: 'checking', label: 'Not checked yet' }
       : result.ok
         ? { state: 'working', detail: `${result.detail} Checked ${relativeTime(result.at) ?? 'just now'}.` }
         : { state: 'attention', detail: result.detail }

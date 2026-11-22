@@ -22,7 +22,7 @@
 
 import { RESOLVED_REPORT_STATUSES } from './fix-report-truth.ts'
 import { ciHeadState, followupTrigger, FOLLOWUP_REASONS, type CiHeadState, type CiJobForRepair, type PriorFollowup } from './review-followup.ts'
-import { localHandoff } from './local-followup.ts'
+import { LOCAL_FIX_AGENT, localHandoff } from './local-followup.ts'
 import { parseCheckNameList } from './merge-queue.ts'
 import { ROOT_CAUSE_OF_GROUP } from './health-checks.ts'
 
@@ -98,6 +98,13 @@ export interface PipelineGroup {
   /** The setting that holds this group; `hint` says what it needs. */
   settings: { label: string; to: string; hint?: string } | null
   items: PipelineItem[]
+  /**
+   * Every item's time in its stage, in four buckets: [0–3 d, 3–7 d, 7–30 d, 30 d+]
+   * (`ageBuckets`). Counted over all `count` items before the list is cut to
+   * MAX_ITEMS_PER_GROUP, so the console's age bar adds up to the group. Absent on groups
+   * built elsewhere (intake, dispatcher): the console buckets their listed items.
+   */
+  ages?: AgeBuckets
   /**
    * The Health check that explains this stuck group while it is a problem
    * for every item's app (`tagRootCauses`); `count` is how many wait on it.
@@ -259,6 +266,30 @@ export const RECENT_MS = 7 * 24 * HOUR
 /** Items listed per group; counts are always whole. */
 export const MAX_ITEMS_PER_GROUP = 100
 
+/** [0–3 d, 3–7 d, 7–30 d, 30 d+] items, by time in their stage. */
+type AgeBuckets = [number, number, number, number]
+
+const DAY = 24 * HOUR
+/** Bucket edges, half-open: exactly 3 days is in 3–7 d. */
+const AGE_EDGES = [3 * DAY, 7 * DAY, 30 * DAY] as const
+
+/**
+ * @internal Exported for tests.
+ * Count `since` timestamps into [0–3 d, 3–7 d, 7–30 d, 30 d+] against `now`. An unreadable
+ * timestamp counts as 0–3 d (it is still an item; the bar must add up to the group).
+ */
+export function ageBuckets(sinces: readonly string[], now: Date): AgeBuckets {
+  const out: AgeBuckets = [0, 0, 0, 0]
+  const t0 = now.getTime()
+  for (const since of sinces) {
+    const t = Date.parse(since)
+    const age = Number.isFinite(t) ? t0 - t : 0
+    const i = age < AGE_EDGES[0] ? 0 : age < AGE_EDGES[1] ? 1 : age < AGE_EDGES[2] ? 2 : 3
+    out[i]++
+  }
+  return out
+}
+
 export const FOLLOWUPS_SETTING = {
   label: 'Review follow-ups setting',
   to: '/settings?tab=byok#review-followups',
@@ -418,7 +449,10 @@ function followupBlock(kind: 'findings' | 'ci_repair', ctx: BlockContext): strin
     ci = ciHeadState(ctx.ciJobs.get(rv.head_sha) ?? [])
   }
   const head = rv.head_sha ?? null
-  if (cloud.ready) {
+  // A PR a local lane opened goes to the local lanes even when cloud agents can run
+  // (api/routes/pipeline.ts sendFollowup): the cloud trigger would refuse it.
+  const localPr = a.agent === LOCAL_FIX_AGENT
+  if (cloud.ready && !localPr) {
     const decision = followupTrigger({
       review: { status: rv.status, verdict: rv.verdict, head_sha: head },
       attempt: { pr_url: a.pr_url, pr_state: a.pr_state, merged_at: a.merged_at, agent: a.agent },
@@ -435,7 +469,8 @@ function followupBlock(kind: 'findings' | 'ci_repair', ctx: BlockContext): strin
     cloudFollowupsOn: cloud.enabled,
     ciCodeRed: kind === 'ci_repair' ? ci?.state === 'code_failure' : undefined,
   })
-  return handoff.ok ? null : `${cloud.why}, and the local mushi work lanes cannot take it: ${handoff.message}`
+  if (handoff.ok) return null
+  return localPr ? `The local mushi work lanes cannot take it: ${handoff.message}` : `${cloud.why}, and the local mushi work lanes cannot take it: ${handoff.message}`
 }
 
 /** Per action of a group: the refusal the server would give for this item, from facts it already has. */
@@ -499,7 +534,7 @@ class Groups {
     g.items.push(item)
     this.map.set(id, g)
   }
-  build(): PipelineGroup[] {
+  build(now: Date): PipelineGroup[] {
     return [...this.map.entries()].map(([id, { spec, items }]) => {
       items.sort((a, b) => a.since.localeCompare(b.since))
       return {
@@ -512,6 +547,7 @@ class Groups {
         actions: spec.actions,
         settings: spec.settings ?? null,
         items: items.slice(0, MAX_ITEMS_PER_GROUP),
+        ages: ageBuckets(items.map((i) => i.since), now),
       }
     })
   }
@@ -825,7 +861,7 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
     }
   }
 
-  const all = groups.build()
+  const all = groups.build(now)
   if (input.actionFacts) {
     const attemptsById = new Map(input.attempts.map((a) => [a.id, a]))
     const queueById = new Map(input.queue.map((q) => [q.fix_attempt_id, q]))
@@ -884,6 +920,28 @@ export interface AgentKeyRow {
   status: string | null
   spend_down_enabled: boolean | null
   exhausted_until: string | null
+  /** The name the owner gave the key (never key material). */
+  label?: string | null
+}
+
+/** Why a Cursor key that serves the app cannot start fixes, and its repair. */
+export interface OffKey {
+  label: string | null
+  issue: 'turned_off' | 'used_up' | 'spend_down_off'
+  /** For used_up: when Cursor lets it start agents again. */
+  until?: string
+}
+
+/** Each serving key that cannot start fixes, with its own reason (first that applies). */
+export function offKeyReasons(keys: AgentKeyRow[], now: number): OffKey[] {
+  const out: OffKey[] = []
+  for (const k of keys) {
+    const label = typeof k.label === 'string' && k.label.trim() ? k.label.trim() : null
+    if (k.status !== 'active') out.push({ label, issue: 'turned_off' })
+    else if (k.exhausted_until && Date.parse(k.exhausted_until) > now) out.push({ label, issue: 'used_up', until: k.exhausted_until })
+    else if (!k.spend_down_enabled) out.push({ label, issue: 'spend_down_off' })
+  }
+  return out
 }
 
 export interface DispatcherInput {
@@ -907,7 +965,7 @@ export interface DispatcherStatus {
   autofixOn: boolean
   /** Who opened fixes in the last 7 days. */
   opener: 'server' | 'local' | 'both' | 'nobody'
-  server: { agentKeys: number; offKeys: number; dispatches24h: number; dispatches48h: number; lastAt: string | null }
+  server: { agentKeys: number; offKeys: number; dispatches24h: number; dispatches48h: number; lastAt: string | null; offKeyList?: OffKey[] }
   local: {
     runs24h: number
     running: number
@@ -945,7 +1003,7 @@ export function buildDispatchers(input: DispatcherInput): DispatcherStatus[] {
     const serverTimes = [...jobs.map((j) => j.created_at), ...serverAttempts.map((a) => a.created_at)].sort()
     const dispatches24h = jobs.filter((j) => within(j.created_at, 24 * HOUR)).length
     const dispatches48h = jobs.filter((j) => within(j.created_at, 48 * HOUR)).length
-    const server = { agentKeys, offKeys: keys.length - agentKeys, dispatches24h, dispatches48h, lastAt: serverTimes[serverTimes.length - 1] ?? null }
+    const server = { agentKeys, offKeys: keys.length - agentKeys, dispatches24h, dispatches48h, lastAt: serverTimes[serverTimes.length - 1] ?? null, offKeyList: offKeyReasons(keys, now) }
     const localTimes = localAttempts.map((a) => a.created_at).sort()
     // Registered lanes, not inferred from runs (ADR 0048): one that is online,
     // not paused or draining, before its stop date and fixing new reports.
@@ -1231,7 +1289,7 @@ export interface InfraClaimRow {
  * their own: a person decides whether to queue them again ("Requeue").
  * Item ids are claim ids; never counted against the report.
  */
-export function localInfraGroup(claims: InfraClaimRow[], titles: Map<string, string>, laneNames: Map<string, string>): PipelineGroup | null {
+export function localInfraGroup(claims: InfraClaimRow[], titles: Map<string, string>, laneNames: Map<string, string>, now: Date = new Date()): PipelineGroup | null {
   if (claims.length === 0) return null
   const items: PipelineItem[] = claims
     .map((cl) => ({
@@ -1264,5 +1322,6 @@ export function localInfraGroup(claims: InfraClaimRow[], titles: Map<string, str
     actions: ['requeue'],
     settings: WORKERS_SETTING,
     items: items.slice(0, MAX_ITEMS_PER_GROUP),
+    ages: ageBuckets(items.map((i) => i.since), now),
   }
 }

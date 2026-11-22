@@ -39,6 +39,9 @@ export interface ByokKeyHealthInput {
   expires_at?: string | null
   /** A key in the old one-key-per-provider project_settings columns. */
   legacy?: boolean
+  /** Last characters of the key, to spot a second copy of the same key (pool keys only). */
+  key_hint?: string | null
+  created_at?: string | null
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -107,6 +110,32 @@ export function countByokKeyHealth(
   const counts: ByokHealthCounts = { working: 0, attention: 0, replaced: 0, expiring: 0, checking: 0, off: 0 }
   for (const key of keys) counts[byokKeyHealth(key, keys, now)] += 1
   return counts
+}
+
+/**
+ * Keys the Settings page asks the user to act on: broken, expiring, unchecked, replaced, and a
+ * second working copy of the same key. Mirrors admin keyStatus.ts `keysNeedingAction` so the
+ * sidebar badge and the page banner give one number (round-3 review, 2026-11-19).
+ */
+export function countByokKeysNeedingAction(
+  keys: readonly ByokKeyHealthInput[],
+  now: number = Date.now(),
+): number {
+  const seen = new Set<string>()
+  let n = 0
+  const ordered = [...keys].sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? ''))
+  for (const key of ordered) {
+    const state = byokKeyHealth(key, keys, now)
+    const id = key.key_hint ? `${key.provider_slug}:${key.key_hint}` : null
+    const copy = id !== null && seen.has(id)
+    if (id) seen.add(id)
+    if (state === 'working') {
+      if (copy) n += 1
+    } else if (state !== 'off') {
+      n += 1
+    }
+  }
+  return n
 }
 
 /** The status a legacy single-key slot reports, from its stored test result. */

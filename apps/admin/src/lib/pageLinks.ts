@@ -123,12 +123,12 @@ export const PAGE_FLOW_LINKS: Record<string, PageFlowLink[]> = {
   recipe: [
     { to: '/fullstack-audit', label: 'Full-stack audit', blurb: 'Every check, with findings' },
     { to: '/design', label: 'Design system', blurb: 'Tokens and drift' },
-    { to: '/health', label: 'Mushi health', blurb: 'Mushi’s AI calls and jobs' },
+    { to: '/health', label: 'Mushi Mushi health', blurb: 'Mushi Mushi’s AI calls and jobs' },
   ],
   'fullstack-audit': [
     { to: '/recipe', label: 'App blueprint', blurb: 'What the app is made of' },
     { to: '/inventory', label: 'User stories', blurb: 'The pages being checked' },
-    { to: '/health', label: 'Mushi health', blurb: 'Mushi’s AI calls and jobs' },
+    { to: '/health', label: 'Mushi Mushi health', blurb: 'Mushi Mushi’s AI calls and jobs' },
   ],
   'qa-coverage': [
     { to: '/reports', label: 'Bugs', blurb: 'Bugs a failing test found' },
@@ -163,10 +163,13 @@ export const PAGE_FLOW_LINKS: Record<string, PageFlowLink[]> = {
     { to: '/reports', label: 'Bugs', blurb: 'Pin evidence to a bug' },
     { to: '/lessons', label: 'Lessons', blurb: 'Turn evidence into a rule' },
   ],
+  // The Integrations page had its own second "Related:" row; its links live here now.
   integrations: [
     { to: '/mcp', label: 'Editor agents', blurb: 'Connect your editor' },
+    { to: '/skills', label: 'Agent skills', blurb: 'Skills your agent can run' },
     { to: '/notifications', label: 'Reporter updates', blurb: 'What reporters see' },
-    { to: '/health', label: 'Mushi health', blurb: 'Probe history' },
+    { to: '/marketplace', label: 'Plugins', blurb: 'More connections' },
+    { to: '/health', label: 'Mushi Mushi health', blurb: 'Probe history' },
   ],
   mcp: [
     { to: '/connect', label: 'Connect', blurb: 'One-click editor install' },
@@ -182,17 +185,17 @@ export const PAGE_FLOW_LINKS: Record<string, PageFlowLink[]> = {
     { to: '/releases', label: 'Releases', blurb: 'Tell reporters what shipped' },
     { to: '/reports', label: 'Bugs', blurb: 'The reports behind each update' },
   ],
-  marketplace: [
-    { to: '/integrations/config', label: 'Integrations', blurb: 'Built-in connections' },
-  ],
+  // No marketplace entry: its "Set up from Integrations:" row already links there (2026-11-19:
+  // "Related: Integrations" was the third link to the same page).
   queue: [
     { to: '/reports', label: 'Bugs', blurb: 'Reports being processed' },
-    { to: '/health', label: 'Mushi health', blurb: 'Mushi’s scheduled jobs' },
+    { to: '/health', label: 'Mushi Mushi health', blurb: 'Mushi Mushi’s scheduled jobs' },
   ],
+  // The sidebar's own names (round-3 review 2026-11-19: "Dashboard · Explore · SDK Setup").
   settings: [
-    { to: '/dashboard', label: 'Dashboard', blurb: 'See the effect of your config' },
-    { to: '/explore', label: 'Explore', blurb: 'Browse indexed codebase' },
-    { to: '/sdk', label: 'SDK Setup', blurb: 'Embed the capture widget' },
+    { to: '/dashboard', label: 'Home', blurb: 'See the effect of your config' },
+    { to: '/explore', label: 'Code map', blurb: 'Browse indexed codebase' },
+    { to: '/onboarding', label: 'Set up', blurb: 'Install the bug widget' },
   ],
   sdk: [
     { to: '/settings', label: 'Settings', blurb: 'API keys and project config' },

@@ -1,15 +1,17 @@
 # `@mushi-mushi/plugin-bugsnag`
 
-> **Your AI wrote it. Mushi Mushi tells you why it broke.**
+> **Your AI built it. Mushi Mushi makes it better.**
+
+**Self-host only:** you need this only when you run your own Mushi Mushi server. To add Mushi Mushi to an app, install [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi).
 
 For teams who live in Bugsnag and want to see what users report there too.
 This copies each bug Mushi Mushi triages into Bugsnag as an error, next to
-your Bugsnag crashes, and marks it `fixed` when Mushi applies a fix.
+your Bugsnag crashes, and marks it `fixed` when Mushi Mushi applies a fix.
 
 **Status on Mushi Mushi Cloud:** the console's **Marketplace** has no Bugsnag
 listing yet (checked 2026-10-29), so you can't install it from the console.
-On a Mushi server you run yourself, add a `plugin_registry` row for it and
-install it like any listed plugin. Getting Bugsnag errors *into* Mushi is the
+On a Mushi Mushi server you run yourself, add a `plugin_registry` row for it and
+install it like any listed plugin. Getting Bugsnag errors *into* Mushi Mushi is the
 separate `@mushi-mushi/adapters` package.
 
 ```bash
@@ -70,4 +72,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 77 edge functions · 546 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 78 edge functions · 583 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

@@ -6,6 +6,9 @@ import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { dbError, callerProjectIds, isProjectAdmin, requireProjectAdmin, resolveOwnedProject } from '../shared.ts';
 import { loadLlmWindowStats } from '../../_shared/llm-window-stats.ts';
 import { log } from '../../_shared/logger.ts';
+import { logAudit } from '../../_shared/audit.ts';
+import { triggerClassification } from '../helpers.ts';
+import { recoverStranded, recoverSummary } from '../queue-actions.ts';
 
 export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
@@ -500,6 +503,10 @@ export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void 
       'seer-poller': 15,
       'ci-sync': 60,
     };
+    // Jobs whose pg_cron tick calls them only when there is work
+    // (migration 20261111091825_cron_edge_work_gates). A quiet day writes no
+    // cron_runs row, which is health, not staleness.
+    const ON_DEMAND_JOBS = new Set(['plugin-dispatch-retry', 'qa-story-runner']);
     const now = Date.now();
     const rowsOrEmpty = runs ?? [];
 
@@ -553,8 +560,9 @@ export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void 
         const ageMin = Math.max(0, Math.round((now - new Date(lastRunIso).getTime()) / 60_000));
         const expected = EXPECTED_CADENCE_MIN[job] ?? 60 * 24;
         byJob[job].stalenessMinutes = ageMin;
-        byJob[job].staleness =
-          ageMin <= expected ? 'ok' : ageMin <= expected * 3 ? 'warn' : 'stale';
+        byJob[job].staleness = ON_DEMAND_JOBS.has(job)
+          ? 'ok'
+          : ageMin <= expected ? 'ok' : ageMin <= expected * 3 ? 'warn' : 'stale';
       }
     }
 
@@ -660,7 +668,7 @@ export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void 
 
   app.post('/v1/admin/health/cron/:job/trigger', jwtAuth, async (c) => {
     const job = c.req.param('job')!;
-    const allowed = ['judge-batch', 'intelligence-report'] as const;
+    const allowed = ['judge-batch', 'intelligence-report', 'pipeline-recovery'] as const;
     if (!allowed.includes(job as (typeof allowed)[number])) {
       return c.json(
         { ok: false, error: { code: 'UNKNOWN_JOB', message: `Unknown job: ${job}` } },
@@ -675,6 +683,31 @@ export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void 
     // These jobs spend LLM budget, so running one by hand is owner/admin work.
     const forbidden = requireProjectAdmin(c, project, 'Only organization owners and admins can run jobs by hand.');
     if (forbidden) return forbidden;
+
+    // pipeline-recovery is a pg_cron SQL function (recover_stranded_pipeline),
+    // not an edge function, and it recovers every tenant. By hand it runs the
+    // same recovery as the queue's "Recover stranded", for this app only. No
+    // cron_runs row: the doctor reads that job's freshness, and a manual run
+    // must not make a skipping cron look healthy.
+    if (job === 'pipeline-recovery') {
+      const recovered = await recoverStranded(db, [project.id], triggerClassification, new Date());
+      await logAudit(db, project.id, userId, 'settings.updated', 'queue', undefined, {
+        kind: 'recover_stranded',
+        trigger: 'health',
+        reports: recovered.reports,
+        queue: recovered.queue,
+        reconciled: recovered.reconciled,
+      }).catch(() => {});
+      return c.json({
+        ok: true,
+        data: {
+          reports: recovered.reports,
+          queue: recovered.queue,
+          reconciled: recovered.reconciled,
+          message: recoverSummary(recovered),
+        },
+      });
+    }
 
     const res = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/${job}`, {
       method: 'POST',

@@ -19,6 +19,7 @@ import {
 } from './device-auth.js'
 import { printAuthApproved, printAuthBanner, printAuthFailed } from './auth-ui.js'
 import { CLI_KEY_SCOPES, FULL_CLI_KEY_SCOPES } from './key-scopes.js'
+import { envKeyOverrideLines } from './env-key-override.js'
 
 export type RunLoginOptions = {
   apiKey?: string
@@ -173,25 +174,36 @@ export function defaultProjectName(packageName: string | undefined, cwd: string)
 export type NonInteractiveProjectChoice =
   | { kind: 'existing'; id: string; name: string }
   | { kind: 'new'; name: string }
+  | { kind: 'ask' }
 
 /**
  * Project pick for a terminal that cannot prompt (an AI agent's shell, CI).
  * Reuse the project whose name matches this app; otherwise create one named
  * after it. Never falls back to "the first project": a non-interactive run
  * must not silently wire an app to an unrelated project's reports.
+ *
+ * Outside an app folder (no package.json, no .git) an account that already
+ * has projects gets `ask` instead: a login run from the home folder created a
+ * stray project named after the user (2026-11-20).
  */
 export function chooseProjectNonInteractive(
   projects: ReadonlyArray<{ id: string; name: string; slug?: string }>,
   preferredName: string,
+  appFolder = true,
 ): NonInteractiveProjectChoice {
   const wanted = slugify(preferredName)
   const match = projects.find((p) => slugify(p.name) === wanted || (p.slug !== undefined && slugify(p.slug) === wanted))
-  return match ? { kind: 'existing', id: match.id, name: match.name } : { kind: 'new', name: preferredName }
+  if (match) return { kind: 'existing', id: match.id, name: match.name }
+  if (!appFolder && projects.length > 0) return { kind: 'ask' }
+  return { kind: 'new', name: preferredName }
 }
 
 export async function runLogin(opts: RunLoginOptions = {}): Promise<void> {
   const { CLOUD_API_ENDPOINT, resolveCloudEndpoint } = await import('./endpoint.js')
-  const endpoint = opts.endpoint ? resolveCloudEndpoint(opts.endpoint) : CLOUD_API_ENDPOINT
+  // A saved endpoint (self-host: `mushi selfhost up` writes it) wins over Cloud when no
+  // --endpoint is given; before 2026-11-18 login always went to Cloud.
+  const saved = loadConfig().endpoint
+  const endpoint = opts.endpoint ? resolveCloudEndpoint(opts.endpoint) : saved ? resolveCloudEndpoint(saved) : CLOUD_API_ENDPOINT
   const consoleBase = await resolveConsoleUrl()
 
   let apiKey = opts.apiKey
@@ -314,10 +326,22 @@ export async function runLogin(opts: RunLoginOptions = {}): Promise<void> {
       // deterministically from the app in the current folder instead.
       const { readPackageJson } = await import('./detect.js')
       const cwd = process.cwd()
+      const pkg = readPackageJson(cwd)
+      const { existsSync } = await import('node:fs')
+      const { join } = await import('node:path')
       const nonInteractive = chooseProjectNonInteractive(
         projectsList,
-        defaultProjectName(readPackageJson(cwd)?.name, cwd),
+        defaultProjectName(pkg?.name, cwd),
+        Boolean(pkg) || existsSync(join(cwd, '.git')),
       )
+      if (nonInteractive.kind === 'ask') {
+        process.stderr.write(
+          `\nerror: This folder is not an app (no package.json or .git), so no project was picked or created.\n` +
+            `  Run it again from your app's folder, or name the project:\n` +
+            projectsList.map((p) => `    mushi login --project-id ${p.id}   # ${p.name}\n`).join(''),
+        )
+        process.exit(2)
+      }
       choice = nonInteractive.kind === 'existing'
         ? { kind: 'picked', id: nonInteractive.id, name: nonInteractive.name }
         : { kind: 'create', name: nonInteractive.name }
@@ -395,8 +419,10 @@ export async function runLogin(opts: RunLoginOptions = {}): Promise<void> {
     if (opts.upgradeScope) {
       console.log(`  ✓ Full-scope CLI key saved (${apiKey.slice(0, 12)}…)`)
       console.log(`    Scopes: report:write · mcp:read · mcp:write — SDK + MCP + admin CLI (incl. writes) all work with this key`)
+      for (const line of envKeyOverrideLines(process.env, apiKey)) console.log(`  ${line}`)
     } else {
       console.log(`  ✓ CLI key saved (${apiKey.slice(0, 12)}…)`)
+      for (const line of envKeyOverrideLines(process.env, apiKey)) console.log(`  ${line}`)
       console.log(`    Scopes: report:write · mcp:read — SDK ingest + MCP read tools.`)
       console.log(`    Admin writes (mushi work, fix merge, billing cap, pipeline start) need: mushi login --upgrade-scope${chosenProjectId ? ` --project-id ${chosenProjectId}` : ''}`)
     }

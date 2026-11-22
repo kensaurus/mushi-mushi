@@ -8,7 +8,8 @@
  *   1. isNewerSemver — basic ordering and edge cases
  *   2. computeBumpPlan — bumps semver deps, skips non-registry specifiers,
  *      skips workspace: / file: / git URLs, skips already-current packages,
- *      preserves ^ prefix, flags @mushi-mushi/react migration
+ *      preserves ^ prefix, bumps the `mushi-mushi` umbrella, points scoped
+ *      SDKs at their `mushi-mushi/<name>` path
  */
 
 import { describe, it, expect } from 'vitest'
@@ -16,6 +17,7 @@ import {
   isNewerSemver,
   computeBumpPlan,
   UPGRADEABLE_PACKAGES,
+  UMBRELLA_PATHS,
 } from '../../supabase/functions/_shared/sdk-upgrade-plan.ts'
 
 // ---------------------------------------------------------------------------
@@ -214,21 +216,60 @@ describe('computeBumpPlan — allow-list', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Migration note: @mushi-mushi/react → @mushi-mushi/web
+// The one package (ADR 0060): `mushi-mushi` is bumped; scoped SDKs are bumped
+// too and point at the umbrella path that ships the same code.
 // ---------------------------------------------------------------------------
-describe('computeBumpPlan — @mushi-mushi/react migration flag', () => {
-  it('sets migrateToWeb=true for @mushi-mushi/react entries', () => {
+describe('computeBumpPlan — mushi-mushi umbrella host', () => {
+  it('bumps mushi-mushi in dependencies, keeping the prefix', () => {
+    const pkg = { dependencies: { 'mushi-mushi': '^1.35.0', react: '^19.0.0' } }
+    const { bumps, updatedPkg } = computeBumpPlan(pkg, { 'mushi-mushi': '1.36.2' })
+    expect(bumps).toEqual([{ package: 'mushi-mushi', from: '1.35.0', to: '1.36.2' }])
+    expect((updatedPkg.dependencies as Record<string, string>)['mushi-mushi']).toBe('^1.36.2')
+    expect((updatedPkg.dependencies as Record<string, string>).react).toBe('^19.0.0')
+  })
+
+  it('leaves the 0.x launcher alone: it is the setup command, and 1.x would add the whole SDK', () => {
+    const pkg = { devDependencies: { 'mushi-mushi': '0.8.15' } }
+    const { bumps } = computeBumpPlan(pkg, { 'mushi-mushi': '1.35.0' })
+    expect(bumps).toHaveLength(0)
+  })
+
+  it('bumps the umbrella within the 1.x line', () => {
+    const pkg = { dependencies: { 'mushi-mushi': '^1.35.0' } }
+    const { bumps } = computeBumpPlan(pkg, { 'mushi-mushi': '1.36.0' })
+    expect(bumps).toEqual([{ package: 'mushi-mushi', from: '1.35.0', to: '1.36.0' }])
+  })
+
+  it('keeps the supply-chain major guard for the umbrella', () => {
+    const pkg = { dependencies: { 'mushi-mushi': '^1.35.0' } }
+    const { bumps } = computeBumpPlan(pkg, { 'mushi-mushi': '9.0.0' })
+    expect(bumps).toHaveLength(0)
+  })
+
+  it('never replaces a workspace: umbrella specifier', () => {
+    const pkg = { dependencies: { 'mushi-mushi': 'workspace:^' } }
+    const { bumps } = computeBumpPlan(pkg, { 'mushi-mushi': '1.36.0' })
+    expect(bumps).toHaveLength(0)
+  })
+
+  it('bumps the umbrella and an old scoped SDK side by side', () => {
+    const pkg = { dependencies: { 'mushi-mushi': '1.35.0', '@mushi-mushi/react': '1.34.0' } }
+    const { bumps } = computeBumpPlan(pkg, { 'mushi-mushi': '1.36.0', '@mushi-mushi/react': '1.36.0' })
+    expect(bumps.map((b) => b.package).sort()).toEqual(['@mushi-mushi/react', 'mushi-mushi'])
+  })
+
+  it('points a scoped SDK at its umbrella path', () => {
     const pkg = { dependencies: { '@mushi-mushi/react': '1.0.0' } }
     const { bumps } = computeBumpPlan(pkg, { '@mushi-mushi/react': '1.2.0' })
     expect(bumps).toHaveLength(1)
-    expect(bumps[0].migrateToWeb).toBe(true)
+    expect(bumps[0].umbrellaPath).toBe('mushi-mushi/react')
   })
 
-  it('does NOT set migrateToWeb for @mushi-mushi/web', () => {
-    const pkg = { dependencies: { '@mushi-mushi/web': '1.7.0' } }
-    const { bumps } = computeBumpPlan(pkg, { '@mushi-mushi/web': '1.8.0' })
-    expect(bumps).toHaveLength(1)
-    expect(bumps[0].migrateToWeb).toBeUndefined()
+  it('has no umbrella path for the umbrella itself or a native SDK', () => {
+    const pkg = { dependencies: { 'mushi-mushi': '1.0.0', '@mushi-mushi/react-native': '0.20.0' } }
+    const { bumps } = computeBumpPlan(pkg, { 'mushi-mushi': '1.1.0', '@mushi-mushi/react-native': '0.21.0' })
+    expect(bumps).toHaveLength(2)
+    for (const b of bumps) expect(b.umbrellaPath).toBeUndefined()
   })
 })
 
@@ -236,9 +277,16 @@ describe('computeBumpPlan — @mushi-mushi/react migration flag', () => {
 // Structural: UPGRADEABLE_PACKAGES catalog is consistent
 // ---------------------------------------------------------------------------
 describe('UPGRADEABLE_PACKAGES', () => {
-  it('every entry is under the @mushi-mushi scope', () => {
+  it('every entry is mushi-mushi or under the @mushi-mushi scope', () => {
+    expect(UPGRADEABLE_PACKAGES[0]).toBe('mushi-mushi')
     for (const pkg of UPGRADEABLE_PACKAGES) {
-      expect(pkg.startsWith('@mushi-mushi/')).toBe(true)
+      expect(pkg === 'mushi-mushi' || pkg.startsWith('@mushi-mushi/')).toBe(true)
+    }
+  })
+
+  it('every umbrella path belongs to a package the plan bumps', () => {
+    for (const name of Object.keys(UMBRELLA_PATHS)) {
+      expect(UPGRADEABLE_PACKAGES as readonly string[]).toContain(name)
     }
   })
 

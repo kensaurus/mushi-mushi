@@ -47,6 +47,7 @@ export const th: MushiLocale = {
     screenshotShareTab: 'แชร์แท็บนี้แทน',
     notSentBlocked: 'ยังไม่ได้ส่ง รายงานนี้ถูกกรองออกก่อนส่ง ข้อความของคุณยังอยู่ เพิ่มรายละเอียดอีกเล็กน้อยแล้วลองอีกครั้ง',
     notSentThrottled: 'ยังไม่ได้ส่ง ส่งรายงานมากเกินไปในเวลาสั้นๆ ข้อความของคุณยังอยู่ รอสักหนึ่งนาทีแล้วลองอีกครั้ง',
+    screenshotReview: 'ตรวจสอบภาพหน้าจอด้านล่าง แล้วกด ส่ง อีกครั้ง',
     screenshotErrors: {
       permission: 'การจับภาพถูกบล็อก โปรดอนุญาตแล้วลองอีกครั้ง',
       unsupported: 'เบราว์เซอร์นี้จับภาพหน้าไม่ได้ โปรดอธิบายแทน',
@@ -174,6 +175,6 @@ export const th: MushiLocale = {
     changelog: {
       whatsNew: 'มีอะไรใหม่ใน {version}',
     },
-    poweredBy: 'รายงานบั๊กโดย Mushi',
+    poweredBy: 'รายงานบั๊กโดย Mushi Mushi',
   },
 };

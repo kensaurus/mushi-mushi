@@ -1,20 +1,37 @@
-# React Native quickstart
+# Bug report widget for React Native and Expo
 
 Source: https://kensaur.us/mushi-mushi/docs/quickstart/react-native
 
 ---
-title: React Native quickstart
-description: Add Mushi Mushi shake-to-report to a React Native or Expo app with @mushi-mushi/react-native. Install, mount the provider, and check the first report.
+title: Bug report widget for React Native and Expo
+description: "Free, open-source bug report widget for React Native and Expo: shake to report, a floating bug button, then a plain-English diagnosis of each report."
 ---
 
-# React Native quickstart
+# Bug report widget for React Native and Expo
 
-Add Mushi Mushi's shake-to-report and floating bug button to your iOS or
-Android app.
+This quickstart adds Mushi Mushi's shake-to-report and floating bug button to
+your iOS or Android app.
 
 Works for **bare React Native CLI** apps and **Expo** apps (managed-with-dev-client
 or bare). Peer dependency is React Native **≥ 0.72**; this quickstart targets
 **0.82+** with the New Architecture as the recommended baseline.
+
+## Get your project ID and API key
+
+The SDK needs two values from a Mushi Mushi project.
+
+- **Fastest:** run `npx mushi-mushi` in your app's folder. It signs you in
+  through the browser, creates or picks a project, installs the SDK and writes
+  both values to `.env.local`.
+- **By hand:** [create a free account](https://kensaur.us/mushi-mushi/admin/signup?src=quickstart-react-native)
+  (no card) and create a project. The panel that opens shows the **project ID**
+  and an **API key** that starts with `mushi_`. Copy the key now: it is shown
+  once. You can mint another under **Set up → Test it → Generate API key**.
+- **Self-hosting?** Your own console gives you the same two values. See
+  [Self-hosting](/self-hosting).
+
+They replace `YOUR_PROJECT_ID` and `YOUR_PUBLIC_API_KEY` in step 2. On Expo the
+wizard names them `EXPO_PUBLIC_MUSHI_PROJECT_ID` and `EXPO_PUBLIC_MUSHI_API_KEY`.
 
 ## 1. Install
 
@@ -109,17 +126,17 @@ patch for these (`__require` errors in Metro); releases with this fix need none.
 ## 3. Verify
 
 Run your app on a simulator or a device, tap the bug button, type a
-description, and submit. The report should appear in the Mushi admin console
+description, and submit. The report should appear in the Mushi Mushi admin console
 within a couple of seconds, showing the SDK that sent it
 (`@mushi-mushi/react-native` and its version).
 
 If nothing arrives:
 
-- Confirm `apiKey` is a Mushi project key (it starts with `mushi_`, like every
-  Mushi key) with the `report:write` scope, not the Supabase service-role key.
+- Confirm `apiKey` is a Mushi Mushi project key (it starts with `mushi_`, like every
+  Mushi Mushi key) with the `report:write` scope, not the Supabase service-role key.
 - Confirm `` is at the **root** of the component tree, above
   any `NavigationContainer`.
-- iOS release builds must use HTTPS for the Mushi endpoint (the default).
+- iOS release builds must use HTTPS for the Mushi Mushi endpoint (the default).
 
   Pure-native shells should use the [iOS](/quickstart/ios) or
   [Android](/quickstart/android) SDKs directly. Capacitor / Ionic apps have

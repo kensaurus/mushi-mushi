@@ -203,8 +203,8 @@ export function VerifiedMergeCard({ projectId }: { projectId: string | null }) {
       setServerErrors(fields)
       setSaveError(
         Object.keys(fields).length > 0
-          ? 'Mushi did not save: fix the fields marked above.'
-          : (res.error?.message ?? 'Mushi did not save the verified merge settings. Try again in a moment.'),
+          ? 'Mushi Mushi did not save: fix the fields marked above.'
+          : (res.error?.message ?? 'Mushi Mushi did not save the verified merge settings. Try again in a moment.'),
       )
       return
     }
@@ -229,7 +229,7 @@ export function VerifiedMergeCard({ projectId }: { projectId: string | null }) {
     if (!yaml) {
       setWorkflowNotice({
         ok: false,
-        message: res.error?.message ?? 'Mushi could not build the workflow file.',
+        message: res.error?.message ?? 'Mushi Mushi could not build the workflow file.',
       })
       return
     }
@@ -258,7 +258,7 @@ export function VerifiedMergeCard({ projectId }: { projectId: string | null }) {
     if (!res.ok || !res.data?.prUrl) {
       setWorkflowNotice({
         ok: false,
-        message: res.error?.message ?? 'Mushi could not open the pull request.',
+        message: res.error?.message ?? 'Mushi Mushi could not open the pull request.',
       })
       return
     }
@@ -278,12 +278,12 @@ export function VerifiedMergeCard({ projectId }: { projectId: string | null }) {
         ? {
             state: 'not_connected' as const,
             label: 'Not set up',
-            detail: 'Until it is, "Test proves the fix" shows Not set up and Mushi never merges on its own.',
+            detail: 'Until it is, "Test proves the fix" shows Not set up and Mushi Mushi never merges on its own.',
           }
         : {
             state: 'attention' as const,
             label: 'Unknown',
-            detail: 'Mushi could not read your repository. Connect GitHub on the Projects page.',
+            detail: 'Mushi Mushi could not read your repository. Connect GitHub on the Projects page.',
           }
 
   return (
@@ -291,7 +291,7 @@ export function VerifiedMergeCard({ projectId }: { projectId: string | null }) {
       <SettingsList
         title="Verified merge"
         id={VERIFIED_MERGE_SECTION_ID}
-        description="Mushi merges an agent's fix by itself only on proof, never on an AI's opinion alone."
+        description="Mushi Mushi merges an agent's fix by itself only on proof, never on an AI's opinion alone."
       >
         {readOnly && (
           <p className="py-2 text-sm text-fg-muted" data-testid="verified-merge-readonly">
@@ -304,7 +304,7 @@ export function VerifiedMergeCard({ projectId }: { projectId: string | null }) {
           title="Merge proven fixes automatically"
           purpose={
             <>
-              When this is on, Mushi squash-merges a cloud agent&apos;s pull request only when every check passes on its
+              When this is on, Mushi Mushi squash-merges a cloud agent&apos;s pull request only when every check passes on its
               latest commit: Opus says merge, a second AI from another company says merge, CI is green, a test fails
               without the fix and passes with it, no test was weakened, and the change is small. It never merges a
               report that is already fixed. Off: you merge every fix yourself.
@@ -430,7 +430,7 @@ export function VerifiedMergeCard({ projectId }: { projectId: string | null }) {
         <SettingsRow
           icon={<IconTerminal size={16} />}
           title="Test command"
-          purpose="How to run the tests a fix adds or changes. Mushi puts those test files where {files} is."
+          purpose="How to run the tests a fix adds or changes. Mushi Mushi puts those test files where {files} is."
         >
           <div className="max-w-lg">
             <Input
@@ -503,7 +503,7 @@ export function VerifiedMergeCard({ projectId }: { projectId: string | null }) {
           status={
             <p className="text-sm text-fg-secondary" data-testid="verify-judge-key">
               {judgeOff ? (
-                'Off: without a second review, Mushi never merges on its own.'
+                'Off: without a second review, Mushi Mushi never merges on its own.'
               ) : judgeKey ? (
                 <>
                   <span aria-hidden="true">✓ </span>
@@ -512,7 +512,7 @@ export function VerifiedMergeCard({ projectId }: { projectId: string | null }) {
               ) : (
                 <>
                   <span aria-hidden="true">! </span>
-                  No OpenAI or OpenRouter key, so the second review cannot run and Mushi never merges on its own.{' '}
+                  No OpenAI or OpenRouter key, so the second review cannot run and Mushi Mushi never merges on its own.{' '}
                   <Link to="/settings?tab=byok" className="text-accent-foreground underline underline-offset-2">
                     Add a key
                   </Link>
@@ -549,7 +549,7 @@ export function VerifiedMergeCard({ projectId }: { projectId: string | null }) {
         <SettingsRow
           icon={<IconUndo size={16} />}
           title="If a merged fix breaks something"
-          purpose="For 72 hours after Mushi merges a fix, it watches CI on the merge, the report, and new reports in the files the fix changed. A revert PR waits for you to merge it."
+          purpose="For 72 hours after Mushi Mushi merges a fix, it watches CI on the merge, the report, and new reports in the files the fix changed. A revert PR waits for you to merge it."
         >
           <div className="max-w-xs">
             <SelectField
@@ -570,7 +570,7 @@ export function VerifiedMergeCard({ projectId }: { projectId: string | null }) {
         <SettingsRow
           icon={<IconGithub size={16} />}
           title="Mushi verify workflow"
-          purpose="A GitHub Actions workflow in your repository that runs the fix's tests twice: with the fix they must pass, without it they must fail. It needs no Mushi secret."
+          purpose="A GitHub Actions workflow in your repository that runs the fix's tests twice: with the fix they must pass, without it they must fail. It needs no Mushi Mushi secret."
           status={workflowStatus}
           action={
             <>

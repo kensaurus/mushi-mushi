@@ -41,13 +41,13 @@
 -- can't leak out if the migration is wrapped by an outer session.
 SET LOCAL search_path = public, extensions;
 
-REVOKE EXECUTE ON FUNCTION public.match_fix_corpus(vector, uuid, integer)                        FROM anon;
-REVOKE EXECUTE ON FUNCTION public.mushi_age_snapshot_drift(uuid)                                 FROM anon;
-REVOKE EXECUTE ON FUNCTION public.mushi_age_upsert_edge(uuid, uuid, uuid, uuid, text, double precision) FROM anon;
-REVOKE EXECUTE ON FUNCTION public.mushi_age_upsert_node(uuid, uuid, text, text)                  FROM anon;
-REVOKE EXECUTE ON FUNCTION public.project_members_autoadd_owner()                                FROM anon;
-REVOKE EXECUTE ON FUNCTION public.report_comments_fanout_to_reporter()                           FROM anon;
-REVOKE EXECUTE ON FUNCTION public.sync_project_api_key_owner()                                   FROM anon;
+DO $guard$ BEGIN IF to_regprocedure('public.match_fix_corpus(vector, uuid, integer)') IS NOT NULL THEN EXECUTE 'REVOKE EXECUTE ON FUNCTION public.match_fix_corpus(vector, uuid, integer) FROM anon'; END IF; END $guard$; -- guarded 2026-11-19: hosted-only function
+DO $guard$ BEGIN IF to_regprocedure('public.mushi_age_snapshot_drift(uuid)') IS NOT NULL THEN EXECUTE 'REVOKE EXECUTE ON FUNCTION public.mushi_age_snapshot_drift(uuid) FROM anon'; END IF; END $guard$; -- guarded 2026-11-19: hosted-only function
+DO $guard$ BEGIN IF to_regprocedure('public.mushi_age_upsert_edge(uuid, uuid, uuid, uuid, text, double precision)') IS NOT NULL THEN EXECUTE 'REVOKE EXECUTE ON FUNCTION public.mushi_age_upsert_edge(uuid, uuid, uuid, uuid, text, double precision) FROM anon'; END IF; END $guard$; -- guarded 2026-11-19: hosted-only function
+DO $guard$ BEGIN IF to_regprocedure('public.mushi_age_upsert_node(uuid, uuid, text, text)') IS NOT NULL THEN EXECUTE 'REVOKE EXECUTE ON FUNCTION public.mushi_age_upsert_node(uuid, uuid, text, text) FROM anon'; END IF; END $guard$; -- guarded 2026-11-19: hosted-only function
+DO $guard$ BEGIN IF to_regprocedure('public.project_members_autoadd_owner()') IS NOT NULL THEN EXECUTE 'REVOKE EXECUTE ON FUNCTION public.project_members_autoadd_owner() FROM anon'; END IF; END $guard$; -- guarded 2026-11-19: hosted-only function
+DO $guard$ BEGIN IF to_regprocedure('public.report_comments_fanout_to_reporter()') IS NOT NULL THEN EXECUTE 'REVOKE EXECUTE ON FUNCTION public.report_comments_fanout_to_reporter() FROM anon'; END IF; END $guard$; -- guarded 2026-11-19: hosted-only function
+DO $guard$ BEGIN IF to_regprocedure('public.sync_project_api_key_owner()') IS NOT NULL THEN EXECUTE 'REVOKE EXECUTE ON FUNCTION public.sync_project_api_key_owner() FROM anon'; END IF; END $guard$; -- guarded 2026-11-19: hosted-only function
 
 -- ── 2. Revoke anon SELECT on all tables that should not appear in GraphQL ─────
 

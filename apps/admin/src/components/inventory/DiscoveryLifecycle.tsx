@@ -114,7 +114,7 @@ function LifecycleTile({ step, index }: { step: LifecycleStep; index: number }) 
           {step.state === 'done' ? <CheckGlyph /> : index + 1}
         </div>
         <div className="min-w-0">
-          <p className={`text-2xs uppercase tracking-wider ${style.labelColor}`}>
+          <p className={`text-2xs ${style.labelColor} font-semibold`}>
             {step.label}
           </p>
           <p className={`text-sm font-semibold ${style.numberColor} tabular-nums truncate`}>

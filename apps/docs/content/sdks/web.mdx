@@ -1,9 +1,9 @@
 ---
 title: JavaScript bug reporting SDK for the browser
-description: Reference for @mushi-mushi/web, the Mushi Mushi browser SDK. Screenshots, console and network capture, the Shadow DOM widget, sampling, beforeSend and privacy.
+description: Reference for mushi-mushi, the Mushi Mushi browser SDK. Screenshots, console and network capture, the Shadow DOM widget, sampling, beforeSend and privacy.
 ---
 
-# `@mushi-mushi/web`
+# `mushi-mushi`
 
 The Mushi Mushi browser SDK: screenshots, console logs, network breadcrumbs, and a
 report widget in a Shadow DOM so your CSS never leaks in or out.
@@ -21,7 +21,10 @@ import { Callout } from 'nextra/components'
   checklist.
 </Callout>
 
-See [Quickstart → Vanilla JS](/quickstart/web) for setup. Notable extras:
+See [Quickstart → Vanilla JS](/quickstart/web) for setup. The project ID and
+API key come from a Mushi Mushi project:
+[create a free account](https://kensaur.us/mushi-mushi/admin/signup?src=sdk-web)
+(no card) to get both. Notable extras:
 
 - **XHR + fetch network capture.** The SDK patches both `XMLHttpRequest` and
   `window.fetch` globally at `init()`. Every network request (including legacy
@@ -76,17 +79,27 @@ Mushi.init({
 | `beforeSend` | — | Every report type after PII scrub. Async OK. |
 | `beforeSendFeedback` | — | **Deprecated.** Feedback-only; ignored when `beforeSend` is set. |
 
-Types live on `MushiConfig` in `@mushi-mushi/core`.
+Types live on `MushiConfig` in `mushi-mushi/core`.
 
 ---
 
 ## Screenshot preview & consent (1.19+)
 
-When screenshot capture is enabled (`capture.screenshot: 'on-report'` or
-`'auto'`), the report screen shows a **visible preview** of the image that will
-be attached, not just a "Screenshot attached ✓" label. Reporters can **Remove**
-the screenshot before submit and optionally read a **privacy caption** beneath
-the preview.
+The reporter sees every screenshot before it is sent: a **visible preview** of
+the image, **Mark up** to blur parts of it, **Remove**, and an optional
+**privacy caption**. When the screenshot is taken depends on
+`capture.screenshot`:
+
+| Value | Taken |
+| --- | --- |
+| not set | Only when the reporter presses the camera button |
+| `'on-report'` | When the reporter presses **Send**. The report stays open with the preview and a "check it, then press Send again" line; the second **Send** sends it (1.38+; earlier versions sent it unseen) |
+| `'auto'` | When the report opens |
+| `'off'` | Never; the camera button is hidden |
+
+A screenshot the reporter removed is never taken again for that report (1.38+).
+What else a report carries, and how to keep private areas out of it:
+[What leaves the browser](/security/what-leaves-the-browser).
 
 ```typescript
 Mushi.init({
@@ -132,6 +145,19 @@ troubleshooting table. Maintainer deep-dive:
 
 ---
 
+## Diagnostics at send time
+
+`setDiagnosticsProvider` attaches what your app knows when the reporter presses **Send** (load timings, recent errors, feature flags). The function runs at that moment, gets 300 ms, and is never allowed to block or drop the report.
+
+```ts
+mushi.setDiagnosticsProvider(() => ({
+  timings: { feed: performance.now() - feedStart },
+  flags: currentFlags(),
+}))
+```
+
+The keys merge into the report's metadata. `screenLoading` / `timings` lines are triage evidence: a step of 1.5 s or more reads as slowness even when the description is short. Strings are scrubbed for personal data and the result is size-capped; keep personal data out anyway. Pass `null` to remove the provider.
+
 ## Capture availability & errors
 
 Screenshot and element-picker buttons hide when that capture mode is unavailable
@@ -175,7 +201,7 @@ different `userId` switches the identity used for later reports and activity.
 Add a `rewards` block to your `init()` config:
 
 ```typescript
-import { Mushi } from '@mushi-mushi/web'
+import { Mushi } from 'mushi-mushi'
 
 const mushi = Mushi.init({
   projectId: 'YOUR_PROJECT_ID',
@@ -257,7 +283,7 @@ The same methods are exposed on the `useMushi()` hook, memoised so they're
 stable across renders:
 
 ```tsx
-import { useMushi } from '@mushi-mushi/react'
+import { useMushi } from 'mushi-mushi/react'
 
 function MyReports() {
   const { listMyReports, replyToReport } = useMushi()
@@ -294,7 +320,7 @@ Mushi.init({
 ```
 
 **Why the `/#/` prefix?** Hash fragments are not part of the pathname.
-When a hash route is present Mushi stores `'/#' + hashPath` (the pathname is
+When a hash route is present Mushi Mushi stores `'/#' + hashPath` (the pathname is
 dropped); otherwise it stores the plain pathname. History-based routes
 (`/article/[slug]`) and hash routes (`/#/article/[slug]`) therefore stay
 distinct in the Inventory and can be monitored independently.
@@ -307,4 +333,4 @@ For slug-heavy apps (articles, profiles, products) this inflates the Inventory;
 route templates collapse them to a manageable list.
 
 **`mushi doctor --host-app`** detects hash-router usage in your source files and
-warns when `/#/` route templates are missing from your Mushi init call.
+warns when `/#/` route templates are missing from your Mushi Mushi init call.

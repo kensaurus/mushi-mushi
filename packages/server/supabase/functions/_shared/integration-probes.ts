@@ -20,6 +20,7 @@ import { safeFetch } from './inventory-guards.ts'
 import { isCodebaseIndexFailing } from './sweep-error-classifier.ts'
 import { dereferenceMaybeVault } from './settings-secrets.ts'
 import { resolveLlmKey } from './byok.ts'
+import { aiProviderForProject } from './ai-provider.ts'
 import { isSlackChannelUnusable } from './slack.ts'
 
 // Deno global — declared only where consumed (edge functions).
@@ -218,9 +219,13 @@ export async function probeIntegration(
       }
 
     } else if (kind === 'anthropic') {
-      // 1-token probe, costs < $0.0001.
-      const key = Deno.env.get('ANTHROPIC_API_KEY') ?? ''
-      if (!key) {
+      // 1-token probe, costs < $0.0001. The platform key follows the
+      // organization's AI provider (ADR 0039 amendment): none on OpenAI.
+      const onOpenAi = !!projectId && (await aiProviderForProject(db, projectId)) === 'openai'
+      const key = onOpenAi ? '' : Deno.env.get('ANTHROPIC_API_KEY') ?? ''
+      if (onOpenAi) {
+        detail = 'This organization runs AI on OpenAI, so the platform Claude key is not used.'
+      } else if (!key) {
         detail = 'ANTHROPIC_API_KEY is not set on the server.'
       } else {
         const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -575,7 +580,40 @@ export async function probeIntegration(
   }
 
   // ── claude_code_agent ─────────────────────────────────────────────────────
-  if (kind === 'claude_code_agent') {
+  if (kind === 'claude_code_agent' && projectId && (await aiProviderForProject(db, projectId)) === 'openai') {
+    // The organization runs AI on OpenAI (ADR 0039 amendment): the fix-worker
+    // gets no Claude key and writes fixes with OpenAI models. Probe that key.
+    // Falling through to the Claude branch below tested the app's leftover
+    // legacy Claude field, so the card said "API key invalid or revoked" all
+    // day on 2026-11-07 while fixes ran fine on OpenAI.
+    const resolved = await resolveLlmKey(db, projectId, 'openai', { purpose: 'probe' }).catch(() => null)
+    if (!resolved?.key) {
+      status = 'unknown'
+      detail = 'Your organization runs AI on OpenAI, and no OpenAI key is set. Add one under Settings → AI keys.'
+    } else {
+      try {
+        const base = (resolved.baseUrl ?? 'https://api.openai.com/v1').replace(/\/$/, '')
+        const res = await fetch(`${base}/models`, {
+          headers: { Authorization: `Bearer ${resolved.key}`, 'User-Agent': 'mushi-mushi-health-probe/1.0' },
+          signal: AbortSignal.timeout(8_000),
+        })
+        httpStatus = res.status
+        if (res.ok) {
+          status = 'ok'
+          detail = 'Your organization runs AI on OpenAI: fixes are written with OpenAI models, and the OpenAI key works.'
+        } else if (res.status === 401 || res.status === 403) {
+          status = 'down'
+          detail = 'Your organization runs AI on OpenAI, and the OpenAI key was rejected. Replace it under Settings → AI keys.'
+        } else {
+          status = 'degraded'
+          detail = `HTTP ${res.status}`
+        }
+      } catch (err) {
+        status = 'down'
+        detail = String(err)
+      }
+    }
+  } else if (kind === 'claude_code_agent') {
     // claude_code fixes run on the Anthropic key pool (withAnthropicOrOpenAi); probe that key first.
     const apiKey =
       (await pooledKey(db, projectId, 'anthropic')) ||
@@ -584,7 +622,7 @@ export async function probeIntegration(
       ''
     if (!apiKey) {
       status = 'unknown'
-      detail = 'No Anthropic API key configured. Add ANTHROPIC_API_KEY to your environment or under Settings → API Keys.'
+      detail = 'No Anthropic API key configured. Add ANTHROPIC_API_KEY to your environment or under Settings → AI keys.'
     } else {
       try {
         // Minimal models list call — cheapest probe with no tokens consumed

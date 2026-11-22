@@ -74,6 +74,10 @@ export const UTM_PARAMS = [
   'utm_term',
   'utm_content',
   'ref',
+  // Mushi's own site monitoring loads pages through Firecrawl with
+  // `?mushi_monitor=<watch|audit|qa>` (Firecrawl strips utm_*). Forwarding it
+  // lets kensaurus-events-ingest drop those visits (ADR 0071).
+  'mushi_monitor',
 ] as const
 
 export interface KensaurusAttribution {

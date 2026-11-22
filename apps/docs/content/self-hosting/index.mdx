@@ -1,58 +1,102 @@
 ---
-title: Self-hosting
-description: Run the whole Mushi Mushi stack yourself with Docker Compose. Your own keys, AGPLv3 server, MIT SDKs, no usage limits.
+title: Self-hosting quickstart
+description: "Run Mushi Mushi on your own Supabase project, from zero to the first diagnosis, with one command. Every feature on, no usage limits."
 ---
 
-import { Callout } from 'nextra/components'
+import { Callout, Steps } from 'nextra/components'
 
-# Self-hosting
+# Self-hosting quickstart
 
-Mushi Mushi is **OSS-first**. Mushi Cloud at `kensaur.us/mushi-mushi/admin` runs the same code as this repo — there is no closed-source plus-tier. Every edge function, migration, and admin SPA you see here is what powers Mushi Cloud. The one difference is data: the hosted service keeps its own tuning (prompt wording, evaluation sets and scoring weights tuned on live traffic) as configuration. The repo ships working default prompts, so your stack has every feature. See [Open source & licensing](/concepts/open-source#what-the-hosted-service-keeps).
+Run the whole Mushi Mushi server on your own [Supabase](https://supabase.com) project. The free tier is enough. Self-host turns every feature on and lifts every plan limit ([ADR 0063](https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0063-reach-first-free-plan-and-free-self-host.md)). It is the same code Mushi Mushi Cloud runs: the server is AGPLv3 and the SDKs are MIT ([Open source & licensing](/concepts/open-source)).
+
+This page takes you from nothing to your first diagnosis. Prefer one command on your own server and no Supabase account? Use the [Docker install](/self-hosting/docker-compose) instead. It sets up Supabase's self-host kit, Realtime included, with the Mushi images.
+
+## Before you start
+
+- [ ] A Supabase project, and its **project ref** (Project Settings → General; the `abcdefghijklmnopqrst` in `https://abcdefghijklmnopqrst.supabase.co`)
+- [ ] The [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started), signed in: `supabase login`
+- [ ] Node 22+, pnpm and git
+- [ ] Optional: an Anthropic **or** OpenAI API key. Without one, reports get a rule-based category and severity, but no plain-English diagnosis or fix draft. You can add one later in the console.
+
+<Steps>
+
+### Clone the repo
+
+The migrations and functions deploy from your clone.
+
+```bash
+git clone https://github.com/kensaurus/mushi-mushi.git && cd mushi-mushi
+```
+
+You should see: a `mushi-mushi` folder, and your shell inside it.
+
+### Deploy the server
+
+```bash
+npx mushi-mushi@latest selfhost up --project-ref <your-ref> --console-url http://localhost:6464
+```
+
+It asks you to confirm, then for an AI key (press Enter to skip). Then it links the project, applies every migration, sets the function secrets, points the database's cron jobs at your project, lifts the plan limits, deploys every edge function stamped with your commit, and saves the API address to the CLI config. `--console-url` is where you will serve the console in the next step; `up` sets it as the address for links and sign-in, and lets that origin call the API.
+
+You should see, at the end:
+
+```
+  OK    /health 200 412ms
+  OK    Server deploy: Running commit 3c64ea2.
+✓  selfhost up complete.
+```
+
+### Serve the console
+
+The console is a static app. Build it with your project's URL and anon key (Project Settings → API), then serve it:
+
+```bash
+pnpm install
+VITE_SUPABASE_URL=https://<your-ref>.supabase.co \
+VITE_SUPABASE_ANON_KEY=<anon key> \
+VITE_INSTANCE_TYPE=self-hosted \
+pnpm --filter "@mushi-mushi/admin..." build
+npx serve -s apps/admin/dist -l 6464
+```
+
+You should see: `Serving!` and `http://localhost:6464`. For a real domain, see [Host the console](/self-hosting/admin-spa).
+
+### Sign up
+
+Open `http://localhost:6464` and create an account. The first account owns the instance. Supabase emails a confirmation link first; to skip it while you test, turn off **Confirm email** under Authentication → Sign In / Providers.
+
+You should see: the console, with **Self-hosted** in the sidebar footer.
+
+### Sign the CLI in and run the doctor
+
+```bash
+npx mushi-mushi@latest login --endpoint https://<your-ref>.supabase.co/functions/v1/api
+npx mushi-mushi@latest selfhost doctor
+```
+
+`login` opens your console to approve the CLI and mints its key; no SQL needed. The doctor checks the server, the console, the cron URL, the screenshots bucket and the AI key.
+
+You should see: `OK` lines and maybe `INFO` lines, with exit code 0. `INFO` marks an optional extra that is not set up (an AI key, Langfuse, Sentry). Each `FAIL` or `WARN` line ends with its fix.
+
+### Get your first diagnosis
+
+In the console, create an app (**Projects** → New), then open **Settings → SDK & connection** and press **Send test bug**. The same page shows the **Self-host setup** checklist.
+
+You should see: a test report under **Reports**, with a plain-English diagnosis if you set an AI key, or a rule-based category if not. To catch real bugs, run `npx mushi-mushi@latest init` in your app's repo.
+
+</Steps>
+
+## Next
+
+| I want to… | Go to |
+| --- | --- |
+| See every setting and where it goes | [Environment variables](/self-hosting/environment) |
+| Run everything in containers with one command, no Supabase account | [Docker (one command)](/self-hosting/docker-compose) |
+| Run each step myself, or understand what `selfhost up` did | [Supabase by hand](/self-hosting/supabase) |
+| Put the console on a real domain | [Host the console](/self-hosting/admin-spa) |
+| Add Langfuse traces and Sentry errors | [Observability](/self-hosting/observability) |
+| Upgrade, bootstrap from IaC, add cron jobs, harden | [Operate and upgrade](/self-hosting/operate) |
 
 <Callout type="info">
-  **Prerequisite:** Node ≥ 22, a [Supabase](https://supabase.com) project, and the [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started).
+  Re-running `selfhost up` is safe: it applies only new migrations and redeploys. It rotates the internal caller secret in both places unless you export `MUSHI_INTERNAL_CALLER_SECRET` first. In CI, add `--yes`. No Supabase CLI, or want to read every command first? `selfhost up --print-commands` prints them with placeholders for each secret.
 </Callout>
-
-## What you'll deploy
-
-| Layer | Technology | License |
-| --- | --- | --- |
-| Database + Auth | Supabase (Postgres 15 + pgvector + pgcrypto + pg_cron) | Open |
-| Edge Functions | 50+ Supabase Edge functions (Deno) — run `pnpm docs-stats` for live count | AGPLv3 |
-| Admin SPA | React + Vite, deployed to any static host | AGPLv3 |
-| Observability | Langfuse + Sentry | MIT / Commercial |
-| Sandbox *(optional)* | E2B, Modal or Cloudflare, through `@mushi-mushi/agents` | External |
-
-## Fastest path — Docker Compose
-
-The whole stack (Postgres + Auth + REST + Storage + edge functions + console)
-in one command, no managed Supabase project required:
-
-```bash
-git clone https://github.com/kensaurus/mushi-mushi.git
-cd mushi-mushi/deploy
-cp .env.example .env   # set ANTHROPIC_API_KEY + Supabase creds
-docker compose up -d
-```
-
-See [Self-host in minutes](/self-hosting/docker-compose) for the full walkthrough.
-
-## Managed-Supabase path
-
-Prefer a hosted Supabase project? Link it and push the schema:
-
-```bash
-git clone https://github.com/kensaurus/mushi-mushi.git
-cd mushi-mushi
-pnpm install                                       # installs all workspaces
-cd packages/server                                 # Supabase CLI works relative to this dir
-npx supabase link --project-ref <your-ref>
-npx supabase db push                               # applies all migrations
-```
-
-Then follow the guides in order:
-
-1. [Supabase setup](/self-hosting/supabase) — extensions, RLS, and required seed data
-2. [Edge Functions deploy](/self-hosting/edge-functions) — all edge functions + secrets
-3. [Admin SPA deploy](/self-hosting/admin-spa) — build and deploy the console
-4. [Observability (Langfuse + Sentry)](/self-hosting/observability) — traces and error tracking

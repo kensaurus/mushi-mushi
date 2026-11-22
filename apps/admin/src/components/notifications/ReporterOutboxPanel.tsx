@@ -17,7 +17,7 @@ import { Link } from 'react-router-dom'
 import { usePageData } from '../../lib/usePageData'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
-import { Badge, Btn, Card, EmptyState, ErrorAlert, RelativeTime, SegmentedControl } from '../ui'
+import { Badge, Btn, Card, ErrorAlert, RelativeTime, SegmentedControl } from '../ui'
 import { TableSkeleton } from '../skeletons/TableSkeleton'
 import { ReporterViewPanel } from '../report-detail/ReporterViewPanel'
 import { ConfirmDialog } from '../ConfirmDialog'
@@ -109,7 +109,8 @@ export function ReporterOutboxPanel({ projectId }: { projectId: string }) {
 
   return (
     <div className="space-y-3">
-      <Card className="p-4 space-y-2">
+      {/* A divider, not a second card inside the section's card. */}
+      <div className="space-y-2 border-t border-edge-subtle pt-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h3 className="text-sm font-semibold text-fg">Reporter updates</h3>
@@ -128,21 +129,19 @@ export function ReporterOutboxPanel({ projectId }: { projectId: string }) {
             ]}
           />
         </div>
-      </Card>
+      </div>
 
       {error ? (
         <ErrorAlert title="Updates waiting for review are unavailable" message={error} onRetry={reload} />
       ) : loading && !data ? (
         <TableSkeleton rows={3} columns={3} showFilters={false} />
       ) : messages.length === 0 ? (
-        <EmptyState
-          title="Nothing waiting"
-          description={
-            mode === 'review'
-              ? 'Pipeline updates land here before reporters see them.'
-              : 'Updates go out automatically. Switch to “Review first” to check each one before it is sent.'
-          }
-        />
+        // Send automatically: nothing is ever held, and the switch above says so; no box restating it.
+        mode === 'review' ? (
+          <p className="text-2xs text-fg-secondary" data-testid="reporter-outbox-empty">
+            Nothing waiting for review. Pipeline updates land here before reporters see them.
+          </p>
+        ) : null
       ) : (
         <ul className="space-y-2">
           {messages.map((msg) => {

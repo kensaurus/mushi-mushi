@@ -60,16 +60,16 @@ describe('Manage apps with no app yet', () => {
   // A first-time user test (2026-10-29) clicked the banner's "Create project"
   // twice on the create tab, where it only re-opened that tab.
   const empty: ProjectsStats = { ...EMPTY_PROJECTS_STATS, topPriority: 'no_projects' }
-  const buttons = () => [...container.querySelectorAll('button')].filter((b) => b.textContent === 'Create project')
+  const buttons = () => [...container.querySelectorAll('button')].filter((b) => b.textContent === 'Add an app')
 
-  it('offers Create project from the other tabs', () => {
+  it('offers Add an app from the other tabs', () => {
     show(ProjectsStatusBanner, { stats: empty, onTab: () => {}, activeTab: 'overview' })
     expect(buttons()).toHaveLength(1)
   })
 
-  it('shows no second Create project button on the create tab, where the form is', () => {
+  it('shows no second Add an app button on the create tab, where the form is', () => {
     show(ProjectsStatusBanner, { stats: empty, onTab: () => {}, activeTab: 'create' })
-    expect(container.textContent).toContain('No projects in this workspace yet')
+    expect(container.textContent).toContain('No apps in this workspace yet')
     expect(buttons()).toHaveLength(0)
   })
 })

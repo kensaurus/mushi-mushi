@@ -1,18 +1,22 @@
 'use client'
 
 /**
- * Inline screenshot / GIF block for docs pages.
- * Images live under public/screenshots/ (synced from docs/screenshots/).
+ * Inline screenshot / demo-clip block for docs pages.
+ * Images and clips live under public/screenshots/ (synced from docs/screenshots/).
  */
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { publicAssetPath } from '../lib/public-asset-path'
+import { DocVideo } from './DocVideo'
 
 type DocScreenshotVariant = 'preview' | 'showcase'
 
 export interface DocScreenshotProps {
-  /** Filename only — e.g. "dashboard-dark.png" */
+  /**
+   * Filename only — e.g. "dashboard-dark.png". With `animated`, the clip's
+   * file stem instead — e.g. "dashboard-demo" (see DocVideo).
+   */
   src: string
   alt: string
   caption?: ReactNode
@@ -20,7 +24,7 @@ export interface DocScreenshotProps {
   lightSrc?: string
   /** Link target — usually the live admin demo route. */
   href?: string
-  /** When true, src is treated as an animated GIF. */
+  /** When true, src names a looping demo clip rendered by DocVideo. */
   animated?: boolean
   /** preview = capped admin-doc peek; showcase = full-width landing strip */
   variant?: DocScreenshotVariant
@@ -80,8 +84,9 @@ export function DocScreenshot({
     }
   }, [closeLightbox, expanded])
 
-  const img =
-    !animated && lightSrc ? (
+  const img = animated ? (
+    <DocVideo name={src} label={alt} className="docs-screenshot__img" />
+  ) : lightSrc ? (
       <picture>
         <source media="(prefers-color-scheme: dark)" srcSet={darkUrl} />
         <source media="(prefers-color-scheme: light)" srcSet={lightUrl} />
@@ -215,7 +220,14 @@ export function DocScreenshot({
                   </button>
                 </div>
                 <div className="docs-screenshot-lightbox__body">
-                  {!animated && lightSrc ? (
+                  {animated ? (
+                    <DocVideo
+                      name={src}
+                      label={alt}
+                      className="docs-screenshot-lightbox__img"
+                      controls
+                    />
+                  ) : lightSrc ? (
                     <picture>
                       <source media="(prefers-color-scheme: dark)" srcSet={darkUrl} />
                       <source media="(prefers-color-scheme: light)" srcSet={lightUrl} />

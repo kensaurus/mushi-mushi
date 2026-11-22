@@ -1,6 +1,8 @@
 # `@mushi-mushi/plugin-zapier`
 
-> **Your AI wrote it. Mushi Mushi tells you why it broke.**
+> **Your AI built it. Mushi Mushi makes it better.**
+
+**Optional, runs on your own server:** it is never part of your app. To add Mushi Mushi to an app, install [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi).
 
 For people who want Mushi Mushi bug events in a tool it does not connect to.
 This sends each event to a Zapier "Catch Hook", so you can pass bug reports and
@@ -9,9 +11,9 @@ writing code.
 
 **Do you need this package?** Not to get started: on Mushi Mushi Cloud you can
 install **Zapier Bridge** from the console's **Marketplace** page and paste
-the Catch Hook URL straight in. Installing from the Marketplace needs a paid
-plan (Builder or above, see [pricing](https://kensaur.us/mushi-mushi/docs/pricing)).
-Run this package between Mushi and Zapier when you want the signature checked
+the Catch Hook URL straight in. Installing from the Marketplace works on
+every plan, Free included (see [pricing](https://kensaur.us/mushi-mushi/docs/pricing)).
+Run this package between Mushi Mushi and Zapier when you want the signature checked
 and a flat payload that is easier to map in Zapier.
 
 ```bash
@@ -54,4 +56,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 77 edge functions · 546 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 78 edge functions · 583 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

@@ -7,11 +7,16 @@ Canonical URLs: [`canonical-urls.md`](./canonical-urls.md)
 | Field | Public surface | Value |
 | --- | --- | --- |
 | **Title** | Page heading | `Mushi Mushi` |
-| **Description** | Subtitle under `@kensaurus` | Your AI shipped it. Mushi Mushi tells you why it broke — plain diagnosis and a paste-ready fix prompt in Cursor. No second LLM key. |
+| **Description** | Subtitle under `@kensaurus` | MCP server for Cursor, Claude Code and Copilot. One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code. |
 | **Content** | Overview tab | Unnamed `<textarea>` (4th on form, index 3) — not TipTap; paste markdown below |
 | **Server Config** | Right rail | JSON below |
 
 ## Server Config (paste verbatim)
+
+The hosted entry signs in with OAuth in the browser (no key). The stdio entry
+uses Mushi Mushi Cloud by default; `MUSHI_API_ENDPOINT` is only for
+self-hosting. Never paste the raw `*.supabase.co` URL: OAuth login needs the
+kensaur.us host (see `canonical-urls.md`).
 
 ```json
 {
@@ -21,18 +26,12 @@ Canonical URLs: [`canonical-urls.md`](./canonical-urls.md)
       "args": ["-y", "@mushi-mushi/mcp@latest"],
       "env": {
         "MUSHI_API_KEY": "<YOUR_MUSHI_API_KEY>",
-        "MUSHI_PROJECT_ID": "<YOUR_PROJECT_UUID>",
-        "MUSHI_API_ENDPOINT": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api",
-        "MUSHI_FEATURES": "triage,fixes,inventory,setup,docs"
+        "MUSHI_PROJECT_ID": "<YOUR_PROJECT_UUID>"
       }
     },
     "mushi-mushi-hosted": {
       "type": "http",
-      "url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp?features=triage,fixes,inventory,setup,docs",
-      "headers": {
-        "Authorization": "Bearer <YOUR_MUSHI_API_KEY>",
-        "X-Mushi-Project-Id": "<YOUR_PROJECT_UUID>"
-      }
+      "url": "https://kensaur.us/mushi-mushi/hosted-mcp/"
     }
   }
 }
@@ -45,9 +44,9 @@ Canonical URLs: [`canonical-urls.md`](./canonical-urls.md)
 3. Paste overview markdown below, submit, hard-refresh [mcp.so/server/mushi-mushi](https://mcp.so/server/mushi-mushi).
 
 ```markdown
-## Why it broke — in your editor
+## One place to improve AI-built apps
 
-Mushi turns user-felt bugs into a plain diagnosis and a paste-ready fix prompt. Works from Cursor, Claude Code, or VS Code over MCP.
+Mushi Mushi fixes what breaks, shows where people get stuck, and cleans up the code. Each bug a user reports gets a plain-English diagnosis and a fix prompt your agent can apply. Works from Cursor, Claude Code or VS Code over MCP.
 
 **Install:** [kensaur.us/mushi-mushi/docs/connect](https://kensaur.us/mushi-mushi/docs/connect) · `npx mushi-mushi setup --ide cursor`
 

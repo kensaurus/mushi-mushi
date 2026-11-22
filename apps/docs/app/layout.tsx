@@ -13,6 +13,7 @@ import './globals.css'
 import changelog from '../data/changelog.json'
 import { MUSHI_TAGLINE_V2 } from '@mushi-mushi/brand'
 import { JsonLd } from '../components/JsonLd'
+import brandMark from '../assets/brand/mushi-mark.webp'
 import { bannerRelease } from '../lib/release-headline'
 import {
   DOCS_SITE,
@@ -24,10 +25,13 @@ import {
 import type { ReactNode } from 'react'
 import type { Metadata } from 'next'
 
+/** The icon set's version, a cache-buster: the old icons were cached for a year. */
+const ICON_VERSION = '20261117'
+
 export const metadata: Metadata = {
   metadataBase: new URL('https://kensaur.us/mushi-mushi'),
   title: {
-    default: 'Mushi Mushi — know why your AI-built app broke, with the fix ready',
+    default: 'Mushi Mushi — one place to improve your AI-built app',
     template: '%s · Mushi Mushi',
   },
   // Fallback for pages without their own `description:` (the admin-console
@@ -45,13 +49,14 @@ export const metadata: Metadata = {
   // Fully-absolute asset URLs: Next joins metadataBase.pathname onto
   // root-relative metadata URLs, which doubles the /mushi-mushi prefix
   // (e.g. /mushi-mushi/mushi-mushi/docs/…). Absolute URLs bypass the join.
+  // ?v= busts the year-long cache the old icon was served with (new mark, 2026-11-17).
   icons: {
     icon: [
-      { url: `${DOCS_SITE}/favicon.svg`, type: 'image/svg+xml' },
-      { url: `${DOCS_SITE}/icon-192.png`, type: 'image/png', sizes: '192x192' },
-      { url: `${DOCS_SITE}/icon-512.png`, type: 'image/png', sizes: '512x512' },
+      { url: `${DOCS_SITE}/favicon.svg?v=${ICON_VERSION}`, type: 'image/svg+xml' },
+      { url: `${DOCS_SITE}/icon-192.png?v=${ICON_VERSION}`, type: 'image/png', sizes: '192x192' },
+      { url: `${DOCS_SITE}/icon-512.png?v=${ICON_VERSION}`, type: 'image/png', sizes: '512x512' },
     ],
-    apple: `${DOCS_SITE}/apple-touch-icon.png`,
+    apple: `${DOCS_SITE}/apple-touch-icon.png?v=${ICON_VERSION}`,
   },
   // No `site`: the @mushimushi_dev handle was never registered (see the
   // sameAs note in lib/structured-data.ts), and naming an account someone
@@ -104,12 +109,32 @@ const banner = latestRelease ? (
 const navbar = (
   <Navbar
     logo={
-      <span className="whitespace-nowrap font-semibold tracking-tight">
-        {/* "— docs" drops on phones so the logo, GitHub, Console and Sign in fit one row at 390px. */}
-        Mushi Mushi <span className="hidden opacity-60 sm:inline">— docs</span>
+      <span className="relative whitespace-nowrap font-semibold tracking-tight">
+        {/* The mark: a magnifier over a ladybug, a small Mushi-chan face peeking in (2026-11-17). Nextra wraps the
+            logo in a link to "/", which is the landing under any basePath. */}
+        <img
+          src={brandMark.src}
+          alt=""
+          aria-hidden="true"
+          width={24}
+          height={24}
+          className="docs-logo-face"
+          draggable={false}
+        />
+        {/* "— docs" drops on phones so the logo, GitHub, Console and Sign in fit one row at 390px,
+            and on the landing (globals.css), which is the product page, not the docs. */}
+        Mushi Mushi <span className="docs-logo-suffix hidden opacity-60 sm:inline">— docs</span>
+        <span className="docs-logo-beta" title="Mushi Mushi is in beta">Beta</span>
       </span>
     }
   >
+    {/* Plain site links for a first-time visitor (audit 2026-11-11). Hidden
+        below lg: at 390px the row is already full, and the menu carries the pages. */}
+    <span className="hidden items-center gap-4 whitespace-nowrap text-sm lg:inline-flex">
+      <Link href="/how-it-works" className="hover:underline">How it works</Link>
+      <Link href="/pricing" className="hover:underline">Pricing</Link>
+      <Link href="/what-is-mushi-mushi" className="hover:underline">Docs</Link>
+    </span>
     {/* Accessible name is on the anchor; the icon is decorative. */}
     <Anchor href="https://github.com/kensaurus/mushi-mushi" aria-label="GitHub repository">
       <GitHubIcon height="24" aria-hidden="true" />
@@ -150,7 +175,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         >
           {children}
         </Layout>
-        {/* Mushi measuring its own funnel with its own SDK — client-only,
+        {/* Mushi Mushi measuring its own funnel with its own SDK — client-only,
             consent-gated, no-op unless NEXT_PUBLIC_MUSHI_SELF_* are set. */}
         <MushiSiteAnalytics />
       </body>

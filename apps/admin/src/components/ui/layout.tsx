@@ -53,7 +53,7 @@ export function Badge({ children, className = '', title, tone, 'aria-label': ari
     <span
       title={title}
       aria-label={ariaLabel}
-      className={`inline-flex items-center px-1.5 py-0.5 rounded-sm text-2xs leading-tight font-medium ${toneClass} ${className}`.trim()}
+      className={`inline-flex items-center px-1 py-px rounded-xs text-2xs leading-tight font-semibold ${toneClass} ${className}`.trim()}
     >
       {children}
     </span>
@@ -158,7 +158,7 @@ export function Card({
   }
   return (
     <div
-      className={`bg-surface-raised border border-edge-subtle rounded-md shadow-card ${interactiveCls} ${interactive || onClick ? 'hover:bg-surface-overlay' : ''} ${className}`}
+      className={`bg-surface-raised border border-edge-subtle rounded-md ${interactiveCls} ${interactive || onClick ? 'hover:bg-surface-overlay' : ''} ${className}`}
       style={style}
       onClick={onClick}
       title={title}
@@ -180,7 +180,7 @@ export function Card({
  * NN/g #4 Consistency: one separator rhythm across the admin console.
  */
 
-export const PANEL_HEADER_SEPARATOR = 'border-b border-edge-subtle/80'
+const PANEL_HEADER_SEPARATOR = 'border-b border-edge-subtle/80'
 
 interface PanelHeaderProps {
   title: ReactNode
@@ -201,7 +201,7 @@ export function PanelHeader({
   as: TitleTag = 'h3',
 }: PanelHeaderProps) {
   const titleCls = uppercase
-    ? 'text-xs font-medium uppercase tracking-wider text-fg-muted'
+    ? 'text-xs font-semibold text-fg-secondary'
     : 'text-xs font-semibold text-fg-secondary'
   return (
     <div className={`mb-2 pb-2 ${PANEL_HEADER_SEPARATOR} ${className}`}>
@@ -510,7 +510,7 @@ export function FreshnessPill({ at, isValidating, channel, className = '' }: Fre
       aria-live={dropped ? 'assertive' : 'polite'}
       aria-label={label}
       title={label}
-      className={`inline-flex items-center gap-1.5 rounded-full border bg-surface-overlay px-1.5 py-0.5 text-3xs leading-tight text-fg-muted shadow-sm ${ringClass} ${className}`}
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-sm border px-1.5 py-px text-3xs leading-tight text-fg-muted ${ringClass} ${className}`}
     >
       <span aria-hidden="true" className={`inline-block h-1.5 w-1.5 rounded-full ${dotClass}`} />
       {/* The box is sized for a settled "x minutes ago" from the first paint:
@@ -518,9 +518,13 @@ export function FreshnessPill({ at, isValidating, channel, className = '' }: Fre
           to the timestamp used to re-wrap the row and drop the page by a
           line (layout shift). Left-aligned: right-aligned, a short "now" sat a
           gap away from its dot and read as a broken pill (owner, 2026-10-30). */}
+      {/* 2026-11-18 (fresh-eyes): a grey filled box around a lone "now" read as a loading
+          skeleton. No fill now, and the word "Updated" says what the time is. */}
       <span className="inline-block text-left tabular-nums" style={{ minWidth: '4.5rem' }}>
         {at ? (
-          <RelativeTime value={at} className="cursor-default" />
+          <>
+            Updated <RelativeTime value={at} className="cursor-default" />
+          </>
         ) : (
           isValidating ? 'Loading…' : '—'
         )}

@@ -114,8 +114,8 @@ export function humanizeFixError(
     (m.includes('cursor api 400') && m.includes('validation_error'))
   ) {
     return {
-      title: 'Mushi sent Cursor a field it no longer accepts.',
-      hint: 'This is a Mushi-side issue from an API schema change. Retrying usually works; a Mushi update will fully fix it.',
+      title: 'Mushi Mushi sent Cursor a field it no longer accepts.',
+      hint: 'This is a Mushi-side issue from an API schema change. Retrying usually works; a Mushi Mushi update will fully fix it.',
       severity: 'soft',
       action: { label: 'Check Cursor changelog', target: { kind: 'external', url: 'https://cursor.com/changelog' } },
       raw,
@@ -169,7 +169,7 @@ export function humanizeFixError(
   // Cursor: unreachable
   if (m.includes('cursor api unreachable')) {
     return {
-      title: 'Mushi could not reach the Cursor API.',
+      title: 'Mushi Mushi could not reach the Cursor API.',
       hint: 'Usually a transient network timeout. Try again in a moment.',
       severity: 'soft',
       action: { label: 'Try again', target: { kind: 'retry' } },
@@ -224,7 +224,7 @@ export function humanizeFixError(
   // Claude: dispatch failed
   if (category === 'claude_repo_dispatch_failed' || m.includes('github dispatch error')) {
     return {
-      title: 'Mushi could not trigger the GitHub Actions workflow.',
+      title: 'Mushi Mushi could not trigger the GitHub Actions workflow.',
       hint: 'Check that your GitHub token has `actions:write` (or `contents:write`) permission on the repo.',
       severity: 'hard',
       action: { label: 'Re-save GitHub token', target: { kind: 'route', to: '/integrations/config', hash: 'github' } },
@@ -268,7 +268,7 @@ export function humanizeFixError(
   // GitHub: forbidden
   if (m.includes('github') && m.includes('403') || category === 'github_403') {
     return {
-      title: "Mushi doesn't have write access to the repo.",
+      title: "Mushi Mushi doesn't have write access to the repo.",
       hint: "Check the token has `contents:write` and `pull_requests:write` permissions.",
       severity: 'hard',
       action: { label: 'Re-save GitHub token', target: { kind: 'route', to: '/integrations/config', hash: 'github' } },
@@ -279,7 +279,7 @@ export function humanizeFixError(
   // GitHub: not found
   if ((m.includes('github') && m.includes('404')) || category === 'github_404') {
     return {
-      title: "Mushi can't find that GitHub repo or branch.",
+      title: "Mushi Mushi can't find that GitHub repo or branch.",
       hint: 'Check the repo URL in Integrations → GitHub — the repo may have been renamed.',
       severity: 'hard',
       action: { label: 'Check repo URL', target: { kind: 'route', to: '/integrations/config', hash: 'github' } },
@@ -323,7 +323,7 @@ export function humanizeFixError(
         : 'The LLM provider rate-limited this request.',
       hint: allExhausted
         ? 'Add a backup key in Settings → API Key Pool to continue without waiting.'
-        : 'Mushi tried all your configured keys. Add a backup key in Settings → API Key Pool, or wait for the cooldown to clear.',
+        : 'Mushi Mushi tried all your configured keys. Add a backup key in Settings → API Key Pool, or wait for the cooldown to clear.',
       severity: 'soft',
       action: {
         label: allExhausted ? 'Add backup key' : 'Manage keys',
@@ -372,7 +372,7 @@ export function humanizeFixError(
   // the two things that help: the editor, or closing a non-code bug.
   if (m.startsWith('review_failed') && m.includes('only adds or removes comments')) {
     return {
-      title: 'Mushi found no code change to make from this report.',
+      title: 'Mushi Mushi found no code change to make from this report.',
       hint: 'There is no stack trace or failing line to work from. Copy the fix prompt into your editor to dig in with the app running, or close the report if it is not a code bug.',
       severity: 'hard',
       raw,
@@ -418,7 +418,7 @@ export function humanizeFixError(
     // The fix worker names this setting when it is off (WEB_SEARCH_OFF_HINT).
     if (m.includes('search the web for known fixes')) {
       return {
-        title: "Mushi couldn't find relevant code to fix.",
+        title: "Mushi Mushi couldn't find relevant code to fix.",
         hint: 'Web search is off for this app. Turn on "Search the web for known fixes" under Settings → Web tools, or re-index under Settings → Codebase Indexing, then retry.',
         severity: 'hard',
         action: { label: 'Turn on web search', target: { kind: 'route', to: '/settings?tab=tools', hash: 'known-issues-search' } },
@@ -426,7 +426,7 @@ export function humanizeFixError(
       };
     }
     return {
-      title: "Mushi couldn't find relevant code to fix.",
+      title: "Mushi Mushi couldn't find relevant code to fix.",
       hint: "The codebase index may be out of date. Re-index under Settings \u2192 Codebase Indexing and retry.",
       severity: 'hard',
       action: { label: 'Retry', target: { kind: 'retry' } },

@@ -133,7 +133,7 @@ export function CiCostFixButton({ fixable, initialJob = null }: { fixable: CiAdv
     <div className="flex min-w-0 flex-col gap-1" data-testid="ci-cost-fix">
       <div className="flex flex-wrap items-center gap-1.5">
         {canOpen && (
-          <Btn size="sm" variant="accent" onClick={() => setConfirming(true)} loading={busy} aria-label={`Open fix PR for ${fixable.label}`}>
+          <Btn size="sm" variant="primary" onClick={() => setConfirming(true)} loading={busy} aria-label={`Open fix PR for ${fixable.label}`}>
             Open fix PR
           </Btn>
         )}
@@ -180,7 +180,7 @@ export function CiCostFixButton({ fixable, initialJob = null }: { fixable: CiAdv
           body={CI_COST_FIX_CHANGE[autofix.kind]}
           details={
             <p className="wrap-break-word">
-              Mushi changes one file, <code className="font-mono">{autofix.workflowPath}</code> in{' '}
+              Mushi Mushi changes one file, <code className="font-mono">{autofix.workflowPath}</code> in{' '}
               <code className="font-mono">{autofix.repo}</code>, and opens it as a <strong>draft</strong> pull request.
               Nothing changes until you review it, mark it ready and merge it.
             </p>

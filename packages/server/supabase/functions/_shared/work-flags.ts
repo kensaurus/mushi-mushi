@@ -30,13 +30,18 @@
  *                             running over 45 minutes with no worker claim: a script, not
  *                             the console-steered worker, started it
  *            credits_idle     no agent work for 2 hours while Cursor credits expire within
- *                             7 days (named with the flag that blocks the work)
+ *                             7 days (named with the flag that blocks the work); or, when
+ *                             the agents are out of credits (agent-credits.ts), "No fix agent
+ *                             has credits since <date>" with when they come back and the
+ *                             Claude Code commands that fix in the meantime (2026-11-11: the
+ *                             flag said "idle" for 4 days while every run was refused)
  *
  *          A daemon too old to send a field raises no flag for it: missing is
  *          not failing. The console says "update the CLI on that machine".
  */
 
 import { HOST_ONLINE_MS, type LaneConfig } from './work-lanes.ts'
+import { agentCreditsSummary, agentCreditsTitle, CLAUDE_FOLLOWUPS_COMMAND, CLAUDE_WORK_COMMAND, type AgentCreditsState } from './agent-credits.ts'
 import type { HostChecks, RunStage, RunTelemetry, SlotTelemetry } from './work-telemetry.ts'
 
 export const RUN_STUCK_MS = 45 * 60_000
@@ -47,6 +52,8 @@ export const CREDITS_SOON_MS = 7 * 86_400_000
 export const HOOK_WINDOW_MS = 24 * 3600_000
 export const HOOK_FAILURES_MIN = 2
 export const BUSY_LOAD_PER_CORE = 2
+/** The credits flag when the agents are out of credits (kind stays `credits_idle` for older consoles). */
+export const CREDITS_OUT_FLAG_ID = 'credits_out'
 /** Slack between a claim and its fix row (the row starts after the claim; the server stamps both). */
 const CLAIM_SLACK_MS = 60_000
 
@@ -151,6 +158,8 @@ export interface FlagInput {
   claims: FlagClaim[]
   localRuns: FlagLocalRun[]
   credits: FlagCreditExpiry[]
+  /** Whether the fix agents have credits at all (agent-credits.ts); absent on older callers. */
+  agentCredits?: AgentCreditsState | null
   now: Date
 }
 
@@ -179,6 +188,27 @@ export const STAGE_TEXT: Record<RunStage, string> = {
 
 /** A run that failed in the repo's git hooks, by the text `mushi work` records (git() in commands/work.ts). */
 export const HOOK_FAILURE_RE = /\bgit (?:commit|push) (?:failed|timed out)\b|\b(?:pre-commit|pre-push|commit-msg|husky|lefthook)\b|\bcommit hook\b/i
+
+/**
+ * What failed in those runs, in a few words: the hook steps `mushi work` names ("hook steps
+ * failed: eslint, typecheck-changed"), most frequent first, else the git step. "glot: 6 runs
+ * failed in the repo's git hooks" gave no cause on Pipeline (2026-11-16).
+ * @internal Exported for tests only.
+ */
+export function hookFailureSummary(details: string[]): { steps: string[]; crashed: boolean } {
+  const counts = new Map<string, number>()
+  const add = (step: string) => counts.set(step, (counts.get(step) ?? 0) + 1)
+  for (const d of details) {
+    const named = /hook steps failed: ([^.|]+)/i.exec(d)
+    if (named) for (const step of named[1]!.split(',').map((x) => x.trim()).filter(Boolean)) add(step)
+    else if (/\bgit push (?:failed|timed out)\b/i.test(d)) add('pre-push checks')
+    else if (/\bgit commit (?:failed|timed out)\b/i.test(d)) add('commit checks')
+  }
+  const steps = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([step]) => step).slice(0, 3)
+  // Exit 139 is a segfault: on these machines, the checker ran out of memory.
+  const crashed = details.some((d) => /segmentation fault|exit status 139|out of memory/i.test(d))
+  return { steps, crashed }
+}
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
 const word = (v: unknown): string | null => (typeof v === 'string' ? v : null)
@@ -490,13 +520,14 @@ export function deriveWorkerFlags(input: FlagInput): WorkerFlag[] {
       .sort((a, b) => (b.finishedAt ?? '').localeCompare(a.finishedAt ?? ''))
     if (hits.length < HOOK_FAILURES_MIN) continue
     const latest = hits[0]!
+    const what = hookFailureSummary(hits.map((c) => c.detail ?? ''))
     flags.push({
       id: `hook_failures:${lane.id}`,
       kind: 'hook_failures',
       severity: 'warn',
       ...base(input.hosts.find((h) => h.id === lane.hostId) ?? null, lane),
-      title: `${lane.name}: ${hits.length} runs failed in the repo's git hooks in 24 h`,
-      cause: `The latest: "${(latest.detail ?? '').slice(0, 200)}". The agent's change may be fine; the repo's own commit or pre-push check failed or hung, and each try spends an agent space and credits.`,
+      title: `${lane.name}: ${hits.length} runs failed in the repo's git hooks in 24 h${what.steps.length ? ` (${what.steps.join(', ')})` : ''}`,
+      cause: `${what.crashed ? 'Some checks crashed (exit 139): the machine ran out of memory for them, so the check, not the change, failed. ' : ''}The latest: "${(latest.detail ?? '').slice(0, 200)}". The agent's change may be fine; the repo's own commit or pre-push check failed or hung, and each try spends an agent space and credits.`,
       sinceSec: ageSince(latest.finishedAt, now),
       actions: [
         { kind: 'pause_lane', label: 'Pause this lane', laneId: lane.id },
@@ -542,8 +573,31 @@ export function deriveWorkerFlags(input: FlagInput): WorkerFlag[] {
     })
   }
 
+  // Out of credits: idle is the wrong word, and "spend them" the wrong remedy.
+  const out = input.agentCredits?.out ? input.agentCredits : null
+  if (out) {
+    flags.push({
+      id: CREDITS_OUT_FLAG_ID,
+      kind: 'credits_idle',
+      severity: 'danger',
+      hostId: null,
+      hostname: null,
+      laneId: null,
+      laneName: null,
+      projectId: null,
+      title: agentCreditsTitle(out),
+      cause: agentCreditsSummary(out),
+      sinceSec: ageSince(out.since, now),
+      actions: [
+        { kind: 'copy_command', label: 'Fix with Claude Code on your computer', command: CLAUDE_WORK_COMMAND },
+        { kind: 'copy_command', label: 'Answer review findings with Claude Code', command: CLAUDE_FOLLOWUPS_COMMAND },
+        { kind: 'open_page', label: 'Spend credits', to: '/credits#agent-credits' },
+      ],
+    })
+  }
+
   // Credits that expire while no agent works.
-  const expiries = input.credits
+  const expiries = out ? [] : input.credits
     .map((c) => ({ ...c, at: Date.parse(c.expiresAt) }))
     .filter((c) => Number.isFinite(c.at) && c.at > nowMs && c.at - nowMs <= CREDITS_SOON_MS)
     .sort((a, b) => a.at - b.at)
@@ -591,7 +645,14 @@ export function deriveWorkerFlags(input: FlagInput): WorkerFlag[] {
 /** The flags that touch one app: its lanes, its machines' host-wide flags, its unmanaged runs, and credits. */
 export function flagsForProject(flags: readonly WorkerFlag[], lanes: ReadonlyArray<Pick<FlagLane, 'hostId' | 'projectId'>>, projectId: string): WorkerFlag[] {
   const hosts = new Set(lanes.filter((l) => l.projectId === projectId).map((l) => l.hostId))
-  return flags.filter((f) => f.projectId === projectId || (f.laneId === null && f.hostId !== null && hosts.has(f.hostId)) || (f.kind === 'credits_idle' && hosts.size > 0))
+  return flags.filter(
+    (f) =>
+      f.projectId === projectId ||
+      (f.laneId === null && f.hostId !== null && hosts.has(f.hostId)) ||
+      // Out of credits stops every app's fixes, lanes or not.
+      f.id === CREDITS_OUT_FLAG_ID ||
+      (f.kind === 'credits_idle' && hosts.size > 0),
+  )
 }
 
 /** The sidebar badge: how many flags, and whether any is danger. */

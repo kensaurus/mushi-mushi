@@ -273,7 +273,7 @@ function AppCard({ app, onJoin, onLeave, acting }: {
                 </div>
               ))}
               <p className="text-2xs text-fg-faint pt-1">
-                Points awarded after developer review. 1,000 pts = $10 gift card or $13 Mushi Pro credit.
+                Points awarded after developer review. 1,000 pts = $10 gift card or $13 Mushi Mushi Pro credit.
               </p>
             </div>
           )}

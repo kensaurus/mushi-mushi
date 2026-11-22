@@ -5,7 +5,7 @@ description: The To-do page gathers everything in Mushi Mushi that needs a human
 
 import { Callout } from 'nextra/components'
 
-<AdminDocHero page="inbox" />
+<Walkthrough id="todo-list" />
 
 # To-do
 
@@ -13,7 +13,7 @@ import { Callout } from 'nextra/components'
 
 > **Scenario:** It's Monday morning. You open Mushi Mushi and want to know in one
 > glance what actually needs a human decision right now, without clicking through
-> Bugs, Processing jobs and Mushi health separately to piece it together.
+> Bugs, Processing jobs and Mushi Mushi health separately to piece it together.
 
 To-do is your list across the whole loop: every action that still needs you, in one
 prioritised view. It has three tabs: **Overview** (every open card, top to bottom),
@@ -27,7 +27,7 @@ recent reports and fixes behind the counts).
 The cards come from `GET /v1/admin/dashboard`, and the status line and tab title from
 `GET /v1/admin/inbox/stats`. The page stays open (never "All clear") while any critical
 or high report is unfixed, including Sentry imports the classifier has already tagged.
-Every card you see is a state in the pipeline that Mushi has identified as requiring a
+Every card you see is a state in the pipeline that Mushi Mushi has identified as requiring a
 human decision or awareness. A page you opened before shows its last data at once and
 refreshes behind it.
 
@@ -106,4 +106,4 @@ source page, not here.
 - [Home](/admin/dashboard): the summary page for one app
 - [Bugs](/admin/reports): source of Plan cards
 - [Processing jobs](/admin/queue): source of queue-failure cards
-- [Mushi health](/admin/health): source of health-probe cards
+- [Mushi Mushi health](/admin/health): source of health-probe cards

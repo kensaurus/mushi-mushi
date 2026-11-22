@@ -34,22 +34,21 @@ export function StorageSnapshotStrip({ stats, statsFetchedAt, statsValidating, o
         {verdict.action === 'probe' ? 'Check bucket' : 'Check again'}
       </Btn>
     ) : null
+  // Built-in storage with nothing saved yet is one line, not a chip, a sentence and two empty
+  // tiles saying it four ways (2026-11-19).
+  const builtInEmpty = verdict.action === 'configure' && stats.activeProjectObjects === 0 && !stats.activeProjectLastWrite
   return (
     <PageStatus
       ariaLabel="Storage status"
       tone={verdict.tone}
-      sentence={verdict.sentence}
+      sentence={builtInEmpty ? `${stats.projectName ?? 'This app'} · built-in storage · no screenshots yet` : verdict.sentence}
       action={action}
       freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
-      metrics={[
+      // This app's numbers only: the team total is the usage table's own
+      // "All apps" row, so 63 is shown once, with its unit.
+      metrics={builtInEmpty ? [] : [
         { label: 'Screenshots', value: stats.activeProjectObjects.toLocaleString(), to: storageLinks.screenshots, hint: 'Screenshots stored for this app.' },
         { label: 'Last saved', value: relativeTime(stats.activeProjectLastWrite) ?? 'Never', hint: 'When this app last stored a screenshot.' },
-        {
-          label: 'All apps',
-          value: stats.totalObjects.toLocaleString(),
-          to: storageLinks.screenshots,
-          hint: 'Screenshots stored across every app on your team.',
-        },
       ]}
     />
   )

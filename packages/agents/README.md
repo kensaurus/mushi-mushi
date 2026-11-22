@@ -1,6 +1,6 @@
 # @mushi-mushi/agents
 
-> **Your AI wrote it. Mushi Mushi tells you why it broke.**
+> **Your AI built it. Mushi Mushi makes it better.**
 
 Internal package, not published to npm. It is the Node-side fix pipeline for
 Mushi Mushi: it hands a triaged bug report to a coding agent, checks the
@@ -196,4 +196,4 @@ The api function serves them under `/v1/schemas/*` (see [`packages/server/supaba
 
 ## License
 
-[AGPLv3](../server/LICENSE), copyleft. Part of the open-core server (self-host and fork freely; modified SaaS publishes changes or takes a [commercial license](../../COMMERCIAL-LICENSE.md)).
+[AGPLv3](../server/LICENSE), copyleft. Part of the open-core server (self-host and fork freely; modified SaaS publishes changes or takes a [commercial license](../../docs/legal/COMMERCIAL-LICENSE.md)).

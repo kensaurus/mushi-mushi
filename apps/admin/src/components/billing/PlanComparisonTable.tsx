@@ -57,13 +57,13 @@ const GROUPS: FeatureGroup[] = [
       {
         key: 'apps',
         label: 'Apps',
-        hint: 'Apps this team can watch. Each app gets its own widget, diagnoses and fixes.',
+        hint: 'Apps this team can watch. Each app gets its own widget; the plan and its diagnoses are shared by the whole team.',
         render: p => (p.max_projects == null ? 'No limit' : String(p.max_projects)),
       },
       {
         key: 'diagnoses',
         label: 'Diagnoses / month',
-        hint: 'Plain-English diagnoses of your bug reports. Reports are still captured past the limit.',
+        hint: 'Plain-English diagnoses of your bug reports, counted across every app in the team. Reports are still captured past the limit.',
         render: p =>
           p.included_diagnoses_per_month == null ? 'Unlimited' : p.included_diagnoses_per_month.toLocaleString(),
       },
@@ -116,7 +116,7 @@ const GROUPS: FeatureGroup[] = [
       {
         key: 'self_hosted',
         label: 'Self-hosted option',
-        hint: 'Run Mushi in your own Supabase + AWS account.',
+        hint: 'Run Mushi Mushi in your own Supabase + AWS account.',
         render: p => Boolean(p.feature_flags?.self_hosted),
       },
     ],
@@ -291,7 +291,7 @@ export function PlanComparisonTable({
             </p>
           </ContainedBlock>
         </div>
-        <span className="text-3xs text-fg-faint font-mono uppercase tracking-wider">
+        <span className="text-3xs text-fg-secondary font-mono font-semibold">
           Your plan is highlighted
         </span>
       </header>
@@ -303,7 +303,7 @@ export function PlanComparisonTable({
         style={{ gridTemplateColumns: `minmax(10rem, 1.4fr) repeat(${sorted.length}, minmax(8rem, 1fr))` }}
       >
         {/* Header row */}
-        <div role="rowheader" className="text-2xs text-fg-faint uppercase tracking-wider self-end pb-1">
+        <div role="rowheader" className="text-2xs text-fg-secondary self-end pb-1 font-semibold">
           Feature
         </div>
         {sorted.map(p => {
@@ -348,7 +348,7 @@ export function PlanComparisonTable({
                     <span className="text-2xs font-mono tabular-nums">
                       {currentUsage.diagnoses.toLocaleString()} / {diagLimit}
                     </span>
-                    <span className="text-3xs uppercase tracking-wider font-medium">
+                    <span className="text-3xs font-semibold">
                       <span aria-hidden="true" className="mr-0.5">{fit.verdict.glyph}</span>
                       {fit.verdict.label}
                     </span>
@@ -402,7 +402,7 @@ function FeatureGroupRows({
     <>
       <div
         role="rowheader"
-        className="col-span-full mt-3 text-3xs text-fg-faint font-mono uppercase tracking-wider border-b border-edge-subtle pb-1"
+        className="col-span-full mt-3 text-3xs text-fg-secondary font-mono border-b border-edge-subtle pb-1 font-semibold"
       >
         {group.title}
       </div>

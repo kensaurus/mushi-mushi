@@ -5,7 +5,7 @@ import { runSelfUpgrade } from '../self-upgrade.js';
 export function registerUpgradeCommand(program: Command): void {
   program
     .command('upgrade')
-    .description('Bump installed @mushi-mushi/* packages to the latest stable npm release')
+    .description('Bump the installed mushi-mushi package (and any @mushi-mushi/* packages) to the latest stable npm release')
     .option('--cwd <path>', 'Target repo (default: cwd)')
     .option('--self', 'Upgrade the globally-installed `mushi` CLI itself (not the project SDK deps)')
     .option('--dry-run', 'Print the install command without running it')

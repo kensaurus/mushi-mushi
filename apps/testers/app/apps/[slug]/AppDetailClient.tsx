@@ -180,7 +180,7 @@ export default function AppDetailClient() {
             </div>
             <p className="testers-faint mt-2 text-xs">
               Points are awarded by the developer after reviewing your submission.
-              1,000 pts = $10 gift card or $13 Mushi Pro credit (1.3× premium).
+              1,000 pts = $10 gift card or $13 of Mushi Mushi plan credit (1.3× premium).
             </p>
           </div>
         ) : (
@@ -202,7 +202,7 @@ export default function AppDetailClient() {
             <li>The developer reviews and awards points if the report is accepted.</li>
           </ol>
           <Link href="/how-it-works/" className="testers-brand-mark mt-2 inline-block text-sm underline underline-offset-2 hover:opacity-90">
-            Full guide: How Mushi Bounties works →
+            Full guide: How Mushi Mushi Bounties works →
           </Link>
         </div>
 

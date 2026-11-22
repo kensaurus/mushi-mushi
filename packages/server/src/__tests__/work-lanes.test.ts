@@ -21,6 +21,8 @@ import {
   LANE_VERBS,
   laneConfigFromRow,
   mayAutoRequeue,
+  meetsSeverityFloor,
+  onePerGroup,
   parseClaimDone,
   parseHeartbeat,
   parseHostGuards,
@@ -91,6 +93,34 @@ describe('lane modes and the console settings (P3)', () => {
     expect(parseLaneSettings({ review_model: 'x', command: 'ls' }).ok).toBe(false)
     expect(parseLaneSettings({}).ok).toBe(false)
     expect(parseLaneVerbs({ ...FULL, review_model: 'x' }).ok).toBe(false)
+  })
+
+  it('the console may set a drain floor (min_severity), server-only like review_model', () => {
+    expect(parseLaneSettings({ min_severity: 'high' })).toEqual({ ok: true, value: { min_severity: 'high' } })
+    expect(parseLaneSettings({ min_severity: null, paused: false })).toEqual({ ok: true, value: { min_severity: null, paused: false } })
+    for (const bad of ['low', 'HIGH', 3, '']) expect(parseLaneSettings({ min_severity: bad }).ok, String(bad)).toBe(false)
+    expect(parseLaneVerbs({ ...FULL, min_severity: 'high' }).ok).toBe(false)
+  })
+
+  it('the drain floor keeps that severity and worse; no floor keeps everything', () => {
+    expect(meetsSeverityFloor('critical', 'high')).toBe(true)
+    expect(meetsSeverityFloor('high', 'high')).toBe(true)
+    expect(meetsSeverityFloor('medium', 'high')).toBe(false)
+    expect(meetsSeverityFloor(null, 'medium')).toBe(false)
+    expect(meetsSeverityFloor('low', null)).toBe(true)
+    expect(meetsSeverityFloor(null, undefined)).toBe(true)
+  })
+
+  it('one claim per duplicate group: busy groups wait, the first-ranked member goes', () => {
+    const rows = [
+      { id: 'a', report_group_id: 'g1' },
+      { id: 'b', report_group_id: 'g1' },
+      { id: 'c', report_group_id: null },
+      { id: 'd', report_group_id: 'g2' },
+      { id: 'e', report_group_id: 'g3' },
+    ]
+    expect(onePerGroup(rows, new Set(['g2'])).map((r) => r.id)).toEqual(['a', 'c', 'e'])
+    expect(onePerGroup([], new Set()).length).toBe(0)
   })
 
   it('a heartbeat lane may say which repository its clone is, as owner/name only', () => {

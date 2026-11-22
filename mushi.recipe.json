@@ -69,9 +69,6 @@
       "flutter.yml": {
         "role": "ci"
       },
-      "infra-cf-docs-behavior.yml": {
-        "role": "ci"
-      },
       "ios.yml": {
         "role": "ci"
       },

@@ -30,6 +30,7 @@ import {
   type LegacyMessage,
 } from './claude-request.ts'
 import { log as rootLog } from './logger.ts'
+import { activeRouteParams } from './route-request-params.ts'
 
 const log = rootLog.child('claude-messages')
 
@@ -66,6 +67,10 @@ interface FinalMessageLike {
 }
 
 async function client(opts: ClaudeCallOptions): Promise<InstanceType<AiSdk['Anthropic']>> {
+  // The SDK reads ANTHROPIC_API_KEY when apiKey is empty, past the
+  // organization's AI provider switch (ai-provider.ts). Callers pass the key
+  // they resolved; without one there is no call.
+  if (!opts.apiKey?.trim()) throw new Error('No Claude API key for this call')
   const { Anthropic } = await loadAiSdk()
   return new Anthropic({ apiKey: opts.apiKey, maxRetries: 0, timeout: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS })
 }
@@ -75,17 +80,29 @@ function requestOptions(opts: ClaudeCallOptions): { signal: AbortSignal } | unde
   return opts.abortSignal ? { signal: opts.abortSignal } : undefined
 }
 
-function requestFor(opts: ClaudeCallOptions, outputSchema?: Record<string, unknown>) {
+/**
+ * The Messages body for one call. Inside a KENSAURUS AI route call the row's
+ * params are the defaults (route-request-params.ts): `max_output_tokens`,
+ * `temperature` and `effort` fill what the caller left unset, and `thinking`
+ * (which callers never set) is sent as the row gives it. buildClaudeRequest
+ * still drops a setting the model does not accept.
+ *
+ * @internal Exported for tests only.
+ */
+export function requestFor(opts: ClaudeCallOptions, outputSchema?: Record<string, unknown>) {
+  const route = activeRouteParams() ?? {}
+  const routeEffort = typeof route.effort === 'string' ? (route.effort as ClaudeEffort) : undefined
   const { body, betas } = buildClaudeRequest({
     model: opts.model,
-    maxTokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
+    maxTokens: opts.maxTokens ?? (typeof route.max_output_tokens === 'number' ? route.max_output_tokens : DEFAULT_MAX_TOKENS),
     system: opts.system,
     prompt: opts.prompt,
     messages: opts.messages,
-    temperature: opts.temperature,
-    effort: opts.effort,
+    temperature: opts.temperature ?? (typeof route.temperature === 'number' ? route.temperature : undefined),
+    effort: opts.effort ?? routeEffort,
     outputSchema,
   })
+  if (route.thinking && typeof route.thinking === 'object' && !('thinking' in body)) body.thinking = route.thinking as never
   return betas.length > 0 ? { ...body, betas } : body
 }
 

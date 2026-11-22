@@ -6,7 +6,7 @@ import type { ReactNode } from 'react'
 export const metadata: Metadata = {
   title: 'Join as a tester',
   description:
-    'Sign up for Mushi Bounties — test real apps, file bug reports, and earn mushi-points redeemable for Mushi Pro credit or gift cards.',
+    'Sign up for Mushi Mushi Bounties — test real apps, file bug reports, and earn mushi-points redeemable for gift cards or Mushi Mushi plan credit.',
   alternates: { canonical: 'https://kensaur.us/mushi-mushi/testers/join/' },
 }
 

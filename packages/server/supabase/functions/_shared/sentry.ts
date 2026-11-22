@@ -17,7 +17,7 @@
 
 import * as Sentry from 'npm:@sentry/deno@^9'
 import type { Context } from 'npm:hono@4'
-import { dbDiagnosticMessage, isHtmlGatewayDbMessage, SAFE_DB_MESSAGE } from './error-codes.ts'
+import { dbDiagnosticMessage, isHtmlGatewayDbMessage, isTransientDbFailure, SAFE_DB_MESSAGE } from './error-codes.ts'
 
 const TOKEN_QUERY_RX = /([?&](?:api_key|apiKey|token|key|access_token|session)=)[^&]+/gi
 
@@ -176,7 +176,8 @@ export function sentryHonoErrorHandler(err: Error, c: Context): Response {
   // drops them; a thrown ProjectAccessReadError used to reach reportError with
   // the raw HTML body (MUSHI-a8a03270). Only that error carries the flag, so
   // an unrelated throw whose text happens to quote HTML still reports.
-  if (err.name === 'ProjectAccessReadError' && (err as { transient?: unknown }).transient === true) {
+  // TransientDbError (error-codes.ts) carries the same flag.
+  if (isTransientDbFailure(err)) {
     console.warn(
       JSON.stringify({
         ts: new Date().toISOString(),
@@ -255,6 +256,29 @@ export function withSentry(
     try {
       return await handler(req)
     } catch (err) {
+      // A platform outage (TransientDbError, or a ProjectAccessReadError
+      // flagged transient) is a warn and a 503, so a cron caller retries on
+      // its next tick. Before this, merge-queue sent the raw Cloudflare 521
+      // page to Sentry as its exception (Sentry 7821462678).
+      if (isTransientDbFailure(err)) {
+        const message = (err as Error).message
+        console.warn(
+          JSON.stringify({
+            ts: new Date().toISOString(),
+            level: 'warn',
+            scope: 'mushi:with-sentry',
+            event: 'db_transient_error',
+            msg: 'transient DB connectivity failure — not an app bug, not reported to Sentry',
+            function: functionName,
+            method: req.method,
+            err_message: dbDiagnosticMessage(message),
+          }),
+        )
+        return new Response(
+          JSON.stringify({ ok: false, error: { code: 'DB_ERROR', message: SAFE_DB_MESSAGE } }),
+          { status: 503, headers: { 'Content-Type': 'application/json', 'Retry-After': '60' } },
+        )
+      }
       reportError(err, {
         tags: { function: functionName, method: req.method },
         extra: { url: req.url.replace(TOKEN_QUERY_RX, '$1[redacted]') },

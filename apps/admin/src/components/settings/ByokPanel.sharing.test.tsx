@@ -80,6 +80,11 @@ const bodyOf = (call: unknown[]) => JSON.parse(String((call[1] as RequestInit).b
 const firecrawlRow = () => document.getElementById('key-firecrawl')!
 const keyRow = (hint: string) =>
   Array.from(document.body.querySelectorAll('li')).find((li) => li.textContent?.includes(hint))!
+/** The scope chip opens the key's "where is it used" picker (round-3 review 2026-11-19). */
+async function openScope(hint: string) {
+  const chip = keyRow(hint).querySelector<HTMLButtonElement>('[data-testid="byok-scope-chip"]')!
+  await act(async () => chip.click())
+}
 
 async function typeInto(el: HTMLInputElement, value: string): Promise<void> {
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
@@ -135,7 +140,7 @@ describe('ByokPanel key scope', () => {
       expect(radio('All my apps', firecrawlRow()).getAttribute('aria-checked')).toBe('true')
       expect(firecrawlRow().textContent).toContain('all 12 apps you own in your 2 organizations')
       expect(firecrawlRow().textContent).toContain(
-        "Each app tries its own key first, then its organization's, then an all-apps key, then Mushi's own.",
+        "Each app tries its own key first, then its organization's, then an all-apps key, then Mushi Mushi's own.",
       )
     })
 
@@ -196,6 +201,9 @@ describe('ByokPanel key scope', () => {
     it('moves an app key to all my apps after confirming', async () => {
       mocks.keys = [OWN]
       await render()
+      // The picker stays closed until the chip is pressed.
+      expect(keyRow('…7270').querySelectorAll('[role="radio"]')).toHaveLength(0)
+      await openScope('…7270')
       await act(async () => radio('All my apps', keyRow('…7270')).click())
       // Nothing moves until the dialog is confirmed.
       expect(calls('/v1/admin/byok/keys/key-own/scope', 'PATCH')).toHaveLength(0)
@@ -209,6 +217,7 @@ describe('ByokPanel key scope', () => {
     it("a colleague's key cannot become my all-apps key, but can still move between app and organization", async () => {
       mocks.keys = [{ ...OWN, addedByMe: false }]
       await render()
+      await openScope('…7270')
       const options = Array.from(keyRow('…7270').querySelectorAll('[role="radio"]')).map((r) => r.textContent?.trim())
       expect(options).toEqual(['This organization', 'This app only'])
     })
@@ -216,6 +225,7 @@ describe('ByokPanel key scope', () => {
     it('brings a universal key back to this app', async () => {
       mocks.keys = [MINE]
       await render()
+      await openScope('…1111')
       await act(async () => radio('This app only', keyRow('…1111')).click())
       expect(document.body.textContent).toContain('Your other apps stop using it')
       await confirmDialog('Use in this app only')
@@ -225,6 +235,7 @@ describe('ByokPanel key scope', () => {
     it('shares an app key with the organization', async () => {
       mocks.keys = [OWN]
       await render()
+      await openScope('…7270')
       await act(async () => radio('This organization', keyRow('…7270')).click())
       expect(document.body.textContent).toContain('Use this key in all 9 apps in kenji?')
       await confirmDialog('Use in this organization')

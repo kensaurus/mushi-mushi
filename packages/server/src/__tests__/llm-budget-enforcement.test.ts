@@ -164,6 +164,7 @@ describe('the shared LLM path enforces the budget', () => {
           openAiCalled = true
           return 'o'
         },
+        { feature: 'test', tier: 'fast' },
       )
       .catch((e: unknown) => e)
     expect(err).toBeInstanceOf(budget.LlmBudgetExceededError)

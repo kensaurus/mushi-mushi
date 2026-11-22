@@ -6,11 +6,14 @@
  * docs and landing, dev.to cover) from the brand SSOT, so a tagline or license
  * change reaches the image the same way it reaches READMEs and npm:
  *
- *   hero     MUSHI_TAGLINE_V2.hero      "Your AI wrote it. Mushi Mushi tells you why it broke."
+ *   hero     MUSHI_TAGLINE_V2.hero      "Your AI built it. Mushi Mushi makes it better."
  *   eyebrow  MUSHI_TAGLINE_V2.category
  *   lead     MUSHI_TAGLINE_V2.promise
  *   footer   MUSHI_CANONICAL_URLS.repo · MUSHI_OSS.license
  *   colours  editorialTokens (paper, ink, vermillion), the landing page's palette
+ *   art      Field Kenji: his icon (docs/mascot/field-kenji-icon.png) as the
+ *            brand stamp, and his wave pose (apps/docs/assets/mascot) beside
+ *            the headline (docs/mascot/README.md, "Icon")
  *
  * Output: docs/social-preview/og-card.png at 1200×630 (the size Open Graph,
  * X and LinkedIn crop to), copied to apps/docs/public/social-preview/ where the
@@ -20,18 +23,21 @@
  * and docs-meta.test.ts reads the PNG header, so change all three together.
  *
  * Text is rendered with the host's fonts (editorialTokens.fontDisplay /
- * fontMono and a CJK serif for the 虫 stamp), so re-render on a machine that
+ * fontMono), so re-render on a machine that
  * has Palatino Linotype or Iowan Old Style and look at the result before
  * committing it. GitHub's social preview is uploaded by hand: Settings → Social
  * preview → docs/social-preview/og-card.png.
  *
  * Usage: node scripts/gen-og-card.mjs
+ *        node scripts/gen-og-card.mjs --html <file>   write the card's HTML only,
+ *          to render with a stored-profile playwright-cli session (the
+ *          browser rule forbids a throwaway chromium.launch()), then
+ *          `node scripts/gen-og-card.mjs --copy <png>` to install the render.
  */
 
-import { copyFileSync, mkdirSync, statSync } from 'node:fs'
+import { copyFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { chromium } from 'playwright'
 import { MUSHI_CANONICAL_URLS, MUSHI_OSS, MUSHI_TAGLINE_V2, editorialTokens } from '../packages/brand/src/index.js'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -39,11 +45,15 @@ const OUT = join(ROOT, 'docs/social-preview/og-card.png')
 const DOCS_COPY = join(ROOT, 'apps/docs/public/social-preview/og-card.png')
 const WIDTH = 1200
 const HEIGHT = 630
+const STAMP_ART = join(ROOT, 'docs/mascot/field-kenji-icon.png')
+const POSE_ART = join(ROOT, 'apps/docs/assets/mascot/mascot-wave.webp')
+
+const dataUri = (file, type) => `data:${type};base64,${readFileSync(file).toString('base64')}`
 
 const escapeHtml = (s) =>
   s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')
 
-/** "Your AI wrote it. Mushi Mushi tells you why it broke." → ["Your AI wrote it.", "Mushi Mushi tells you why it broke."] */
+/** "Your AI built it. Mushi Mushi makes it better." → ["Your AI built it.", "Mushi Mushi makes it better."] */
 function splitHero(hero) {
   const cut = hero.indexOf('. ')
   if (cut < 0) return [hero, '']
@@ -54,7 +64,8 @@ function html() {
   const { paper, ink, vermillion, fontDisplay, fontMono } = editorialTokens
   const [heroLead, heroPunch] = splitHero(MUSHI_TAGLINE_V2.hero)
   const repo = MUSHI_CANONICAL_URLS.repo.replace(/^https?:\/\//, '')
-  const cjkSerif = `'Hiragino Mincho ProN','Yu Mincho','Source Han Serif JP','Noto Serif CJK JP','SimSun',serif`
+  const stamp = dataUri(STAMP_ART, 'image/png')
+  const pose = dataUri(POSE_ART, 'image/webp')
   return `<!doctype html>
 <html><head><meta charset="utf-8"><style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -78,12 +89,13 @@ function html() {
   }
   .brand { display: flex; align-items: center; gap: 22px; }
   .stamp {
-    width: 76px; height: 76px; border-radius: 12px;
-    background: ${vermillion}; color: ${paper};
-    display: flex; align-items: center; justify-content: center;
-    font-family: ${cjkSerif}; font-weight: 700; font-size: 54px; line-height: 1;
+    width: 76px; height: 76px; border-radius: 16px; display: block;
     transform: rotate(-3deg);
     box-shadow: 0 3px 10px rgba(139, 26, 14, 0.22);
+  }
+  .kenji {
+    position: absolute; right: 40px; bottom: 104px;
+    width: 290px; height: 290px;
   }
   .wordmark { font-size: 34px; font-weight: 700; letter-spacing: -0.02em; }
   .eyebrow {
@@ -92,11 +104,11 @@ function html() {
     color: rgba(14, 13, 11, 0.62);
   }
   h1 {
-    margin-top: 54px;
-    font-size: 76px; line-height: 1.02; font-weight: 700; letter-spacing: -0.035em;
+    margin-top: 54px; max-width: 860px;
+    font-size: 66px; line-height: 1.04; font-weight: 700; letter-spacing: -0.035em;
   }
   h1 .punch { display: block; color: ${vermillion}; }
-  .lead { margin-top: 26px; font-size: 30px; line-height: 1.3; color: rgba(14, 13, 11, 0.72); }
+  .lead { margin-top: 26px; max-width: 720px; font-size: 30px; line-height: 1.3; color: rgba(14, 13, 11, 0.72); }
   .footer {
     margin-top: auto;
     padding-top: 22px; border-top: 1px solid rgba(14, 13, 11, 0.14);
@@ -108,9 +120,10 @@ function html() {
 </style></head>
 <body>
   <div class="wash"></div>
+  <img class="kenji" src="${pose}" alt="">
   <div class="frame">
     <div class="brand">
-      <div class="stamp">虫</div>
+      <img class="stamp" src="${stamp}" alt="">
       <div>
         <div class="wordmark">Mushi Mushi</div>
         <div class="eyebrow">${escapeHtml(MUSHI_TAGLINE_V2.category)}</div>
@@ -124,6 +137,24 @@ function html() {
 }
 
 async function main() {
+  const htmlAt = process.argv.indexOf('--html')
+  if (htmlAt > 0) {
+    const file = resolve(process.argv[htmlAt + 1] ?? 'og-card.html')
+    writeFileSync(file, html())
+    console.log(`[gen-og-card] wrote ${file} (render it at ${WIDTH}×${HEIGHT})`)
+    return
+  }
+  const copyAt = process.argv.indexOf('--copy')
+  if (copyAt > 0) {
+    const png = resolve(process.argv[copyAt + 1] ?? '')
+    mkdirSync(dirname(OUT), { recursive: true })
+    copyFileSync(png, OUT)
+    mkdirSync(dirname(DOCS_COPY), { recursive: true })
+    copyFileSync(OUT, DOCS_COPY)
+    console.log(`[gen-og-card] installed ${png} as docs/social-preview/og-card.png and the apps/docs/public copy`)
+    return
+  }
+  const { chromium } = await import('playwright')
   const browser = await chromium.launch()
   try {
     const page = await browser.newPage({ viewport: { width: WIDTH, height: HEIGHT }, deviceScaleFactor: 1 })

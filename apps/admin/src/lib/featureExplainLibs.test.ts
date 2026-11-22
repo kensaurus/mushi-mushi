@@ -90,7 +90,9 @@ describe('anomaliesExplainer', () => {
 describe('codeHealthExplainer', () => {
   it('defines god-file metric', () => {
     expect(CODE_HEALTH_METRIC_DEFINITIONS.find((m) => m.id === 'god_file')?.label).toMatch(/God file/)
-    expect(isCodeHealthGuideExpanded('no_data')).toBe(true)
+    // Round 3: closed with no data; the empty state carries the one step.
+    expect(isCodeHealthGuideExpanded('no_data')).toBe(false)
+    expect(isCodeHealthGuideExpanded('errors')).toBe(true)
   })
 })
 

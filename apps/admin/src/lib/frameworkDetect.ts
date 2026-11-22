@@ -343,19 +343,19 @@ export function detectFromPackageJson(input: string | PackageJson): DetectionRes
     }
   }
 
-  // Angular — @mushi-mushi/angular ships with provideMushi(); use the Vanilla
-  // tab for the snippet (no dedicated tab yet) but guide users to the right pkg.
+  // Angular — mushi-mushi/angular ships provideMushi(); use the Vanilla
+  // tab for the snippet (no dedicated tab yet) but guide users to the right import.
   if (hasDep(pkg, '@angular/core')) {
     warnings.push(
-      'Angular detected. Install @mushi-mushi/angular, then add ' +
-      'provideMushi({ projectId, apiKey }) to your app.config.ts providers array.',
+      'Angular detected. Install mushi-mushi, then add ' +
+      "provideMushi({ projectId, apiKey }) from 'mushi-mushi/angular' to your app.config.ts providers array.",
     )
     return {
       framework: 'vanilla',
       confidence: 0.75,
       reason:
-        'Found @angular/core → Angular app. Install @mushi-mushi/angular and use ' +
-        'provideMushi() in app.config.ts. The Vanilla JS tab shows the raw init call ' +
+        "Found @angular/core → Angular app. Install mushi-mushi and use provideMushi() from 'mushi-mushi/angular' " +
+        'in app.config.ts. The Vanilla JS tab shows the raw init call ' +
         'as a fallback if needed.',
       monorepo,
       workspacePath,

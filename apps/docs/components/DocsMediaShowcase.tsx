@@ -12,7 +12,7 @@ export function DocsMediaShowcase() {
   return (
     <div className="docs-media-showcase not-prose">
       <DocScreenshot
-        src="tour-pdca-loop.gif"
+        src="tour-pdca-loop"
         alt={adminTour.alt}
         caption={
           <>
@@ -23,7 +23,7 @@ export function DocsMediaShowcase() {
         animated
       />
       <DocScreenshot
-        src="glotit-report-flow.gif"
+        src="glotit-report-flow"
         alt={glotit.alt}
         caption={
           <>

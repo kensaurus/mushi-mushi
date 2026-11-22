@@ -101,7 +101,7 @@ export function ExploreDiagramPanel({ projectId }: Props) {
       <Card className="p-6 space-y-3 text-center">
         <h3 className="text-sm font-semibold text-fg">See how your app fits together</h3>
         <p className="mx-auto max-w-prose text-xs text-fg-muted">
-          Mushi reads your repo on GitHub at the latest commit and asks AI to draw the main parts and how they connect.
+          Mushi Mushi reads your repo on GitHub at the latest commit and asks AI to draw the main parts and how they connect.
           Every file path is checked against the real repo. It costs one AI call, and nothing changes until you redraw.
         </p>
         {canDraw ? (
@@ -185,7 +185,7 @@ export function ExploreDiagramPanel({ projectId }: Props) {
           ) : (
             <p className="text-xs text-fg-faint">
               {selected.path_invalid
-                ? 'The AI named a path that is not in the repo, so Mushi removed it.'
+                ? 'The AI named a path that is not in the repo, so Mushi Mushi removed it.'
                 : 'No single file or folder implements this part.'}
             </p>
           )}

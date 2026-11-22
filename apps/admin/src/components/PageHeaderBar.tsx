@@ -44,30 +44,30 @@ import { Tooltip } from './ui'
 import { PDCA_STAGES, PDCA_OVERVIEW_CHIP, chipForPath, type PdcaStageId } from '../lib/pdca'
 import { stageChipCopy } from '../lib/navRegistry'
 import { PageHelpPopover } from './ui/help-popover'
+import { useClaimedHeaderTabs } from './PageHeaderTabs'
 
 /* ── Inline PDCA chip ─────────────────────────────────────────────────── */
 
-function HeaderPdcaChip({ chip }: { chip: string }) {
+function HeaderPdcaChip({ chip, title }: { chip: string; title?: unknown }) {
   const meta = chip === 'overview' ? PDCA_OVERVIEW_CHIP : PDCA_STAGES[chip as keyof typeof PDCA_STAGES]
   if (!meta) return null
   // Colours from the stage; words from the cycle step the sidebar shows (ADR 0027).
   const copy = stageChipCopy(chip as 'overview' | PdcaStageId)
+  // A tag that repeats the heading ("Home" over Home, "Bugs" over Bugs) says nothing (round 3, 2026-11-19).
+  if (typeof title === 'string' && title.trim().toLowerCase() === copy.label.trim().toLowerCase()) return null
   return (
     // The chip must be able to shrink: a long label is wider than the header
     // column at 390px, and a non-shrinking chip overflowed its row and sat
     // on top of the freshness pill. The tooltip and aria-label keep the
     // full wording.
     <Tooltip content={copy.hint} className="min-w-0 max-w-full">
+      {/* A plain section tag (fresh-eyes 2026-11-18): four stage colours and a step number
+          ("② Bugs" blue, "④ Verify" amber) read as statuses on a console where colour means state. */}
       <span
-        className={`inline-flex min-w-0 max-w-full items-center gap-1 rounded-full border px-1.5 py-0.5 text-3xs uppercase tracking-wider cursor-help ${meta.tintBg} ${meta.tintBorder} ${meta.text}`}
+        className="inline-flex min-w-0 max-w-full items-center rounded-sm border border-edge-subtle px-1.5 py-px text-3xs text-fg-secondary cursor-help"
         aria-label={copy.ariaLabel}
+        data-stage={chip}
       >
-        <span
-          className={`inline-flex h-3 w-3 shrink-0 items-center justify-center rounded-sm font-bold text-3xs ${meta.badgeBg} ${meta.badgeFg}`}
-          aria-hidden="true"
-        >
-          {copy.glyph}
-        </span>
         <span className="truncate">{copy.label}</span>
       </span>
     </Tooltip>
@@ -132,6 +132,8 @@ export function PageHeaderBar({
   const { pathname } = useLocation()
   const registerPageHelp = usePageHelpRegister()
   const locationChrome = useLocationChrome()
+  // A hub's view tabs (Home, Team, Mushi health) sit under the title, not above it (ADR 0066).
+  const hubTabs = useClaimedHeaderTabs()
 
   const chipKey =
     contextChip === undefined && !suppressContextChipProp && !locationChrome.suppressContextChip
@@ -176,7 +178,7 @@ export function PageHeaderBar({
         <div className="flex min-w-0 flex-1 basis-48 flex-wrap items-center gap-x-2 gap-y-1">
           {/* PDCA chip */}
           {contextChip === undefined && chipKey ? (
-            <HeaderPdcaChip chip={chipKey} />
+            <HeaderPdcaChip chip={chipKey} title={title} />
           ) : contextChip ? (
             <span className="shrink-0">{contextChip}</span>
           ) : null}
@@ -199,7 +201,7 @@ export function PageHeaderBar({
             {showProjectScope && (
               <>
                 <span className="mx-1.5 text-fg-faint" aria-hidden="true">·</span>
-                <span className="font-mono text-xs text-fg-secondary">{projectScope}</span>
+                <span className="text-xs text-fg-secondary">{projectScope}</span>
               </>
             )}
           </h2>
@@ -209,18 +211,23 @@ export function PageHeaderBar({
             console journeys 2026-10-27): the explainer no longer takes a row
             of the page. */}
         {(children || showCopyLink || hasHelp) && (
-          <div className="ml-auto flex max-w-full shrink-0 flex-wrap items-center justify-end gap-1.5">
+          // Phone (2026-11-18 fresh-eyes): the actions take the full row, left to right, with
+          // help and the link pinned to its end, instead of a right-aligned stack that wrapped
+          // into ragged rows ("now" alone, then ?/link on a third line).
+          <div className="flex w-full min-w-0 flex-wrap items-center gap-1.5 sm:ml-auto sm:w-auto sm:max-w-full sm:shrink-0 sm:justify-end">
             {children}
-            {hasHelp && helpTitle && helpWhatIsIt ? (
-              <PageHelpPopover
-                title={helpTitle}
-                whatIsIt={helpWhatIsIt}
-                useCases={helpUseCases}
-                howToUse={helpHowToUse}
-                flowPath={helpFlowPath}
-              />
-            ) : null}
-            {showCopyLink && <CopyViewLinkButton />}
+            <span className="ml-auto inline-flex shrink-0 items-center gap-1.5 sm:ml-0">
+              {hasHelp && helpTitle && helpWhatIsIt ? (
+                <PageHelpPopover
+                  title={helpTitle}
+                  whatIsIt={helpWhatIsIt}
+                  useCases={helpUseCases}
+                  howToUse={helpHowToUse}
+                  flowPath={helpFlowPath}
+                />
+              ) : null}
+              {showCopyLink && <CopyViewLinkButton />}
+            </span>
           </div>
         )}
       </div>
@@ -230,6 +237,12 @@ export function PageHeaderBar({
           {description}
         </p>
       )}
+
+      {hubTabs ? (
+        <div className="mt-3 min-w-0" data-testid="page-header-hub-tabs">
+          {hubTabs}
+        </div>
+      ) : null}
     </div>
   )
 }

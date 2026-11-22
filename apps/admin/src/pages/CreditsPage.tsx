@@ -22,11 +22,17 @@ import { FirecrawlLevers, type FirecrawlBalance } from '../components/credits/Fi
 import { SkillRunsCard } from '../components/credits/SkillRunsCard'
 import { LocalWorkerModels } from '../components/credits/LocalWorkerModels'
 import { usePageData } from '../lib/usePageData'
+import { useAgentCredits } from '../lib/agentCredits'
+import { AgentCreditsOutCard } from '../components/AgentCreditsOutCard'
 import { usePublishPageContext } from '../lib/pageContext'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { useNow } from '../lib/useNow'
 import { useScrollToHash } from '../lib/useScrollToHash'
+import { LANES_PATH, type WorkLanesData } from '../lib/workers'
+import { creditsBlocker } from '../lib/creditsView'
+import { AlertCards } from '../components/signal/AlertCards'
+import { HighlightProvider } from '../components/signal/linkedHighlight'
 import type { SpendDownResponse } from '../components/settings/spendDown'
 import type { ReviewFollowupsResponse } from '../components/settings/reviewFollowups'
 
@@ -59,6 +65,11 @@ export function CreditsPage() {
   const followups = usePageData<ReviewFollowupsResponse | null>('/v1/admin/byok/review-followups')
   const projects = usePageData<{ projects?: Array<{ id: string; name: string }> }>('/v1/admin/projects')
 
+  // Same read as the Local workers section (shared cache): the idle-credits
+  // blocker leads the page in red, above the "spend-down is off" nudge.
+  const lanes = usePageData<WorkLanesData>(LANES_PATH, { scope: 'enumeration' })
+  const blocker = creditsBlocker(lanes.data)
+  const agentCredits = useAgentCredits()
   const balance = firecrawlBalance(credits.data)
   const cursorKeys = spendDown.data?.keys ?? []
   usePublishPageContext({
@@ -74,12 +85,37 @@ export function CreditsPage() {
       <PageHeaderBar
         title="Spend credits"
         icon={<IconCost />}
-        description="Credits that expire, and every way Mushi can spend them finding and fixing your bugs."
+        description="Credits that expire, and every way Mushi Mushi can spend them finding and fixing your bugs."
         helpTitle="About Spend credits"
-        helpWhatIsIt="Cursor and Firecrawl credits that lapse at the end of a period are worth more spent. This page lists each place Mushi can spend them on your apps, with a switch for each: Cursor fixes open bugs, answers review findings and runs skills that improve an app round by round; Firecrawl checks your live sites for broken pages that become bug reports."
+        helpWhatIsIt="Cursor and Firecrawl credits that lapse at the end of a period are worth more spent. This page lists each place Mushi Mushi can spend them on your apps, with a switch for each: Cursor fixes open bugs, answers review findings and runs skills that improve an app round by round; Firecrawl checks your live sites for broken pages that become bug reports."
         helpHowToUse="Turn on what you want, top to bottom. Every fix still opens a draft pull request for you to review, inside each app's auto-fix limits. The full settings for each switch are linked from its row."
       />
-      {/* First: one countdown per expiring key, and the one switch that matters. */}
+      {/* Problems first (round-2 review): offline workers leave expiring credits idle. That
+          failure leads in red; the countdowns and their amber "turn on spend-down" nudge follow. */}
+      {blocker && (
+        <HighlightProvider>
+          <AlertCards
+            label="What blocks spending"
+            testIdPrefix="credits"
+            emptyText={null}
+            alerts={[
+              {
+                id: 'credits-idle',
+                severity: blocker.severity,
+                label: blocker.offlineLanes > 0 ? `${blocker.offlineLanes} ${blocker.offlineLanes === 1 ? 'lane' : 'lanes'} offline` : 'Credits idle',
+                title: blocker.title,
+                detail: <span data-testid="credits-idle">{blocker.cause}</span>,
+                metric:
+                  blocker.idleHours != null
+                    ? { value: String(blocker.idleHours), unit: 'h idle' }
+                    : { value: String(blocker.offlineLanes), unit: blocker.offlineHosts.length ? `offline on ${blocker.offlineHosts.join(', ')}` : 'lanes offline' },
+                action: { label: 'Open Workers', to: '/pipeline?tab=workers' },
+              },
+            ]}
+          />
+        </HighlightProvider>
+      )}
+      {/* Then: one countdown per expiring key, and the one switch that matters. */}
       <PagePosture
         slots={[
           {
@@ -88,6 +124,7 @@ export function CreditsPage() {
             show: !spendDown.error,
             children: (
               <CreditCountdowns
+                outOfCredits={agentCredits.state}
                 keys={spendDown.data ? cursorKeys : null}
                 balance={balance}
                 canManageOrg={followups.data?.canManage === true}
@@ -98,6 +135,7 @@ export function CreditsPage() {
           },
         ]}
       />
+      {agentCredits.state?.out && <AgentCreditsOutCard state={agentCredits.state} />}
       {error && <PageLoadError error={error} resource="credit settings" endpoint="/v1/admin/byok/spend-down" onRetry={() => { spendDown.reload(); credits.reload() }} />}
 
       <Section title="Cursor: fix bugs" id="cursor-fix-bugs">
@@ -118,7 +156,7 @@ export function CreditsPage() {
       </Section>
 
       <Section title="Local workers: models" id="local-worker-models">
-        <LocalWorkerModels />
+        <LocalWorkerModels idleShownAbove={blocker != null} />
       </Section>
 
       <Section title="Cursor: improve your apps with skills">
@@ -127,7 +165,12 @@ export function CreditsPage() {
 
       <Section title="Firecrawl: find bugs on your live sites">
         {credits.data || !credits.loading ? (
-          <FirecrawlLevers balance={balance} projects={projects.data ? (projects.data.projects ?? []) : null} now={now} />
+          <FirecrawlLevers
+            balance={balance}
+            projects={projects.data ? (projects.data.projects ?? []) : null}
+            now={now}
+            balanceShownAbove={Boolean(spendDown.data && !spendDown.error && balance?.periodEnd && balance.remaining != null)}
+          />
         ) : (
           <p className="text-xs text-fg-muted">Reading your Firecrawl balance…</p>
         )}

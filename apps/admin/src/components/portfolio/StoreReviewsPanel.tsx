@@ -11,11 +11,12 @@
 
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Badge, Btn, Callout, Loading, Section } from '../ui'
+import { Badge, Btn, Callout, Section } from '../ui'
+import { TimedLoading } from './TimedLoading'
 import { PageLoadError } from '../PageLoadError'
 import { usePageData } from '../../lib/usePageData'
 import { apiFetchMutate } from '../../lib/supabase'
-import { pullSummary, ratingLabel, storeLabel, type StoreIntakeResult } from './storeReviewsView'
+import { pullBlocker, pullSummary, ratingLabel, storeLabel, type StoreIntakeResult } from './storeReviewsView'
 
 interface StoreReviewsData {
   settings: { enabled: boolean; maxRating: number; lastPulledAt: string | null; lastStatus: string | null; lastError: string | null }
@@ -61,20 +62,30 @@ export function StoreReviewsPanel({ projectId }: { projectId: string }) {
   }
 
   const s = data?.settings
+  const blocker = pullBlocker(data)
   return (
     <Section
       title="Store reviews as reports"
       action={(
-        <Btn
-          size="sm"
-          variant="ghost"
-          onClick={pull}
-          loading={busy}
-          disabled={busy || !s?.enabled || !data?.canPull}
-          title={data && !data.canPull ? 'Viewers cannot pull store reviews.' : undefined}
-        >
-          Pull now
-        </Btn>
+        // The reason sits beside the button, one line, whenever it is disabled for one.
+        <span className="flex flex-wrap items-center justify-end gap-2">
+          {blocker && (
+            <span className="text-2xs text-fg-secondary" id={`store-pull-blocker-${projectId}`} data-testid="store-pull-blocker">
+              {blocker}
+            </span>
+          )}
+          <Btn
+            size="sm"
+            variant="ghost"
+            onClick={pull}
+            loading={busy}
+            disabled={busy || blocker != null}
+            title={blocker ?? undefined}
+            aria-describedby={blocker ? `store-pull-blocker-${projectId}` : undefined}
+          >
+            Pull now
+          </Btn>
+        </span>
       )}
     >
       <p className="mb-3 text-xs text-fg-muted">
@@ -86,8 +97,19 @@ export function StoreReviewsPanel({ projectId }: { projectId: string }) {
         </Callout>
       )}
       {error && <PageLoadError error={error} resource="store reviews" endpoint={path} onRetry={reload} />}
-      {loading && !data && <Loading text="Reading the store review settings…" />}
-      {data && s && (
+      <TimedLoading waiting={loading && !data && !error} text="Reading the store review settings…" what="Store reviews" onRetry={reload} testId="portfolio-store-reviews-not-checked" />
+      {data && s && data.sources.length === 0 && (
+        // The blocker first and alone: the controls do nothing until a store is bound (round 3:
+        // a checkbox and "Only reviews of 1–2 stars" came first, the reason at the bottom).
+        <p className="text-xs text-fg-secondary" data-testid="store-reviews-blocker">
+          No App Store Connect or Google Play source is bound to this app. Connect one under{' '}
+          <Link to="/portfolio?tab=spend#portfolio-connectors" className="font-medium text-brand hover:underline">
+            Apps → Spend → Connected sources
+          </Link>{' '}
+          and bind this app&apos;s Apple id or Android package.
+        </p>
+      )}
+      {data && s && data.sources.length > 0 && (
         <div className="flex flex-col gap-3 text-sm">
           <fieldset className="flex flex-col gap-2" disabled={busy || !data.canManage}>
             <legend className="sr-only">Store reviews as reports</legend>
@@ -103,21 +125,15 @@ export function StoreReviewsPanel({ projectId }: { projectId: string }) {
               </select>
             </label>
           </fieldset>
-          {data.sources.length === 0 ? (
-            <p className="text-xs text-fg-muted">
-              No App Store Connect or Google Play source is bound to this app. Connect one under Portfolio → Connected sources and bind this app's Apple id or Android package.
-            </p>
-          ) : (
-            <ul className="flex flex-wrap gap-1.5">
-              {data.sources.map((src) => (
-                <li key={`${src.store}:${src.appId}`}>
-                  <Badge tone={src.connected ? 'okSubtle' : 'warnSubtle'} title={src.connected ? 'Key stored' : 'The key could not be read'}>
-                    {storeLabel(src.store)} {src.appId}
-                  </Badge>
-                </li>
-              ))}
-            </ul>
-          )}
+          <ul className="flex flex-wrap gap-1.5">
+            {data.sources.map((src) => (
+              <li key={`${src.store}:${src.appId}`}>
+                <Badge tone={src.connected ? 'okSubtle' : 'warnSubtle'} title={src.connected ? 'Key stored' : 'The key could not be read'}>
+                  {storeLabel(src.store)} {src.appId}
+                </Badge>
+              </li>
+            ))}
+          </ul>
           <p className="text-xs text-fg-muted">
             {s.lastPulledAt ? `Last pulled ${new Date(s.lastPulledAt).toLocaleString()} (${s.lastStatus ?? 'unknown'}).` : 'Not pulled yet.'}
             {s.lastError ? ` ${s.lastError}` : ''}

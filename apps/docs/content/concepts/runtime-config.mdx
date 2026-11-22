@@ -64,13 +64,13 @@ fresh report session.
 
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
-| Top banner vanished after saving console config | Host had `trigger: 'banner'`; old server always sent `launcher: 'auto'` | Upgrade to latest `@mushi-mushi/web`. Host banner wiring now wins over console defaults. |
+| Top banner vanished after saving console config | Host had `trigger: 'banner'`; old server always sent `launcher: 'auto'` | Upgrade to the latest `mushi-mushi` (or `@mushi-mushi/web`). Host banner wiring now wins over console defaults. |
 | Console toggle has no effect | `runtimeConfig: false` or SDK never heartbeats | Set `runtimeConfig: 'auto'` and confirm project ID + API key |
 | Capture button missing | Host or console disabled that capture mode | Check `capture.screenshot` / `capture.elementSelector` in init and SDK install card |
-| Reporter lost typed text mid-report | Pre-fix SDK rebuild | Upgrade `@mushi-mushi/web` — drafts persist across re-renders |
+| Reporter lost typed text mid-report | Pre-fix SDK rebuild | Upgrade `mushi-mushi` (or `@mushi-mushi/web`) — drafts persist across re-renders |
 
 ## Related
 
 - [Trigger modes](/concepts/trigger-modes) — launcher posture matrix
-- [@mushi-mushi/web](/sdks/web) — SDK reference
+- [mushi-mushi](/sdks/web) — SDK reference
 - [Screenshot preview deep-dive](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SDK_SCREENSHOT_PREVIEW.md)

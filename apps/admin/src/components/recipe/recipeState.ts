@@ -66,7 +66,7 @@ const UNKNOWN: ElementStateMeta = {
   label: 'Not checked yet',
   tone: 'neutral',
   glyph: 'question',
-  description: 'Mushi has not checked this yet, so it is not a pass.',
+  description: 'Mushi Mushi has not checked this yet, so it is not a pass.',
   cardEdge: 'border-2 border-dashed border-edge',
 }
 
@@ -91,7 +91,7 @@ const ERROR: ElementStateMeta = {
   label: 'Check failed',
   tone: 'dangerSubtle',
   glyph: 'cross',
-  description: 'The last check could not finish, so Mushi cannot say if this works.',
+  description: 'The last check could not finish, so Mushi Mushi cannot say if this works.',
   cardEdge: 'border-2 border-danger/60',
 }
 
@@ -214,7 +214,7 @@ export function orderedRecipeElements(
       label: FALLBACK_LABEL[key],
       lane: ELEMENT_LANE[key],
       state: 'unknown',
-      reason: 'Mushi could not load this part of the recipe. Press Refresh to try again.',
+      reason: 'Mushi Mushi could not load this part of the recipe. Press Refresh to try again.',
       lastCheckedAt: null,
       facts: {},
       findingsCount: 0,
@@ -268,6 +268,79 @@ export function elementsBehindWorst(elements: readonly RecipeElementSummary[]): 
   return elements.filter((e) => elementStateMeta(e.state).state === worst)
 }
 
+/** States whose card holds a real result; the others were never judged. */
+const JUDGED: ReadonlySet<ElementState> = new Set(['ok', 'drift', 'error'])
+
+/**
+ * Which of a card's two status lines to show (2026-11-18: a card said "Not set up", "Nothing to
+ * check until it is set up" and "Not checked for problems" at once). The chip already names an
+ * unjudged state, so the check time shows only when there is one (or the check failed or found
+ * drift), and the problem count only once the element was judged or has problems.
+ */
+export function cardStatusLines(state: ElementState, lastCheckedAt: string | null | undefined, findings: number): { checked: boolean; problems: boolean } {
+  return {
+    checked: Boolean(lastCheckedAt) || state === 'error' || state === 'drift',
+    problems: findings > 0 || JUDGED.has(state),
+  }
+}
+
+/**
+ * A card's reason when its problems are counted (round 3, 2026-11-19): "2 problems to fix: Mushi
+ * Mushi setup check (2). They and their fixes are under Risk checks…" sat on the card, under the
+ * header's "Next step … 2 problems to fix" and over the card's own "2 problems to fix". The header
+ * says it in words and the card shows a mark and the number, so a reason that only counts the
+ * problems is dropped from the card (the side panel keeps it).
+ */
+export function cardReason(reason: string, findings: number): string {
+  return findings > 0 && /^\s*[\d,]+ problems? to fix\b/i.test(reason) ? '' : reason
+}
+
+/**
+ * The server's reason without a leading restatement of the chip ("Not set up. Add deploy
+ * targets…" beside a "Not set up" chip reads the state twice).
+ */
+export function reasonAfterState(reason: string, stateLabel: string): string {
+  const lead = `${stateLabel}.`
+  const text = recipeReasonText(reason)
+  if (!text.toLowerCase().startsWith(lead.toLowerCase())) return text
+  const rest = text.slice(lead.length).trim()
+  return rest.length > 0 ? rest : text
+}
+
+/**
+ * The server's reason, with its pointer to Risk checks matching the page: they moved to the top
+ * (390 px put them about 3,000 px down, 2026-11-18), so "at the end of the App blueprint page"
+ * is now "at the top of this page". The server copy should follow (reported).
+ */
+export function recipeReasonText(reason: string): string {
+  return (
+    reason
+      .replace(/ at the end of the App blueprint page/g, ' at the top of this page')
+      // The product name in full ("so Mushi can read", "Mushi knows your pages"); the server copy should follow (reported).
+      .replace(/(?<![\w-]|Mushi )Mushi(?![\w-]| Mushi)/g, 'Mushi Mushi')
+  )
+}
+
+/**
+ * The first sentence of a reason, for the header's next step: the card carries the rest, so the
+ * same two sentences no longer appear three times (header, card, side panel; 2026-11-18).
+ * "Mushi setup check (2)." keeps its parenthesis; a sentence ends at ". " or the end.
+ */
+export function firstSentence(text: string): string {
+  const i = text.search(/[.!?](\s|$)/)
+  return i < 0 ? text : text.slice(0, i + 1)
+}
+
+/**
+ * A fact's value for a card that was never judged: a 0, an empty value or "—" there is not a
+ * measured zero, so it reads "not checked" (2026-11-18: "Releases 0", "Connected 0" on cards
+ * that are not set up). Null when the value should show as it is.
+ */
+export function uncheckedFact(state: ElementState, v: string | number | boolean | null | undefined): 'not checked' | null {
+  if (JUDGED.has(state)) return null
+  return v === 0 || v === null || v === undefined || v === '' || v === '—' ? 'not checked' : null
+}
+
 /** Card fact value → short display string. */
 export function formatFactValue(v: string | number | boolean | null | undefined): string {
   if (v === null || v === undefined || v === '') return '—'
@@ -283,7 +356,9 @@ const FACT_LABEL: Readonly<Record<string, string>> = {
   tokens: 'Design tokens',
   deviance: 'Off-system score',
   manifest: 'Recipe file',
-  graphNodes: 'Pages known',
+  // The server counts every graph_nodes row (pages and components from reports), not routes:
+  // "Pages known 2" contradicted "0 routes" on User stories (2026-11-18).
+  graphNodes: 'Graph nodes',
   inventory: 'inventory.yaml',
   validationErrors: 'File errors',
   gates: 'Checks that ran',

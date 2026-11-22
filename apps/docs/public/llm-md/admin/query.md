@@ -5,6 +5,9 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/query
 ---
 title: SQL query
 description: Ask about your bug data in Mushi Mushi in plain English or in read-only SQL; the SQL query page shows the SQL it ran, the result rows and a short summary.
+robots:
+  index: false
+  follow: true
 ---
 
 # SQL query

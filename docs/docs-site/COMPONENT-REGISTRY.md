@@ -30,7 +30,7 @@ Both patterns are supported. Register new shared components in `mdx-components.t
 | Component | Purpose | Typical page |
 |-----------|---------|--------------|
 | `EditorialHero` | Landing/chapter hero — **the only H1** on marketing pages | `/`, concepts |
-| `AdminDocHero` | Console screenshot/GIF hero from catalog | `/admin/*` |
+| `AdminDocHero` | Console screenshot/demo-clip hero from catalog (clips play through `DocVideo`) | `/admin/*` |
 | `OssTrustStrip` | Open-source trust bullets (license, self-host) | `/` |
 | `WhereToStartGrid` | Three-path “where to start” decision grid | `/` |
 | `QuickstartGrid` | Four platform install cards with commands | `/` |
@@ -38,6 +38,7 @@ Both patterns are supported. Register new shared components in `mdx-components.t
 | `ComparisonTable` | Foil vs Mushi comparison | `/` |
 | `DocScreenshot` | Screenshot with lightbox | Home, admin docs |
 | `DocsMediaShowcase` | Animated tour + SDK dogfood + theme-aware stills | Home (`index.mdx`) after 60-second proof |
+| `Mascot` | Field Kenji beside one first-person guide line (`pose`: `wave`, `laptop`, `think`; `line` ≤ 90 chars, a prop so the llms mirrors skip it). One per page; rules in [`docs/mascot/README.md`](../mascot/README.md) | `/quickstart`, `/quickstart/mcp`, 404 |
 | `MigrationHub` | Filterable migration guide grid | `/migrations` |
 | `MigrationChecklist` | Per-guide interactive checklist | `/migrations/*` |
 | `EffortBadge` / `RiskBadge` | Migration effort/risk chips | Hub + guide headers |

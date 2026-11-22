@@ -17,6 +17,7 @@ import { usePageData } from '../lib/usePageData'
 import { apiFetch } from '../lib/supabase'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePublishPageContext } from '../lib/pageContext'
+import { tabbedPageTitle } from '../lib/pageTitle'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { NextStep } from '../components/NextStep'
 import { useToast } from '../lib/toast'
@@ -45,8 +46,9 @@ import {
   isCatalogTabId,
   mcpTestFailureMessage,
   resolveMcpTab,
-  validateMcpJsonSyntax,
 } from '../lib/mcpPageHelpers'
+import { accountKeyForProject, mcpJsonDraftCheck } from '../lib/mcpSetupView'
+import type { AccountKeyRow } from '../components/mcp/McpAccountKeysList'
 import { CHIP_TONE, HEADER_BADGE_TONE } from '../lib/chipTone'
 import { PageLoadError } from '../components/PageLoadError'
 
@@ -85,6 +87,9 @@ export function McpPage() {
 
   const projectsQuery = usePageData<McpProjectsResponse>(projectsPath, { deps: [activeProjectId] })
   const statsQuery = usePageData<McpStats>(statsPath, { deps: [activeProjectId] })
+  // Same read as the Setup tab's account-key list (requests are shared).
+  const accountKeysQuery = usePageData<{ keys: AccountKeyRow[] }>(activeProjectId ? '/v1/admin/mcp/account-keys' : null, { scope: 'none' })
+  const accountKey = accountKeyForProject(accountKeysQuery.data?.keys, activeProjectId)
 
   const activeProject = useMemo(() => {
     if (!activeProjectId) return null
@@ -196,10 +201,9 @@ export function McpPage() {
       : snippetMode === 'http'
         ? buildHttpCursorJson(projectId, displayName)
         : buildEnvBlock(projectId)
-  const syntaxCheck = useMemo(
-    () => validateMcpJsonSyntax(mcpJsonDraft || (snippetMode === 'env' ? '' : snippet)),
-    [mcpJsonDraft, snippet, snippetMode],
-  )
+  // Only what was pasted is checked: with an empty box it validated the
+  // generated snippet's placeholder key and warned (round-2 review 2026-11-18).
+  const syntaxCheck = useMemo(() => mcpJsonDraftCheck(mcpJsonDraft), [mcpJsonDraft])
 
   async function testMcpConnection() {
     if (!activeProjectId) return
@@ -235,16 +239,16 @@ export function McpPage() {
   }
 
 
-  const hasReadKey = stats.mcpReadKeyCount > 0
-  const hasWriteKey = stats.mcpWriteKeyCount > 0
+  // An account key that reaches this app is a key the editor can use.
+  const hasReadKey = stats.mcpReadKeyCount > 0 || Boolean(accountKey)
+  const hasWriteKey = stats.mcpWriteKeyCount > 0 || Boolean(accountKey?.scopes.includes('mcp:write'))
   const step1Tone: McpQuickstartStepProps['tone'] = hasReadKey ? 'done' : 'next'
   const step2Tone: McpQuickstartStepProps['tone'] = hasReadKey ? (stats.connectedKeyCount > 0 ? 'done' : 'next') : 'idle'
   const step3Tone: McpQuickstartStepProps['tone'] = stats.connectedKeyCount > 0 ? 'done' : hasReadKey ? 'next' : 'idle'
 
   usePublishPageContext({
     route: '/mcp',
-    title: `${activeMeta.label} · Editor agents`,
-    summary: activeMeta.description,
+    title: tabbedPageTitle('Editor agents', activeMeta.label, activeMeta.id === MCP_PAGE_TABS[0].id),
     filters: { tab: activeTab, catalog: catalogTab, project_id: activeProjectId ?? undefined },
     criticalCount: stats.neverConnectedCount + (stats.endpointMismatch ? 1 : 0),
   })
@@ -261,7 +265,8 @@ export function McpPage() {
 
   const catalogOptions = useMemo(
     () => [
-      { id: 'tools' as const, label: 'Tools', count: stats.toolCount },
+      // No count here: the Catalog tab already carries it (round-3 review 2026-11-19).
+      { id: 'tools' as const, label: 'Tools' },
       { id: 'resources' as const, label: 'Resources', count: stats.resourceCount },
       { id: 'prompts' as const, label: 'Prompts', count: stats.promptCount },
     ],
@@ -277,7 +282,7 @@ export function McpPage() {
           helpTitle={copy?.help?.title ?? 'About editor agents'}
           helpWhatIsIt={
             copy?.help?.whatIsIt ??
-            'MCP lets your coding assistant call Mushi tools during a chat — read reports, dispatch fixes, and query production data without copy-pasting IDs.'
+            'MCP lets your coding assistant call Mushi Mushi tools during a chat — read reports, dispatch fixes, and query production data without copy-pasting IDs.'
           }
           helpUseCases={
             copy?.help?.useCases ?? [
@@ -340,7 +345,7 @@ export function McpPage() {
         helpTitle={copy?.help?.title ?? 'About editor agents'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
-          'MCP lets your coding assistant call Mushi tools during a chat — read reports, dispatch fixes, and query production data without copy-pasting IDs.'
+          'MCP lets your coding assistant call Mushi Mushi tools during a chat — read reports, dispatch fixes, and query production data without copy-pasting IDs.'
         }
         helpUseCases={
           copy?.help?.useCases ?? [
@@ -390,6 +395,7 @@ export function McpPage() {
                 stats={stats}
                 onTab={setTab}
                 plainBanner={ux.plainBanner}
+                accountKey={accountKey}
               />
             ),
           },
@@ -427,10 +433,10 @@ export function McpPage() {
         <McpOverviewPanel
           stats={stats}
           keys={projectsQuery.data ? (activeProject?.api_keys ?? []) : null}
-          lastFetchedAt={lastFetchedAt}
-          isValidating={isValidating}
           onOpenExamples={() => setTab('examples')}
           onOpenSetup={() => setTab('setup')}
+          hideEmptyEditors={!ux.hideMcpSnapshot}
+          keyMixShown={stats.topPriority === 'report_only_keys'}
         />
       )}
 
@@ -451,6 +457,7 @@ export function McpPage() {
             projects={projectsQuery.data?.projects}
             hasReadKey={hasReadKey}
             hasWriteKey={hasWriteKey}
+            accountKeyLabel={accountKey ? (accountKey.label ?? '') : null}
             step1Tone={step1Tone}
             step2Tone={step2Tone}
             step3Tone={step3Tone}

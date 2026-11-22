@@ -70,7 +70,7 @@ Most teams will never hand-author `inventory.yaml`. Turn on
 `capture.discoverInventory` in the SDK config:
 
 ```ts
-import { MushiProvider } from '@mushi-mushi/react'
+import { MushiProvider } from 'mushi-mushi/react'
 
 <MushiProvider config={{
   projectId: '…',
@@ -111,7 +111,7 @@ tab lists their findings under the names in the first column:
 
 ## Watch your live site
 
-**Discovery → Watch your live site** asks Firecrawl to crawl your live site once a day, following your site's own links from the address you enter. Mushi files a bug report, before a user finds the problem, for each page that:
+**Discovery → Watch your live site** asks Firecrawl to load your live pages once a day: the pages your site lists in its sitemap and that Firecrawl knows about, starting from the address you enter, up to your page limit. The list refreshes after each daily check. Mushi Mushi files a bug report, before a user finds the problem, for each page that:
 
 - returns a server error (5xx);
 - returns a 404 or another 4xx from a link on your own site (sign-in walls and rate limits don't count);
@@ -120,19 +120,19 @@ tab lists their findings under the names in the first column:
 
 Pages your `robots.txt` blocks, links that only differ by `?utm_…` parameters, and pages you removed are not reported.
 
-A page has to fail twice before it becomes a report. When a check finds a broken page, Mushi loads that page again, waits about 10 seconds for it to finish loading, and files only if it is still broken. A page caught mid-load (a loading screen, only a "Skip to content" link, a status line waiting on a request) is not a broken page. A server error or a page that won't load also files when two checks in a row see it. If your whole site is down, Mushi files one report within the hour. Two cases file at low severity: a page Firecrawl's checker keeps calling broken that Mushi can't load again to confirm (marked "unconfirmed"), and a server error that keeps coming back but loads fine each time Mushi looks again (3 times in 7 days, marked "intermittent"). These second loads use your app's own Firecrawl key: at most 6 per hourly read, shared across your apps, 1 credit each.
+A page has to fail twice before it becomes a report. When a check finds a broken page, Mushi Mushi loads that page again, waits about 10 seconds for it to finish loading, and files only if it is still broken. A page caught mid-load (a loading screen, only a "Skip to content" link, a status line waiting on a request) is not a broken page. A server error or a page that won't load also files when two checks in a row see it. If your whole site is down, Mushi Mushi files one report within the hour. Two cases file at low severity: a page Firecrawl's checker keeps calling broken that Mushi Mushi can't load again to confirm (marked "unconfirmed"), and a server error that keeps coming back but loads fine each time Mushi Mushi looks again (3 times in 7 days, marked "intermittent"). These second loads use your app's own Firecrawl key: at most 6 per hourly read, shared across your apps, 1 credit each.
 
-Each broken page files one report. When 5 or more pages break at once (the site is down, or a deploy broke a shared layout), they file one report that lists them all. While a page stays broken, Mushi doesn't file again. When it is no longer broken, it leaves the "Broken right now" list; its report stays as it is for you to close. If it breaks again later, it has to fail twice again before it files.
+Each broken page files one report. When 5 or more pages break at once (the site is down, or a deploy broke a shared layout), they file one report that lists them all. While a page stays broken, Mushi Mushi doesn't file again. When it is no longer broken, it leaves the "Broken right now" list; its report stays as it is for you to close. If it breaks again later, it has to fail twice again before it files.
 
 **Check now** runs a check straight away, and results show in 1 to 3 minutes. Each app can run 6 checks an hour this way; the daily check always runs.
 
-The watch uses your Firecrawl key, or a key shared with all your apps. It costs 1 credit per page per day, about 750 a month for 25 pages. Firecrawl's own estimate is up to twice that, because it holds back 1 credit per page for checking changed pages. **Turn off** deletes the crawl in Firecrawl and needs the key to do so; reports already filed stay. Only public pages are checked; flows behind sign-in belong in [QA stories](/admin/qa-coverage).
+The watch uses your Firecrawl key, or a key shared with all your apps. It costs 1 credit per page per day, about 750 a month for 25 pages. Firecrawl's own estimate is up to twice that, because it holds back 1 credit per page for checking changed pages. It also uses 1 credit a day to refresh the page list. **Turn off** deletes the monitor in Firecrawl and needs the key to do so; reports already filed stay. Only public pages are checked; flows behind sign-in belong in [QA stories](/admin/qa-coverage).
 
-The crawler sends `MushiSiteWatch` in its `User-Agent` header (`MushiSiteWatch/1.0 (+https://kensaur.us/mushi-mushi)`, after a normal Chrome user agent). Filter that string out of Sentry and your analytics so the daily check doesn't count as visitors or errors, for example by dropping events in Sentry's `beforeSend` when the request's user agent contains `MushiSiteWatch`. The header is on the HTTP request; don't rely on `navigator.userAgent` showing it. A watch turned on before this header was added starts sending it the next time you save it or turn it off and on.
+Firecrawl's browser arrives with a `https://www.google.com/` referrer, so without a filter the daily check counts as Google visitors. Every Mushi page load of your app (the watch, the site audit, Production Check, QA stories) adds `mushi_monitor=watch`, `audit` or `qa` to the page URL, plus `utm_source=mushi-monitor`, which Firecrawl strips before loading. It also sends `MushiSiteWatch` in its `User-Agent` header (`MushiSiteWatch/1.0 (+https://kensaur.us/mushi-mushi)`, after a normal Chrome user agent). Exclude page views whose URL contains `mushi_monitor=` from your analytics, and drop Sentry events in `beforeSend` when the URL contains `mushi_monitor=` or the request's user agent contains `MushiSiteWatch`. Every page the watch loads carries the URL marker. The header is on the HTTP request only: the page's `navigator.userAgent` doesn't show it. A watch turned on before 2026-11-13 switches to the marked page list by itself within the hour, with nothing to re-save.
 
 ## Synthetic monitor
 
-Mushi re-walks the inventory's `expected_outcome` checks against your
+Mushi Mushi re-walks the inventory's `expected_outcome` checks against your
 staging URL every 15 minutes once you enable it. The monitor is
 **fail-closed by default**: write paths (POST / PUT / DELETE actions)
 are skipped unless you turn on **Allow mutations** for the project in
@@ -178,6 +178,6 @@ per-surface details.
 - [`@mushi-mushi/inventory-schema`](/sdks/inventory-schema) — the Zod /
   JSON Schema for `inventory.yaml`.
 - [`@mushi-mushi/mcp-ci`](/sdks/mcp-ci) — the GitHub Action.
-- [`eslint-plugin-mushi-mushi`](/sdks/eslint-plugin) — the lint rules.
+- [`mushi-mushi/eslint`](/sdks/eslint-plugin) — the lint rules.
 - [`@mushi-mushi/inventory-auth-runner`](/sdks/inventory-auth-runner) —
   bootstrap an authenticated session for the crawler / monitor.

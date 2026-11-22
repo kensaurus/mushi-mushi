@@ -1,5 +1,11 @@
 # @mushi-mushi/ux
 
+## 0.3.1
+
+### Patch Changes
+
+- 184d4ea: The README and the npm description now use the full product name, Mushi Mushi, everywhere instead of a shortened "Mushi". In `@mushi-mushi/mcp`, `search_mushi_docs` and `get_mushi_doc` also return the updated docs pages and the corrected auto-fix-loop blog post.
+
 ## 0.3.0
 
 ### Minor Changes

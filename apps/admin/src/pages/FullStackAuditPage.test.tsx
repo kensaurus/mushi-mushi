@@ -36,8 +36,8 @@ vi.mock('../components/PageHeaderBar', () => ({
 }))
 vi.mock('../components/PagePosture', () => ({ PagePosture: () => null, POSTURE_PRIORITY: { guide: 1 } }))
 
-import { FullStackAuditPage, auditStatus } from './FullStackAuditPage'
-import { findingFixPrompt } from '../components/gates/CopyFixPromptButton'
+import { FullStackAuditPage, auditStatus, unfinishedChecks } from './FullStackAuditPage'
+import { checkFindingsFixPrompt, findingFixPrompt } from '../components/gates/CopyFixPromptButton'
 import { EMPTY_FULLSTACK_AUDIT_STATS } from '../components/fullstack-audit/FullstackAuditStatsTypes'
 
 const STATS: FullstackAuditStats = {
@@ -89,14 +89,32 @@ describe('auditStatus', () => {
   it('never calls a failed read healthy', () => {
     expect(auditStatus({ ...STATS, topPriority: 'unknown', readError: 'timeout' })).toEqual({
       tone: 'warn',
-      sentence: 'Mushi could not count the open findings: timeout. The list below may still load.',
+      sentence: 'Mushi Mushi could not count the open findings: timeout. The list below may still load.',
     })
   })
 
-  it('says a check that could not finish is unknown, not a pass', () => {
-    const s = auditStatus({ ...STATS, errorCount: 0, warnCount: 0, failedGateCount: 1, topPriority: 'failures' })
+  it('names each check that could not finish, and never calls a failing check unfinished', () => {
+    const s = auditStatus({ ...STATS, errorCount: 0, warnCount: 0 }, ['API contract'])
     expect(s.tone).toBe('warn')
-    expect(s.sentence).toContain('1 check could not finish')
+    expect(s.sentence).toContain('1 check could not finish: API contract.')
+    // failedGateCount counts `fail` runs: failing checks, not unfinished ones (2026-11-18).
+    const failing = auditStatus({ ...STATS, errorCount: 0, warnCount: 0, failedGateCount: 2, topPriority: 'failures' })
+    expect(failing.tone).toBe('danger')
+    expect(failing.sentence).not.toContain('could not finish')
+    expect(failing.sentence).toContain('2 checks failing')
+  })
+
+  it('reads unfinished checks from the newest run per check (status error), by name', () => {
+    expect(unfinishedChecks(null)).toEqual([])
+    const names = unfinishedChecks({
+      runs: [
+        { id: 'a', gate: 'api_contract', status: 'error', started_at: now, completed_at: now },
+        { id: 'b', gate: 'schema_drift', status: 'fail', started_at: now, completed_at: now },
+      ],
+      findings: [],
+    })
+    expect(names).toHaveLength(1)
+    expect(names[0]).toMatch(/API contract/i)
   })
 })
 
@@ -106,6 +124,16 @@ describe('findingFixPrompt', () => {
     expect(text).toContain('"API contract" check found a problem in src/orders.ts (line 41): POST /orders body does not match.')
     expect(text).toContain('run the tests')
   })
+
+  it('puts every open finding of one check in one prompt (Fix all, 2026-11-19)', () => {
+    const text = checkFindingsFixPrompt([
+      { gate: 'api_contract', message: 'POST /orders body does not match', file_path: 'src/orders.ts', line: 41 },
+      { gate: 'api_contract', message: 'GET /users is never called' },
+    ])
+    expect(text).toContain('"API contract" check found 2 problems:')
+    expect(text).toContain('- POST /orders body does not match (src/orders.ts:41)')
+    expect(text).toContain('- GET /users is never called')
+  })
 })
 
 describe('FullStackAuditPage', () => {
@@ -114,12 +142,15 @@ describe('FullStackAuditPage', () => {
     mocks.findings = FINDINGS
     await render()
     const status = host.querySelector('[data-testid="audit-status"]')!
-    expect(status.textContent).toContain('9 errors and 9 warnings are open')
+    // Counts as marks, not a text wall (2026-11-18).
+    expect(status.querySelector('[data-testid="audit-mark-errors"]')?.textContent).toBe('9errors')
+    expect(status.querySelector('[data-testid="audit-mark-warnings"]')?.textContent).toBe('9warnings')
+    expect(status.querySelector('[data-testid="audit-unfinished"]')).toBeNull()
     const copy = status.querySelector<HTMLButtonElement>('[data-testid="copy-fix-prompt"]')!
     await act(async () => copy.click())
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining('src/orders.ts (line 41)'))
-    // The list totals use the same exact counts.
-    expect(host.querySelector('[data-testid="gate-findings-totals"]')?.textContent).toBe('9 errors · 9 warnings open in 1 check')
+    // The totals are said once, in the status above; the list does not repeat them (2026-11-18).
+    expect(host.querySelector('[data-testid="gate-findings-totals"]')).toBeNull()
     // Every finding in the list can be copied too.
     expect(host.querySelectorAll('[data-testid="copy-fix-prompt"]').length).toBe(3)
   })
@@ -135,7 +166,8 @@ describe('FullStackAuditPage', () => {
     }
     await render()
     const row = host.querySelector('[data-testid="gate-shown-elsewhere"]')!
-    expect(row.textContent).toContain('1 open')
+    expect(row.textContent).toContain('1 error more')
+    expect(row.textContent).toContain('Known holes in your dependencies')
     expect(row.querySelector('a')?.getAttribute('href')).toBe('/#dependency-holes')
     // The hole itself is not listed as a finding card a second time.
     expect(host.textContent).not.toContain('next 16.3.8 has 3 known security holes')

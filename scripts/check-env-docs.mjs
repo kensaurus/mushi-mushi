@@ -24,7 +24,7 @@ const REQUIRED_IN_EXAMPLES = {
   LANGFUSE_BASE_URL: ['.env.example', 'deploy/.env.example'],
 }
 
-const ONBOARDING_SCAN = ['apps/docs/content/self-hosting', 'CONTRIBUTING.md', 'SELF_HOSTED.md']
+const ONBOARDING_SCAN = ['apps/docs/content/self-hosting', '.github/CONTRIBUTING.md', 'docs/SELF_HOSTED.md']
 
 const ENV_KEY_RE = /^#?\s*([A-Z][A-Z0-9_]*)\s*=/
 
@@ -84,6 +84,7 @@ for (const rel of [
   'apps/admin/.env.example',
   'packages/server/.env.example',
   'deploy/.env.example',
+  'deploy/selfhost/mushi.env.example',
   'apps/docs/.env.example',
   'examples/react-demo/.env.example',
 ]) {
@@ -105,6 +106,7 @@ const ALLOW_UNDOCUMENTED = new Set([
   'VITE_INSTANCE_TYPE',
   'VITE_RELEASE',
   'VITE_BASE_PATH',
+  'MUSHI_INIT_OWNER_EMAIL',
   'MUSHI_INIT_ORG_NAME',
   'MUSHI_INIT_ORG_ID',
   'MUSHI_INIT_PROJECT_NAME',

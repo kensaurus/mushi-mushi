@@ -31,7 +31,8 @@ export function LockedHubView({ view, currentPlan }: { view: HubView; currentPla
     <div data-testid="locked-hub-view">
       <PageFirstStep
         title={`${view.label} is available on ${planName}`}
-        sentence={`You are on ${currentPlan}. ${plan ? `${plan.display_name} includes ${view.label.toLowerCase()}.` : 'See which plan includes it.'}`}
+        // The title names the plan; "Enterprise includes compliance" said it again (2026-11-19).
+        sentence={`You are on ${currentPlan}.${plan ? '' : ' See which plan includes it.'}`}
         action={{ label: 'See plans', to: PLANS_HREF }}
         marksPageEmpty={false}
         data-testid="locked-hub-view-card"

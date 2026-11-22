@@ -1,6 +1,6 @@
 # @mushi-mushi/cli
 
-> **Your AI wrote it. Mushi Mushi tells you why it broke.**
+> **Your AI built it. Mushi Mushi makes it better.**
 
 The `mushi` command for [Mushi Mushi](https://github.com/kensaurus/mushi-mushi). Install the SDK in your app, connect your editor, then read bugs, dispatch fixes and merge them without leaving the terminal.
 
@@ -21,7 +21,7 @@ npm install -g @mushi-mushi/cli      # optional: a global `mushi` command
 
 The wizard detects your framework and package manager, checks your credentials, installs the right SDK, writes framework-prefixed env vars (`NEXT_PUBLIC_`, `VITE_`, `EXPO_PUBLIC_`…) to `.env.local`, prints the snippet to paste, and offers to send a test report. It never overwrites an existing env var or edits your code.
 
-**Credentials** come from the [console](https://kensaur.us/mushi-mushi/admin): the **project ID** is on the Projects page; the **API key** is under **Setup → Verify → Generate API key** (`report:write`), not the AI keys in Settings. No project yet? The wizard can open the console for you.
+**Credentials** come from the [console](https://kensaur.us/mushi-mushi/admin): the **project ID** is on the **Manage apps** page; the **API key** is under **Set up → Test it → Generate API key** (`report:write`), not the AI keys in Settings. No project yet? The wizard can open the console for you.
 
 For your editor, `mushi setup` writes the hosted MCP entry by default: the editor opens a browser sign-in on first use and no key is stored on disk. Add `--stdio` for a local server instead.
 
@@ -32,7 +32,7 @@ For your editor, `mushi setup` writes the hosted MCP entry by default: the edito
 | Set up | `init`, `login`, `setup`, `connect`, `doctor`, `test` (send a test report), `upgrade`, `nudge`, `completion`, `profile` |
 | Bugs | `reports list/show/search/triage`, `lessons list/show`, `sentry import` |
 | Fixes | `fix <reportId>`, `fixes tail/merge/refresh-ci/review/verify`, `verify workflow` |
-| Local agent | `work` (a Cursor agent on your own computer fixes a report; you push), `worker install/status/revoke` (keeps it running, steered from the console) |
+| Local agent | `work` (the Cursor CLI or Claude Code on your own computer fixes a report; `mushi work` pushes and opens the draft PR with your `git` and `gh`), `worker install/status/revoke` (keeps it running, steered from the console) |
 | Ship | `sourcemaps upload`, `deploy check`, `migrate`, `audit`, `releases` |
 | Test and UX | `qa stories/runs/run`, `tdd gen/pending/approve/improve`, `stories map`, `ux` (including `ux fresh-eyes`, the first-time user test) |
 | CI | `runner status/compare/bill`: where your tests run, what they cost, and whether a red check was your code or the machine |
@@ -45,7 +45,7 @@ For your editor, `mushi setup` writes the hosted MCP entry by default: the edito
 ```bash
 mushi doctor --fix                                  # check SDK, ingest and dispatch; fix what's safe locally
 mushi reports list --status new --severity critical # what broke
-mushi fix <reportId> --wait                         # an agent opens a draft PR for it (your own AI key)
+mushi fix <reportId> --wait                         # the built-in fixer opens a draft PR for it
 mushi fixes merge <fixId>                           # merge it and mark the report Fixed
 mushi upgrade                                       # bump @mushi-mushi/* to the latest stable
 mushi upgrade --check                               # CI: exit 0 current, 1 outdated, 2 registry down
@@ -60,9 +60,9 @@ mushi init --yes --project-id <uuid> --api-key mushi_xxx --skip-test-report
 MUSHI_API_KEY=mushi_xxx mushi connect --project-id <uuid> --endpoint <url> --wait   # wire a repo, wait for the first SDK heartbeat
 ```
 
-Other `init` flags: `--framework next`, `--cwd apps/web` (monorepos), `--endpoint <url>` (self-hosted), `--skip-install`, `--audit` (check an existing install instead).
+Other `init` flags: `--framework next`, `--cwd apps/web` (monorepos), `--endpoint <url>` (self-hosted), `--skip-install`, `--audit` (check an existing install instead), `--dry-run` (show what it would install and write, change nothing).
 
-**What needs your own key.** Reading reports, diagnoses and fix prompts does not. `mushi fix` hands the report to an agent that runs on your own key: Anthropic for the built-in fixer (the default), or Cursor with `--agent cursor_cloud`. `mushi work` runs a Cursor agent on your own computer instead.
+**What needs your own key.** Reading reports, diagnoses and fix prompts does not. `mushi fix` hands the report to the built-in fixer by default (`--agent claude_code`): it uses your own Anthropic or OpenAI key when you have added one, and on hosted Mushi Mushi it falls back to Mushi Mushi's key when you have not. `--agent cursor_cloud` needs your own Cursor key. `mushi work` runs the Cursor CLI or Claude Code (`--agent claude`, CLI 0.36.0 or later) on your own computer instead, on the account that tool is signed in to.
 
 ## Environment variables
 
@@ -70,7 +70,7 @@ Other `init` flags: `--framework next`, `--cwd apps/web` (monorepos), `--endpoin
 | --- | --- |
 | `MUSHI_API_KEY` | API key. Prefer it over `--api-key`, which shows up in `ps` |
 | `MUSHI_PROJECT_ID` | Project UUID |
-| `MUSHI_API_ENDPOINT` | API base URL (defaults to Mushi Cloud) |
+| `MUSHI_API_ENDPOINT` | API base URL (defaults to Mushi Mushi Cloud) |
 | `MUSHI_CONSOLE_URL` | Console base for links and browser opens |
 | `MUSHI_PROFILE` | Named credential profile to use (same as `--profile`) |
 | `MUSHI_BYOK_KEY` | Key for `mushi keys add`, kept out of shell history |

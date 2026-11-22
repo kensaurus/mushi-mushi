@@ -10,13 +10,18 @@ export type DiagnosisLane = 'evidence' | 'signal' | 'diagnosis' | 'check' | 'fix
 export const DIAGNOSIS_LANES: ReadonlyArray<{ id: DiagnosisLane; label: string; hint: string }> = [
   { id: 'evidence', label: 'Evidence', hint: 'What came in' },
   { id: 'signal', label: 'Signals', hint: 'What the fast filter read' },
-  { id: 'diagnosis', label: 'Diagnosis', hint: 'What Mushi concluded' },
+  { id: 'diagnosis', label: 'Diagnosis', hint: 'What Mushi Mushi concluded' },
   { id: 'check', label: 'Checks', hint: 'How sure it is' },
   { id: 'fix', label: 'Fix', hint: 'What was tried, what is next' },
 ]
 
-/** observed: a fact; ok / weak / failed: a claim and how it held up; pending: not there yet; open: a step for you. */
-type DiagnosisNodeState = 'observed' | 'ok' | 'weak' | 'failed' | 'pending' | 'open' | 'done'
+/**
+ * observed: a fact; ok / weak / failed: a claim and how it held up; pending:
+ * running now; unchecked: never checked and nothing running (the judge grades
+ * a sample, so most reports are never graded: "Not graded yet · in progress"
+ * said both, R2 sweep 2026-11-18); open: a step for you.
+ */
+type DiagnosisNodeState = 'observed' | 'ok' | 'weak' | 'failed' | 'pending' | 'unchecked' | 'open' | 'done'
 
 export interface DiagnosisNode {
   id: string
@@ -69,3 +74,6 @@ export function headline(value: string, max = 110): string {
   const space = cut.lastIndexOf(' ')
   return `${(space > max * 0.6 ? cut.slice(0, space) : cut).replace(/[,;:\s]+$/, '')}…`
 }
+
+/** The detail line of the diagnosis node when only the first check ran. */
+export const STAGE1_ONLY_DETAIL = 'first check only'

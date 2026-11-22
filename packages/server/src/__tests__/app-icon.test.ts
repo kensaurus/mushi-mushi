@@ -15,6 +15,7 @@ vi.mock('../../supabase/functions/_shared/logger.ts', () => {
 })
 
 import {
+  ICON_FORCE_MIN_MS,
   ICON_REFRESH_MS,
   iconsDue,
   isStoreIconUrl,
@@ -53,6 +54,26 @@ describe('resolveStoreIcon', () => {
     expect(fetcher).toHaveBeenCalledTimes(1)
   })
 
+  it('asks a storefront first: the bare lookup is a stale cache (lets-talk 1.3.2 vs 1.4.0, 2026-11-18)', async () => {
+    const urls: string[] = []
+    const fetcher = async (url: string) => {
+      urls.push(url)
+      return url.includes('country=') ? res(200, ITUNES(APPLE_ICON)) : res(200, ITUNES('https://is1-ssl.mzstatic.com/old.png'))
+    }
+    await expect(resolveStoreIcon({ appleIds: ['6799392790'], packages: [] }, fetcher)).resolves.toEqual({ icon: { url: APPLE_ICON, source: 'app_store' }, complete: true })
+    expect(urls).toEqual(['https://itunes.apple.com/lookup?id=6799392790&country=us'])
+  })
+
+  it('tries jp, then the bare lookup, for an app the us storefront does not sell', async () => {
+    const urls: string[] = []
+    const fetcher = async (url: string) => {
+      urls.push(url)
+      return url.endsWith('country=us') || url.endsWith('country=jp') ? res(200, '{"resultCount":0,"results":[]}') : res(200, ITUNES(APPLE_ICON))
+    }
+    await expect(resolveStoreIcon({ appleIds: ['1'], packages: [] }, fetcher)).resolves.toMatchObject({ icon: { url: APPLE_ICON } })
+    expect(urls).toEqual(['https://itunes.apple.com/lookup?id=1&country=us', 'https://itunes.apple.com/lookup?id=1&country=jp', 'https://itunes.apple.com/lookup?id=1'])
+  })
+
   it('falls back to the Play icon, and never trusts a non-store host', async () => {
     const fetcher = async (url: string) => (url.includes('itunes') ? res(200, ITUNES('https://evil.example/x.png')) : res(200, PLAY(PLAY_ICON)))
     await expect(resolveStoreIcon({ appleIds: ['1'], packages: ['p.q'] }, fetcher)).resolves.toEqual({
@@ -74,11 +95,24 @@ describe('resolveStoreIcon', () => {
 })
 
 describe('iconsDue', () => {
-  it('picks never-checked and week-old icons only', () => {
-    const now = new Date('2026-10-14T00:00:00Z')
-    const old = new Date(now.getTime() - ICON_REFRESH_MS - 1000).toISOString()
-    const fresh = new Date(now.getTime() - 1000).toISOString()
-    expect(iconsDue([{ id: 'a', icon_checked_at: null }, { id: 'b', icon_checked_at: old }, { id: 'c', icon_checked_at: fresh }], now)).toEqual(['a', 'b'])
+  const now = new Date('2026-10-14T00:00:00Z')
+  const ago = (ms: number) => new Date(now.getTime() - ms).toISOString()
+
+  it('picks never-checked and day-old icons only', () => {
+    // A day, not a week (owner, 2026-11-17): a new store icon shows by the next day.
+    expect(ICON_REFRESH_MS).toBe(86_400_000)
+    expect(iconsDue([{ id: 'a', icon_checked_at: null }, { id: 'b', icon_checked_at: ago(ICON_REFRESH_MS + 1000) }, { id: 'c', icon_checked_at: ago(2 * 3600_000) }], now)).toEqual(['a', 'b'])
+  })
+
+  it('a forced refresh re-checks icons over ten minutes old, never one checked just now', () => {
+    const rows = [
+      { id: 'two-hours', icon_checked_at: ago(2 * 3600_000) },
+      { id: 'one-minute', icon_checked_at: ago(60_000) },
+      { id: 'never', icon_checked_at: null },
+    ]
+    expect(ICON_FORCE_MIN_MS).toBe(10 * 60_000)
+    expect(iconsDue(rows, now, { force: true })).toEqual(['two-hours', 'never'])
+    expect(iconsDue(rows, now)).toEqual(['never'])
   })
 })
 
@@ -111,7 +145,9 @@ describe('refreshAppIcons', () => {
     ])
     const fetcher = async (url: string) => (url.includes('111111') ? res(200, ITUNES(APPLE_ICON)) : res(503))
     const now = new Date('2026-10-14T00:00:00Z')
-    await refreshAppIcons(db as never, ['p1', 'p2', 'p3'], fetcher, now)
+    const saved = await refreshAppIcons(db as never, ['p1', 'p2', 'p3'], fetcher, now)
+    // What was stored, so a forced refresh can show it at once; p3 kept its old value.
+    expect([...saved]).toEqual([['p1', APPLE_ICON], ['p2', null]])
     expect(updates).toEqual([
       { id: 'p1', patch: { icon_url: APPLE_ICON, icon_source: 'app_store', icon_checked_at: now.toISOString() } },
       { id: 'p2', patch: { icon_url: null, icon_source: null, icon_checked_at: now.toISOString() } },

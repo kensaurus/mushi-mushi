@@ -17,7 +17,8 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { Modal } from '../Modal'
-import { Badge, Btn, CodeValue, Input } from '../ui'
+import { Btn, CodeValue, Input } from '../ui'
+import { StatusPill } from '../signal/StatusMark'
 import { readCursorSwitch, switchCursorAccount, type CursorSwitchStatus } from '../../lib/workers'
 
 interface Props {
@@ -103,7 +104,7 @@ export function SwitchCursorAccountDialog({ hostId, hostname, onClose, onChanged
         {status && !status.canSwitch && (
           <div className="space-y-2" data-testid="cursor-switch-too-old">
             <p>
-              This machine's Mushi CLI is too old to switch accounts from here. Update it there, then restart the worker:
+              This machine's Mushi Mushi CLI is too old to switch accounts from here. Update it there, then restart the worker:
             </p>
             <CodeValue value={UPDATE_COMMAND} />
             <p>Or sign in on the machine itself: <code>cursor-agent login</code>.</p>
@@ -211,7 +212,7 @@ function Result({ status, onAgain }: { status: CursorSwitchStatus; onAgain: () =
   return (
     <div className="space-y-2" data-testid={`cursor-switch-${login.state}`}>
       <p className="flex items-center gap-1.5">
-        <Badge tone={ok ? 'ok' : 'danger'}>{ok ? 'done' : login.state === 'wrong_account' ? 'wrong account' : login.state}</Badge>
+        <StatusPill status={ok ? 'passed' : 'failed'} label={ok ? 'done' : login.state === 'wrong_account' ? 'wrong account' : login.state} />
         <span>{text[login.state] ?? login.state}</span>
       </p>
       {login.detail && <p className="text-fg-muted">{login.detail}</p>}

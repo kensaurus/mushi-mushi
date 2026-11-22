@@ -143,7 +143,7 @@ export function ExploreDomainsPanel({ projectId, onFileClick }: Props) {
                                   key={fp}
                                   type="button"
                                   onClick={() => onFileClick?.(fp)}
-                                  className="text-2xs font-mono px-1 py-0.5 rounded border border-edge-subtle hover:border-brand/40 truncate max-w-full"
+                                  className="text-2xs font-mono px-1 py-px rounded truncate max-w-full"
                                 >
                                   {fp.split('/').pop() ?? fp}
                                 </button>

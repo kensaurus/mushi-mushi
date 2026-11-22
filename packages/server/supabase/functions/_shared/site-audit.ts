@@ -120,20 +120,29 @@ export function imagesWithoutAlt(html: string): string[] {
   return out
 }
 
-/** Image and og:image URLs a page loads, absolute; data: URIs skipped. */
-export function imageTargets(page: AuditPage): string[] {
+/**
+ * `<img src>` URLs of an HTML document (then `extra`, e.g. the og:image),
+ * absolute against `base`, deduped; data: URIs and unparseable values skipped.
+ * Shared with the free Production Check (`_shared/production-check.ts`).
+ */
+export function htmlImageSrcs(html: string, base: string, extra: ReadonlyArray<string | null | undefined> = []): string[] {
   const out = new Set<string>()
   const add = (src: string | null | undefined) => {
     if (!src || src.startsWith('data:')) return
     try {
-      out.add(new URL(src, page.url).href)
+      out.add(new URL(src, base).href)
     } catch {
       // unparseable src
     }
   }
-  for (const m of (page.html ?? '').matchAll(/<img\b[^>]*\bsrc\s*=\s*["']([^"']+)/gi)) add(m[1])
-  add(page.ogImage)
+  for (const m of html.matchAll(/<img\b[^>]*\bsrc\s*=\s*["']([^"']+)/gi)) add(m[1])
+  for (const e of extra) add(e)
   return [...out]
+}
+
+/** Image and og:image URLs a page loads, absolute; data: URIs skipped. */
+export function imageTargets(page: AuditPage): string[] {
+  return htmlImageSrcs(page.html ?? '', page.url, [page.ogImage])
 }
 
 /**
@@ -145,7 +154,7 @@ export function imageTargets(page: AuditPage): string[] {
  * Firecrawl failed to read, not a page missing all three: on 2026-10-23 two
  * mushi-mushi docs pages came back that way and both had all three live.
  */
-export function isUnreadableRender(page: AuditPage): boolean {
+export function isUnreadableRender(page: Pick<AuditPage, 'title' | 'description' | 'language'>): boolean {
   return !page.title?.trim() && !page.description?.trim() && !page.language?.trim()
 }
 

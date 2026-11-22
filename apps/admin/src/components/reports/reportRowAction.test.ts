@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { closedRowAction } from './reportRowAction'
 
 describe('closedRowAction', () => {
-  it('shows a neutral "Fixed ✓" for fixed reports, never the red Triage', () => {
+  it('shows a neutral "View" for fixed reports (the Status column says Fixed), never the red Triage', () => {
     for (const status of ['fixed', 'verified', 'resolved']) {
-      expect(closedRowAction(status)?.label).toBe('Fixed ✓')
+      expect(closedRowAction(status)?.label).toBe('View')
+      expect(closedRowAction(status)?.label).not.toMatch(/fixed/i)
       expect(closedRowAction(status)?.className).not.toContain('bg-brand')
     }
   })

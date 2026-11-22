@@ -26,8 +26,6 @@ import { EmptySectionMessage } from '../components/report-detail/ReportClassific
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { ActiveFiltersRail, type ActiveFilter } from '../components/ActiveFiltersRail'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
-import { NextStep } from '../components/NextStep'
-import { HeroFixWrench } from '../components/illustrations/HeroIllustrations'
 import { useToast } from '../lib/toast'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -35,11 +33,14 @@ import type { FixTimelineEvent } from '../components/FixGitGraph'
 import { FixSummaryRow } from '../components/fixes/FixSummaryRow'
 import { FixRecommendation } from '../components/fixes/FixRecommendation'
 import { InflightDispatches } from '../components/fixes/InflightDispatches'
+import { StatusMark } from '../components/signal/StatusMark'
+import { VitalText } from '../components/signal/VitalText'
 import { FixesTable } from '../components/fixes/FixesTable'
 import { FixBulkActionBar } from '../components/fixes/FixBulkActionBar'
 import { canMergeFix, isFixMerged, mergeFixAttempt } from '../lib/mergeFix'
 import { queueMerges } from '../lib/mergeQueue'
 import { MergeQueuePanel } from '../components/fixes/MergeQueuePanel'
+import { heldReasonOf } from '../lib/heldReason'
 import { failureCause, fixCauseLabel, fixReportLabel, needsAttention, retryCandidates } from '../lib/fixReportTruth'
 import {
   RETRY_AGENT_OPTIONS,
@@ -52,6 +53,9 @@ import type { FixAttempt, DispatchJob, FixSummary } from '../components/fixes/ty
 import { FixesStatusBanner } from '../components/fixes/FixesStatusBanner'
 import { reconcileFixesStats } from '../lib/fixesBannerReconcile'
 import { FixesPipelineGuide } from '../components/fixes/FixesPipelineGuide'
+import { FixesStartCard } from '../components/fixes/FixesStartCard'
+import { AgentCreditsOutCard } from '../components/AgentCreditsOutCard'
+import { useAgentCredits } from '../lib/agentCredits'
 import { FixesSnapshotStrip } from '../components/fixes/FixesSnapshotStrip'
 import { FixesFailedSummary } from '../components/fixes/FixesFailedSummary'
 import { EMPTY_FIXES_STATS, type FixesStats } from '../components/fixes/FixesStatsTypes'
@@ -64,7 +68,13 @@ import { statsWithProjectPresence } from '../lib/projectPresence'
 import { trackSelf } from '../lib/track'
 import { FixesFirstView } from '../components/fixes/FixesFirstView'
 import type { PipelineData } from '../lib/pipeline'
-import { isReadyToMerge, pipelineApprovedGreen } from '../lib/countDefinitions'
+import {
+  collectInFlightReportIds,
+  inFlightHeadline,
+  isLiveFixAttempt,
+  isReadyToMerge,
+  pipelineApprovedGreen,
+} from '../lib/countDefinitions'
 interface InventoryActionNode {
   actionNodeId?: string
   id?: string
@@ -112,8 +122,10 @@ function bucketFromUrl(status: string | null, tab: string | null): StatusBucket 
 
 /** The one exclusive bucket of an attempt; PR open is matched separately. */
 function bucketize(fix: FixAttempt): StatusBucket {
-  const status = fix.status?.toLowerCase()
-  if (status === 'queued' || status === 'running') return 'inflight'
+  // Same live statuses as the server In flight card (queued, running,
+  // pending and dispatched). A live attempt whose report is already
+  // resolved stays here: the row is still queued or running.
+  if (isLiveFixAttempt(fix.status)) return 'inflight'
   // "Failed / skipped" holds the latest attempt of each report that is
   // still unfixed after it failed, was skipped (2026-08-16 audit P1-4), or
   // its PR went red / closed unmerged (2026-10-02). Earlier attempts on a
@@ -217,10 +229,17 @@ export function FixesPage() {
   // both happen often in StrictMode dev because effects mount twice.
   const inFlightRef = useRef(false)
   const cancelledRef = useRef(false)
+  // The app the list belongs to. These reads take the app from the request
+  // headers, so a load started for one app must never land on another
+  // (2026-11-16: switching glot.it → mushi-mushi kept glot.it's 629 fixes).
+  const projectRef = useRef(activeProjectId)
+  projectRef.current = activeProjectId
+  const loadedProjectRef = useRef<string | null>(null)
 
   const loadFixes = useCallback(async () => {
     if (inFlightRef.current) return
     inFlightRef.current = true
+    const forProject = projectRef.current
     setError(false)
     setIsValidating(true)
     try {
@@ -230,6 +249,9 @@ export function FixesPage() {
         apiFetch<FixSummary>('/v1/admin/fixes/summary'),
       ])
       if (cancelledRef.current) return
+      // The app changed while this load ran: drop it, the reload below follows.
+      if (projectRef.current !== forProject) return
+      loadedProjectRef.current = forProject ?? null
       if (fixRes.ok && fixRes.data) {
         setLatestFixes(fixRes.data.fixes)
         setFixesTotal(typeof fixRes.data.total === 'number' ? fixRes.data.total : null)
@@ -244,9 +266,13 @@ export function FixesPage() {
       if (!cancelledRef.current) {
         setLoading(false)
         setIsValidating(false)
+        // The app changed while this load ran: load the new one now.
+        if (projectRef.current !== forProject) void loadFixesRef.current()
       }
     }
   }, [])
+  const loadFixesRef = useRef(loadFixes)
+  loadFixesRef.current = loadFixes
 
   const loadOlderFixes = useCallback(async () => {
     setLoadingOlder(true)
@@ -293,6 +319,19 @@ export function FixesPage() {
       cancelledRef.current = true
     }
   }, [loadFixes])
+
+  // Switching apps: clear the old app's rows at once (never show them under the
+  // new app's name), then load the new app's.
+  useEffect(() => {
+    if (loadedProjectRef.current === null || loadedProjectRef.current === activeProjectId) return
+    setLatestFixes([])
+    setOlderFixes([])
+    setFixesTotal(null)
+    setDispatches([])
+    setSummary(null)
+    setLoading(true)
+    void loadFixes()
+  }, [activeProjectId, loadFixes])
 
   // Realtime replaces the 5s poll. `fix_attempts` flips when an agent
   // moves through queued → running → succeeded/failed; `fix_events` fires
@@ -366,7 +405,9 @@ export function FixesPage() {
 
   // One entry per still-unfixed report a retry can clear now — never an
   // attempt on a report a merged PR already fixed (server-derived flag).
-  const failedFixes = useMemo(() => retryCandidates(fixes), [fixes])
+  const agentCredits = useAgentCredits()
+  // Out of credits: nothing is retryable, every retry hits the same empty account.
+  const failedFixes = useMemo(() => (agentCredits.state?.out ? [] : retryCandidates(fixes)), [fixes, agentCredits.state?.out])
 
   // Pre-bucket every fix once so the segmented filter and the per-bucket
   // counts in the segmented control stay in sync without re-scanning the
@@ -644,7 +685,10 @@ export function FixesPage() {
     () => selectedFixes.filter((f) => canMergeFix(f) && f.pr_url),
     [selectedFixes],
   )
-  const selectedFailed = useMemo(() => retryCandidates(selectedFixes), [selectedFixes])
+  const selectedFailed = useMemo(
+    () => (agentCredits.state?.out ? [] : retryCandidates(selectedFixes)),
+    [selectedFixes, agentCredits.state?.out],
+  )
   const selectedMerged = useMemo(
     () => selectedFixes.filter((f) => isFixMerged(f)),
     [selectedFixes],
@@ -673,7 +717,7 @@ export function FixesPage() {
     reloadPipeline()
     toast.push({
       tone: skipped.length ? 'warning' : 'success',
-      message: `Queued ${queued} ${pluralize(queued, 'PR', 'PRs')} to merge when ready${skipped.length ? ` · ${skipped.length} skipped: ${[...new Set(skipped.map((s) => s.reason))].join(' ')}` : ''}`,
+      message: `Queued ${queued} ${pluralize(queued, 'PR', 'PRs')} to merge when ready${skipped.length ? ` · ${skipped.length} skipped: ${[...new Set(skipped.map((s) => heldReasonOf(s.reason) ?? s.reason))].join(', ')}` : ''}`,
     })
   }, [toast, reloadPipeline])
 
@@ -745,16 +789,41 @@ export function FixesPage() {
     void loadFixes()
   }, [selectedFailed, activeProjectId, pushOptimistic, settleOptimistic, clearSelection, loadFixes, toast])
 
+  // Merge optimistic rows with server rows — server wins if the same
+  // report_id + status appears in both, keeping the list non-duplicative
+  // once the real dispatch record lands via realtime.
+  const mergedDispatches = useMemo(() => {
+    if (optimisticDispatches.length === 0) return dispatches
+    const realReportIds = new Set(dispatches.map((d) => d.report_id))
+    const keptOptimistic = optimisticDispatches.filter((d) => !realReportIds.has(d.report_id))
+    return [...keptOptimistic, ...dispatches]
+  }, [dispatches, optimisticDispatches])
+
+  // One report, once. The tab title used to count only queued/running rows,
+  // so it read 0 while the In flight card (server inProgress, which includes
+  // pending and dispatched, plus a dispatch that has no attempt yet) read 1.
+  const inFlightReportIds = useMemo(
+    () => collectInFlightReportIds(fixes, mergedDispatches),
+    [fixes, mergedDispatches],
+  )
+  const inFlightCount = inFlightHeadline(
+    inFlightReportIds.size,
+    summary?.inProgress,
+    fixesStats.inProgress + fixesStats.inflightDispatches,
+  )
+
   // Publish page context so Ask Mushi and command palette can react
   // to the current bucket + counts (e.g. "Retry all failed fixes" only
-  // makes sense when `failedFixes.length > 0`).
+  // makes sense when `failedFixes.length > 0`). The summary is the browser
+  // tab title. Stopped matches the banner (B3); in flight matches the card.
+  // Attempts are the total, not the loaded page: the title read "200 fixes ·
+  // 228 failed" (200 loaded of 639 attempts, 228 stopped reports, 2026-11-20).
   usePublishPageContext({
     route: '/fixes',
     title: projectName ? `Fixes · ${projectName}` : 'Fixes',
     summary: loading
       ? 'Loading fix pipeline…'
-      // Same number as the banner and the stopped-dispatch cards (B3).
-      : `${pluralizeWithCount(fixes.length, 'fix', 'fixes')} · ${bucketCounts.inflight} in flight · ${Math.max(bucketCounts.failed, fixesStats.failed)} failed`,
+      : `${pluralizeWithCount(Math.max(fixesTotal ?? 0, fixes.length), 'attempt')} · ${inFlightCount} in flight · ${Math.max(bucketCounts.failed, fixesStats.failed)} stopped`,
     filters: {
       bucket: statusBucket,
     },
@@ -765,8 +834,8 @@ export function FixesPage() {
       bucketCounts.failed > 0
         ? `Why did the ${pluralizeWithCount(bucketCounts.failed, 'failed fix', 'failed fixes')} fail?`
         : 'Is the auto-fix pipeline healthy right now?',
-      bucketCounts.inflight > 0
-        ? `What is taking the longest among the ${bucketCounts.inflight} in-flight fixes?`
+      inFlightCount > 0
+        ? `What is taking the longest among the ${inFlightCount} in-flight fixes?`
         : 'Which report should I dispatch next?',
       'Which fixes are waiting on a human review?',
     ],
@@ -804,29 +873,6 @@ export function FixesPage() {
     })),
   })
 
-  // Merge optimistic rows with server rows — server wins if the same
-  // report_id + status appears in both, keeping the list non-duplicative
-  // once the real dispatch record lands via realtime.
-  const mergedDispatches = useMemo(() => {
-    if (optimisticDispatches.length === 0) return dispatches
-    const realReportIds = new Set(dispatches.map((d) => d.report_id))
-    const keptOptimistic = optimisticDispatches.filter((d) => !realReportIds.has(d.report_id))
-    return [...keptOptimistic, ...dispatches]
-  }, [dispatches, optimisticDispatches])
-
-  const inFlightReportIds = useMemo(() => {
-    const ids = new Set<string>()
-    for (const f of fixes) {
-      const s = f.status?.toLowerCase()
-      if (s === 'queued' || s === 'running' || s === 'dispatched') ids.add(f.report_id)
-    }
-    for (const d of mergedDispatches) {
-      const s = d.status?.toLowerCase()
-      if (s === 'queued' || s === 'running') ids.add(d.report_id)
-    }
-    return ids
-  }, [fixes, mergedDispatches])
-
   const reloadAll = useCallback(() => {
     reloadStats()
     reloadPipeline()
@@ -853,7 +899,7 @@ export function FixesPage() {
         projectScope={projectName}
 
         helpTitle={copy?.help?.title ?? 'About drafted fixes'}
-        helpWhatIsIt={copy?.help?.whatIsIt ?? 'When Mushi finds a reproducible bug, it drafts a fix on a branch and opens a pull request for you to review before merge.'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'When Mushi Mushi finds a reproducible bug, it drafts a fix on a branch and opens a pull request for you to review before merge.'}
         helpUseCases={copy?.help?.useCases ?? [
           'Track each draft PR from report to merge',
           'See model used, token spend, and trace link per attempt',
@@ -862,12 +908,23 @@ export function FixesPage() {
         helpHowToUse={copy?.help?.howToUse ?? 'The list shows every attempt. Filter by status; In flight shows runs still going.'}
       >
         <FreshnessPill at={lastFetchedAt ?? statsFetchedAt} isValidating={isValidating || statsValidating} channel={channelState} />
-        <span className="inline-flex items-center rounded-sm border border-edge-subtle bg-surface-overlay/40 px-2 py-0.5 font-mono text-2xs tabular-nums text-fg-muted">
-          {fixesTotal != null && fixesTotal > fixes.length
-            ? `${fixes.length} of ${pluralizeWithCount(fixesTotal, 'attempt')}`
-            : pluralizeWithCount(fixes.length, 'attempt')}
-        </span>
+        {/* "0 attempts" beside "No fixes in the last 30 days" was noise (round-2 review). */}
+        {fixes.length > 0 && (
+          <span className="inline-flex items-center whitespace-nowrap rounded-sm bg-surface-overlay/40 px-2 py-px text-2xs tabular-nums text-fg-muted">
+            {fixesTotal != null && fixesTotal > fixes.length
+              ? `${fixes.length} of ${pluralizeWithCount(fixesTotal, 'attempt')}`
+              : pluralizeWithCount(fixes.length, 'attempt')}
+          </span>
+        )}
       </PageHeaderBar>
+
+      {/* Out of credits: say so, with the remedy, where Retry would have been (audit 2026-11-11). */}
+      {agentCredits.state?.out && (
+        <AgentCreditsOutCard
+          state={agentCredits.state}
+          note="Retry is not offered for these: it would send each one to the same empty account."
+        />
+      )}
 
       <PagePosture
         slots={[
@@ -878,7 +935,7 @@ export function FixesPage() {
             show: setupBlocked && !emptyAsksForGithub,
             children: (
               <FixesStatusBanner
-                stats={fixesStats}
+                stats={{ ...fixesStats, inProgress: inFlightCount }}
                 causeSummary={causeSummary}
                 onRefresh={reloadAll}
                 refreshing={isValidating || statsValidating}
@@ -893,25 +950,26 @@ export function FixesPage() {
               <FixesSnapshotStrip
                 stats={snapshotStats}
                 ready={readyCount}
-                statsFetchedAt={statsFetchedAt}
-                statsValidating={statsValidating}
-              />
-            ),
-          },
-          {
-            priority: POSTURE_PRIORITY.guide,
-            // A third explainer next to the help row and the banner; only
-            // worth its space before the first attempt.
-            show: fixes.length === 0,
-            children: (
-              <FixesPipelineGuide
-                topPriority={fixesStats.topPriority}
-                stats={fixesStats}
+                inFlight={inFlightCount}
               />
             ),
           },
         ]}
       />
+
+      {/* Before the first fix: the status line above leads ("4 bugs waiting
+          for a fix"), then how a fix starts: the no-setup path first (copy the
+          fix prompt), Autofix second with its "How Autofix works" disclosure
+          inside, not a second panel repeating it (audit 2026-11-11, round-2 review). */}
+      {fixes.length === 0 && (
+        <FixesStartCard
+          githubConnected={fixesStats.topPriority !== 'no_github'}
+          projectId={activeProjectId}
+          autofixGuide={
+            <FixesPipelineGuide flat topPriority={fixesStats.topPriority} stats={{ ...fixesStats, inProgress: inFlightCount }} />
+          }
+        />
+      )}
 
       {codebaseStats &&
         (!codebaseStats.codebase_index_enabled || codebaseStats.indexed_files === 0) &&
@@ -933,7 +991,7 @@ export function FixesPage() {
 
       {/* Quick mode has no snapshot strip, so the KPI row stands in for it. */}
       {summary && ux.hideFixesSnapshot && (
-        <FixSummaryRow summary={{ ...summary, prsOpen: prCounts.open }} successRate={successRate} />
+        <FixSummaryRow summary={{ ...summary, inProgress: inFlightCount, prsOpen: prCounts.open }} successRate={successRate} />
       )}
 
       {fixes.length > 0 && (
@@ -946,6 +1004,7 @@ export function FixesPage() {
           onQueue={(list) => void queueFixes(list)}
           onShowCause={reviewFailedCause}
           onRetry={(list, label) => setRetryRequest({ kind: 'list', fixes: list, label, agent: commonRetryAgent(list.map((f) => f.agent)) })}
+          agentsOut={agentCredits.state?.out === true}
         />
       )}
 
@@ -954,7 +1013,10 @@ export function FixesPage() {
         <FixRecommendation fixes={fixes} dispatches={mergedDispatches} />
       )}
 
-      {emptyAsksForGithub ? null : (
+      {/* Merge queue, release-train timing and "Decide for me" are controls
+          over fixes: with none on record there is nothing for them to act
+          on, and a new user read them as required setup (re-audit 2026-11-11). */}
+      {emptyAsksForGithub || fixes.length === 0 ? null : (
         <MergeQueuePanel projectId={activeProjectId ?? null} refreshKey={queueRefresh} onMerged={loadFixes} />
       )}
 
@@ -973,11 +1035,14 @@ export function FixesPage() {
           </div>
           <ul className="space-y-1">
             {mergeFailures.map(({ fix, reason }) => (
-              <li key={fix.id} className="text-2xs text-fg-secondary">
+              <li key={fix.id} className="flex items-baseline gap-1.5 text-2xs text-fg-secondary" data-testid="fixes-merge-failure">
+                <StatusMark status="failed" label="Did not merge" className="self-center" />
                 <a href={fix.pr_url} target="_blank" rel="noreferrer" className="font-mono hover:underline">
                   #{fix.pr_number ?? '?'}
-                </a>{' '}
-                {fixReportLabel(fix)}: <span className="text-fg-muted">{reason}</span>
+                </a>
+                <span className="min-w-0">
+                  <VitalText text={fixReportLabel(fix)} />: <span className="text-fg-muted">{reason}</span>
+                </span>
               </li>
             ))}
           </ul>
@@ -986,20 +1051,7 @@ export function FixesPage() {
 
       <InflightDispatches dispatches={mergedDispatches} />
 
-      {fixes.length === 0 ? (
-        <NextStep
-          variant="inline"
-          requires={['github_connected', 'first_report_received', 'byok_anthropic']}
-          emptyTitle="No fix attempts yet"
-          emptyDescription="Open a classified report and click “Dispatch fix” to start the auto-fix loop. Mushi opens a draft PR you review and merge — nothing ships without you."
-          emptyIcon={<HeroFixWrench />}
-          blockedIcon={<HeroFixWrench accent="text-fg-faint" />}
-          emptyHints={[
-            'Each dispatch creates one branch + one draft PR per attempt.',
-            'The judge scores every attempt before it appears in green here.',
-          ]}
-        />
-      ) : (
+      {fixes.length === 0 ? null : (
         <>
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
             <SegmentedControl<StatusBucket>
@@ -1176,12 +1228,12 @@ export function FixesPage() {
       {bulkMergeConfirm && selectedMergeable.length > 0 ? (
         <ConfirmDialog
           title={`Merge ${selectedMergeable.length} ${pluralize(selectedMergeable.length, 'PR', 'PRs')}`}
-          body={`Merge when ready: Mushi updates each branch with your default branch, waits for CI and for an Opus "merge" on the final commit, then squash-merges, one PR per repo at a time, so a merge never leaves the next PR behind. A merge conflict goes to a Cursor agent when review follow-ups are on. Each merged fix marks its report Fixed and tells the reporter. You can leave this page.${selectedFixes.length > selectedMergeable.length ? ` ${selectedFixes.length - selectedMergeable.length} selected ${pluralize(selectedFixes.length - selectedMergeable.length, 'fix has', 'fixes have')} no open PR and ${pluralize(selectedFixes.length - selectedMergeable.length, 'is', 'are')} skipped.` : ''}`}
+          body={`Merge when ready: Mushi Mushi updates each branch with your default branch, waits for CI and for an Opus "merge" on the final commit, then squash-merges, one PR per repo at a time, so a merge never leaves the next PR behind. A merge conflict goes to a Cursor agent when review follow-ups are on. Each merged fix marks its report Fixed and tells the reporter. You can leave this page.${selectedFixes.length > selectedMergeable.length ? ` ${selectedFixes.length - selectedMergeable.length} selected ${pluralize(selectedFixes.length - selectedMergeable.length, 'fix has', 'fixes have')} no open PR and ${pluralize(selectedFixes.length - selectedMergeable.length, 'is', 'are')} skipped.` : ''}`}
           details={
             <ul className="max-h-40 overflow-y-auto space-y-0.5">
               {selectedMergeable.map((f) => (
                 <li key={f.id} className="truncate">
-                  <span className="font-mono">#{f.pr_number ?? '?'}</span> {fixReportLabel(f)}
+                  <span className="font-mono">#{f.pr_number ?? '?'}</span> <VitalText text={fixReportLabel(f)} />
                 </li>
               ))}
             </ul>

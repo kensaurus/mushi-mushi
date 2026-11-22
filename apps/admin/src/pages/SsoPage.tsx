@@ -174,10 +174,14 @@ export function SsoPage() {
         helpHowToUse="SAML 2.0 is the supported flow today: add your IdP's metadata URL below, then paste the ACS URL and Entity ID we return into your IdP and test with a non-admin user. OIDC is recorded for audit but cannot be auto-registered — it requires Supabase enterprise tier; contact support if you need it."
       />
 
+      {/* Locked plan: the upgrade panel below is the page. A status banner with its own
+          "View plans" and four zero tiles ("GoTrue registration state") on top of it said
+          the same thing three times (audit 2026-11-21). */}
       <PagePosture
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
+            show: ssoUnlocked,
             children: (
               <SsoStatusBanner
                 stats={stats}
@@ -192,6 +196,7 @@ export function SsoPage() {
           },
           {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
+            show: ssoUnlocked,
             children: (
               <SsoSnapshotStrip
                 stats={stats}
@@ -203,7 +208,7 @@ export function SsoPage() {
           },
           {
             priority: POSTURE_PRIORITY.guide,
-            show: !shouldHideGuideWhenBannerActive(
+            show: ssoUnlocked && !shouldHideGuideWhenBannerActive(
               true,
               COMMON_HEALTHY_PRIORITIES,
               stats.topPriority,
@@ -238,7 +243,7 @@ export function SsoPage() {
       {ssoUnlocked && (
         <>
           <Card className="p-3 space-y-3">
-            <h3 className="text-xs font-medium text-fg-muted uppercase tracking-wider">
+            <h3 className="text-xs font-semibold text-fg-secondary">
               Add Identity Provider
             </h3>
             <div className="grid grid-cols-2 gap-2">
@@ -289,7 +294,7 @@ export function SsoPage() {
                     onChange={(e) => setForm({ ...form, clientId: e.target.value })}
                   />
                   <p className="col-span-2 text-xs text-fg-secondary">
-                    Mushi saves the issuer and client ID for your support ticket. Don&rsquo;t paste the client
+                    Mushi Mushi saves the issuer and client ID for your support ticket. Don&rsquo;t paste the client
                     secret here: give it to Supabase support directly when they ask for it.
                   </p>
                 </>
@@ -308,14 +313,14 @@ export function SsoPage() {
             </Btn>
             <p className="text-2xs text-fg-faint">
               {form.providerType === 'saml'
-                ? 'On submit, Mushi calls the Supabase Auth Admin API to register the SAML provider. We surface the resulting ACS URL + Entity ID below for you to paste into your IdP.'
-                : 'OIDC providers are stored for audit but Mushi cannot auto-register them — Supabase\u2019s GoTrue Admin API does not yet expose an OIDC endpoint. Submitting saves the issuer and client ID so you can quote them in a Supabase support ticket. For a fully self-service flow today, use SAML 2.0.'}
+                ? 'On submit, Mushi Mushi calls the Supabase Auth Admin API to register the SAML provider. We surface the resulting ACS URL + Entity ID below for you to paste into your IdP.'
+                : 'OIDC providers are stored for audit but Mushi Mushi cannot auto-register them — Supabase\u2019s GoTrue Admin API does not yet expose an OIDC endpoint. Submitting saves the issuer and client ID so you can quote them in a Supabase support ticket. For a fully self-service flow today, use SAML 2.0.'}
             </p>
           </Card>
 
           {lastRegister?.status === 'registered' && (
             <Card className="p-3 border border-ok/30 bg-ok-muted/20 space-y-2">
-              <h3 className="text-xs font-medium text-ok uppercase tracking-wider">
+              <h3 className="text-xs font-semibold text-ok">
                 Provider registered — finish IdP setup
               </h3>
               <p className="text-2xs text-fg-secondary">
@@ -325,7 +330,7 @@ export function SsoPage() {
               <div className="grid grid-cols-1 gap-2">
                 {lastRegister.acsUrl && (
                   <div className="space-y-1">
-                    <div className="text-3xs font-semibold uppercase tracking-wider text-fg-faint">
+                    <div className="text-3xs font-semibold text-fg-secondary">
                       ACS URL (Reply URL)
                     </div>
                     <CodeValue value={lastRegister.acsUrl} tone="url" />
@@ -333,7 +338,7 @@ export function SsoPage() {
                 )}
                 {lastRegister.entityId && (
                   <div className="space-y-1">
-                    <div className="text-3xs font-semibold uppercase tracking-wider text-fg-faint">
+                    <div className="text-3xs font-semibold text-fg-secondary">
                       Audience / Entity ID
                     </div>
                     <CodeValue value={lastRegister.entityId} tone="hash" />
@@ -341,7 +346,7 @@ export function SsoPage() {
                 )}
                 {lastRegister.providerId && (
                   <div className="space-y-1">
-                    <div className="text-3xs font-semibold uppercase tracking-wider text-fg-faint">
+                    <div className="text-3xs font-semibold text-fg-secondary">
                       Supabase provider id
                     </div>
                     <CodeValue value={lastRegister.providerId} tone="id" />

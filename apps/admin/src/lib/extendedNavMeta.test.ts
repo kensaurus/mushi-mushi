@@ -335,6 +335,12 @@ describe('settingsNavBadge', () => {
     expect(settingsNavBadge(slice())).toBeNull()
   })
 
+  it('counts what the Settings banner counts when the server sends it (3 keys, not 1 failing)', () => {
+    const badge = settingsNavBadge(slice({ byokKeysFailing: 1, byokKeysNeedingAction: 3 }))
+    expect(badge?.count).toBe(3)
+    expect(settingsNavBadge(slice({ byokKeysFailing: 0, byokKeysNeedingAction: 0 }))).toBeNull()
+  })
+
   it('asks for attention when a key expires soon, like the Settings banner', () => {
     const badge = settingsNavBadge(slice({ byokKeysExpiring: 1 }))
     expect(badge?.mode).toBe('attention')
@@ -344,9 +350,10 @@ describe('settingsNavBadge', () => {
   })
 
   it('still badges keys that need attention', () => {
+    // Amber like the Settings page's own row (round-3 review, 2026-11-19).
     expect(settingsNavBadge(slice({ byokKeysFailing: 2 }))).toMatchObject({
       mode: 'attention',
-      tone: 'danger',
+      tone: 'warn',
       count: 2,
     })
     expect(settingsNavBadge(slice({ byokKeysUntested: 1 }))).toMatchObject({

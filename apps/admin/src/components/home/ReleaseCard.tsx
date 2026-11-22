@@ -23,6 +23,15 @@ function severityHref(s: SeverityKey): string {
   return s === 'unrated' ? '/reports?status=open' : `/reports?status=open&severity=${s}`
 }
 
+/**
+ * @internal Exported for tests.
+ * Nothing has started toward a release: every station is 0 and no train
+ * ran. Five "0" chips said one fact five times (fresh-eyes sweep 2026-11-18).
+ */
+export function releaseIsEmpty(r: Pick<HomeRelease, 'stations' | 'train'>): boolean {
+  return !r.train && r.stations.every((s) => s.count === 0 && s.stuck === 0)
+}
+
 export function ReleaseCard({ section, projectId }: { section: HomeSection<HomeRelease>; projectId: string }) {
   const pipelineHref = `/pipeline?project=${encodeURIComponent(projectId)}`
   return (
@@ -30,10 +39,17 @@ export function ReleaseCard({ section, projectId }: { section: HomeSection<HomeR
       <HomeSectionBody section={section} what="the release" notConnectedText="Connect your GitHub repo to see fixes move toward a release.">
         {(r) => (
           <div className="space-y-4">
-            <ReleaseStations stations={r.stations} href={pipelineHref} />
+            {releaseIsEmpty(r) ? null : <ReleaseStations stations={r.stations} href={pipelineHref} />}
             <div className="grid gap-2 text-xs text-fg-secondary sm:grid-cols-2">
               <p>
-                <ReleaseTrainLine train={r.train} href={pipelineHref} />
+                {releaseIsEmpty(r) ? (
+                  <span className="inline-flex items-center gap-1.5 text-fg-muted" data-testid="home-release-empty">
+                    <span aria-hidden className="ci-nodata h-3 w-6 shrink-0 rounded-sm border border-edge-subtle" />
+                    No fix PRs yet
+                  </span>
+                ) : (
+                  <ReleaseTrainLine train={r.train} href={pipelineHref} />
+                )}
               </p>
               <p className="sm:text-right">
                 {r.lastDeploy ? (
@@ -70,8 +86,9 @@ function WaitingBar({ waiting, error }: { waiting: HomeRelease['waiting']; error
           <span key={s} className={severityBar(s)} style={{ width: `${(waiting.counts[s] / waiting.total) * 100}%` }} />
         ))}
       </div>
+      {/* Only severities with bugs: "Critical 0" and "Not rated yet 0" were chips for nothing (round-2 sweep 2026-11-18). */}
       <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
-        {SEVERITIES.map((s) => (
+        {parts.map((s) => (
           <li key={s}>
             <Link to={severityHref(s)} className="inline-flex items-center gap-1.5 text-2xs text-fg-secondary hover:text-fg">
               <span aria-hidden className={`h-2 w-2 rounded-full ${severityBar(s)}`} />

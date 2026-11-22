@@ -17,6 +17,19 @@ queue, automatic device context, a breadcrumb ring buffer and PII scrubbing.
   from the repository's `master` branch as shown below. `npx mushi-mushi` does
   not set up native iOS projects.
 
+## Get your project ID and API key
+
+The SDK needs two values from a Mushi Mushi project.
+
+- **By hand:** [create a free account](https://kensaur.us/mushi-mushi/admin/signup?src=quickstart-ios)
+  (no card) and create a project. The panel that opens shows the **project ID**
+  and an **API key** that starts with `mushi_`. Copy the key now: it is shown
+  once. You can mint another under **Set up → Test it → Generate API key**.
+- **Self-hosting?** Your own console gives you the same two values. See
+  [Self-hosting](/self-hosting).
+
+They go into the config in the Initialize step below.
+
 ## Install (Swift Package Manager)
 
 In Xcode → **File → Add Package Dependencies**, enter the URL below and set the
@@ -87,6 +100,6 @@ do { try riskyOperation() } catch { Mushi.shared.captureError(error) }
 ## Sentry
 
 The Swift package has no Sentry bridge. Keep initialising Sentry in your app
-and attach context to Mushi reports with `Mushi.shared.setMetadata(_:value:)`.
+and attach context to Mushi Mushi reports with `Mushi.shared.setMetadata(_:value:)`.
 
 Full API: [`MushiMushi` (iOS)](/sdks/ios).

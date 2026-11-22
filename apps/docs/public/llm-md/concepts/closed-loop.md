@@ -9,9 +9,9 @@ description: The thesis behind Mushi Mushi. Why AI-built apps need a closed loop
 
 # Closed-loop evolution — the thesis
 
-> *"Sentry sees what code throws. Mushi sees what users feel — and closes the loop with AI."*
+> *"Sentry sees what code throws. Mushi Mushi sees what users feel — and closes the loop with AI."*
 
-The vibe-coding era — AI-assisted development where you build and ship in hours — solved the creation bottleneck. The new bottleneck is selection: out of everything you could fix next, which changes actually make the app better for real users? Without a closed feedback loop, you're flying blind. This page is the long-form argument for *why* the loop matters and *how* Mushi implements it.
+The vibe-coding era — AI-assisted development where you build and ship in hours — solved the creation bottleneck. The new bottleneck is selection: out of everything you could fix next, which changes actually make the app better for real users? Without a closed feedback loop, you're flying blind. This page is the long-form argument for *why* the loop matters and *how* Mushi Mushi implements it.
 
 For a shorter version see [The evolution loop](/concepts/evolution-loop). For the manifesto see the [EVOLUTION-LOOP.md](https://github.com/kensaurus/mushi-mushi/blob/master/docs/EVOLUTION-LOOP.md) doc.
 
@@ -32,7 +32,7 @@ Matthew Syed documents this contrast in *Black Box Thinking* (2015): aviation le
 
 Software development is closer to pre-NTSB medicine than to aviation. Every production bug is technically a crash. Most get fixed and forgotten. The knowledge that *this* class of bug appeared, under *these* conditions, encoded in *this* pattern — vanishes. The next developer joins the project and makes the same mistake. Six months later a user reports the same friction. The fix is almost identical. The cost is real.
 
-**Mushi is the NTSB layer software has been missing.**
+**Mushi Mushi is the NTSB layer software has been missing.**
 
   *"In a world where crashes are hidden, disasters accumulate. In a world where crashes are dissected, progress compounds."* — Matthew Syed, *Black Box Thinking* (2015), p. 9
 
@@ -68,14 +68,14 @@ This is cumulative selection. The software system gets permanently better with e
 
   *"Cumulative selection is the key to all of evolution. … Each improvement, however slight, is retained and passed on."* — Richard Dawkins, *Climbing Mount Improbable* (1996), p. 74
 
-In Mushi that means: catch the bug → embed it → cluster similar bugs → name the cluster → promote it to a learning rule → inject the rule into the next PR review and the next agent fix → credit the reporter → repeat.
+In Mushi Mushi that means: catch the bug → embed it → cluster similar bugs → name the cluster → promote it to a learning rule → inject the rule into the next PR review and the next agent fix → credit the reporter → repeat.
 
 ---
 
 ## What the loop looks like in practice
 
 1. **A user feels friction** (a dead button, a slow screen, a layout that breaks on one phone) and shakes the app or clicks the feedback stamp. — *Source: SDK or [Anti-gaming](/admin/anti-gaming) for synthetic probes.*
-2. **Mushi SDK captures** the moment: screenshot, session breadcrumbs, device info, the current route. — *Visible in [Reports & triage](/admin/reports).*
+2. **Mushi Mushi SDK captures** the moment: screenshot, session breadcrumbs, device info, the current route. — *Visible in [Reports & triage](/admin/reports).*
 3. **The server embeds the report** with `text-embedding-3-small` and runs the BIRCH-style streaming clusterer. — *Architecture: `mistake-clusterer` edge function (hourly).*
 4. **Similar reports collapse** into a `mistake_cluster`. When the cluster reaches coherence ≥ 0.75 and size ≥ 3, the judge model promotes it to a **`lesson`** with auto-generated name + summary + one-shot rule. — *Visible in [Judge dashboard](/admin/judge) and [Lessons](/admin/lessons).*
 5. **The lesson is injected** into the next PR review (packed into a token budget, 3,000 by default) and into the next agentic fix run, so reviewers and the AI agent are less likely to repeat the same class of mistake. — *Triggered from [Fix orchestrator](/admin/fixes) or autonomously via [Iterate (PDCA)](/admin/iterate).*
@@ -87,7 +87,7 @@ In Mushi that means: catch the bug → embed it → cluster similar bugs → nam
 
 ## What this means for the roadmap
 
-Every feature in the Mushi roadmap is either:
+Every feature in the Mushi Mushi roadmap is either:
 
 1. **A sensor**: something that generates more signal about where the system is failing (rewards that incentivise reporting, drift agents that find latent failures, A/B tests that detect which version performs better).
 2. **A processor**: something that turns raw signal into named, structured knowledge (the mistake clusterer, the judge coherence gate, the PDCA loop, anomaly detection).

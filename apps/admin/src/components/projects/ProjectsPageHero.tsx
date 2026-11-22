@@ -31,7 +31,7 @@ function heroDecideLabel(stats: ProjectsStats): string {
   ) return 'New app, setup left'
   switch (stats.topPriority) {
     case 'healthy':
-      return 'All projects ingesting'
+      return 'All apps ingesting'
     case 'never_ingested':
       return 'No ingest yet'
     case 'no_sdk_heartbeat':
@@ -67,7 +67,7 @@ function heroAct(stats: ProjectsStats): PageAction | null {
       primary: {
         kind: 'link',
         to: `/projects?project=${stats.activeProjectId}&tab=list`,
-        label: 'Open project →',
+        label: 'Open app →',
       },
     }
   }
@@ -84,12 +84,12 @@ function heroAct(stats: ProjectsStats): PageAction | null {
 function heroVerify(stats: ProjectsStats): PageHeroVerify {
   const viewing = stats.activeProjectName
   return {
-    label: viewing ? 'Active context' : 'No project selected',
+    label: viewing ? 'Active context' : 'No app selected',
     detail: viewing
       ? `${viewing} · ${stats.activeProjectHasReports ? 'ingesting' : 'no reports'} · ${
           stats.activeProjectSdkConnected ? 'SDK live' : 'no heartbeat'
         }`
-      : 'Pick a project on the list tab — filters follow your selection.',
+      : 'Pick an app on the Your apps tab — filters follow your selection.',
     to: stats.activeProjectId
       ? `/projects?project=${stats.activeProjectId}&tab=list`
       : '/projects?tab=list',

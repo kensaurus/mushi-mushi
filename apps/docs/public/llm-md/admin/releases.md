@@ -60,8 +60,8 @@ any of these ships a release on its own:
 
 | Trigger | Where it comes from | Version reporters see |
 |---------|---------------------|-----------------------|
-| A GitHub release is **published** (not a draft or pre-release) | The Mushi GitHub App on the repo, subscribed to **Releases** | The tag, e.g. `v2.4.1` |
-| A **production** deployment succeeds (`deployment_status` = success) | The Mushi GitHub App, subscribed to **Deployment statuses** | The deployed tag, or the short commit sha |
+| A GitHub release is **published** (not a draft or pre-release) | The Mushi Mushi GitHub App on the repo, subscribed to **Releases** | The tag, e.g. `v2.4.1` |
+| A **production** deployment succeeds (`deployment_status` = success) | The Mushi Mushi GitHub App, subscribed to **Deployment statuses** | The deployed tag, or the short commit sha |
 | Your CI posts `release.published` | `POST /v1/ingest/recipe/events` with an agent key (`mcp:write`) kept in CI secrets | The `version` you send |
 
 ```bash
@@ -70,7 +70,7 @@ curl -X POST "$MUSHI_API_URL/v1/ingest/recipe/events" \
   -d '{ "events": [ { "type": "release.published", "targetId": "web", "version": "2.4.1" } ] }'
 ```
 
-For each trigger, Mushi:
+For each trigger, Mushi Mushi:
 
 1. skips it if a release with that version already exists;
 2. skips it if no report was marked fixed since the last published release
@@ -122,10 +122,10 @@ remove fixes from [Pipeline](/admin/pipeline).
 - **Rules to ride** count how many fixes pass each rule: Opus said merge at the
   current commit, not a draft, its own CI is green, it did not keep failing trains
   at that commit, and it is not urgent (urgent fixes merge on their own).
-- **Database migrations** lists migration files in the fixes' changes. Mushi looks
+- **Database migrations** lists migration files in the fixes' changes. Mushi Mushi looks
   in the folder your app recipe names (`data.migrationsDir` in
   `mushi.recipe.json`), or else in `supabase/migrations`, `prisma/migrations` and
-  `migrations`. Mushi never runs them; apply them when you deploy. If a change could
+  `migrations`. Mushi Mushi never runs them; apply them when you deploy. If a change could
   not be read, the list says it may be incomplete.
 - **Deploy after the last train** says whether the merge commit was seen running, or
   a deploy was seen after the merge. With no deploy in 14 days it links to the

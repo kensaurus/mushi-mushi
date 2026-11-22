@@ -114,8 +114,14 @@ function hasGithub(s: PlatformSettingsRow): boolean {
   return !!(s.github_repo_url && s.github_installation_token_ref)
 }
 
-function hasClaudeCodeAgent(s: PlatformSettingsRow): boolean {
-  return !!s.claude_api_key_ref
+/**
+ * Set up when a Claude key is saved, or when the organization runs AI on
+ * OpenAI: the fix-worker then writes fixes with the organization's OpenAI
+ * key, which the probe tests (2026-11-07: the owner cleared mushi-mushi's
+ * unused legacy Claude field and the card stopped being checked at all).
+ */
+function hasClaudeCodeAgent(s: PlatformSettingsRow, orgOnOpenAi: boolean): boolean {
+  return !!s.claude_api_key_ref || orgOnOpenAi
 }
 
 function hasCursorCloud(s: PlatformSettingsRow): boolean {
@@ -164,6 +170,7 @@ async function handler(req: Request): Promise<Response> {
     const [
       { data: settingsRows, error: settingsErr },
       { data: projectOrgRows },
+      { data: openAiOrgRows },
       { data: orgSettingsRows },
     ] = await Promise.all([
       db
@@ -172,6 +179,7 @@ async function handler(req: Request): Promise<Response> {
           'project_id, sentry_org_slug, sentry_auth_token_ref, langfuse_host, langfuse_public_key_ref, langfuse_secret_key_ref, github_repo_url, github_installation_token_ref, claude_api_key_ref, cursor_api_key_ref, linear_api_key_ref, linear_access_token_ref, slack_bot_token_ref, slack_channel_id',
         ),
       db.from('projects').select('id, organization_id, owner_id'),
+      db.from('organizations').select('id, ai_provider').eq('ai_provider', 'openai'),
       db.from('organization_integration_settings').select('organization_id, sentry_org_slug, sentry_auth_token_ref, langfuse_host, langfuse_public_key_ref, langfuse_secret_key_ref, github_repo_url, github_installation_token_ref, claude_api_key_ref, cursor_api_key_ref, linear_api_key_ref, linear_access_token_ref'),
     ])
     if (settingsErr) throw new Error(`project_settings load failed: ${settingsErr.message}`)
@@ -189,6 +197,7 @@ async function handler(req: Request): Promise<Response> {
     for (const p of projectRows) {
       if (p.organization_id) projectOrgMap.set(p.id, p.organization_id)
     }
+    const openAiOrgs = new Set(((openAiOrgRows ?? []) as Array<{ id: string }>).map((o) => o.id))
     const orgSettingsMap = new Map<string, PlatformSettingsRow>()
     for (const os of (orgSettingsRows ?? []) as Array<PlatformSettingsRow & { organization_id: string }>) {
       orgSettingsMap.set(os.organization_id, os as PlatformSettingsRow)
@@ -242,7 +251,7 @@ async function handler(req: Request): Promise<Response> {
       if (hasSentry(s)) tasks.push({ projectId: s.project_id, kind: 'sentry', settings: s, routingConfig: {} })
       if (hasLangfuse(s, operatorOwnedProjects.has(s.project_id))) tasks.push({ projectId: s.project_id, kind: 'langfuse', settings: s, routingConfig: {} })
       if (hasGithub(s)) tasks.push({ projectId: s.project_id, kind: 'github', settings: s, routingConfig: {} })
-      if (hasClaudeCodeAgent(s)) {
+      if (hasClaudeCodeAgent(s, openAiOrgs.has(projectOrgMap.get(s.project_id) ?? ''))) {
         tasks.push({ projectId: s.project_id, kind: 'claude_code_agent', settings: s, routingConfig: {} })
       }
       if (hasCursorCloud(s)) {

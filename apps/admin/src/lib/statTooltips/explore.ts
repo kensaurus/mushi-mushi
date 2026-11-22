@@ -77,7 +77,7 @@ export function embeddingsTooltip(stats: ExploreStats): MetricTooltipData {
 
   return metricTip(
     'Search chunks (whole files and individual symbols) that have a vector for semantic codebase search.',
-    'Counts project_codebase_files rows where embedding column is non-null (match_codebase_files RPC input).',
+    'Counts project_codebase_files rows where embedding_768 is non-null (the vector match_codebase_files searches).',
     takeaway,
     stats.withEmbeddings === 0 && stats.indexedFiles > 0
       ? { tone: 'warn', text: 'Index exists without embeddings — semantic search will be empty.' }

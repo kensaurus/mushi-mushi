@@ -15,6 +15,7 @@ import { useState } from 'react'
 import { usePageData } from '../../lib/usePageData'
 import { isConsolePath, setupGapsSentence, type SetupGap, type SetupGapsResponse } from '../../lib/setupGaps'
 import { Btn, ErrorAlert, HelpPopover, Loading, PageStatus, Section } from '../ui'
+import { StatusGlyph } from '../signal/StatusGlyph'
 
 const DOT: Record<SetupGap['status'], string> = {
   gap: 'bg-danger',
@@ -76,14 +77,14 @@ export function SetupGapsSection({ projectId }: { projectId: string | null }) {
   const status = setupGapsSentence(gaps)
 
   const help = (
-    <HelpPopover label="What is checked" title="What Mushi checks" align="end">
+    <HelpPopover label="What is checked" title="What Mushi Mushi checks" align="end">
       <ul className="list-disc space-y-1 pl-4 text-xs text-fg-secondary">
-        <li>What Mushi&apos;s GitHub access can do in each repo: push fix branches, open pull requests, re-run CI, write CI secrets.</li>
+        <li>What Mushi Mushi&apos;s GitHub access can do in each repo: push fix branches, open pull requests, re-run CI, write CI secrets.</li>
         <li>Whether the review follow-up key and the auto-fix Cursor keys still work.</li>
         <li>Whether a deploy was seen in the last 14 days, so reporters hear when their fix is live.</li>
         <li>Whether Slack still accepts the bot token.</li>
       </ul>
-      <p className="mt-2 text-xs text-fg-muted">Mushi only reads to check. It never writes to GitHub to find out whether it may write, so some lines say &ldquo;can&apos;t tell&rdquo;.</p>
+      <p className="mt-2 text-xs text-fg-muted">Mushi Mushi only reads to check. It never writes to GitHub to find out whether it may write, so some lines say &ldquo;can&apos;t tell&rdquo;.</p>
     </HelpPopover>
   )
 
@@ -114,7 +115,10 @@ export function SetupGapsSection({ projectId }: { projectId: string | null }) {
           <ErrorAlert title="Setup gaps" message={page.error} onRetry={page.reload} />
         ) : (
           <>
-            <PageStatus sentence={status.sentence} tone={status.tone} ariaLabel="Setup gaps status" data-testid="setup-gaps-status" />
+            {/* All pass: the disclosure below is the one line ("All 6 checks pass." sat over "▸ 6 checks pass"). */}
+            {open.length > 0 || fine.length === 0 ? (
+              <PageStatus sentence={status.sentence} tone={status.tone} ariaLabel="Setup gaps status" data-testid="setup-gaps-status" />
+            ) : null}
             {open.length > 0 ? (
               <ul className="divide-y divide-edge-subtle" data-testid="setup-gaps-open">
                 {open.map((g) => (
@@ -125,7 +129,16 @@ export function SetupGapsSection({ projectId }: { projectId: string | null }) {
             {fine.length > 0 ? (
               <details className="group rounded-sm" data-testid="setup-gaps-fine">
                 <summary className="cursor-pointer text-xs text-fg-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50">
-                  {fine.length} check{fine.length === 1 ? '' : 's'} pass
+                  {open.length === 0 ? (
+                    <span className="inline-flex items-center gap-1.5 text-sm text-fg">
+                      <StatusGlyph tone="ok" />
+                      All {fine.length} check{fine.length === 1 ? '' : 's'} pass
+                    </span>
+                  ) : (
+                    <>
+                      {fine.length} check{fine.length === 1 ? '' : 's'} pass
+                    </>
+                  )}
                 </summary>
                 <ul className="divide-y divide-edge-subtle">
                   {fine.map((g) => (

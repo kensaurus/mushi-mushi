@@ -10,7 +10,7 @@
 
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CiOverview } from '../lib/ciTypes'
 import { ciOverviewFixture, emptyCiOverview } from '../components/ci/__fixtures__/ciOverview'
@@ -20,13 +20,22 @@ const state = vi.hoisted(() => ({
   projectId: 'p1' as string | null,
   paths: [] as Array<{ path: string | null; scope?: string }>,
   error: null as unknown,
+  loading: false,
+  reloads: 0,
   summary: '' as string,
   syncs: [] as Array<{ path: string; scope?: string }>,
+  debug: null as unknown,
+  debugPaths: [] as string[],
 }))
 
 vi.mock('../lib/supabase', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   apiFetch: async (path: string, opts: { scope?: string } = {}) => {
+    // The job debug drawer (2026-11-19) reads its own route, never the overview.
+    if (path.startsWith('/v1/admin/ci/jobs/')) {
+      state.debugPaths.push(path)
+      return { ok: true, data: state.debug }
+    }
     state.syncs.push({ path, scope: opts.scope })
     return { ok: true, data: null }
   },
@@ -46,7 +55,8 @@ vi.mock('../lib/usePageData', () => ({
           }
         : null
     const error = path?.startsWith('/v1/admin/ci/overview') ? state.error : null
-    return { data, loading: false, error, isValidating: false, reload: () => {}, lastFetchedAt: null }
+    const loading = path?.startsWith('/v1/admin/ci/overview') ? state.loading : false
+    return { data, loading, error, isValidating: false, reload: () => { state.reloads += 1 }, lastFetchedAt: null }
   },
 }))
 vi.mock('../components/ProjectSwitcher', () => ({ useActiveProjectId: () => state.projectId }))
@@ -68,6 +78,7 @@ vi.mock('../components/ci/CiRunnerMap', async () => {
 })
 
 import { CiPage } from './CiPage'
+import { CI_READ_TIMEOUT_MS } from '../lib/ciReadTimeout'
 import { getStoredProjectScopeMode, setStoredProjectScopeMode } from '../lib/projectScope'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -86,7 +97,11 @@ beforeEach(() => {
   state.paths = []
   state.syncs = []
   state.error = null
+  state.loading = false
+  state.reloads = 0
   state.summary = ''
+  state.debug = null
+  state.debugPaths = []
   window.localStorage.clear()
 })
 
@@ -109,19 +124,105 @@ async function render(url = '/ci') {
 const q = (id: string) => host.querySelector(`[data-testid="${id}"]`) as HTMLElement | null
 
 describe('CiPage', () => {
-  it('renders the header line, the summary, then every section, queue first', async () => {
+  const headings = () => Array.from(host.querySelectorAll('h2, h3')).map((h) => h.textContent ?? '')
+  const hasHeading = (t: string) => headings().some((h) => h.startsWith(t))
+
+  it('opens on Now: the header line, the summary, then the queue and the timeline, and nothing else', async () => {
     await render()
     expect(host.querySelector('h1')!.textContent).toBe('CI runners')
     expect(host.textContent).toContain('Where your tests run, how long they wait, and what slows them down.')
-    const headings = Array.from(host.querySelectorAll('h2, h3')).map((h) => h.textContent ?? '')
-    const order = ['Queue', 'Timeline', 'Runner map', 'Speed it up', 'Slow jobs', 'Stopped by the test machine'].map((t) =>
-      headings.findIndex((h) => h.startsWith(t)),
-    )
+    const order = ['Finished jobs', 'Timeline'].map((t) => headings().findIndex((h) => h.startsWith(t)))
     expect(order.every((i) => i >= 0)).toBe(true)
     expect([...order].sort((a, b) => a - b)).toEqual(order)
-    // The summary sits above the queue.
+    // "Which machine, what is slow, when will it finish, what broke" (2026-11-16): the plain status
+    // board opens Now, above the week's numbers, which sit above the queue.
+    const board = q('ci-status-board')!
+    expect(hasHeading('Right now')).toBe(true)
+    expect(q('ci-status-headline')!.textContent!.length).toBeGreaterThan(10)
+    for (const t of ['Machines right now', 'Running now', 'What broke in the last 2 hours', 'Where the time goes this week']) expect(hasHeading(t)).toBe(true)
     const summary = q('ci-summary')!
+    // What is wrong comes first (2026-11-17): the ranked alerts sit above the board.
+    expect(q('ci-alerts')!.compareDocumentPosition(board) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(board.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(summary.compareDocumentPosition(q('ci-queue')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(hasHeading('Last 7 days')).toBe(true)
+    expect(hasHeading('Job times')).toBe(true)
+    // Runner ids never stand in for a machine: running jobs name the machine.
+    expect(q('ci-status-board')!.textContent).not.toMatch(/aw-[a-z.-]+-\d{6,}/)
+    // One long column was 50,000 px tall (2026-11-06): the other views are not on Now.
+    for (const t of ['Runner map', 'Speed it up', 'Slow jobs', 'Stopped by the test machine', 'Where CI runs']) expect(hasHeading(t)).toBe(false)
+  })
+
+  it('lists waiting jobs under one header per label they need, not the label on every row', async () => {
+    await render()
+    const nuc = q('ci-waiting-group-nuc')!
+    expect(nuc.textContent).toBe('2 waiting for nuc')
+    expect(nuc.querySelectorAll('[data-testid="ci-waiting-label"]')).toHaveLength(1)
+    for (const id of ['j2', 'j3']) {
+      const row = q(`ci-waiting-${id}`)!
+      expect(row.querySelector('[data-testid="ci-waiting-label"]')).toBeNull()
+      // The job's rows sit right under their header.
+      expect(nuc.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    }
+    expect(q('ci-waiting-group-cloud')!.textContent!.trim()).toBe('1 waiting for a machine')
+  })
+
+  it('draws the waiting card as label chips and keeps its sentence for screen readers', async () => {
+    await render()
+    const chips = q('ci-alert-wait-labels')!
+    expect(chips.getAttribute('aria-hidden')).toBe('true')
+    expect(Array.from(chips.querySelectorAll('[data-testid="ci-alert-needs"]')).map((e) => e.textContent)).toEqual(['nuc'])
+    const has = Array.from(chips.querySelectorAll('[data-status="passed"]')).map((e) => e.textContent)
+    expect(has.length).toBeGreaterThan(0)
+    expect(chips.previousElementSibling!.className).toBe('sr-only')
+    expect(chips.previousElementSibling!.textContent!.length).toBeGreaterThan(10)
+  })
+
+  it('puts each section in its view, with a tab per view and the active one marked', async () => {
+    const views: Array<[string, string[]]> = [
+      ['machines', ['Machines', 'Runner map (advanced)', 'Stopped by the test machine']],
+      ['cost', ['Speed it up', 'Slow jobs', 'Cost and speed']],
+      ['settings', ['Where CI runs']],
+    ]
+    for (const [view, titles] of views) {
+      act(() => root.unmount())
+      root = createRoot(host)
+      await render(`/ci?view=${view}`)
+      for (const t of titles) expect(hasHeading(t)).toBe(true)
+      expect(q('ci-queue')).toBeNull()
+      expect(hasHeading('Right now')).toBe(false)
+      const active = host.querySelector('[role="tab"][aria-selected="true"]')!
+      expect(active.getAttribute('href')).toContain(`view=${view}`)
+    }
+    const tabs = Array.from(host.querySelectorAll('[role="tab"]')).map((t) => t.textContent ?? '')
+    expect(tabs.map((t) => t.replace(/\d+( stopped)?$/, ''))).toEqual(['Now', 'Machines', 'Speed and cost', 'Settings'])
+  })
+
+  it('keeps old section links working: the hash picks the view, then scrolls to it', async () => {
+    const scroll = vi.fn()
+    Element.prototype.scrollIntoView = scroll // jsdom has none
+    await render('/ci#ci-placement')
+    expect(hasHeading('Where CI runs')).toBe(true)
+    expect(q('ci-queue')).toBeNull()
+    expect(scroll).toHaveBeenCalled()
+  })
+
+  it('labels each tab count with what it counts', async () => {
+    await render()
+    // "Machines 7" read as seven machines while three were listed (2026-11-18).
+    const machinesTab = Array.from(host.querySelectorAll('[role="tab"]')).find((t) => t.textContent?.startsWith('Machines'))!
+    expect(machinesTab.textContent).toMatch(/Machines\d+ stopped$/)
+    const labels = Array.from(host.querySelectorAll('[role="tab"] [aria-label]')).map((b) => b.getAttribute('aria-label') ?? '')
+    expect(labels.some((l) => /jobs? waiting for a test machine$/.test(l))).toBe(true)
+    expect(labels.some((l) => /changes? that would speed CI up$/.test(l))).toBe(true)
+    expect(labels.every((l) => !l.endsWith(' items'))).toBe(true)
+  })
+
+  it('keeps the scope and the job in the tab links', async () => {
+    await render('/ci?job=j3')
+    const machines = Array.from(host.querySelectorAll('[role="tab"]')).find((t) => t.textContent?.startsWith('Machines'))!
+    expect(machines.getAttribute('href')).toMatch(/job=j3/)
+    expect(machines.getAttribute('href')).toMatch(/view=machines/)
   })
 
   it('paints from stored jobs, live-syncs with refresh=1 in the background, and shows when it was updated', async () => {
@@ -133,8 +234,22 @@ describe('CiPage', () => {
     expect(q('ci-updated-ago')!.textContent).toBe('Updated 20 s ago')
   })
 
-  it('lays out the queue: waiting oldest first with counts, hints and fix links', async () => {
+  // 2026-11-18: the queue repeated every job "Running now" lists. Live jobs are listed once, under
+  // Right now (with their fix link); the queue below holds what finished.
+  it('lists each live job once: under Running now with its fix link, the queue holds finished jobs', async () => {
     await render()
+    expect(q('ci-queue-count-waiting')).toBeNull()
+    expect(q('ci-queue-count-running')).toBeNull()
+    expect(q('ci-queue-count-finished')!.textContent).toBe('4')
+    expect(hasHeading('Finished jobs')).toBe(true)
+    for (const id of ['j1', 'j2', 'j3', 'j4']) expect(q(`ci-queue-job-${id}`)).toBeNull()
+    const fix = q('ci-waiting-j2')!.querySelector('[data-testid="ci-live-fix-link"]')
+    expect(fix?.getAttribute('href')).toBe('/reports/report-142')
+    expect(q('ci-running-j1')).not.toBeNull()
+  })
+
+  it('lays out the queue with a live job deep-linked: waiting oldest first with counts, hints and fix links', async () => {
+    await render('/ci?job=j2')
     expect(q('ci-queue-count-waiting')!.textContent).toBe('3')
     expect(q('ci-queue-count-running')!.textContent).toBe('1')
     expect(q('ci-queue-count-finished')!.textContent).toBe('4')
@@ -159,16 +274,79 @@ describe('CiPage', () => {
     const failed = q('ci-queue-job-j7')
     if (failed) {
       expect(Array.from(failed.querySelectorAll('button')).some((b) => b.textContent?.includes('Re-run'))).toBe(false)
-      expect(Array.from(failed.querySelectorAll('a')).some((a) => a.textContent?.includes('Read the failing logs'))).toBe(true)
+      // "Why?" opens the log and the cause here; GitHub is the secondary link (2026-11-19).
+      expect(failed.querySelector('[data-testid="ci-why"]')).not.toBeNull()
+      expect(Array.from(failed.querySelectorAll('a')).some((a) => a.textContent?.includes('Open on GitHub'))).toBe(true)
     }
   })
 
-  it('opens with a plain verdict, live tiles and the outcome bar', async () => {
+  it('opens a failed job in the debug drawer: the failing step, the screened log, the cause and the actions', async () => {
+    state.debug = {
+      job: {
+        id: 'j7', projectId: 'p1', repo: 'kensaurus/mushi-mushi', runId: 1000, runAttempt: 1, jobId: 7, jobName: 'test', workflowName: 'CI', prNumber: null,
+        headBranch: 'mushi/fix', status: 'completed', conclusion: 'failure', ciKind: 'code_failure', infra: false, infraDetail: null,
+        htmlUrl: 'https://github.com/kensaurus/mushi-mushi/actions/runs/1000/job/j7', runUrl: 'https://github.com/kensaurus/mushi-mushi/actions/runs/1000', completedAt: null, durationSeconds: 600,
+      },
+      steps: [{ name: 'Set up job', conclusion: 'success', seconds: 2 }, { name: 'Run unit tests', conclusion: 'failure', seconds: 40 }],
+      failedStep: 'Run unit tests',
+      log: { status: 'ok', excerpt: 'AssertionError: expected 2 to be 3', linesDropped: 1 },
+      annotations: ['cart.test.ts: expected 2 to be 3'],
+      explanation: null,
+      actions: { rerun: true, cancel: false, explain: true, ciRepair: { fixId: 'f9', reportId: 'r9' } },
+    }
     await render()
-    expect(q('ci-verdict')!.textContent).toMatch(/waiting for a test machine|test machine, not your code|failed on the code|healthy/)
+    const why = q('ci-broke-kensaurus/mushi-mushi|mushi/fix')?.querySelector('[data-testid="ci-why"]') ?? host.querySelector('[data-testid="ci-why"]')
+    expect(why).not.toBeNull()
+    await act(async () => (why as HTMLButtonElement).click())
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(state.debugPaths).toEqual(['/v1/admin/ci/jobs/j7/debug'])
+    const panel = document.querySelector('[data-testid="ci-debug-panel"]') as HTMLElement
+    expect(panel).not.toBeNull()
+    expect(panel.querySelector('[data-testid="ci-debug-step"]')!.textContent).toContain('Failed at Run unit tests')
+    expect(panel.querySelector('pre')!.textContent).toBe('AssertionError: expected 2 to be 3')
+    expect(panel.textContent).toContain('1 line hidden')
+    expect(panel.querySelector('[data-testid="ci-debug-annotations"]')!.textContent).toContain('cart.test.ts')
+    expect(panel.querySelector('[data-testid="ci-debug-explain"]')).not.toBeNull()
+    expect(panel.querySelector('[data-testid="ci-debug-rerun"]')).not.toBeNull()
+    expect(panel.querySelector('[data-testid="ci-debug-repair"]')).not.toBeNull()
+    expect(panel.querySelector('[data-testid="ci-debug-cancel"]')).toBeNull()
+  })
+
+  it('groups the Now view by app with All apps and two apps: worst app first, healthy ones collapsed', async () => {
+    const base = ciOverviewFixture()
+    const P2 = 'p2'
+    state.overview = {
+      ...base,
+      repos: base.repos.map((r) => (r.repo === 'kensaurus/mushi-mushi' ? { ...r, projectId: P2 } : r)),
+      jobs: base.jobs.map((j) => (j.repo === 'kensaurus/mushi-mushi' ? { ...j, projectId: P2 } : j)),
+    }
+    await render('/ci?apps=all')
+    const byApp = q('ci-by-app')!
+    expect(byApp).not.toBeNull()
+    // "Running now" and "What broke" live inside each app's group now.
+    expect(hasHeading('Running now')).toBe(false)
+    expect(hasHeading('What broke in the last 2 hours')).toBe(false)
+    const groups = Array.from(byApp.querySelectorAll('[data-testid^="ci-app-group-"]'))
+    expect(groups.map((g) => g.getAttribute('aria-label'))).toEqual(['mushi-mushi', 'glot.it'])
+    // Each app's live jobs sit under it; the machine that stopped reporting stays in the strip on top.
+    expect(q('ci-app-live-p2')!.querySelector('[data-testid="ci-waiting-j4"]')).not.toBeNull()
+    expect(q('ci-alert-stale:h-aw')).not.toBeNull()
+    // Single-app mode stays flat.
+    act(() => root.unmount())
+    root = createRoot(host)
+    await render('/ci')
+    expect(q('ci-by-app')).toBeNull()
+    expect(hasHeading('Running now')).toBe(true)
+  })
+
+  it("opens the week with a plain verdict and the outcome bar, not the board's live queue again", async () => {
+    await render()
+    expect(q('ci-verdict')!.textContent).toMatch(/test machine, not your code|failed on the code|healthy/)
     const summary = q('ci-summary')!
-    expect(summary.textContent).toContain('Waiting now')
-    expect(summary.textContent).toContain('Running now')
+    expect(summary.textContent).not.toContain('Waiting now')
+    expect(summary.textContent).not.toContain('Running now')
     expect(summary.textContent).toContain('Test machine stopped')
     expect(summary.querySelector('[role="img"]')?.getAttribute('aria-label')).toMatch(/passed/)
   })
@@ -183,29 +361,115 @@ describe('CiPage', () => {
     expect(q('ci-queue-job-j5')).toBeNull()
   })
 
+  // Problems first (2026-11-18): failures lead Finished, passes fold into one row, empty columns go.
+  it('leads Finished with the failures, folds the passes into one row, and hides empty columns', async () => {
+    await render()
+    const finished = Array.from(host.querySelectorAll('[data-testid="ci-queue-list-finished"] > li')).map((el) => el.getAttribute('data-testid'))
+    expect(finished[0]).toBe('ci-queue-job-j7')
+    expect(q('ci-queue-job-j5')).toBeNull()
+    const toggle = q('ci-queue-passed-toggle')!
+    expect(toggle.textContent).toContain('1 passed')
+    await act(async () => {
+      toggle.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(q('ci-queue-job-j5')).not.toBeNull()
+
+    act(() => root.unmount())
+    root = createRoot(host)
+    const o = ciOverviewFixture()
+    state.overview = { ...o, jobs: o.jobs.filter((j) => j.status === 'completed') }
+    await render()
+    expect(q('ci-queue-count-waiting')).toBeNull()
+    expect(q('ci-queue-count-running')).toBeNull()
+    expect(q('ci-queue-count-finished')).not.toBeNull()
+  })
+
   it('focuses the job named in ?job=', async () => {
     await render('/ci?job=j3')
     expect(q('ci-queue-job-j3')!.dataset.focused).toBe('true')
     expect(q('ci-queue-job-j2')!.dataset.focused).toBeUndefined()
   })
 
-  it('draws the timeline with the busiest runner first and "No runner yet" last', async () => {
+  // The page scrolls, not a column: each column shows 6 cards and a "Show N more" (2026-11-14).
+  describe('a long column', () => {
+    const withWaiting = (n: number) => {
+      const o = ciOverviewFixture()
+      const base = o.jobs.find((j) => j.id === 'j4')!
+      const extra = Array.from({ length: n }, (_, k) => ({ ...base, id: `w${k + 1}`, jobId: 9001 + k, createdAt: `2026-10-21T11:59:${String(k + 1).padStart(2, '0')}Z` }))
+      // A new array: the fixture's jobs list is shared between calls.
+      state.overview = { ...o, jobs: [...o.jobs, ...extra] }
+    }
+    const waitingCards = () => host.querySelectorAll('[data-testid="ci-queue-list-waiting"] [data-testid^="ci-queue-job-"]').length
+
+    it('shows six cards, then all of them on "Show N more"', async () => {
+      withWaiting(6) // 3 in the fixture + 6
+      // A live job in ?job= opens the live columns (Now otherwise lists live jobs under Running now).
+      await render('/ci?job=j2')
+      expect(q('ci-queue-count-waiting')!.textContent).toBe('9')
+      expect(waitingCards()).toBe(6)
+      expect(q('ci-queue-list-waiting')!.className).not.toMatch(/overflow-y-auto|max-h-/)
+      const more = Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Show 3 more')!
+      await act(async () => {
+        more.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      })
+      expect(waitingCards()).toBe(9)
+    })
+
+    it('opens the column in full when ?job= names a card past the sixth', async () => {
+      withWaiting(6)
+      await render('/ci?job=w6')
+      expect(waitingCards()).toBe(9)
+      expect(q('ci-queue-job-w6')!.dataset.focused).toBe('true')
+    })
+  })
+
+  it('draws the timeline with failing machines first, then the busiest, and "No runner yet" last', async () => {
     await render()
-    const lanes = Array.from(host.querySelectorAll('[data-testid^="ci-timeline-lane-"]')).map((el) => el.getAttribute('data-testid'))
+    const laneEls = Array.from(host.querySelectorAll<HTMLElement>('[data-testid^="ci-timeline-lane-"]'))
+    const lanes = laneEls.map((el) => el.getAttribute('data-testid'))
+    // nuc-glot is the busiest runner and has a stopped job (j6): it leads either way.
     expect(lanes[0]).toBe('ci-timeline-lane-nuc-glot')
     expect(lanes.at(-1)).toBe('ci-timeline-lane-No runner yet')
+    // Every lane with a failure comes before every lane without one ("show important things first").
+    const failed = laneEls.slice(0, -1).map((el) => el.dataset.failed === 'true')
+    expect(failed.indexOf(false) === -1 || failed.lastIndexOf(true) < failed.indexOf(false)).toBe(true)
     const bar = q('ci-timeline-bar-j6')!
     expect(bar.getAttribute('aria-label')).toContain('Test machine stopped')
     expect(bar.getAttribute('aria-label')).toContain('memory peak 9.9 GB')
   })
 
-  it('lists advice with its evidence and a copyable fix, and the infra failures', async () => {
-    await render()
+  it('lists advice with its evidence and a copyable fix under Speed and cost', async () => {
+    await render('/ci?view=cost')
     expect(q('ci-advice')!.textContent).toContain('nuc-glot ran out of memory')
     expect(q('ci-advice')!.textContent).toContain('1 OOM kill in 7 days')
     expect(q('ci-advice')!.querySelector('button[aria-label="Copy the fix"]')).not.toBeNull()
-    expect(q('ci-infra-failures')!.textContent).toContain('lost communication')
+  })
+
+  it('shows machine cards first, the map only on request, and the infra failures in plain words under Machines', async () => {
+    await render('/ci?view=machines')
+    expect(q('ci-machines-all')!.querySelectorAll('li').length).toBeGreaterThan(0)
+    // The map is the advanced view: it mounts only when opened.
+    expect(q('ci-map-stub')).toBeNull()
+    const details = q('ci-map-disclosure') as HTMLDetailsElement
+    await act(async () => {
+      details.open = true
+      details.dispatchEvent(new Event('toggle'))
+    })
     expect(q('ci-map-stub')!.textContent).toBe('2 hosts')
+    // GitHub's raw message stays one click away, behind a plain sentence.
+    expect(q('ci-infra-failures')!.textContent).toContain('lost touch with GitHub')
+    expect(q('ci-infra-failures')!.textContent).toContain('lost communication')
+    // The reason is said once for the list, and the jobs group by app and PR (2026-11-18).
+    expect(q('ci-infra-failures')!.textContent!.match(/lost touch with GitHub/g)).toHaveLength(1)
+    expect(host.querySelectorAll('[data-testid^="ci-infra-group-"]').length).toBeGreaterThan(0)
+  })
+
+  it('puts the stopped jobs above the GitHub-access banner on Machines', async () => {
+    state.overview = ciOverviewFixture({ permissions: { jobs: 'ok', runners: 'missing' } })
+    await render('/ci?view=machines')
+    const stopped = q('ci-infra-failures')!
+    const banner = Array.from(host.querySelectorAll('*')).find((el) => el.children.length === 0 && el.textContent?.startsWith('GitHub lists a runner to Mushi Mushi'))!
+    expect(stopped.compareDocumentPosition(banner) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('shows one advice card per rule, with a chip per workflow and the fix once', async () => {
@@ -221,18 +485,22 @@ describe('CiPage', () => {
     })
     const slow = { id: 'slow_steps', severity: 'low' as const, title: 'Where your CI spends its time', detail: 'd', evidence: `${T} · build · pnpm install: 3 min (12 runs); ${T} · e2e · playwright: 9 min (4 runs)`, fix: 'Cache it', repo: T }
     state.overview = ciOverviewFixture({ advice: [drafts('ci-pr.yml'), drafts('pricing-parity.yml'), drafts('mushi-freshness.yml'), slow] })
-    await render()
+    await render('/ci?view=cost')
     const advice = q('ci-advice')!
     expect(advice.querySelectorAll(':scope > li')).toHaveLength(2)
     expect(advice.textContent!.match(/Draft pull requests run the full CI/g)).toHaveLength(1)
     for (const file of ['ci-pr.yml', 'pricing-parity.yml', 'mushi-freshness.yml']) expect(advice.textContent).toContain(file)
     expect(advice.querySelectorAll('button[aria-label="Copy the fix"]')).toHaveLength(2)
+    // Severity is a mark, not a text pill; evidence that only names each chip again is dropped (2026-11-18).
+    expect([...advice.querySelectorAll('[data-testid="ci-advice-severity"]')].map((el) => el.getAttribute('data-severity'))).toEqual(['low', 'low'])
+    expect(advice.textContent).not.toMatch(/\bLow\b/)
+    expect(advice.textContent!.match(/Why Mushi Mushi thinks so/g)).toHaveLength(1)
     // Evidence joined with "; " reads as a list.
     expect([...advice.querySelectorAll('ul.list-disc li')].map((li) => li.textContent)).toEqual(expect.arrayContaining([`${T} · e2e · playwright: 9 min (4 runs)`]))
   })
 
   it('shows slow jobs and steps in full, with the repo name and a bar against the slowest', async () => {
-    await render()
+    await render('/ci?view=cost')
     const jobs = q('ci-slow-jobs')!
     expect(jobs.textContent).toContain('build')
     expect(jobs.textContent).toContain('CI')
@@ -257,15 +525,18 @@ describe('CiPage', () => {
     expect(action?.getAttribute('href')).toMatch(/\/operating\/ci-runners$/)
   })
 
-  it('explains a missing runner permission', async () => {
+  it('explains a missing runner permission where the runners are, not on top of Now', async () => {
+    const text = 'GitHub lists a runner to Mushi Mushi only while it runs a job. Machines that report in show below either way'
     state.overview = ciOverviewFixture({ permissions: { jobs: 'ok', runners: 'missing' } })
+    await render('/ci?view=machines')
+    expect(host.textContent).toContain(text)
+    act(() => root.unmount())
+    root = createRoot(host)
     await render()
-    expect(host.textContent).toContain(
-      'Mushi sees runners only through jobs. Give the GitHub token Administration: read to see idle and offline runners.',
-    )
+    expect(host.textContent).not.toContain(text)
   })
 
-  it('explains a missing jobs permission', async () => {
+  it('explains a missing jobs permission on every view, Now included', async () => {
     state.overview = ciOverviewFixture({ permissions: { jobs: 'missing', runners: 'unknown' } })
     await render()
     expect(host.textContent).toContain('Give the GitHub token Actions: read')
@@ -298,6 +569,57 @@ describe('CiPage', () => {
     expect(getStoredProjectScopeMode()).toBe('project')
     expect(state.paths).toContainEqual({ path: '/v1/admin/ci/overview?project_id=p1&days=7', scope: 'project' })
     expect(state.paths).not.toContainEqual({ path: '/v1/admin/ci/overview?days=7', scope: 'enumeration' })
+  })
+
+  it('offers the apps to pick on Settings with All apps, and picking one switches to that app', async () => {
+    // "Pick one app to see and change where its CI runs." with nothing to pick was a dead end, and the
+    // first fix made two URL updates in one click, so picking glot.it opened the old app (yen-yen).
+    const base = ciOverviewFixture()
+    state.overview = { ...base, repos: [...base.repos, { ...base.repos[0], projectId: 'p2', projectName: 'yen-yen', repo: 'acme/yen-yen' }] }
+    let search = ''
+    const Probe = () => {
+      search = useLocation().search
+      return null
+    }
+    await act(async () => {
+      root.render(createElement(MemoryRouter, { initialEntries: ['/ci?apps=all&view=settings&project=p1'] }, createElement(CiPage), createElement(Probe)))
+    })
+    const picker = host.querySelector('[data-testid="ci-placement-app-picker"]') as HTMLElement
+    expect(Array.from(picker.querySelectorAll('[data-app-name]')).map((b) => b.textContent)).toEqual(['glot.it', 'yen-yen'])
+    // Each chip marks where the app's jobs ran this week (2026-11-18): glot.it on both, yen-yen none seen.
+    const buttons = Array.from(picker.querySelectorAll('button'))
+    expect(buttons.map((b) => b.dataset.runsOn)).toEqual(['both', 'none'])
+    expect(buttons[0].textContent).toContain('●○')
+    const yen = buttons.find((b) => b.querySelector('[data-app-name]')?.textContent === 'yen-yen') as HTMLButtonElement
+    await act(async () => yen.click())
+    const params = new URLSearchParams(search)
+    expect(params.get('project')).toBe('p2')
+    expect(params.get('apps')).toBeNull()
+    expect(params.get('view')).toBe('settings')
+    expect(getStoredProjectScopeMode()).toBe('project')
+  })
+
+  // Round 3 (2026-11-19): 390 All apps sat on "Reading your CI…" on a blank page while the
+  // overview hit its CPU limit. After the timeout it says "not checked" with one Retry.
+  it('turns an All apps read that never answers into "CI runners: not checked" with Retry', async () => {
+    vi.useRealTimers()
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-21T12:00:00Z'))
+    state.projectId = null
+    state.overview = null
+    state.loading = true
+    await render()
+    expect(host.textContent).toContain('Reading your CI…')
+    expect(q('ci-not-checked')).toBeNull()
+    await act(async () => {
+      vi.advanceTimersByTime(CI_READ_TIMEOUT_MS)
+    })
+    const row = q('ci-not-checked')!
+    expect(row.textContent).toContain('CI runners: not checked')
+    expect(host.textContent).not.toContain('Reading your CI…')
+    await act(async () => Array.from(row.querySelectorAll('button')).find((b) => b.textContent === 'Retry')!.click())
+    expect(state.reloads).toBeGreaterThan(0)
+    expect(host.textContent).toContain('Reading your CI…')
   })
 
   it('says the page could not load, not that it is still loading, when the overview fails', async () => {

@@ -5,6 +5,8 @@
 
 import type { ReactNode } from 'react'
 import { withBasePath } from '../lib/appPath'
+import type { GuideLine } from '../lib/fieldGuide'
+import { Mascot } from './mascot/Mascot'
 
 interface EditorialErrorStateProps {
   /**
@@ -47,6 +49,11 @@ interface EditorialErrorStateProps {
    * itself the single page landmark in those cases.
    */
   as?: 'main' | 'section'
+  /**
+   * The field guide's pose and line (lib/fieldGuide.ts). The line may only
+   * mention the actions this screen renders.
+   */
+  mascot?: GuideLine
 }
 
 interface ActionProps {
@@ -108,11 +115,15 @@ export function EditorialErrorState({
   primary,
   secondary,
   as = 'section',
+  mascot,
 }: EditorialErrorStateProps) {
   const Wrapper = as
   return (
     <Wrapper className="mushi-marketing-surface grid min-h-[70vh] place-items-center px-6 py-16">
       <article className="mx-auto w-full max-w-[38rem]">
+        {mascot ? (
+          <Mascot {...mascot} size="lg" surface="paper" className="mb-6" data-testid="error-state-mascot" />
+        ) : null}
         <p
           aria-hidden="true"
           className="mb-5 inline-flex items-center gap-2.5 font-mono text-3xs font-semibold uppercase tracking-[0.22em] text-editorial-ink-muted"

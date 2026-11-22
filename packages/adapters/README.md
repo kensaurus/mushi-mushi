@@ -1,6 +1,8 @@
 # `@mushi-mushi/adapters`
 
-> **Your AI wrote it. Mushi Mushi tells you why it broke.**
+> **Your AI built it. Mushi Mushi makes it better.**
+
+**Optional, runs on your own server:** you need it only to forward an error tool you already run into Mushi Mushi. It is never part of your app. To add Mushi Mushi to an app, install [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi).
 
 Already send errors to Sentry, Crashlytics, Bugsnag or Rollbar? These webhook
 handlers forward them into [Mushi Mushi](https://github.com/kensaurus/mushi-mushi),
@@ -14,18 +16,18 @@ integration's Client Secret, and Sentry alerts go straight into the queue
 ([how](https://kensaur.us/mushi-mushi/docs/plugins/sentry#route-sentry-errors-into-mushi-mushi-inbound)).
 The other sources have no built-in receiver. For those you run one of these
 handlers on your own server and pass each event on, for example with
-`@mushi-mushi/node` and a project API key.
+`mushi-mushi/node` and a project API key.
 
 ## Quick start: Sentry to Hono
 
 ```bash
-npm i @mushi-mushi/adapters @mushi-mushi/node
+npm i @mushi-mushi/adapters mushi-mushi
 ```
 
 ```ts
 import { Hono } from 'hono';
 import { createSentryAdapter } from '@mushi-mushi/adapters/sentry';
-import { MushiNodeClient } from '@mushi-mushi/node';
+import { MushiNodeClient } from 'mushi-mushi/node';
 
 const mushi = new MushiNodeClient({
   apiKey: process.env.MUSHI_API_KEY!,
@@ -81,9 +83,9 @@ local database, or several of these at once. Subpath imports are supported, e.g.
 
 ## Severity mapping
 
-Each adapter maps the source's native severity onto Mushi's four-level scale:
+Each adapter maps the source's native severity onto Mushi Mushi's four-level scale:
 
-| Mushi      | Sentry (`level`) | Datadog | New Relic (`priority`) | Honeycomb (contains) | Grafana/AM       |
+| Mushi Mushi      | Sentry (`level`) | Datadog | New Relic (`priority`) | Honeycomb (contains) | Grafana/AM       |
 | ---------- | ---------------- | ------- | ---------------------- | -------------------- | ---------------- |
 | `critical` | fatal            | P1      | critical               | critical             | critical, page   |
 | `high`     | error            | P2      | high                   | high, error          | high, error      |
@@ -121,4 +123,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 77 edge functions · 546 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 78 edge functions · 583 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

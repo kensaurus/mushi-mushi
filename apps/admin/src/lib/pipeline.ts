@@ -65,6 +65,12 @@ export interface PipelineGroup {
   /** The setting that holds the group; `hint` says what it needs. */
   settings: { label: string; to: string; hint?: string } | null
   items: PipelineItem[]
+  /**
+   * Every item's time in its stage as [0–3 d, 3–7 d, 7–30 d, 30 d+], counted on the server
+   * before the item list is cut (2026-11-18). Absent on an older server and on some groups:
+   * lib/pipelineSignals.ts buckets the listed items instead.
+   */
+  ages?: [number, number, number, number]
 }
 
 export interface PipelineStage {
@@ -105,8 +111,103 @@ export interface DispatcherStatus {
   problem: string | null
 }
 
+/** What each stage means, in plain words, under its name (2026-11-16: "Fix PR", "CI" and "Release train" said nothing to a non-developer). */
+export const STAGE_PLAIN: Record<PipelineStageId, string> = {
+  reported: 'New bug reports',
+  triaged: 'Understood; waiting for a fix',
+  pr: 'An agent wrote a fix',
+  review: 'An AI checked the fix',
+  ci: 'Your tests run on the fix',
+  train: 'Waiting to merge with other fixes',
+  merged: 'Merged into your code',
+  deployed: 'Live for your users',
+}
+
+function countOf(stages: readonly PipelineStage[], id: PipelineStageId): number {
+  return stages.find((s) => s.id === id)?.count ?? 0
+}
+
+/**
+ * The pace in one or two sentences: how many fixes merge a day, how long the bugs
+ * waiting for a fix take at that pace, and who started fixes in the last day.
+ * Null with no stages. The owner (2026-11-16): "I don't know what is the bottleneck
+ * or what is running well, and what I can estimate".
+ * @internal Exported for tests.
+ */
+export function pipelinePace(stages: readonly PipelineStage[], dispatchers: readonly DispatcherStatus[] | null): string | null {
+  if (stages.length === 0) return null
+  const merged7 = countOf(stages, 'merged') + countOf(stages, 'deployed')
+  const waiting = countOf(stages, 'triaged')
+  const perDay = merged7 / 7
+  const parts: string[] = []
+  const rate = merged7 === 0 ? 'no fix merged in the last 7 days' : `${merged7} ${merged7 === 1 ? 'fix' : 'fixes'} merged in the last 7 days (${perDay >= 1 ? `about ${Math.round(perDay)} a day` : `about one every ${Math.round(1 / perDay)} days`})`
+  if (waiting > 0) {
+    if (perDay > 0) {
+      const days = waiting / perDay
+      const span = days < 14 ? `${Math.max(1, Math.round(days))} days` : days < 120 ? `${Math.round(days / 7)} weeks` : `${Math.round(days / 30)} months`
+      parts.push(`Pace: ${rate}. ${waiting} ${waiting === 1 ? 'bug waits' : 'bugs wait'} for a fix, about ${span} of work at this pace.`)
+    } else {
+      parts.push(`Pace: ${rate}, while ${waiting} ${waiting === 1 ? 'bug waits' : 'bugs wait'} for a fix.`)
+    }
+  } else {
+    parts.push(`Pace: ${rate}. No bug is waiting for a fix.`)
+  }
+  if (dispatchers && dispatchers.length > 0) {
+    const local = dispatchers.reduce((n, d) => n + d.local.runs24h, 0)
+    const server = dispatchers.reduce((n, d) => n + d.server.dispatches24h, 0)
+    const none = dispatchers.filter((d) => d.autofixOn && d.server.dispatches24h === 0 && d.local.runs24h === 0).map((d) => d.name)
+    const who =
+      local + server === 0
+        ? 'No fix was started in the last 24 hours.'
+        : `Fixes started in the last 24 hours: ${local + server}${server === 0 ? ', all by your own worker' : local === 0 ? ', all by Mushi Mushi’s cloud agents' : ` (${local} by your own worker, ${server} by cloud agents)`}.`
+    const quiet = none.length ? ` None for ${none.length > 3 ? `${none.slice(0, 3).join(', ')} and ${none.length - 3} more` : none.join(none.length === 2 ? ' and ' : ', ')}.` : ''
+    parts.push(who + quiet)
+  }
+  return parts.join(' ')
+}
+
+/** The pace as figures for a short labelled row (2026-11-18): the same numbers as `pipelinePace`. */
+export interface PaceFigures {
+  merged7: number
+  /** "about 5 a day", "about one every 3 days", or null when nothing merged. */
+  rate: string | null
+  waiting: number
+  /** How long the waiting bugs take at this pace ("5 months"); null with nothing merged or nothing waiting. */
+  clears: string | null
+  /** Fixes started in the last 24 h; null when the server sent no dispatchers. */
+  started24h: number | null
+  /** Who started them, when any: "all by your own worker", "3 by your worker, 2 by cloud agents". */
+  startedBy: string | null
+  /** Apps with auto-fix on that started nothing in 24 h. */
+  quietApps: string[]
+}
+
+export function pipelinePaceFigures(stages: readonly PipelineStage[], dispatchers: readonly DispatcherStatus[] | null): PaceFigures | null {
+  if (stages.length === 0) return null
+  const merged7 = countOf(stages, 'merged') + countOf(stages, 'deployed')
+  const waiting = countOf(stages, 'triaged')
+  const perDay = merged7 / 7
+  const rate = merged7 === 0 ? null : perDay >= 1 ? `about ${Math.round(perDay)} a day` : `about one every ${Math.round(1 / perDay)} days`
+  let clears: string | null = null
+  if (waiting > 0 && perDay > 0) {
+    const days = waiting / perDay
+    clears = days < 14 ? `${Math.max(1, Math.round(days))} days` : days < 120 ? `${Math.round(days / 7)} weeks` : `${Math.round(days / 30)} months`
+  }
+  let started24h: number | null = null
+  let startedBy: string | null = null
+  let quietApps: string[] = []
+  if (dispatchers && dispatchers.length > 0) {
+    const local = dispatchers.reduce((n, d) => n + d.local.runs24h, 0)
+    const server = dispatchers.reduce((n, d) => n + d.server.dispatches24h, 0)
+    started24h = local + server
+    if (started24h > 0) startedBy = server === 0 ? 'all by your own worker' : local === 0 ? 'all by cloud agents' : `${local} by your worker, ${server} by cloud agents`
+    quietApps = dispatchers.filter((d) => d.autofixOn && d.server.dispatches24h === 0 && d.local.runs24h === 0).map((d) => d.name)
+  }
+  return { merged7, rate, waiting, clears, started24h, startedBy, quietApps }
+}
+
 /** "server 0 · local 6 · nobody 2": apps by who opened a fix in the last 24 h. */
-export function openerSummary(dispatchers: DispatcherStatus[]): { server: number; local: number; nobody: number } {
+export function openerSummary(dispatchers: DispatcherStatus[]): { server: number; local: number; nobody: number; total: number } {
   let server = 0
   let local = 0
   let nobody = 0
@@ -117,7 +218,24 @@ export function openerSummary(dispatchers: DispatcherStatus[]): { server: number
     if (l) local++
     if (!s && !l) nobody++
   }
-  return { server, local, nobody }
+  return { server, local, nobody, total: dispatchers.length }
+}
+
+/**
+ * The same apps split so the parts add up to the whole (an app can open fixes
+ * both ways), for the "Who opens fixes" stacked bar.
+ */
+export function openerSplit(dispatchers: DispatcherStatus[]): { serverOnly: number; localOnly: number; both: number; nobody: number } {
+  const out = { serverOnly: 0, localOnly: 0, both: 0, nobody: 0 }
+  for (const d of dispatchers) {
+    const s = d.server.dispatches24h > 0
+    const l = d.local.runs24h > 0
+    if (s && l) out.both++
+    else if (s) out.serverOnly++
+    else if (l) out.localOnly++
+    else out.nobody++
+  }
+  return out
 }
 
 export interface PipelineData {
@@ -146,23 +264,27 @@ interface ActionMeta {
   needsConfirm: boolean
   /** A reason is kept as a team note on the report. */
   needsReason: boolean
-  variant: 'primary' | 'ghost' | 'danger' | 'success'
+  /**
+   * The button's look. Never `success`: a green-filled "Requeue" or "Send to CI repair" read as a
+   * passed state, not an action (round-2 review, 2026-11-18). Ink primary or outline only.
+   */
+  variant: 'primary' | 'ghost' | 'danger'
 }
 
 export const ACTION_META: Record<PipelineAction, ActionMeta> = {
   ci_repair: {
     label: 'Send to CI repair',
-    confirm: 'Sends each PR to an agent that makes its CI green without weakening tests: Mushi’s cloud agent when review follow-ups can run, otherwise your local mushi work lanes on their next mushi work --followups run.',
+    confirm: 'Sends each PR to an agent that makes its CI green without weakening tests: Mushi Mushi’s cloud agent when review follow-ups can run, otherwise your local mushi work lanes on their next mushi work --followups run.',
     needsConfirm: true,
     needsReason: false,
-    variant: 'success',
+    variant: 'ghost',
   },
   followup: {
     label: 'Send to follow-up',
-    confirm: 'Sends each PR’s Opus findings to an agent that fixes them on the same branch: Mushi’s cloud agent when review follow-ups can run, otherwise your local mushi work lanes on their next mushi work --followups run.',
+    confirm: 'Sends each PR’s Opus findings to an agent that fixes them on the same branch: Mushi Mushi’s cloud agent when review follow-ups can run, otherwise your local mushi work lanes on their next mushi work --followups run.',
     needsConfirm: true,
     needsReason: false,
-    variant: 'success',
+    variant: 'ghost',
   },
   rerun_ci: {
     label: 'Re-run CI',
@@ -197,7 +319,7 @@ export const ACTION_META: Record<PipelineAction, ActionMeta> = {
     confirm: 'Takes each draft out of draft on GitHub, so its CI runs.',
     needsConfirm: true,
     needsReason: false,
-    variant: 'success',
+    variant: 'ghost',
   },
   queue_merge: {
     label: 'Queue to merge',
@@ -232,7 +354,7 @@ export const ACTION_META: Record<PipelineAction, ActionMeta> = {
     confirm: 'Puts each report back at the front of the local worker lane that ran it. The machine stopped it, not the code, so it never counts against the report.',
     needsConfirm: true,
     needsReason: false,
-    variant: 'success',
+    variant: 'ghost',
   },
   close: {
     label: 'Close PR',
@@ -368,14 +490,6 @@ export function ageLabel(iso: string | null, now: number = Date.now()): string {
   const h = Math.round(m / 60)
   if (h < 48) return `${h} h`
   return `${Math.round(h / 24)} d`
-}
-
-export const TRAIN_STATE_TONE: Record<string, 'ok' | 'danger' | 'accent' | 'neutral'> = {
-  merged: 'ok',
-  failed: 'danger',
-  building: 'accent',
-  testing: 'accent',
-  abandoned: 'neutral',
 }
 
 /** One fix's place in the pipeline (GET /v1/admin/pipeline/fix/:id): its group, the group's actions and what the server would refuse. */

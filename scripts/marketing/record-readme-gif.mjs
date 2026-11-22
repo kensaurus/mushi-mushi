@@ -36,6 +36,9 @@ loadEnv()
 const args = parseArgs()
 
 const URL = args.url || 'https://kensaur.us/mushi-mushi/'
+// Egress guard (E246 spike, 2026-11-13): live kensaur.us bytes are CloudFront egress. Audio and GIFs
+// never show in the recording, so they are never downloaded. MP4 stays: the landing shows a walkthrough.
+const SKIP_MEDIA = /\.(mp3|gif|wav|m4a)(?:[?#]|$)/i
 const OUT_DIR = resolve(REPO_ROOT, 'docs/screenshots')
 const RAW_DIR = resolve(REPO_ROOT, '.cache', 'gif-record')
 
@@ -66,6 +69,7 @@ const context = await browser.newContext({
   // Reduced motion off so the canvas animations show up in the recording.
   reducedMotion: 'no-preference',
 })
+await context.route(SKIP_MEDIA, (route) => route.abort())
 const page = await context.newPage()
 
 async function pause(ms) {

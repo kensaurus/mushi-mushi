@@ -116,7 +116,7 @@ describe('switching the Cursor account from the console', () => {
     await s.cl.settle()
     const r = s.cl.report()!
     expect(r.state).toBe('wrong_account')
-    expect(r.detail).toMatch(/Signed in as s\*\*\*@g\*\*\*\.com, not k\*\*\*@g\*\*\*\.com/)
+    expect(r.detail).toMatch(/Signed in as w\*\*\*@e\*\*\*\.com, not k\*\*\*@g\*\*\*\.com/)
     expect(s.signedIn).toEqual([])
   })
 

@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Plant Shop</title>
+<!--
+  A tiny made-up shop with one visible bug (the cart total reads $NaN), used
+  only to film the reporter's side of Mushi Mushi for the docs. The recorder
+  serves it at https://plant-shop.example/ and answers the SDK's requests
+  itself, so nothing reaches a real Mushi Mushi project.
+-->
+<style>
+  :root { color-scheme: light; --ink: #1d2a22; --muted: #5d6b62; --line: #dfe6e1; --leaf: #2f7d4f; --bg: #f6f8f4; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif; color: var(--ink); background: var(--bg); }
+  header { display: flex; align-items: center; justify-content: space-between; padding: 18px 40px; background: #fff; border-bottom: 1px solid var(--line); }
+  .brand { font-weight: 800; font-size: 20px; letter-spacing: -0.02em; }
+  .brand span { color: var(--leaf); }
+  nav a { margin-left: 22px; color: var(--muted); text-decoration: none; font-weight: 500; }
+  main { display: grid; grid-template-columns: 340px 1fr; gap: 32px; padding: 32px 40px; max-width: 1180px; margin: 0 auto; }
+  h1 { font-size: 26px; margin: 0 0 16px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+  .pic { height: 120px; border-radius: 10px; display: grid; place-items: center; font-size: 52px; }
+  .card h3 { margin: 10px 0 2px; font-size: 16px; }
+  .card p { margin: 0; color: var(--muted); font-size: 14px; }
+  .cart { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 20px; align-self: start; }
+  .cart h2 { margin: 0 0 12px; font-size: 18px; }
+  .row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .qty { display: inline-flex; align-items: center; gap: 8px; }
+  .qty button { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--line); background: #fff; font-size: 16px; cursor: pointer; }
+  .total { display: flex; justify-content: space-between; font-weight: 800; font-size: 20px; padding: 16px 0 6px; }
+  .total output.broken { color: #b42318; }
+  .cart { grid-column: 1; grid-row: 1; }
+  main > section { grid-column: 2; grid-row: 1; }
+  .checkout { width: 100%; margin-top: 12px; padding: 12px; border: 0; border-radius: 10px; background: var(--leaf); color: #fff; font-weight: 700; font-size: 16px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">Plant<span>Shop</span></div>
+  <nav><a href="#">Plants</a><a href="#">Pots</a><a href="#">Care</a><a href="#">Cart (2)</a></nav>
+</header>
+<main>
+  <section>
+    <h1>Easy-care plants</h1>
+    <div class="grid">
+      <div class="card"><div class="pic" style="background:#e3f1e7">🪴</div><h3>Monstera</h3><p>$24.00</p></div>
+      <div class="card"><div class="pic" style="background:#f1ede3">🌵</div><h3>Golden cactus</h3><p>$12.00</p></div>
+      <div class="card"><div class="pic" style="background:#e3ecf1">🌿</div><h3>Pothos</h3><p>$16.00</p></div>
+      <div class="card"><div class="pic" style="background:#efe3f1">🌸</div><h3>Orchid</h3><p>$32.00</p></div>
+      <div class="card"><div class="pic" style="background:#e6f1e3">🍃</div><h3>Snake plant</h3><p>$18.00</p></div>
+      <div class="card"><div class="pic" style="background:#f1e6e3">🌱</div><h3>Seedling kit</h3><p>$9.00</p></div>
+    </div>
+  </section>
+  <aside class="cart" id="cart">
+    <h2>Your cart</h2>
+    <div class="row"><span>Monstera</span><span class="qty"><button id="minus" aria-label="One fewer">−</button><b id="q">1</b><button id="plus" aria-label="One more">+</button></span></div>
+    <div class="row"><span>Golden cactus</span><span>$12.00</span></div>
+    <div class="total"><span>Total</span><output id="total">$36.00</output></div>
+    <button class="checkout" id="checkout">Check out</button>
+  </aside>
+</main>
+<script>
+  // The bug on purpose: the quantity is read as text, so "1" + 1 = "11", and
+  // the price maths then turns the total into NaN.
+  let q = '1'
+  const render = () => {
+    document.getElementById('q').textContent = q
+    const total = Number(q) * 24 + 12
+    const ok = Number.isFinite(total) && q.length < 2
+    const out = document.getElementById('total')
+    out.textContent = '$' + (ok ? total.toFixed(2) : 'NaN')
+    out.classList.toggle('broken', !ok)
+  }
+  document.getElementById('plus').onclick = () => { q = q + 1; render() }
+  document.getElementById('minus').onclick = () => { q = String(Math.max(1, Number(q) - 1)); render() }
+</script>
+<script async
+  src="https://cdn.jsdelivr.net/npm/@mushi-mushi/web@1/dist/mushi.loader.global.js"
+  data-project="00000000-0000-4000-8000-000000000000"
+  data-key="mushi_demo_key"
+  data-endpoint="https://api.plant-shop.example"
+  data-theme="light"
+></script>
+</body>
+</html>

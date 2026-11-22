@@ -1,5 +1,13 @@
 # GTM plan — 10 paying customers by 2026-11-30
 
+> **Retired 2026-11-11 (ADR 0056 §6).** The "10 paying customers by
+> 2026-11-30" target is retired. It contradicted free-first, and on 2026-11-11
+> there were 0 paid and 0 real outside activations. The concierge play is
+> dropped too. The north star stays activated external projects per week, and
+> the leading indicator is `sdk_seen_live`. The plan that replaces this one is
+> [`docs/marketing/launch-2026-11/PLAN.md`](marketing/launch-2026-11/PLAN.md).
+> This file is kept as written, for the record.
+
 _Plan-gtm output. Nothing is posted, sent or changed on a public surface until
 the owner approves each phase. Written 2026-10-28; numbers queried that day._
 

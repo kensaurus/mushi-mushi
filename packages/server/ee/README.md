@@ -18,7 +18,7 @@ Mushi Mushi is **open-core**, the same model as Supabase, Grafana, and Sentry:
 - **Core (AGPLv3).** Everything under `packages/server`, `packages/agents`,
   and `packages/verify` that is **not** in an `ee/` directory. Self-host it, fork
   it, modify it for your own org. Modified SaaS → publish changes (§13) or a
-  [commercial license](../../../COMMERCIAL-LICENSE.md). The cloud at
+  [commercial license](../../../docs/legal/COMMERCIAL-LICENSE.md). The cloud at
   `kensaur.us/mushi-mushi/` runs this exact core.
 - **Enterprise Edition (commercial).** The code in this `ee/` directory. It is
   **source-available** (read, audit, modify, test, contribute) but **Production
@@ -32,7 +32,7 @@ Mushi Mushi is **open-core**, the same model as Supabase, Grafana, and Sentry:
 
 ## What is Enterprise Edition
 
-These are the **Bucket C** features from [`/VISION.md`](../../../VISION.md) — the
+These are the **Bucket C** features from [`docs/VISION.md`](../../../docs/VISION.md) — the
 ones an enterprise buyer needs and a solo vibe-coder does not. They are **paid in
 production**, free to read and to run for development/evaluation:
 

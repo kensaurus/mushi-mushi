@@ -204,7 +204,7 @@ export function UsersPage() {
         title="All users"
 
         helpTitle={copy?.help?.title ?? 'About all users'}
-        helpWhatIsIt={copy?.help?.whatIsIt ?? 'A full list of every Mushi account — visible only to operators — showing signup date, plan, and recent activity.'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'A full list of every Mushi Mushi account — visible only to operators — showing signup date, plan, and recent activity.'}
         helpUseCases={copy?.help?.useCases ?? [
           'Look up a specific user to check their plan or recent activity',
           'See how many new users signed up this week',
@@ -429,27 +429,27 @@ function UserDetailDrawer({ userId, onClose }: { userId: string; onClose: () => 
             <>
               <Card className="space-y-3">
                 <div>
-                  <div className="text-2xs text-fg-muted uppercase tracking-wide">Email</div>
+                  <div className="text-2xs text-fg-secondary font-semibold">Email</div>
                   <div className="text-base text-fg">{detail.user.email ?? '—'}</div>
                 </div>
                 <IdField label="User ID" value={detail.user.user_id} full tone="id" />
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <div className="text-2xs text-fg-muted uppercase tracking-wide">Signed up</div>
+                    <div className="text-2xs text-fg-secondary font-semibold">Signed up</div>
                     <div className="text-sm text-fg"><RelativeTime value={detail.user.signed_up_at} /></div>
                   </div>
                   <div>
-                    <div className="text-2xs text-fg-muted uppercase tracking-wide">Last sign-in</div>
+                    <div className="text-2xs text-fg-secondary font-semibold">Last sign-in</div>
                     <div className="text-sm text-fg">
                       {detail.user.last_sign_in_at ? <RelativeTime value={detail.user.last_sign_in_at} /> : '—'}
                     </div>
                   </div>
                   <div>
-                    <div className="text-2xs text-fg-muted uppercase tracking-wide">Current plan</div>
+                    <div className="text-2xs text-fg-secondary font-semibold">Current plan</div>
                     <div className="text-sm text-fg">{planBadgeTone(detail.user.current_plan).label}</div>
                   </div>
                   <div>
-                    <div className="text-2xs text-fg-muted uppercase tracking-wide">Signup plan</div>
+                    <div className="text-2xs text-fg-secondary font-semibold">Signup plan</div>
                     <div className="text-sm text-fg">{detail.user.signup_plan ?? '—'}</div>
                   </div>
                 </div>

@@ -113,10 +113,10 @@ export function EdgeInspector({ edge, stages, onClose }: EdgeInspectorProps) {
         <span className="text-fg-muted text-3xs tabular-nums">{targetMeta.letter}</span>
         <span className="ml-auto inline-flex items-center gap-1">
           {flowing && (
-            <span className="text-3xs uppercase tracking-wider text-brand font-medium">Flowing</span>
+            <span className="text-3xs text-brand font-semibold">Flowing</span>
           )}
           {failing && (
-            <span className="text-3xs uppercase tracking-wider text-danger font-medium">Stalled</span>
+            <span className="text-3xs text-danger font-semibold">Stalled</span>
           )}
           <button
             type="button"

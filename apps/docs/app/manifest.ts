@@ -9,15 +9,16 @@ export const dynamic = 'force-static'
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: 'Mushi Mushi',
-    short_name: 'Mushi',
+    short_name: 'Mushi Mushi',
     description: MUSHI_TAGLINE_V2.oneLiner,
     start_url: '/mushi-mushi/',
     display: 'browser',
     background_color: '#f8f4ed',
     theme_color: '#0e0d0b',
     icons: [
-      { src: '/mushi-mushi/docs/icon-192.png', sizes: '192x192', type: 'image/png' },
-      { src: '/mushi-mushi/docs/icon-512.png', sizes: '512x512', type: 'image/png' },
+      // ?v= busts the year-long cache the old icon was served with (new mark, 2026-11-17).
+      { src: '/mushi-mushi/docs/icon-192.png?v=20261117', sizes: '192x192', type: 'image/png' },
+      { src: '/mushi-mushi/docs/icon-512.png?v=20261117', sizes: '512x512', type: 'image/png' },
     ],
   }
 }

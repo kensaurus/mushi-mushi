@@ -19,7 +19,7 @@ export function ComparisonTable({ foil, rows }: ComparisonTableProps) {
         <tr>
           <th scope="col">Question</th>
           <th scope="col">{foil}</th>
-          <th scope="col">Mushi</th>
+          <th scope="col">Mushi Mushi</th>
         </tr>
       </thead>
       <tbody>

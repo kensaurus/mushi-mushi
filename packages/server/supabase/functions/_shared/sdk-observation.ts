@@ -48,7 +48,7 @@ export function isValidSdkObservation(
 ): boolean {
   if (!sdkPackage || !sdkVersion) return false
   if (sdkVersion === SDK_SEED_VERSION) return false
-  if (!sdkPackage.startsWith('@mushi-mushi/')) return false
+  if (sdkPackage !== 'mushi-mushi' && !sdkPackage.startsWith('@mushi-mushi/')) return false
   if (!UPGRADEABLE_SET.has(sdkPackage)) return false
   return SAFE_SEMVER.test(sdkVersion)
 }

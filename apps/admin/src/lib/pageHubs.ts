@@ -44,9 +44,9 @@ export const HOME_HUB: PageHub = {
 
 export const HEALTH_HUB: PageHub = {
   path: '/health',
-  title: 'Mushi health view',
+  title: 'Mushi Mushi health view',
   views: [
-    { id: 'integrations', label: 'Mushi’s AI & jobs', legacyPath: null },
+    { id: 'integrations', label: 'Mushi Mushi’s AI & jobs', legacyPath: null },
     { id: 'code', label: 'Code size', legacyPath: '/code-health' },
     { id: 'schema', label: 'Schema changes', legacyPath: '/drift' },
     { id: 'spikes', label: 'Unusual spikes', legacyPath: '/anomalies' },
@@ -108,6 +108,19 @@ export function hubRedirectTarget(hub: PageHub, viewId: string, search: string):
   else params.set('view', viewId)
   const qs = params.toString()
   return qs ? `${hub.path}?${qs}` : hub.path
+}
+
+/**
+ * The label of the hub view a URL opens, when it is not the hub's first view
+ * ("Billing" for `/team?view=billing`), else null. The browser tab said just
+ * "Team" on all seven Team views (console audit 2026-11-21).
+ */
+export function hubViewLabel(pathname: string, search: string): string | null {
+  const hub = PAGE_HUBS.find((h) => h.path === pathname)
+  if (!hub) return null
+  const raw = new URLSearchParams(search).get('view')
+  const view = hub.views.find((v) => v.id === raw)
+  return view && view.id !== hub.views[0].id ? view.label : null
 }
 
 /** Every retired route with its hub and view, for the router and the tests. */

@@ -9,7 +9,7 @@ description: Connect any agent orchestrator to Mushi Mushi. MCP, A2A, REST and A
 
 # Connecting your orchestrator
 
-Mushi exposes four inbound surfaces and one outbound channel so any
+Mushi Mushi exposes four inbound surfaces and one outbound channel so any
 modern agent orchestrator — Cursor, Claude Code / Claude Desktop /
 Claude Agent SDK, OpenAI Agents SDK, ChatGPT Agent, LangGraph, CrewAI,
 AutoGen, Mastra, A2A v1.0.0, or your own — can plug in without forking
@@ -18,7 +18,7 @@ flagged.
 
 ## Discovery
 
-Every Mushi backend serves the canonical discovery doc at:
+Every Mushi Mushi backend serves the canonical discovery doc at:
 
 ```
 GET /.well-known/agent-card
@@ -33,16 +33,16 @@ at `/v1/agent-card` for proxies that strip dotfiles.
 
 ```mermaid
 flowchart TB
-  subgraph Inbound["Inbound to Mushi"]
-    MCP["MCP — both stdio AND Streamable HTTP<br/>130 tools / 8 resources / 4 prompts"]
+  subgraph Inbound["Inbound to Mushi Mushi"]
+    MCP["MCP — both stdio AND Streamable HTTP<br/>133 tools / 8 resources / 4 prompts"]
     REST["REST /v1/admin/*<br/>OpenAPI 3.1 at /openapi.json<br/>adminOrApiKey({ scope: 'mcp:read|write' })"]
     A2A["A2A v1.0.0 /v1/a2a/tasks<br/>create / get / cancel / SSE subscribe"]
     AGUI["AG-UI v0.4 SSE<br/>fix dispatch stream<br/>API key OR JWT"]
   end
-  subgraph Outbound["Outbound from Mushi"]
+  subgraph Outbound["Outbound from Mushi Mushi"]
     Hooks["HMAC-signed webhooks<br/>10 event types<br/>plugin SDK helpers"]
   end
-  subgraph Native["Embed inside Mushi"]
+  subgraph Native["Embed inside Mushi Mushi"]
     FA["FixAgent + SandboxProvider<br/>open contract — JSON Schemas<br/>at /v1/schemas/*"]
   end
   Orch["Your orchestrator"] -->|"call tools"| MCP
@@ -54,10 +54,10 @@ flowchart TB
 
 ### MCP — stdio (local) AND Streamable HTTP (hosted)
 
-Mushi ships BOTH MCP transports so you can pick the one that matches
+Mushi Mushi ships BOTH MCP transports so you can pick the one that matches
 your client:
 
-- **stdio** — `npx -y @mushi-mushi/mcp@0.30.2`. Default for editor
+- **stdio** — `npx -y @mushi-mushi/mcp@0.31.8`. Default for editor
   integrations (Cursor / Claude Desktop / Claude Code / Continue /
   Cline / Zed / Windsurf). Your client launches the server as a
   subprocess and pipes JSON-RPC over stdio.
@@ -82,7 +82,7 @@ your client:
 }
 ```
 
-The full tool catalog (130 tools, 8 resources, 4 prompts) lives in
+The full tool catalog (133 tools, 8 resources, 4 prompts) lives in
 [`@mushi-mushi/mcp`](/sdks/mcp) — see also the generated catalog at
 [`MCP tools reference`](/sdks/mcp-tools). Tools that move money
 (`dispatch_fix`, `transition_status`, `submit_fix_result`, `trigger_judge`,
@@ -93,11 +93,11 @@ The full tool catalog (130 tools, 8 resources, 4 prompts) lives in
 
 Google's Agent2Agent v1.0.0 spec (March 2026) requires `tasks/{id}` GET
 
-- `tasks/{id}:cancel` + `tasks/{id}:subscribe`. Mushi implements all of
+- `tasks/{id}:cancel` + `tasks/{id}:subscribe`. Mushi Mushi implements all of
   them on top of the existing `fix_dispatch_jobs` table — every A2A Task
   IS a fix dispatch job, with status names translated at the edge:
 
-| Mushi `fix_dispatch_jobs.status` | A2A `Task.state`                          |
+| Mushi Mushi `fix_dispatch_jobs.status` | A2A `Task.state`                          |
 | -------------------------------- | ----------------------------------------- |
 | `queued`                         | `submitted`                               |
 | `running`                        | `working`                                 |
@@ -197,7 +197,7 @@ orchestrators actually use:
 - `POST /v1/admin/auth/token` (RFC 6749 refresh + introspection)
 
 Internal admin-UI-only endpoints (settings forms, billing, super-admin
-diagnostics) are deliberately excluded — they're shaped for the Mushi
+diagnostics) are deliberately excluded — they're shaped for the Mushi Mushi
 admin app, not for general-purpose API clients.
 
 ### AG-UI v0.4 — fix dispatch SSE
@@ -232,7 +232,7 @@ Browse the full index at `GET /v1/schemas` for shape `{ schemas: [{ name, url, $
 ## Open `SandboxProvider` contract
 
 `SandboxProvider['name']` is now an open
-`KnownSandboxProvider | (string & {})` union. First-party Mushi ships
+`KnownSandboxProvider | (string & {})` union. First-party Mushi Mushi ships
 `local-noop` / `e2b` / `modal` / `cloudflare`; third parties (Daytona,
 Sealos DevBox, internal corp envs) register at runtime:
 
@@ -258,14 +258,14 @@ helpful message for unregistered ids.
 
 | Orchestrator                                        | Recommended path                 | Why                                                                                                                                                                                                              |
 | --------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 130 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
+| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 133 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
 | **Claude Agent SDK / Claude Desktop / Claude Code** | stdio MCP                        | Same path, same surface                                                                                                                                                                                          |
-| **OpenAI Agents SDK** (TS / Python)                 | Streamable HTTP MCP              | Per OpenAI's MCP guide, Streamable HTTP and stdio are preferred over deprecated SSE. Mushi's hosted MCP at `/functions/v1/mcp` fits                                                                              |
+| **OpenAI Agents SDK** (TS / Python)                 | Streamable HTTP MCP              | Per OpenAI's MCP guide, Streamable HTTP and stdio are preferred over deprecated SSE. Mushi Mushi's hosted MCP at `/functions/v1/mcp` fits                                                                              |
 | **ChatGPT Agent**                                   | Streamable HTTP MCP              | Same — no subprocess in the hosted runtime                                                                                                                                                                       |
 | **Mastra**                                          | stdio MCP via `MCPClient`        | Same                                                                                                                                                                                                             |
 | **CrewAI / AutoGen**                                | Outbound webhook + REST callback | CrewAI's strength is multi-agent crews reacting to events. Subscribe to `report.classified` via the plugin SDK pattern; trigger your crew on the event; call `POST /v1/admin/fixes/dispatch` to round-trip a fix |
 | **LangGraph**                                       | REST + AG-UI SSE                 | Use `/v1/admin/*` inside a LangGraph node with API-key auth. AG-UI SSE is no longer JWT-only — subscribe directly with the same key                                                                              |
-| **A2A v1.0.0 agents**                               | A2A `tasks` + agent card         | Discovery via `/.well-known/agent-card`; delegation via `POST /v1/a2a/tasks`. The Mushi agent card advertises the skill catalog and the A2A endpoint URLs                                                        |
+| **A2A v1.0.0 agents**                               | A2A `tasks` + agent card         | Discovery via `/.well-known/agent-card`; delegation via `POST /v1/a2a/tasks`. The Mushi Mushi agent card advertises the skill catalog and the A2A endpoint URLs                                                        |
 
 ## Spec traceability flows out automatically
 
@@ -297,5 +297,5 @@ compose its own prompt around the same contract.
 - [Concepts → Fix drafts & PRs](/concepts/fix-orchestrator) —
   what the worker does between dispatch and PR.
 - [`@mushi-mushi/mcp`](/sdks/mcp) — the MCP server (both transports).
-- [`@mushi-mushi/agents`](https://www.npmjs.com/package/@mushi-mushi/agents)
+- [`@mushi-mushi/agents`](https://github.com/kensaurus/mushi-mushi/tree/master/packages/agents) (source; not published to npm)
   — TypeScript types + `registerSandboxProvider` + JSON Schemas.

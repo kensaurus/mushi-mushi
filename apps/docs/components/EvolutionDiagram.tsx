@@ -10,7 +10,7 @@ import {
 } from './diagram-primitives'
 
 const ARIA =
-  'Mushi closed loop: user reports friction, SDK captures, Mistake DB clusters, Learning rule encoded, PR review inherits genome, Reward loop credits reporter, cycles back to user. Drift and PDCA agents feed findings into Mistake DB.'
+  'Mushi Mushi closed loop: user reports friction, SDK captures, Mistake DB clusters, Learning rule encoded, PR review inherits genome, Reward loop credits reporter, cycles back to user. Drift and PDCA agents feed findings into Mistake DB.'
 
 export function EvolutionDiagram() {
   return (
@@ -26,7 +26,7 @@ export function EvolutionDiagram() {
       >
         <DiagramNode label="End user" sub="feels friction" />
         <DiagramHArrow label="report" />
-        <DiagramNode label="Mushi SDK" sub="shake to report" />
+        <DiagramNode label="Mushi Mushi SDK" sub="shake to report" />
         <DiagramHArrow label="embed" accent />
         <DiagramNode label="Mistake DB" sub="vector cluster" accent />
         <DiagramHArrow label="promote" accent />
@@ -73,7 +73,7 @@ export function EvolutionDiagram() {
         className="not-prose mt-3 flex items-center justify-center gap-1.5 text-center text-xs"
         style={{ color: VIZ.muted }}
       >
-        The Mushi closed loop —
+        The Mushi Mushi closed loop —
         <span
           aria-hidden
           style={{

@@ -2,12 +2,12 @@ import Link from 'next/link'
 import { PRICING_TIERS, PRICING_TIER_CTAS } from '@/lib/public-copy'
 
 /** "Get started" cell — tracked CTA per tier (`cta_click.cta_id = pricing-tier-<id>`). */
-function TierCta({ tierId }: { tierId: string }) {
+function TierCta({ tierId, location = 'pricing-table' }: { tierId: string; location?: string }) {
   const cta = PRICING_TIER_CTAS[tierId]
   if (!cta) return <>—</>
   const tracking = {
     'data-mushi-cta': `pricing-tier-${tierId}`,
-    'data-mushi-location': 'pricing-table',
+    'data-mushi-location': location,
     // plan_selected for the 60-day price test (lib/site-analytics.ts planSelectionFromCta).
     'data-mushi-plan': tierId,
   } as const
@@ -23,6 +23,35 @@ function TierCta({ tierId }: { tierId: string }) {
       {cta.label}
     </Link>
   )
+}
+
+/** The self-serve plans, shown as cards before the full table on /pricing. */
+const CARD_TIER_IDS = ['free', 'indie', 'pro'] as const
+
+/** Plan cards for the top of /pricing: how many apps, how many bugs explained, the price. */
+export function PricingPlanCards() {
+  const tiers = CARD_TIER_IDS.map((id) => PRICING_TIERS.find((t) => t.id === id)).filter(
+    (t): t is (typeof PRICING_TIERS)[number] => t !== undefined,
+  )
+  return (
+    <ul className="not-prose m-0 grid list-none gap-3 p-0 sm:grid-cols-3">
+      {tiers.map((tier) => (
+        <li key={tier.id} className="landing-diagnosis-card">
+          <span className="landing-diagnosis-name">{tier.name}</span>
+          <span className="text-2xl font-semibold">{tier.monthly}</span>
+          <span className="landing-diagnosis-role">{tier.plain}</span>
+          <TierCta tierId={tier.id} location="pricing-cards" />
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/** Self-serve plans first, then Enterprise, then Self-host. */
+const TABLE_ORDER = ['free', 'indie', 'pro', 'enterprise', 'self-host']
+const rank = (id: string) => {
+  const i = TABLE_ORDER.indexOf(id)
+  return i < 0 ? TABLE_ORDER.length : i
 }
 
 /** Full plan table for /pricing — sourced from PRICING_TIERS SSOT. */
@@ -43,7 +72,7 @@ export function PricingTiersTable() {
         </tr>
       </thead>
       <tbody>
-        {PRICING_TIERS.map((tier) => (
+        {[...PRICING_TIERS].sort((a, b) => rank(a.id) - rank(b.id)).map((tier) => (
           <tr key={tier.id}>
             <td>
               <strong>{tier.name}</strong>

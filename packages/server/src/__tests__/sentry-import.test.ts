@@ -384,3 +384,59 @@ describe('sentryAutoImportQuery', () => {
     expect(imp.parseSentryImportRequest({ query: q, limit: imp.SENTRY_IMPORT_MAX }).ok).toBe(true)
   })
 })
+
+describe('platform-outage issues the auto-import skips (2026-11-01 outage)', () => {
+  const OUTAGE = {
+    ...ISSUE,
+    id: '4601',
+    shortId: 'MUSHI-MUSHI-SERVER-3V',
+    title: 'Error: candidate read failed: upstream connect error or disconnect/reset before headers. delayed connect error: 111',
+  }
+  const sentry = { token: 't', orgSlug: 'sakuramoto', projectSlugs: ['glot-it'] }
+
+  function recordingSentry() {
+    const calls: Array<{ method: string; path: string; body: string }> = []
+    const fetchImpl = async (url: string, init?: RequestInit) => {
+      const path = url.replace(api.SENTRY_API_BASE, '')
+      calls.push({ method: init?.method ?? 'GET', path, body: String(init?.body ?? '') })
+      if (path.startsWith('/projects/sakuramoto/glot-it/issues/')) return json([OUTAGE])
+      if (path.startsWith('/organizations/sakuramoto/issues/4601/events/latest/')) return json({ ...EVENT, title: OUTAGE.title })
+      return json({})
+    }
+    return { fetchImpl, calls }
+  }
+
+  it('the poll files no report and archives the issue in Sentry until it escalates', async () => {
+    const state = { links: [] as Row[], inserted: [] as { table: string; row: Row }[] }
+    const { fetchImpl, calls } = recordingSentry()
+    const result = await imp.importSentryIssues(makeDb(state), {
+      projectId: 'p1',
+      request: { limit: 10, intake: 'poll' },
+      sentry,
+      triggerClassification: () => {},
+      fetchImpl,
+    })
+    expect(result.items[0]).toMatchObject({ issueId: '4601', outcome: 'ignored' })
+    expect(state.inserted.filter((i) => i.table === 'reports')).toHaveLength(0)
+    const put = calls.find((c) => c.method === 'PUT')
+    expect(put).toEqual({
+      method: 'PUT',
+      path: '/organizations/sakuramoto/issues/4601/',
+      body: '{"status":"ignored","substatus":"archived_until_escalating"}',
+    })
+    expect(calls.some((c) => c.path === '/organizations/sakuramoto/issues/4601/comments/' && c.body.includes('platform outage'))).toBe(true)
+  })
+
+  it('a hand import never archives anything', async () => {
+    const state = { links: [] as Row[], inserted: [] as { table: string; row: Row }[] }
+    const { fetchImpl, calls } = recordingSentry()
+    await imp.importSentryIssues(makeDb(state), {
+      projectId: 'p1',
+      request: { limit: 10 },
+      sentry,
+      triggerClassification: () => {},
+      fetchImpl,
+    })
+    expect(calls.some((c) => c.method === 'PUT')).toBe(false)
+  })
+})

@@ -203,7 +203,7 @@ export function DispatchFixPreflight({
               const shortName = match?.[1] ?? repoUrl.replace(/^https?:\/\//, '')
               return (
                 <span
-                  className="inline-flex items-center gap-1 rounded-full bg-surface-overlay border border-edge px-1.5 py-0.5 text-2xs text-fg-muted font-mono"
+                  className="inline-flex items-center gap-1 rounded-sm bg-surface-overlay px-1.5 py-px text-2xs text-fg-muted font-mono"
                   title={`PR will land on ${repoUrl}`}
                 >
                   <span aria-hidden="true">📂</span>
@@ -213,7 +213,7 @@ export function DispatchFixPreflight({
             })()}
           </div>
           <p className="text-2xs text-fg-muted leading-relaxed">
-            We&apos;ll queue a Mushi fix-worker that reads your repo, picks the
+            We&apos;ll queue a Mushi Mushi fix-worker that reads your repo, picks the
             file it thinks owns this bug, and drafts a pull request on a new
             feature branch.{' '}
             <span className="text-fg-faint">

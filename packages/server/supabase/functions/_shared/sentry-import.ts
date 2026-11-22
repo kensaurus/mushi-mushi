@@ -23,6 +23,8 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { ingestSentryError, type SentryIngestResult } from './sentry-ingest.ts';
 import {
+  archiveSentryIssue,
+  commentOnSentryIssue,
   getLatestSentryEvent,
   getSentryIssue,
   restEventToWebhookEvent,
@@ -34,6 +36,42 @@ import {
   type SentryRestIssue,
 } from './sentry-api.ts';
 import { extractFramePaths } from './sentry-frames.ts';
+import { log as rootLog } from './logger.ts';
+
+const importLog = rootLog.child('sentry-import');
+
+/**
+ * Archive a Supabase outage error in Sentry once the auto-import has decided
+ * not to file it. Ingest skips these as infrastructure noise, but nothing told
+ * Sentry, so they stayed unresolved there for good (MUSHI-MUSHI-SERVER-29, -3S,
+ * -3T and -3V after the 2026-11-01 outage). Archived until escalating, Sentry
+ * still brings one back if the outage returns. Best-effort: a failure only
+ * means the issue is looked at again on the next poll.
+ */
+async function archiveOutageNoise(
+  sentry: { token: string; orgSlug: string },
+  issueId: string,
+  fetchImpl?: FetchLike,
+): Promise<boolean> {
+  try {
+    await archiveSentryIssue(sentry.token, sentry.orgSlug, issueId, fetchImpl);
+  } catch (err) {
+    importLog.warn('Archiving a platform-outage issue failed', { issueId, err: thrownMessage(err).slice(0, 200) });
+    return false;
+  }
+  try {
+    await commentOnSentryIssue(
+      sentry.token,
+      sentry.orgSlug,
+      issueId,
+      'Archived by Mushi: a platform outage (the database could not be reached), not a bug in the code. Sentry brings it back if it escalates.',
+      fetchImpl,
+    );
+  } catch {
+    // The issue is archived; the comment is only an explanation.
+  }
+  return true;
+}
 
 export const SENTRY_IMPORT_MAX = 10;
 export const SENTRY_IMPORT_DEFAULT_QUERY = 'is:unresolved';
@@ -278,6 +316,9 @@ export async function importSentryIssues(
         triggerClassification: input.triggerClassification,
         intake: request.intake ?? 'import',
       });
+      if (result.reason === 'platform_outage' && request.intake === 'poll') {
+        await archiveOutageNoise(sentry, issueId, fetchImpl);
+      }
       items.push({ input: raw, issueId, shortId, outcome: result.outcome, reportId: result.reportId ?? null });
     } catch (err) {
       items.push({ input: raw, issueId, shortId, outcome: 'error', reportId: null, error: describe(err) });

@@ -6,8 +6,8 @@ Verify that the Mushi MCP server is reachable and all expected tools/resources/p
 
 1. Call `list_projects` — confirm it returns at least one project and shows a valid `name` and `id`.
 2. Call `get_recent_reports { limit: 1 }` — confirm you get a valid response (even if empty).
-3. Call `get_project_context { project_id: "<id from step 1>" }` — confirm preflight and activation fields are present.
-4. Call `get_pipeline_logs { project_id: "<id>", level: "error", limit: 5 }` — confirm the response has an `entries` array.
+3. Call `get_project_context { projectId: "<id from step 1>" }` — confirm preflight and activation fields are present.
+4. Call `get_pipeline_logs { projectId: "<id>", level: "error", limit: 5 }` — confirm the response has an `entries` array.
 5. Report back:
    - ✅ Connected — `{toolCount}` tools available
    - ✅ `list_projects` returned `{N}` project(s)
@@ -19,6 +19,6 @@ Verify that the Mushi MCP server is reachable and all expected tools/resources/p
 ## Troubleshooting
 
 - **UNAUTHENTICATED / 401**: `MUSHI_API_KEY` is missing or invalid. Mint a new `mcp:read` key at your Mushi project settings.
-- **PROJECT_REQUIRED**: Set `MUSHI_PROJECT_ID` in your environment or pass `project_id` explicitly.
+- **PROJECT_REQUIRED**: Set `MUSHI_PROJECT_ID` in your environment or pass `projectId` explicitly.
 - **No tools listed**: The MCP server binary may not be installed. Run `npx @mushi-mushi/mcp` manually to check.
 - **Hosted HTTP 404**: Verify the edge function URL in your `mcp.json` matches your Supabase project URL.

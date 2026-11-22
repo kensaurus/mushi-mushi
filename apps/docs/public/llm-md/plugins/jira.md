@@ -12,16 +12,16 @@ description: Open Jira Cloud issues from Mushi Mushi bug reports and keep their 
 Opens a Jira issue for each Mushi Mushi bug report and keeps it in step as the
 report moves to fixed.
 
-## Setup (Mushi Cloud, no code)
+## Setup (Mushi Mushi Cloud, no code) [#setup-mushi-cloud-no-code]
 
 1. At **id.atlassian.com → Security → API tokens**, create an API token.
-2. In the Mushi console: open the **Integrations** page, find **Jira**, and
+2. In the Mushi Mushi console: open the **Integrations** page, find **Jira**, and
    enter your Jira base URL (e.g. `https://acme.atlassian.net`), the
    Atlassian email that owns the token, the token, and the project key
    (e.g. `BUG`).
 3. Click **Save**, then **Test connection**.
 
-Mushi opens and resolves the Jira issues itself; you do not need the npm package.
+Mushi Mushi opens and resolves the Jira issues itself; you do not need the npm package.
 
 ## Self-hosted plugin
 
@@ -30,7 +30,7 @@ is a library for doing the same from your own server with Jira OAuth 2.0
 (3LO): `buildAuthorizeUrl`, `exchangeCode`, `refreshTokens` and
 `createJiraPluginHandler`. See its README for the code. The console's
 Marketplace has no Jira listing, so you can't install it from the console. On
-a Mushi server you run yourself, add a `plugin_registry` row for it and
+a Mushi Mushi server you run yourself, add a `plugin_registry` row for it and
 install it like any listed plugin.
 
 | Event | Action |

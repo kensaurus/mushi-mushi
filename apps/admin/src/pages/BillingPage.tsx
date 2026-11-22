@@ -56,8 +56,8 @@ import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import {
   Card,
   EmptyState,
+  SegmentedControl,
 } from '../components/ui'
-import { MotionSegmentedControl } from '../components/motion/MotionSegmentedControl'
 import {
   ActionPill,
   ActionPillRow,
@@ -110,6 +110,9 @@ export function BillingPage() {
   )
   const { plan: activePlan } = useActivePlan()
   const membersStats = membersStatsQuery.data ?? EMPTY_MEMBERS_STATS
+  // The one seat limit on the page: the Seats meter and the cards' "Seats"
+  // entitlement both read it (the billing tier omits seat_limit).
+  const seatLimit = membersStats.seatLimit ?? activePlan?.seatLimit ?? null
   const billing = billingQuery.data
   const stats = statsQuery.data ?? EMPTY_BILLING_STATS
   const projects = billing?.projects ?? []
@@ -296,13 +299,13 @@ export function BillingPage() {
         helpTitle={copy?.help?.title ?? 'About Billing'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
-          'Your plan and its usage. A plan sets how many apps you watch and how many plain-English diagnoses a month are included; reports are always captured. Free covers one app, Builder three, Studio ten.'
+          'Your plan and its usage. A plan sets how many apps you watch and how many plain-English diagnoses a month are included; reports are always captured. Free and Builder cover three apps, Studio ten.'
         }
         helpUseCases={
           copy?.help?.useCases ?? [
-            'Move to Builder for a second app, or when this month\'s diagnoses run out',
+            'Move to Builder when this month\'s diagnoses run out, or to Studio for more than three apps',
             'Open the Stripe Billing Portal to update your card, download invoices, or cancel',
-            'Cross-check usage between Mushi (reports/fixes/tokens) and Stripe (line items)',
+            'Cross-check usage between Mushi Mushi (reports/fixes/tokens) and Stripe (line items)',
           ]
         }
         helpHowToUse={
@@ -311,7 +314,7 @@ export function BillingPage() {
         }
       >
         {!ux.hideOverviewChrome && (
-        <SignalChip tone="neutral" className="font-mono">
+        <SignalChip tone="neutral" className="tabular-nums">
           {formatPlanQuotaChip(
             stats.planDisplayName,
             stats.diagnosesLimit,
@@ -349,7 +352,7 @@ export function BillingPage() {
                 isValidating={statsQuery.isValidating}
                 seats={{
                   used: membersStats.seatsUsed,
-                  limit: membersStats.seatLimit ?? activePlan?.seatLimit ?? null,
+                  limit: seatLimit,
                 }}
               />
             ),
@@ -357,14 +360,16 @@ export function BillingPage() {
         ]}
       />
 
-      {(activeTab === 'overview' || activeTab === 'plans') && (
+      {/* Plans only: on the overview the "Seat usage · 3 of 5 seats used"
+          box repeated the Seats meter right above (review 2026-11-18). */}
+      {activeTab === 'plans' && (
         <BillingSeatFaqCallout
-          collapsible={activeTab === 'plans'}
+          collapsible
           planDisplayName={
             membersStats.planDisplayName ?? activePlan?.displayName ?? stats.planDisplayName
           }
           planId={membersStats.planId ?? activePlan?.planId ?? stats.planId}
-          seatLimit={membersStats.seatLimit ?? activePlan?.seatLimit ?? null}
+          seatLimit={seatLimit}
           seatsUsed={membersStats.seatsUsed}
           teamsEnabled={Boolean(activePlan?.featureFlags?.teams)}
           onBillingPage
@@ -372,13 +377,15 @@ export function BillingPage() {
       )}
 
       {!ux.hideTabs && (
-      <MotionSegmentedControl
+      // The same tab strip as the Team views above and AI spend.
+      <SegmentedControl
         value={activeTab}
         onChange={setActiveTab}
         options={tabOptions}
         ariaLabel="Billing sections"
-        trackId="billing-section-tabs"
         size="sm"
+        // The page stack is a flex column, which stretched the strip full width (2026-11-19).
+        className="self-start"
       />
       )}
 
@@ -494,6 +501,11 @@ export function BillingPage() {
             onReload={reloadAll}
             activeProject={activeProject}
             setup={setup}
+            // One source per number: the team meters own the quota, and the
+            // cards' seat entitlement reads the Seats meter's limit.
+            quotaInStrip={!ux.hideBillingSnapshot}
+            seatLimit={seatLimit}
+            seatLimitKnown={membersStatsQuery.data != null}
           />
         )}
 

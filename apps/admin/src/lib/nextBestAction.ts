@@ -131,7 +131,7 @@ export function computeNextAction(setup: NbaSetup, work: NbaWork, pathname: stri
   if (setup.isStepIncomplete('sdk_installed')) {
     return {
       tone: 'plan',
-      title: 'Install the Mushi widget in your app',
+      title: 'Install the Mushi Mushi widget in your app',
       why: 'Without the SDK, end-users have no way to flag bugs.',
       cta: { kind: 'link', to: '/onboarding', label: 'Open install steps' },
     }
@@ -150,7 +150,7 @@ export function computeNextAction(setup: NbaSetup, work: NbaWork, pathname: stri
     return {
       tone: 'do',
       title: `Dispatch a fix on your ${project.report_count} waiting ${plural(project.report_count, 'report', 'reports')}`,
-      why: 'Mushi opens a draft PR with rationale. You review the diff, not the ticket.',
+      why: 'Mushi Mushi opens a draft PR with rationale. You review the diff, not the ticket.',
       cta: { kind: 'link', to: '/reports', label: 'Open Reports' },
     }
   }

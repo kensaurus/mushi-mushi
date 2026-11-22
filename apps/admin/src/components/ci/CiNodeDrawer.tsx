@@ -11,7 +11,8 @@
 import type { ComponentProps, ReactNode } from 'react'
 import { StageDrawer } from '../flow-primitives/StageDrawer'
 import { IconExternalLink } from '../icons'
-import { RelativeTime } from '../ui'
+import { Btn, RelativeTime } from '../ui'
+import { useCiDebug } from './CiJobDebug'
 import type { CiJob, CiOverview } from '../../lib/ciTypes'
 import { ciActivity, formatPercent, formatSeconds, runnerFamily, runnerKey } from '../../lib/ciView'
 import { GITHUB_HOST_ID, GITHUB_RUNNER_ID, GITHUB_RUNNERS_NAME, UNKNOWN_HOST_ID } from './ciMapContext'
@@ -85,7 +86,7 @@ function JobsPanel({
   const finishedToday = today.passed + today.failed + today.infra + today.other
   return (
     <>
-      <DrawerSection title="Performance" hint={`from the ${a.finished} most recent finished jobs Mushi holds`}>
+      <DrawerSection title="Performance" hint={`from the ${a.finished} most recent finished jobs Mushi Mushi holds`}>
         <StatTiles
           tiles={[
             { label: 'Jobs today', value: String(jobsToday ?? finishedToday) },
@@ -95,7 +96,7 @@ function JobsPanel({
           ]}
         />
       </DrawerSection>
-      <DrawerSection title="Last 7 days" hint={a.days.some((d) => !d.covered) ? 'shaded days are older than the jobs Mushi holds' : undefined}>
+      <DrawerSection title="Last 7 days" hint={a.days.some((d) => !d.covered) ? 'shaded days are older than the jobs Mushi Mushi holds' : undefined}>
         <ActivityBars activity={a} />
       </DrawerSection>
       <RecentJobs jobs={jobs} empty={empty} onSelect={onSelect} {...recent} />
@@ -112,7 +113,7 @@ function runnerContent(o: CiOverview, key: string, onSelect: Select) {
     const st = runnerStatus({ busy, status: 'online', runnerKind: 'github_hosted' })
     return {
       title: GITHUB_RUNNERS_NAME,
-      subtitle: 'Machines GitHub starts for each job. Mushi sees their jobs, not their memory or load.',
+      subtitle: 'Machines GitHub starts for each job. Mushi Mushi sees their jobs, not their memory or load.',
       body: (
         <>
           <StatusLine {...st} />
@@ -151,7 +152,7 @@ function runnerContent(o: CiOverview, key: string, onSelect: Select) {
   const peak = jobs.reduce<number | null>((m, j) => (j.memPeakMb == null ? m : Math.max(m ?? 0, j.memPeakMb)), null)
   const lastJob = [...rows.map((r) => r.lastJobAt), ...jobs.map((j) => j.startedAt ?? j.createdAt)].filter((x): x is string => !!x).sort().pop() ?? null
 
-  const where = host ? `On ${host.hostname}` : 'On a machine with no Mushi heartbeat'
+  const where = host ? `On ${host.hostname}` : 'On a machine with no Mushi Mushi heartbeat'
   return {
     title: oneJob ? `${key} · one-job runners` : key,
     subtitle: oneJob ? `${where} · ${members.length} one-job runner${members.length === 1 ? '' : 's'} seen` : where,
@@ -177,7 +178,7 @@ function runnerContent(o: CiOverview, key: string, onSelect: Select) {
             label="Memory now"
             used={hr?.memCurrentMb}
             total={hr?.memMaxMb}
-            note={hr ? (peak != null ? `Biggest job peak: ${mb(peak)}` : undefined) : 'Needs a Mushi heartbeat on this machine'}
+            note={hr ? (peak != null ? `Biggest job peak: ${mb(peak)}` : undefined) : 'Needs a Mushi Mushi heartbeat on this machine'}
           />
           <Facts
             rows={[
@@ -217,7 +218,7 @@ function hostContent(o: CiOverview, key: string, onSelect: Select) {
         <StatusLine
           dot={h.stale ? 'bg-warn' : 'bg-ok'}
           word={h.stale ? 'No heartbeat lately' : 'Reporting'}
-          why={h.stale ? 'The machine may be off, asleep, or its heartbeat timer stopped.' : 'Mushi gets this machine’s memory, load and runner services every few minutes.'}
+          why={h.stale ? 'The machine may be off, asleep, or its heartbeat timer stopped.' : 'Mushi Mushi gets this machine’s memory, load and runner services every few minutes.'}
         />
         <DrawerSection title="Resources" hint={<>heartbeat <RelativeTime value={h.lastHeartbeatAt} /></>}>
           <Gauge label="Memory" used={h.metrics.memUsedMb} total={h.memTotalMb} />
@@ -267,7 +268,7 @@ function hostContent(o: CiOverview, key: string, onSelect: Select) {
   }
 }
 
-function content(o: CiOverview, nodeId: string, onSelect: Select): { title: string; subtitle: string; body: ReactNode } | null {
+function content(o: CiOverview, nodeId: string, onSelect: Select, onDebug?: (jobId: string) => void): { title: string; subtitle: string; body: ReactNode } | null {
   const [kind, ...rest] = nodeId.split(':')
   const key = rest.join(':')
 
@@ -275,7 +276,7 @@ function content(o: CiOverview, nodeId: string, onSelect: Select): { title: stri
     const jobs = o.jobs.filter((j) => j.runnerKind === 'github_hosted')
     return {
       title: 'GitHub-hosted',
-      subtitle: 'Machines GitHub runs for you. Mushi sees their jobs, not their memory or load.',
+      subtitle: 'Machines GitHub runs for you. Mushi Mushi sees their jobs, not their memory or load.',
       body: (
         <>
           <ChipRow items={[{ key: 'r', label: GITHUB_RUNNERS_NAME, nodeId: GITHUB_RUNNER_ID }]} onSelect={onSelect} />
@@ -298,7 +299,7 @@ function content(o: CiOverview, nodeId: string, onSelect: Select): { title: stri
     const families = new Set([...o.runners.map((r) => r.name), ...o.jobs.map((j) => j.runnerName ?? '')].map(runnerFamily).filter((f): f is string => f != null))
     return {
       title: 'Unknown machine',
-      subtitle: 'These runners have not sent a heartbeat, so Mushi cannot see their memory or service state.',
+      subtitle: 'These runners have not sent a heartbeat, so Mushi Mushi cannot see their memory or service state.',
       body: (
         <>
           <p className="text-xs text-fg-secondary">
@@ -382,6 +383,11 @@ function content(o: CiOverview, nodeId: string, onSelect: Select): { title: stri
               onSelect={onSelect}
             />
           </DrawerSection>
+          {onDebug && (j.status !== 'completed' || ['code_failure', 'runner_lost', 'queue_expired', 'cancelled'].includes(j.ciKind)) && (
+            <Btn size="sm" variant="primary" className="mt-3" onClick={() => onDebug(j.id)} data-testid="ci-node-debug">
+              {j.status === 'completed' ? 'Why it failed: log and cause' : 'Inspect: live steps and Cancel'}
+            </Btn>
+          )}
           {j.infraDetail && <p className="mt-3 text-xs text-fg-secondary">{j.infraDetail}</p>}
           {isMushiVerifyJob(j) && <p className="mt-3 text-xs text-fg-secondary">{MUSHI_VERIFY_JOB_NOTE}</p>}
           {j.htmlUrl && (
@@ -398,7 +404,15 @@ function content(o: CiOverview, nodeId: string, onSelect: Select): { title: stri
 }
 
 export function CiNodeDrawer({ overview, nodeId, onClose, onSelect }: Props) {
-  const c = nodeId ? content(overview, nodeId, onSelect) : null
+  const debug = useCiDebug()
+  // The debug drawer replaces this one: two drawers open at once fight over focus.
+  const onDebug = debug
+    ? (jobId: string) => {
+        onClose()
+        debug.open(jobId)
+      }
+    : undefined
+  const c = nodeId ? content(overview, nodeId, onSelect, onDebug) : null
   return (
     <StageDrawer open={c != null} onClose={onClose} title={c?.title ?? ''} subtitle={c?.subtitle}>
       {c?.body}

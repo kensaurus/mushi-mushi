@@ -52,8 +52,8 @@ the auth settings of the live project, so the button never rendered, and
 every one of the nine signups used email and password. I found out by
 reading the live auth config, not from any dashboard.
 
-**The console was not measuring itself.** Mushi's own console is supposed to
-run the Mushi SDK, so that "did the owner open the diagnosis" is a number.
+**The console was not measuring itself.** Mushi Mushi's own console is supposed to
+run the Mushi Mushi SDK, so that "did the owner open the diagnosis" is a number.
 The deployed console had never been given its own SDK key. The build pipeline
 did not pass it. Dogfooding was silently off, and every funnel cell between
 "signed up" and "paid" was blank.
@@ -79,7 +79,7 @@ and the owner opens the diagnosis. Not signups (nine people did that and
 none came back), not stars, not downloads.
 
 **Measured with our own SDK.** The SDK grew a `track()` call and the console
-grew a Users & Funnels page, and Mushi's own landing, docs and console emit
+grew a Users & Funnels page, and Mushi Mushi's own landing, docs and console emit
 events through it. The company funnel is a query now. Zero is a value it
 returns; "unmeasured" is not.
 

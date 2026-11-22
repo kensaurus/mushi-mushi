@@ -26,6 +26,7 @@ export interface BillingStats {
   diagnosesLimit?: number | null
   diagnosesUsagePct?: number | null
   overDiagnosisQuota?: boolean
+  byokUncapped?: boolean
   approachingDiagnosisQuota?: boolean
   fixesAttempted: number
   fixesSucceeded: number
@@ -134,10 +135,13 @@ export interface BillingProject {
   limit_reports: number | null
   over_quota: boolean
   usage_pct?: number | null
+  /** The team's diagnoses this month, every app pooled (a plan is the team's). */
   diagnoses_used?: number | null
   limit_diagnoses?: number | null
   diagnoses_usage_pct?: number | null
   over_diagnosis_quota?: boolean
+  /** ADR 0063: free project on its own AI key — never stopped at the diagnosis cap. */
+  byok_uncapped?: boolean
   spend_cap_usd?: number | null
   alert_email?: string | null
   usage_series?: {

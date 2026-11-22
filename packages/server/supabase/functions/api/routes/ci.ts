@@ -2,6 +2,7 @@
  * ci.ts — CI runners you can see (Plan 022, ADR 0033).
  *
  *   POST /v1/ingest/runner               apiKeyAuth + scope runner:write, 60/min
+ *        (handler in ci-runner-ingest.ts, served by both `api` and `api-ext`)
  *        `mushi runner heartbeat` (kind 'heartbeat') and the runner job hooks
  *        (kind 'job'). Host ids arrive hashed; raw machine ids are refused.
  *        Only a runner:write key: the public SDK key (report:write, shipped in
@@ -35,6 +36,10 @@
  *        (POST /actions/runs/{id}/rerun-failed-jobs). 409 CI_RUNNING while
  *        its CI still runs; 403 GITHUB_ACTIONS_WRITE_MISSING when the token
  *        cannot write Actions. Records a "Re-ran tests" fix event.
+ *   GET  /v1/admin/ci/jobs/:id/debug, POST …/explain, …/rerun, …/cancel
+ *        Debug one job from the console (ci-job-debug.ts): the screened log excerpt, the
+ *        failing step, annotations, a cached plain-English explanation, and run actions keyed
+ *        by the job's row, not by a fix.
  */
 
 import type { Context, Hono, MiddlewareHandler } from 'npm:hono@4'
@@ -42,7 +47,6 @@ import { z } from 'npm:zod@3'
 import { adminOrApiKey, apiKeyAuth, jwtAuth, requireApiKeyScope } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { log } from '../../_shared/logger.ts'
-import { runnerIngestSchema } from '../../_shared/schemas.ts'
 import { mintProjectApiKey } from '../../_shared/api-key-mint.ts'
 import { logAudit } from '../../_shared/audit.ts'
 import { claimTenantRateLimit, logOrgAudit } from '../../_shared/tenant-observability.ts'
@@ -60,20 +64,19 @@ import { liveSyncProjects, type CollectorDeps } from '../../_shared/ci-collector
 import { buildCiOverview, loadCiOverviewRows } from '../../_shared/ci-overview.ts'
 import { ciGithub, listRunsForHeadSha, rerunFailedJobs, RERUN_REFUSED_DEDUPE_PREFIX, type CiGithub } from '../../_shared/ci-jobs.ts'
 import { callerCanAccessProject, callerProjectIds, jsonError } from '../shared.ts'
+import { registerRunnerIngestRoute } from './ci-runner-ingest.ts'
+import { defaultCiJobDebugDeps, registerCiJobDebugRoutes, type CiJobDebugDeps } from './ci-job-debug.ts'
 import { denyViewerWrite } from '../viewer-gate.ts'
 import type { Variables } from '../types.ts'
 
 const clog = log.child('ci-routes')
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-export const RUNNER_INGEST_PER_MINUTE = 60
+export { RUNNER_INGEST_PER_MINUTE } from './ci-runner-ingest.ts'
 export const CI_RERUNS_PER_HOUR = 6
 export const RUNNER_KEY_MINTS_PER_HOUR = 10
 /** The only scope a runner key carries. */
 export const RUNNER_KEY_SCOPES = ['runner:write'] as const
-/** A job sample may be at most this far in the future (clock skew) or the past. */
-const SAMPLE_FUTURE_MS = 10 * 60_000
-const SAMPLE_PAST_MS = 7 * 24 * 60 * 60_000
 const RERUN_CONCLUSIONS = new Set(['failure', 'cancelled', 'timed_out', 'startup_failure'])
 
 type Db = ReturnType<typeof getServiceClient>
@@ -99,6 +102,8 @@ export interface CiRouteDeps {
   logOrgAudit: typeof logOrgAudit
   fetchImpl?: CiGithub['fetchImpl']
   now: () => Date
+  /** The job debug panel's GitHub token, model call and usage log (ci-job-debug.ts); defaults when unset. */
+  debug?: Partial<CiJobDebugDeps>
 }
 
 export const defaultCiRouteDeps: CiRouteDeps = {
@@ -125,98 +130,15 @@ export const defaultCiRouteDeps: CiRouteDeps = {
 }
 
 export function registerCiRoutes(app: Hono<{ Variables: Variables }>, deps: CiRouteDeps = defaultCiRouteDeps): void {
-  app.post('/v1/ingest/runner', deps.apiKeyAuth, deps.requireRunnerScope, (c) => ingestRunner(c, deps))
+  // The handler lives in ci-runner-ingest.ts, which `api` also imports (one edge invocation per push).
+  registerRunnerIngestRoute(app, deps)
   app.post('/v1/admin/projects/:id/runner-key', deps.adminOrApiKeyWrite, (c) => mintRunnerKey(c, deps))
   app.get('/v1/admin/ci/overview', deps.adminOrApiKeyRead, (c) => ciOverview(c, deps))
   app.get('/v1/admin/ci/compare', deps.adminOrApiKeyRead, (c) => ciCompare(c, deps))
   app.get('/v1/admin/ci/cost-settings', deps.jwtAuth, (c) => getCostSettings(c, deps))
   app.put('/v1/admin/ci/cost-settings', deps.jwtAuth, (c) => putCostSettings(c, deps))
   app.post('/v1/admin/fixes/:id/ci/rerun', deps.adminOrApiKeyWrite, (c) => rerunFixCi(c, deps))
-}
-
-async function ingestRunner(c: Context, deps: CiRouteDeps): Promise<Response> {
-  const projectId = c.get('projectId') as string | null | undefined
-  if (!projectId) return jsonError(c, 'PROJECT_KEY_REQUIRED', 'Use a key bound to a project (Projects → SDK ingest key).', 400)
-  const db = deps.getServiceClient()
-  const rate = await deps.claimRateLimit(db, `project:${projectId}:runner_ingest`, RUNNER_INGEST_PER_MINUTE, 60)
-  if (!rate.allowed) {
-    c.header('Retry-After', String(rate.retryAfterSec ?? 60))
-    return jsonError(c, 'RATE_LIMITED', 'Too many runner pushes. Retry in a minute.', 429)
-  }
-  let raw: unknown
-  try {
-    raw = await c.req.json()
-  } catch {
-    return jsonError(c, 'INVALID_JSON', 'Body must be valid JSON', 400)
-  }
-  const parsed = runnerIngestSchema.safeParse(raw)
-  if (!parsed.success) {
-    return jsonError(c, 'VALIDATION_ERROR', parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ').slice(0, 500), 400)
-  }
-  const body = parsed.data
-
-  const { data: project, error: projectErr } = await db.from('projects').select('organization_id').eq('id', projectId).maybeSingle()
-  if (projectErr) return jsonError(c, 'DB_ERROR', 'Could not read the project.', 500)
-  const organizationId = (project as { organization_id: string | null } | null)?.organization_id ?? null
-  if (!organizationId) return jsonError(c, 'NO_ORGANIZATION', 'This project belongs to no organization, so runner data has nowhere to go.', 409)
-
-  const now = deps.now()
-  if (body.kind === 'heartbeat') {
-    const h = body.host
-    const { error } = await db.from('ci_runner_hosts').upsert(
-      {
-        organization_id: organizationId,
-        project_id: projectId,
-        host_id: h.host_id,
-        hostname: h.hostname,
-        platform: h.platform,
-        cpu_count: h.cpu_count ?? null,
-        mem_total_mb: h.mem_total_mb ?? null,
-        mushi_version: h.mushi_version ?? null,
-        metrics: h.metrics ?? {},
-        runners: body.runners,
-        // Server time: a host with a wrong clock must not look fresh or stale.
-        last_heartbeat_at: now.toISOString(),
-        updated_at: now.toISOString(),
-      },
-      { onConflict: 'organization_id,host_id' },
-    )
-    if (error) {
-      clog.error('runner heartbeat upsert failed', { projectId, err: error.message })
-      return jsonError(c, 'DB_ERROR', 'The heartbeat could not be stored.', 500)
-    }
-    return c.json({ ok: true, data: { kind: 'heartbeat', hostId: h.host_id, runners: body.runners.length, receivedAt: now.toISOString() } })
-  }
-
-  const at = Date.parse(body.at)
-  if (at > now.getTime() + SAMPLE_FUTURE_MS || at < now.getTime() - SAMPLE_PAST_MS) {
-    return jsonError(c, 'SAMPLE_OUT_OF_RANGE', '`at` must be within the last 7 days (and not in the future).', 400)
-  }
-  const { error } = await db.from('ci_runner_job_samples').upsert(
-    {
-      organization_id: organizationId,
-      project_id: projectId,
-      host_id: body.host_id,
-      runner_name: body.runner_name,
-      repo: body.repo,
-      run_id: body.run_id,
-      run_attempt: body.run_attempt,
-      job_key: body.job_key,
-      phase: body.phase,
-      at: new Date(at).toISOString(),
-      mem_peak_mb: body.mem_peak_mb ?? null,
-      mem_max_mb: body.mem_max_mb ?? null,
-      oom_kills: body.oom_kills ?? null,
-      swap_used_mb: body.swap_used_mb ?? null,
-      load1: body.load1 ?? null,
-    },
-    { onConflict: 'organization_id,host_id,job_key,phase', ignoreDuplicates: true },
-  )
-  if (error) {
-    clog.error('runner job sample insert failed', { projectId, err: error.message })
-    return jsonError(c, 'DB_ERROR', 'The job sample could not be stored.', 500)
-  }
-  return c.json({ ok: true, data: { kind: 'job', jobKey: body.job_key, phase: body.phase } })
+  registerCiJobDebugRoutes(app, { ...deps, ...defaultCiJobDebugDeps, ...deps.debug })
 }
 
 async function mintRunnerKey(c: Context, deps: CiRouteDeps): Promise<Response> {
@@ -273,6 +195,27 @@ async function mintRunnerKey(c: Context, deps: CiRouteDeps): Promise<Response> {
   )
 }
 
+/**
+ * The built overview, per scope and window, for a few seconds (2026-11-18). The CI page polls
+ * every 30 s and the Apps page's CI card reads the same thing, so two tabs or two pages paid the
+ * whole build twice; together with the workflow parsing it pushed the function past its CPU
+ * budget (27 of 773 reads ended in 546 in a day). Keyed by the access-checked project list, so a
+ * caller only ever gets a build of projects it may read. `refresh=1` always builds again.
+ * Per route instance (deps), so tests with different fixtures never share an entry.
+ */
+const OVERVIEW_CACHE_MS = 15_000
+const OVERVIEW_CACHE_MAX = 64
+const overviewCaches = new WeakMap<CiRouteDeps, Map<string, { at: number; data: unknown }>>()
+
+function overviewCacheFor(deps: CiRouteDeps): Map<string, { at: number; data: unknown }> {
+  let m = overviewCaches.get(deps)
+  if (!m) {
+    m = new Map()
+    overviewCaches.set(deps, m)
+  }
+  return m
+}
+
 async function ciOverview(c: Context, deps: CiRouteDeps): Promise<Response> {
   const userId = c.get('userId') as string
   const db = deps.getServiceClient()
@@ -297,10 +240,18 @@ async function ciOverview(c: Context, deps: CiRouteDeps): Promise<Response> {
   }
 
   const now = deps.now()
+  const cache = overviewCacheFor(deps)
+  const cacheKey = `${days}|${[...scope].sort().join(',')}`
+  const hit = cache.get(cacheKey)
+  if (!refresh && hit && now.getTime() - hit.at < OVERVIEW_CACHE_MS) return c.json({ ok: true, data: hit.data })
   const from = new Date(now.getTime() - days * 24 * 60 * 60_000)
   try {
     const rows = await loadCiOverviewRows(db as never, scope, from)
-    return c.json({ ok: true, data: buildCiOverview(rows, { now, days, from, refreshedAt: rows.lastLiveSyncAt }) })
+    const data = buildCiOverview(rows, { now, days, from, refreshedAt: rows.lastLiveSyncAt })
+    cache.delete(cacheKey)
+    cache.set(cacheKey, { at: now.getTime(), data })
+    if (cache.size > OVERVIEW_CACHE_MAX) cache.delete(cache.keys().next().value as string)
+    return c.json({ ok: true, data })
   } catch (err) {
     clog.error('ci overview read failed', { err: err instanceof Error ? err.message : String(err) })
     return jsonError(c, 'CI_OVERVIEW_FAILED', 'The CI overview could not be read. Try again in a minute.', 500)
@@ -358,7 +309,7 @@ export const costSettingsSchema = z
 async function callerOrgs(c: Context, deps: CiRouteDeps, db: Db, userId: string): Promise<Array<{ id: string; name: string | null }>> {
   const projectIds = await deps.callerProjectIds(c, db, userId)
   if (projectIds.length === 0) return []
-  const { data, error } = await db.from('projects').select('organization_id, organizations(name)').in('id', projectIds)
+  const { data, error } = await db.from('projects').select('organization_id, organizations!projects_organization_id_fkey(name)').in('id', projectIds)
   if (error) throw new Error(`projects read failed: ${error.message}`)
   const out = new Map<string, string | null>()
   for (const p of (data ?? []) as Array<{ organization_id: string | null; organizations?: { name?: string | null } | null }>) {

@@ -8,7 +8,7 @@ import type { getServiceClient } from './db.ts'
 import { ghFetchOptional } from './github-pr.ts'
 import { parseGithubRepoUrl, resolveProjectGithubToken } from './github.ts'
 import { log as rootLog } from './logger.ts'
-import { UPGRADEABLE_PACKAGES } from './sdk-upgrade-plan.ts'
+import { isUmbrellaLauncherOnly, UPGRADEABLE_PACKAGES } from './sdk-upgrade-plan.ts'
 import { upsertProjectSdkObservationAsync } from './sdk-observation.ts'
 
 const log = rootLog.child('sdk-repo-scan')
@@ -22,8 +22,13 @@ const PKG_PATH_CANDIDATES = [
   'src/package.json',
 ]
 
-/** Prefer web/RN adapters over core for display when multiple are declared. */
+/**
+ * Prefer the `mushi-mushi` umbrella (ADR 0060), then web/RN adapters over core
+ * for display when multiple are declared. The umbrella is its own catalog
+ * entry: its version is what the app bumps.
+ */
 const PACKAGE_PRIORITY: string[] = [
+  'mushi-mushi',
   '@mushi-mushi/web',
   '@mushi-mushi/react-native',
   '@mushi-mushi/react',
@@ -31,11 +36,12 @@ const PACKAGE_PRIORITY: string[] = [
   '@mushi-mushi/core',
   ...UPGRADEABLE_PACKAGES.filter(
     (p) =>
-      !['@mushi-mushi/web', '@mushi-mushi/react-native', '@mushi-mushi/react', '@mushi-mushi/capacitor', '@mushi-mushi/core'].includes(p),
+      !['mushi-mushi', '@mushi-mushi/web', '@mushi-mushi/react-native', '@mushi-mushi/react', '@mushi-mushi/capacitor', '@mushi-mushi/core'].includes(p),
   ),
 ]
 
 const WORKSPACE_PKG_PATH: Record<string, string> = {
+  'mushi-mushi': 'packages/launcher/package.json',
   '@mushi-mushi/web': 'packages/web/package.json',
   '@mushi-mushi/react-native': 'packages/react-native/package.json',
   '@mushi-mushi/react': 'packages/react/package.json',
@@ -90,6 +96,8 @@ export function detectDeclaredSdkFromDeps(
   for (const pkg of PACKAGE_PRIORITY) {
     const spec = deps[pkg]
     if (!spec) continue
+    // `mushi-mushi@0.x` is the setup command a host keeps to run the wizard, not its SDK.
+    if (isUmbrellaLauncherOnly(pkg, spec)) continue
     const rank = PACKAGE_PRIORITY.indexOf(pkg)
     let version: string | null = null
     if (spec.startsWith('workspace:')) {

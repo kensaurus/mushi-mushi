@@ -137,9 +137,9 @@ is always consistent — there is no separate aggregation job to fall behind.
 ```mermaid
 sequenceDiagram
   participant Auth as Auth layer (your app)
-  participant Mushi as Mushi SDK
+  participant Mushi as Mushi Mushi SDK
   participant Buffer as Local buffer
-  participant API as Mushi API
+  participant API as Mushi Mushi API
 
   Auth->>Mushi: identify(userId, { email, name })
   Mushi->>Buffer: flush queued anonymous events (if any)
@@ -227,7 +227,7 @@ The rewards system inherits all guarantees from the
 
 Register webhook endpoints in the admin console on the **Rewards** page. All
 payloads are `POST`, `Content-Type: application/json`, and signed with
-`X-Mushi-Signature: sha256=`. `@mushi-mushi/node`
+`X-Mushi-Signature: sha256=`. `mushi-mushi/node`
 exports `createMushiRewardsHandler` to verify and route them.
 
 Every payload carries `event`, `end_user_id`, `occurred_at` and `webhookId`, plus

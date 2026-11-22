@@ -47,6 +47,7 @@ export const es: MushiLocale = {
     screenshotShareTab: 'Compartir esta pestaña',
     notSentBlocked: 'No se envió. El reporte se filtró antes de enviarse. Tu texto sigue aquí; añade algo más de detalle e inténtalo de nuevo.',
     notSentThrottled: 'No se envió. Demasiados reportes en poco tiempo. Tu texto sigue aquí; espera un minuto e inténtalo de nuevo.',
+    screenshotReview: 'Revisa la captura de abajo y pulsa Enviar otra vez.',
     screenshotErrors: {
       permission: 'Se bloqueó la captura. Permítela y reintenta.',
       unsupported: 'Este navegador no puede capturar la página. Descríbelo.',
@@ -174,6 +175,6 @@ export const es: MushiLocale = {
     changelog: {
       whatsNew: 'Novedades de {version}',
     },
-    poweredBy: 'Reportes de errores con Mushi',
+    poweredBy: 'Reportes de errores con Mushi Mushi',
   },
 };

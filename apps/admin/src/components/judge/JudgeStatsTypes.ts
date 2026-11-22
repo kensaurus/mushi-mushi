@@ -33,6 +33,8 @@ export interface JudgeStats {
   /** Grades and disagreements in the last recentWindowDays; null when that read failed. */
   recentEvaluations?: number | null
   recentDisagreements?: number | null
+  /** Recent disagreements a person has not reviewed yet (Accept / Keep); absent on an older server. */
+  recentToReview?: number | null
   /** Grades per week and how many agreed with the diagnosis, oldest first (12 weeks). */
   agreementWeeks?: Array<{ weekStart: string; graded: number; agreed: number }>
   agreementCapped?: boolean
@@ -68,10 +70,4 @@ export const EMPTY_JUDGE_STATS: JudgeStats = {
   topPriority: 'no_project',
   topPriorityLabel: null,
   topPriorityTo: null,
-}
-
-/** Stat-card title for the latest scored week: 'This week' or 'Week of Sep 28'. */
-export function judgeWeekTitle(label: string | null | undefined): string {
-  const l = label || 'this week'
-  return l.charAt(0).toUpperCase() + l.slice(1)
 }

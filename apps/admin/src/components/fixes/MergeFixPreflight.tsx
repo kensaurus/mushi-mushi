@@ -230,7 +230,7 @@ export function MergeFixPreflight({
           {reviewBlocksMerge(review) && (
             <div className={`mt-2 rounded-sm px-2 py-1.5 text-2xs ${CHIP_TONE.dangerSubtle}`}>
               <p className="mb-1">
-                The review says hold: Mushi will not merge this until you override it. Fix the findings and re-run the
+                The review says hold: Mushi Mushi will not merge this until you override it. Fix the findings and re-run the
                 review, or merge anyway if you have checked them yourself.
               </p>
               <Checkbox label="Merge anyway (override the hold)" checked={overrideHold} onChange={setOverrideHold} />

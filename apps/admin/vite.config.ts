@@ -78,7 +78,10 @@ const SDK_WASM_VERSION = readPkgVersion('../../packages/wasm-classifier/package.
 const CREATE_MUSHI_VERSION = readPkgVersion('../../packages/create-mushi-mushi/package.json')
 const LAUNCHER_VERSION = readPkgVersion('../../packages/launcher/package.json')
 const BUILD_SHA = readGitSha()
-const BUILD_DATE = new Date().toISOString().slice(0, 10)
+// Full ISO instant: the console shows the build to the minute in the viewer's
+// own time zone (sidebar stamp + version popover, owner 2026-11-19).
+const BUILD_TIME = new Date().toISOString()
+const BUILD_DATE = BUILD_TIME.slice(0, 10)
 
 // Local dev: proxy Supabase Edge Functions through Vite so any dev port (6464,
 // 5180, …) avoids browser CORS preflight failures against the cloud API.
@@ -106,6 +109,7 @@ export default defineConfig({
     __SERVER_VERSION__: JSON.stringify(SERVER_VERSION),
     __BUILD_SHA__: JSON.stringify(BUILD_SHA),
     __BUILD_DATE__: JSON.stringify(BUILD_DATE),
+    __BUILD_TIME__: JSON.stringify(BUILD_TIME),
     // Extended SDK catalog
     __SDK_CORE_VERSION__: JSON.stringify(SDK_CORE_VERSION),
     __SDK_VUE_VERSION__: JSON.stringify(SDK_VUE_VERSION),
@@ -145,7 +149,8 @@ export default defineConfig({
       // Bundled as a classic script so it works everywhere Web Push does
       // (Safari's module-worker support lags the rest).
       injectRegister: false, // registration lives in src/lib/pwaRegister.ts
-      registerType: 'autoUpdate',
+      // A new worker waits for the page's Reload (src/lib/swUpdate.ts), never an auto reload.
+      registerType: 'prompt',
       injectManifest: {
         // The plugin appends the manifest icons + manifest.webmanifest itself.
         globPatterns: ['index.html', 'favicon.svg'],
@@ -167,9 +172,9 @@ export default defineConfig({
         icons: [
           { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
-          // The brand mark is opaque with its own background, so the same
-          // 512 render is safe for maskable crops.
-          { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          // The magnifier and ladybug sit inside the 80% safe zone on the
+          // vermillion tile, so a maskable crop never cuts the mark (2026-11-17).
+          { src: 'icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
         // Android Chrome: "Share" an audio file (Google Recorder .m4a, a voice
         // memo) straight into the console. iOS has no share_target.

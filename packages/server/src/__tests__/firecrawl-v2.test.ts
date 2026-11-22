@@ -105,8 +105,12 @@ describe('firecrawl v2 client', () => {
 
   it('the own-site scrape is a live fetch with a Firecrawl timeout under the abort', async () => {
     reply({ data: { markdown: '# Home', metadata: { title: 'Home' } } })
-    await firecrawlScrapeOwnSite(makeDb(), 'p1', 'https://www.app.example/pricing', 'https://app.example')
+    const page = await firecrawlScrapeOwnSite(makeDb(), 'p1', 'https://www.app.example/pricing', 'https://app.example')
     expect(sent().body).toMatchObject({ maxAge: 0, timeout: 15000 })
+    // A page of the customer's app: marked as Mushi's QA traffic, the result keeps the bare URL.
+    expect(sent().body.url).toBe('https://www.app.example/pricing?mushi_monitor=qa&utm_source=mushi-monitor&utm_medium=qa')
+    expect((sent().body.headers as Record<string, string>)['User-Agent']).toMatch(/MushiSiteWatch\/1\.0/)
+    expect(page.url).toBe('https://www.app.example/pricing')
     // The site with or without www passes; another site does not.
     await expect(firecrawlScrapeOwnSite(makeDb(), 'p1', 'https://other.example/x', 'https://app.example')).rejects.toThrow(
       'FIRECRAWL_DOMAIN_NOT_ALLOWED',
@@ -139,7 +143,7 @@ describe('firecrawl v2 client', () => {
     expect(sent().body.includeDomains).toEqual(['example.com', 'docs.example.org'])
   })
 
-  it('only the live-site watch identifies as MushiSiteWatch; search, map and own-site scrape do not', async () => {
+  it('search and map load no customer page and are not marked; the own-site scrape is (monitor-url.ts)', async () => {
     const bodies: string[] = []
     for (const run of [
       () => firecrawlSearch(makeDb(), 'p1', 'some error text here', { bypassCache: true }),
@@ -152,6 +156,12 @@ describe('firecrawl v2 client', () => {
       bodies.push(String(init.body) + JSON.stringify(init.headers ?? {}))
     }
     expect(bodies).toHaveLength(3)
-    for (const b of bodies) expect(b).not.toContain('MushiSiteWatch')
+    const [search, map, ownSite] = bodies
+    for (const b of [search, map]) {
+      expect(b).not.toContain('MushiSiteWatch')
+      expect(b).not.toContain('mushi_monitor')
+    }
+    expect(ownSite).toContain('MushiSiteWatch')
+    expect(ownSite).toContain('mushi_monitor=qa')
   })
 })

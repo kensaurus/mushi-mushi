@@ -25,6 +25,10 @@ interface Props {
   onAgeFilterChange: (age: SessionAge) => void
   onOpenSession: (id: string) => void
   activeSessionId?: string | null
+  /** The page's first-step card already says "No searches yet" with its button. */
+  firstStepShown?: boolean
+  /** Opens the Search tab (the search box is there, not above this list). */
+  onSearch?: () => void
 }
 
 function filterSessions(
@@ -52,14 +56,30 @@ export function ResearchSessionTable({
   onAgeFilterChange,
   onOpenSession,
   activeSessionId,
+  firstStepShown = false,
+  onSearch,
 }: Props) {
   const filtered = filterSessions(sessions, modeFilter, ageFilter)
 
   if (sessions.length === 0) {
+    // Round-2 sweep 2026-11-18: two stacked empty states, and this one said
+    // "search above" though the search box is on the Search tab.
+    if (firstStepShown) return null
     return (
       <EmptyState
         title={projectName ? `No research sessions for ${projectName} yet` : 'No research sessions yet'}
-        description="Run a Firecrawl web search above — each query is saved here so you can reopen results and attach snippets to reports."
+        description="Each web search is saved here so you can reopen its results and attach findings to a bug."
+        action={
+          onSearch ? (
+            <button
+              type="button"
+              onClick={onSearch}
+              className="text-2xs font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity"
+            >
+              Open Search
+            </button>
+          ) : undefined
+        }
       />
     )
   }

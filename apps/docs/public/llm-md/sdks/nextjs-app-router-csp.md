@@ -20,7 +20,7 @@ Mount Mushi Mushi inside a client component:
 'use client'
 
 import { useEffect } from 'react'
-import { Mushi } from '@mushi-mushi/web'
+import { Mushi } from 'mushi-mushi'
 
 export function MushiClient() {
   useEffect(() => {
@@ -64,4 +64,4 @@ export default {
 }
 ```
 
-Run `await Mushi.diagnose()` in the browser console if reports are not reaching Mushi. It checks endpoint reachability, CSP, widget mount state, capture modules, and SDK version.
+Run `await Mushi.diagnose()` in the browser console if reports are not reaching Mushi Mushi. It checks endpoint reachability, CSP, widget mount state, capture modules, and SDK version.

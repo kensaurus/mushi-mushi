@@ -111,12 +111,13 @@ describe('SetupProgressRail', () => {
   it('with a key made earlier, offers to make one on the spot instead of a snippet that cannot work', () => {
     const onMintKey = vi.fn()
     render(project(true, false), { onMintKey })
-    expect(host.querySelector('[data-testid="setup-next-step"]')?.textContent).toContain('npm install @mushi-mushi/')
+    // An app with no connected repo gets the Script tag (works on every host, Lovable first; 2026-11-11).
+    expect(host.querySelector('[data-testid="setup-next-step"]')?.textContent).toContain('<script async')
     act(() => button('Make a key and fill it in')!.click())
     expect(onMintKey).toHaveBeenCalled()
     expect(button('Copy without a key')).toBeTruthy()
     expect(host.textContent).not.toMatch(/SDK tab/)
-    expect(host.querySelector('[data-testid="setup-heartbeat"]')?.textContent).toMatch(/^Mushi has not heard from your app yet/)
+    expect(host.querySelector('[data-testid="setup-heartbeat"]')?.textContent).toMatch(/^Mushi Mushi has not heard from your app yet/)
   })
 
   it('with the key just made, the snippet carries it and Copy snippet leads', () => {
@@ -147,7 +148,7 @@ describe('SetupProgressRail', () => {
     state.ttfd = { keyMintedAt: null, firstDiagnosisAt: null, ms: null, testDiagnosisAt: new Date().toISOString() }
     render(project(true, true, true))
     expect(host.textContent).toContain('Your app is wired up')
-    expect(host.textContent).toContain('Mushi has only seen a test bug so far')
+    expect(host.textContent).toContain('Mushi Mushi has only seen a test bug so far')
   })
 
   it('done: opens the first report from the app', () => {

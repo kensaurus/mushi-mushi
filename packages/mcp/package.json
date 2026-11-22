@@ -1,9 +1,9 @@
 {
   "name": "@mushi-mushi/mcp",
   "mcpName": "io.github.kensaurus/mushi-mushi",
-  "version": "0.30.2",
+  "version": "0.31.8",
   "license": "MIT",
-  "description": "MCP server for Cursor, Claude Code and Copilot. The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.",
+  "description": "MCP server for Cursor, Claude Code and Copilot. One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code.",
   "type": "module",
   "exports": {
     ".": {

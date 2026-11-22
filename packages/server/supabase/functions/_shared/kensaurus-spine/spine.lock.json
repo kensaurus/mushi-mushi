@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "manifest": {
+    "version": 2,
+    "updated": "2026-11-20"
+  },
+  "files": {
+    "apps.generated.ts": "0190f110b89bc166a40298a991437954802ff3bcdbf8eb815f16bd274f6ae3d9",
+    "account.ts": "a00cb4f34fa6b43849644042e751a446f94de5e6d7fb7bacb933e9b4dbc66f17",
+    "events.ts": "34f23d53af8db17a3d3104e0440694fc994cdc4302ac022f46b74ac15377bb22",
+    "links.ts": "ffdd3dcb251cc4f33da94d9d02fc8e06a5376ad1a5edb576eacfb0930739cf1b",
+    "mail.ts": "b411b58a8c0b242420ca86af7177e7c0860fb342fc1c879b274b67a0a4c2cd84",
+    "check-spine.mjs": "e753ba0f57ae09571c69f617ae1f5240b63a26c235156104c16220654541807f"
+  }
+}

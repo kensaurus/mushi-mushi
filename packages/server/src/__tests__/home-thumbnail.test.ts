@@ -71,6 +71,9 @@ describe('captureThumbnail', () => {
     expect(JSON.stringify(row)).not.toContain('storage.example.com')
     const body = JSON.parse((fetchImpl as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls[0][1].body as string)
     expect(body.formats[0]).toMatchObject({ type: 'screenshot', fullPage: false })
+    // The screenshot load is marked as Mushi's traffic; the stored page_url stays bare (above).
+    expect(body.url).toBe('https://glot.it?mushi_monitor=watch&utm_source=mushi-monitor&utm_medium=watch')
+    expect(body.headers['User-Agent']).toMatch(/MushiSiteWatch\/1\.0/)
   })
 
   it('refuses anything but png, jpeg or webp, and records why', async () => {

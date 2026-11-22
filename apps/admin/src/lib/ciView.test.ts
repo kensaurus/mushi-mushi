@@ -9,6 +9,7 @@ import {
   ciVerdict,
   buildFixLinks,
   runnerDisplayName,
+  splitQuietLanes,
   formatSeconds,
   isCiOverviewEmpty,
   jobElapsedSeconds,
@@ -202,6 +203,12 @@ describe('overview helpers', () => {
     expect(permissionsNotice({ jobs: 'ok', runners: 'ok' })).toBeNull()
     expect(permissionsNotice({ jobs: 'ok', runners: 'missing' })).toContain('Administration: read')
     expect(permissionsNotice({ jobs: 'missing', runners: 'missing' })).toContain('Actions: read')
+    // A single repo without access is named, not reported as "cannot read your jobs".
+    const one = permissionsNotice({ jobs: 'missing', runners: 'ok', jobsMissingRepos: ['kensaurus/solo-boss-cloud_backend'] })
+    expect(one).toContain('for solo-boss-cloud_backend')
+    expect(one).not.toContain('cannot read your GitHub Actions jobs')
+    const many = permissionsNotice({ jobs: 'missing', runners: 'ok', jobsMissingRepos: ['o/a', 'o/b', 'o/c', 'o/d', 'o/e'] })
+    expect(many).toContain('a, b, c and 2 more')
   })
 })
 
@@ -370,15 +377,71 @@ describe('summary: outcome counts and verdict', () => {
   it('leads with a long wait, then machine trouble, then code failures, else healthy', () => {
     const o = ciOverviewFixture()
     // j2 has waited 30 min in the fixture.
-    expect(ciVerdict(o, FIXTURE_NOW)).toMatchObject({ tone: 'warn', headline: expect.stringContaining('waiting for a test machine') })
+    // The live queue is the status board's; the week's verdict never repeats it.
+    expect(ciVerdict(o).headline).not.toContain('waiting for a test machine')
     const noQueue = { ...o, jobs: o.jobs.filter((j) => jobOutcome(j) !== 'waiting') }
-    expect(ciVerdict({ ...noQueue, stats: { ...o.stats, infraFailures: 5, codeFailures: 2 } }, FIXTURE_NOW).headline).toBe('Most failures are the test machine, not your code.')
-    expect(ciVerdict({ ...noQueue, stats: { ...o.stats, infraFailures: 1, codeFailures: 3 } }, FIXTURE_NOW).headline).toContain('3 jobs failed on the code')
-    expect(ciVerdict({ ...noQueue, stats: { ...o.stats, infraFailures: 0, codeFailures: 0, passRate: 1 } }, FIXTURE_NOW).tone).toBe('ok')
+    expect(ciVerdict({ ...noQueue, stats: { ...o.stats, infraFailures: 5, codeFailures: 2 } }).headline).toBe('Most failures are the test machine, not your code.')
+    expect(ciVerdict({ ...noQueue, stats: { ...o.stats, infraFailures: 1, codeFailures: 3 } }).headline).toContain('3 jobs failed on the code')
+    expect(ciVerdict({ ...noQueue, stats: { ...o.stats, infraFailures: 0, codeFailures: 0, passRate: 1 } }).tone).toBe('ok')
+  })
+
+  it('counts the whole window when the server counted it, not just the newest jobs read', () => {
+    const o = ciOverviewFixture()
+    // The newest jobs read show 2 code failures; the database counted 61 across the week.
+    const hourly = [
+      { at: '2026-10-20T10:00:00.000Z', jobs: 900, passed: 800, codeFailures: 60, infraFailures: 1 },
+      { at: '2026-10-21T11:00:00.000Z', jobs: 100, passed: 90, codeFailures: 1, infraFailures: 0 },
+    ]
+    const v = ciVerdict({ ...o, stats: { ...o.stats, codeFailures: 2, infraFailures: 0, hourly, windowJobs: 1000 } })
+    expect(v.headline).toBe('61 jobs failed on the code in 7 days.')
+    // Without windowJobs (an older server) it stays on the jobs read.
+    expect(ciVerdict({ ...o, stats: { ...o.stats, codeFailures: 2, infraFailures: 0, hourly } }).headline).toContain('2 jobs failed on the code')
   })
 
   it('links a CI job to its report and fix attempt', () => {
     const links = buildFixLinks([{ id: 'f1', report_id: 'r1', pr_url: 'https://github.com/Owner/Repo/pull/7', pr_number: 7 }])
     expect(links.get('owner/repo#7')).toEqual({ reportId: 'r1', fixId: 'f1' })
+  })
+})
+
+describe('splitQuietLanes', () => {
+  type Outcome = Parameters<typeof splitQuietLanes>[0][number]['bars'][number]['outcome']
+  const lane = (label: string, outcomes: Outcome[], unassigned = false, kind: 'runner' | 'family' | 'github' | 'none' = 'family') => ({
+    label,
+    unassigned,
+    kind,
+    bars: outcomes.map((outcome, i) => ({ jobId: `${label}-${i}`, outcome })) as unknown as Parameters<typeof splitQuietLanes>[0][number]['bars'],
+  })
+  const busy = ['a', 'b', 'c', 'd', 'e'].map((l) => lane(l, ['passed', 'passed', 'code_failure']))
+
+  it('folds machines with one passed or cancelled job on a long timeline, keeping order', () => {
+    const lanes = [...busy, lane('q1', ['passed']), lane('q2', ['cancelled']), lane('q3', []), lane('none', ['waiting'], true)]
+    const { shown, quiet } = splitQuietLanes(lanes)
+    expect(quiet.map((l) => l.label)).toEqual(['q1', 'q2', 'q3'])
+    expect(shown.map((l) => l.label)).toEqual(['a', 'b', 'c', 'd', 'e', 'none'])
+  })
+
+  it('never folds a failure, a stopped job, a live job or "No runner yet"', () => {
+    const lanes = [
+      ...busy,
+      lane('failed', ['code_failure']),
+      lane('stopped', ['infra']),
+      lane('running', ['running']),
+      lane('waiting', ['waiting']),
+      lane('none', ['passed'], true),
+    ]
+    expect(splitQuietLanes(lanes).quiet).toEqual([])
+  })
+
+  it('never folds a GitHub-hosted lane: a job there is billed minutes', () => {
+    const lanes = [...busy, lane('GitHub-hosted', ['passed'], false, 'github'), lane('q1', ['passed']), lane('q2', ['passed'])]
+    const { shown, quiet } = splitQuietLanes(lanes)
+    expect(quiet.map((l) => l.label)).toEqual(['q1', 'q2'])
+    expect(shown.map((l) => l.label)).toContain('GitHub-hosted')
+  })
+
+  it('folds nothing on a short timeline or to save a single row', () => {
+    expect(splitQuietLanes([busy[0], lane('q1', ['passed']), lane('q2', ['passed'])]).quiet).toEqual([])
+    expect(splitQuietLanes([...busy, busy[0], busy[1], lane('q1', ['passed'])]).quiet).toEqual([])
   })
 })

@@ -1,16 +1,18 @@
 # `@mushi-mushi/plugin-linear`
 
-> **Your AI wrote it. Mushi Mushi tells you why it broke.**
+> **Your AI built it. Mushi Mushi makes it better.**
+
+**Optional, runs on your own server:** it is never part of your app. To add Mushi Mushi to an app, install [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi).
 
 For people who plan their work in Linear. This opens a Linear issue for each
-new Mushi Mushi bug report, updates it once Mushi has triaged the report, and
+new Mushi Mushi bug report, updates it once Mushi Mushi has triaged the report, and
 can move it along your Linear workflow.
 
 **Do you need this package?** Usually not. On Mushi Mushi Cloud you connect
 Linear on the **Integrations** page of the console (OAuth or an API key, on
-any plan) and Mushi files and closes Linear issues itself. Run this package
+any plan) and Mushi Mushi files and closes Linear issues itself. Run this package
 only if you want the Linear calls to come from your own server. Installing
-**Linear Sync** from the Marketplace needs a paid plan (Builder or above, see
+**Linear Sync** from the Marketplace works on every plan, Free included (see
 [pricing](https://kensaur.us/mushi-mushi/docs/pricing)).
 
 ```bash
@@ -33,12 +35,12 @@ Docs: https://kensaur.us/mushi-mushi/docs/plugins/linear
 - `report.classified`: updates the issue's title and description with the
   triage result.
 - `report.status_changed`: moves the issue to the Linear workflow state in
-  `stateMap[newStatus]`. This needs a `stateMap` (Mushi status → Linear
+  `stateMap[newStatus]`. This needs a `stateMap` (Mushi Mushi status → Linear
   state id), so it works only when you call `createLinearPlugin` yourself;
   the stand-alone server sets no `stateMap` and never moves issues.
 
 `MUSHI_API_KEY` is read by the stand-alone server but nothing in it posts
-back to Mushi yet. To comment on the Mushi report yourself, call
+back to Mushi Mushi yet. To comment on the Mushi Mushi report yourself, call
 `attachMushiBackComment({ mushiApiKey, projectId })`, which returns a
 `createMushiClient` client.
 
@@ -65,4 +67,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 77 edge functions · 546 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 78 edge functions · 583 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

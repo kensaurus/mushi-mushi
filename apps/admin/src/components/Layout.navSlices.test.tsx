@@ -16,9 +16,11 @@ import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { navSlicesForPaths } from '../lib/navBadges'
-import { CORE_NAV_PATHS } from '../lib/navRegistry'
+import { BUILDER_CORE_NAV_PATHS, CORE_NAV_PATHS } from '../lib/navRegistry'
 
 const state = vi.hoisted(() => ({
+  // The full sidebar is the operator's (navRegistry coreNavPathsFor).
+  isOperator: true,
   enabledLabs: new Set<string>(),
   sliceCalls: [] as Array<readonly string[] | null | undefined>,
 }))
@@ -47,7 +49,7 @@ vi.mock('../lib/auth', () => ({
   useAuth: () => ({ user: { id: 'u1', email: 'owner@example.com' }, signOut: async () => {} }),
 }))
 vi.mock('../lib/useEntitlements', () => ({
-  useEntitlements: () => ({ isSuperAdmin: false, isOperator: false, has: () => true, loading: false }),
+  useEntitlements: () => ({ isSuperAdmin: false, isOperator: state.isOperator, has: () => true, loading: false }),
 }))
 vi.mock('../lib/useSetupStatus', () => ({
   useSetupStatus: () => ({ loading: false, activeProject: null, selectors: { done: true } }),
@@ -92,6 +94,7 @@ let root: Root | null = null
 let container: HTMLDivElement | null = null
 
 beforeEach(() => {
+  state.isOperator = true
   state.enabledLabs = new Set()
   state.sliceCalls = []
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -148,6 +151,12 @@ describe('Layout nav-meta slices', () => {
     renderAt('/health')
     expectSlices(navSlicesForPaths(CORE_NAV_PATHS))
     expect(state.sliceCalls.at(-1)).not.toContain('health')
+  })
+
+  it('asks a builder only for the badges of the short sidebar (audit 2026-11-11)', () => {
+    state.isOperator = false
+    renderAt('/reports')
+    expectSlices(navSlicesForPaths(BUILDER_CORE_NAV_PATHS))
   })
 
   it('adds a Lab’s slice only when that Lab is in the sidebar', () => {

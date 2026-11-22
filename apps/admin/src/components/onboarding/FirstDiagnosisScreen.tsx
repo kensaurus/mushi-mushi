@@ -46,6 +46,8 @@ import { isReturningFromGithub } from '../../lib/githubConnect'
 import { ClientConnectButton } from '../ClientConnectButton'
 import { startFirstRunTour } from '../FirstRunTour'
 import { recordDiagnosisViewed, type DiagnosisSurface } from '../../lib/diagnosisViewed'
+import { firstDiagnosisGuide } from '../../lib/fieldGuide'
+import { Mascot } from '../mascot/Mascot'
 
 const CURSOR_SETUP_COMMAND = 'npx mushi-mushi setup --ide cursor'
 
@@ -168,7 +170,7 @@ function DiagnosisCard({
     <Card className="p-4 border-ok/30 bg-ok/5 space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-2" data-testid="first-diagnosis-card">
         <div className="min-w-0 flex-1">
-          <SignalChip tone="ok" className="uppercase tracking-wider text-3xs">
+          <SignalChip tone="ok" className="text-3xs font-semibold">
             Your first diagnosis
           </SignalChip>
           <h3 className="mt-1.5 text-sm font-semibold text-fg text-pretty">{diagnosis.title}</h3>
@@ -187,7 +189,7 @@ function DiagnosisCard({
 
       {diagnosis.rootCause && (
         <div>
-          <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">Likely root cause</p>
+          <p className="text-3xs font-semibold text-fg-secondary">Likely root cause</p>
           <p className="mt-0.5 text-xs leading-relaxed text-fg-secondary">{diagnosis.rootCause}</p>
         </div>
       )}
@@ -322,18 +324,21 @@ export function FirstDiagnosisScreen({
     <div className="space-y-4" data-testid="onboarding-first-diagnosis">
       <Card className="p-5 space-y-4">
         <div>
-          <SignalChip tone="brand" className="uppercase tracking-wider text-3xs">
+          <SignalChip tone="brand" className="text-3xs font-semibold">
             Step 2 of 2
           </SignalChip>
           <h2 className="mt-1.5 text-base font-semibold text-fg">See your first diagnosis</h2>
           <ContainedBlock tone="muted" className="mt-2">
             <p className="text-xs leading-relaxed text-fg-muted">
-              Send one synthetic bug report to <span className="font-mono text-fg-secondary">{projectName}</span>.
-              Mushi turns what a user felt into a plain-English diagnosis in about a minute — no SDK
-              install needed for this step.
+              See what Mushi Mushi gives you for each bug: a sample report for{' '}
+              <span className="font-mono text-fg-secondary">{projectName}</span> with its plain-English
+              explanation and fix prompt, shown in a few seconds. The explanation is pre-written; your real
+              bugs get one written for them. Nothing to install for this step.
             </p>
           </ContainedBlock>
         </div>
+
+        <Mascot {...firstDiagnosisGuide(state)} size="md" data-testid="first-diagnosis-guide" />
 
         {!diagnosed && (
           <div className="flex flex-wrap items-center gap-3">
@@ -386,10 +391,12 @@ export function FirstDiagnosisScreen({
           <Card className="p-4 space-y-3">
             <div>
               <h3 className="text-sm font-semibold text-fg">
-                {diagnosed ? 'Now get this for real bugs' : 'Install the SDK'}
+                {diagnosed ? 'Now get this for real bugs' : 'Put the report button in your app'}
               </h3>
               <p className="mt-0.5 text-xs text-fg-muted">
-                Drop the widget into your app and every report your users file gets the same read.
+                Add the report button to your live app, and every bug your users report gets the same explanation.
+                The quickest ways are listed first: one line to paste for Lovable or Bolt, one command if you have a
+                terminal.
               </p>
             </div>
             <SdkInstallCard
@@ -460,8 +467,8 @@ export function FirstDiagnosisInline({
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-semibold text-fg">No reports yet — see your first diagnosis</h3>
           <p className="mt-0.5 text-xs leading-relaxed text-fg-muted">
-            Send a synthetic bug to <span className="font-mono text-fg-secondary">{projectName}</span> and
-            watch it come back classified. Takes about a minute.
+            Open a sample bug for <span className="font-mono text-fg-secondary">{projectName}</span> with a
+            pre-written explanation and fix prompt, so you see what a real report gets. Takes a few seconds.
           </p>
         </div>
         {!diagnosed && (
@@ -477,6 +484,8 @@ export function FirstDiagnosisInline({
           </Btn>
         )}
       </div>
+
+      <Mascot {...firstDiagnosisGuide(state)} size="sm" data-testid="first-diagnosis-guide" />
 
       <PhaseRow
         state={state}

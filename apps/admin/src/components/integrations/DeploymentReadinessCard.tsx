@@ -37,6 +37,8 @@ interface Props {
   /** Vercel project slug for the deploy-preview shortcut. Optional --
    *  null falls back to a "Connect to Vercel" generic CTA. */
   vercelProjectSlug?: string | null
+  /** Go to an in-page target that may not be on screen (Integrations opens the GitHub drawer). */
+  onAnchorJump?: (anchorId: string) => void
 }
 
 interface CodebaseStatsLite {
@@ -83,7 +85,7 @@ interface ChecklistItem {
   snippet?: string
 }
 
-export function DeploymentReadinessCard({ projectId, githubAppInstalled, vercelProjectSlug }: Props) {
+export function DeploymentReadinessCard({ projectId, githubAppInstalled, vercelProjectSlug, onAnchorJump }: Props) {
   // The integrations page already loads platform credentials, so this
   // card only needs the lightweight `repo_url` to build deep links.
   // We fetch the codebase stats endpoint (already populated for any
@@ -119,8 +121,8 @@ export function DeploymentReadinessCard({ projectId, githubAppInstalled, vercelP
           title: 'Connect a GitHub repo first',
           status: 'recommended',
           description:
-            'The Deployment Readiness checklist becomes actionable once your project is linked to a GitHub repo. Open the GitHub integration card above to connect.',
-          ctaLabel: 'Go to the GitHub card',
+            'The Deployment Readiness checklist becomes actionable once your project is linked to a GitHub repo. Press the GitHub tile on this page to connect.',
+          ctaLabel: 'Open GitHub settings',
           ctaHref: null,
           ctaAnchorId: 'platform-card-github',
         },
@@ -141,12 +143,12 @@ export function DeploymentReadinessCard({ projectId, githubAppInstalled, vercelP
         title: 'Protect `main` from auto-merging fix PRs',
         status: githubAppInstalled ? 'recommended' : 'optional',
         description:
-          'Add a rule on `main` that requires at least one reviewer and a passing CI check. Mushi opens PRs as drafts, but a protected base branch is the belt-and-suspenders that stops a fast-clicked merge.',
+          'Add a rule on `main` that requires at least one reviewer and a passing CI check. Mushi Mushi opens PRs as drafts, but a protected base branch is the belt-and-suspenders that stops a fast-clicked merge.',
         ctaLabel: 'Open branch protection settings',
         ctaHref: protectionUrl,
         snippetLanguage: 'yaml',
         snippet: [
-          '# GitHub branch protection -- minimum rules for Mushi fix PRs',
+          '# GitHub branch protection -- minimum rules for Mushi Mushi fix PRs',
           '# Repo Settings -> Branches -> Add rule (or use the new Rulesets API)',
           'branch_name_pattern: main',
           'rules:',
@@ -189,7 +191,7 @@ export function DeploymentReadinessCard({ projectId, githubAppInstalled, vercelP
         title: 'Ship a Vercel preview on every fix PR',
         status: vercelProjectSlug ? 'ready' : 'recommended',
         description: vercelProjectSlug
-          ? 'Connected -- each Mushi PR will get a unique preview URL that lands as a comment on the PR. Reviewers can click straight into the fix.'
+          ? 'Connected -- each Mushi Mushi PR will get a unique preview URL that lands as a comment on the PR. Reviewers can click straight into the fix.'
           : 'Connect this repo to Vercel so each `mushi/fix-*` branch gets a preview deployment. Reviewers can verify the fix in a browser before approving.',
         ctaLabel: vercelProjectSlug ? 'Open Vercel git settings' : 'Connect to Vercel',
         ctaHref: vercelHref,
@@ -226,10 +228,10 @@ export function DeploymentReadinessCard({ projectId, githubAppInstalled, vercelP
       },
       {
         key: 'required-checks',
-        title: 'Require Mushi triage to pass before merge',
+        title: 'Require Mushi Mushi triage to pass before merge',
         status: 'optional',
         description:
-          'Advanced: add `mushi/triage` as a required status check so a merge can only happen once Mushi has classified the report and confirmed the fix relates to it. Useful for teams that want a paper trail on every change.',
+          'Advanced: add `mushi/triage` as a required status check so a merge can only happen once Mushi Mushi has classified the report and confirmed the fix relates to it. Useful for teams that want a paper trail on every change.',
         ctaLabel: 'Configure required checks',
         ctaHref: requiredChecksUrl,
       },
@@ -242,7 +244,7 @@ export function DeploymentReadinessCard({ projectId, githubAppInstalled, vercelP
         <div className="min-w-0">
           <h3 className="text-sm font-medium text-fg">Deployment readiness</h3>
           <p className="text-2xs text-fg-muted mt-0.5 leading-relaxed">
-            What to enable on your repo so every Mushi fix PR is reviewed and
+            What to enable on your repo so every Mushi Mushi fix PR is reviewed and
             shipped safely. Each item is opt-in — pick the ones that match your
             release process.
           </p>
@@ -258,7 +260,7 @@ export function DeploymentReadinessCard({ projectId, githubAppInstalled, vercelP
 
       <ul className="mt-3 space-y-2">
         {items.map((item) => (
-          <ReadinessItem key={item.key} item={item} />
+          <ReadinessItem key={item.key} item={item} onAnchorJump={onAnchorJump} />
         ))}
       </ul>
     </Card>
@@ -283,7 +285,7 @@ const STATUS_TONE: Record<ChecklistItem['status'], { dot: string; pill: string; 
   },
 }
 
-function ReadinessItem({ item }: { item: ChecklistItem }) {
+function ReadinessItem({ item, onAnchorJump }: { item: ChecklistItem; onAnchorJump?: (anchorId: string) => void }) {
   const tone = STATUS_TONE[item.status]
   return (
     <li className="rounded-sm border border-edge-subtle bg-surface-raised p-2.5">
@@ -292,7 +294,7 @@ function ReadinessItem({ item }: { item: ChecklistItem }) {
           <div className="flex items-center gap-2">
             <span aria-hidden="true" className={`inline-block w-1.5 h-1.5 rounded-full ${tone.dot}`} />
             <span className="text-sm font-medium text-fg">{item.title}</span>
-            <span className={`text-2xs font-mono px-1.5 py-0.5 rounded-sm border ${tone.pill}`}>
+            <span className={`text-2xs font-mono px-1.5 py-px rounded-sm ${tone.pill}`}>
               {tone.label}
             </span>
           </div>
@@ -304,6 +306,10 @@ function ReadinessItem({ item }: { item: ChecklistItem }) {
             variant="ghost"
             className="shrink-0"
             onClick={() => {
+              if (onAnchorJump) {
+                onAnchorJump(item.ctaAnchorId!)
+                return
+              }
               const el = document.getElementById(item.ctaAnchorId!)
               el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
               el?.querySelector<HTMLElement>('button, a, input')?.focus({ preventScroll: true })

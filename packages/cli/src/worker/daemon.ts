@@ -39,7 +39,11 @@ import { tryLoadWorkerKey } from '../keychain.js'
 import { detectPlatform, hashHostId, nodeHostIO, readMachineId, type HostIO } from '../runner/host.js'
 import { onInterrupt } from '../signals.js'
 import { MUSHI_CLI_VERSION } from '../version.js'
+import { AGENT_UNAVAILABLE, agentSpec, isClaudeModel, type LocalAgent } from '../commands/work-agents.js'
+import { wrongRepoMessage } from '../commands/work-repo.js'
+import type { WhoamiData } from '../cli-types.js'
 import {
+  checkAgentSignIn,
   checkCursorSignIn,
   classifyFailure,
   followUpOne,
@@ -98,8 +102,13 @@ const BACKOFF_MS = 2 * 60_000
  */
 const INFRA_BACKOFF_MS = 60_000
 const INFRA_BACKOFF_MAX_MS = 30 * 60_000
-/** The agent account would not run at all (spent usage, a model its plan lacks): the run says nothing about the report. */
-const AGENT_UNAVAILABLE = /ActionRequiredError|Increase limits|usage limit|out of (?:usage|credits)|Cannot use this model/i
+/**
+ * The agent account would not run (spent usage, signed out): every lane on
+ * the machine shares it, so every lane waits this long before it claims
+ * again, instead of claiming report after report into the same failure
+ * (2026-11-07: both Cursor keys spent, lanes kept claiming).
+ */
+const AGENT_UNAVAILABLE_WAIT_MS = 30 * 60_000
 const GH_CHECK_MS = 5 * 60_000
 const CURSOR_CHECK_MS = 20 * 60_000
 
@@ -142,6 +151,8 @@ export interface DaemonDeps {
   setCursorAccount?: (account: string) => void
   /** "Switch account" from the console. Without it the daemon does not offer to switch (no `can: cursor_login`). */
   cursorLogin?: CursorLogin
+  /** The coding agent the lanes run (worker.json `agent`); default cursor. */
+  agent?: LocalAgent
   /** Runs a first-time user test the console queued. Without it the daemon does not offer to take them. */
   freshEyes?: (t: FreshEyesTarget, o: { projectId: string; signal: AbortSignal; log: (line: string) => void }) => Promise<JobOutcome>
 }
@@ -172,6 +183,8 @@ interface LaneRuntime {
   nextFollowupAt: number
   /** Machine-side failures in a row; any other ending resets it. */
   infraStreak: number
+  /** When this lane last got an agent space (a run, job or follow-up started); 0 = never. Drives fairOrder. */
+  servedAt: number
   state: string
   /** The state the last heartbeat sent, and since when (for "waited 3 h for an agent space"). */
   seenState: string
@@ -182,6 +195,20 @@ interface LaneRuntime {
   last: string
 }
 
+/**
+ * @internal Exported for tests only. The order lanes ask for an agent space in
+ * on each tick: the lane served longest ago first (never served first), config
+ * order on ties. A fixed order let the first lanes in worker.json take every
+ * freed space: on 2026-11-16, with 17 lanes and 2 agents, mushi-mushi ran 5
+ * times in a row while glot.it, tsumagoi, yen-yen and HHTP waited 100 minutes.
+ */
+export function fairOrder<T extends { servedAt: number }>(lanes: readonly T[]): T[] {
+  return lanes
+    .map((lane, i) => ({ lane, i }))
+    .sort((a, b) => a.lane.servedAt - b.lane.servedAt || a.i - b.i)
+    .map((x) => x.lane)
+}
+
 /** @internal Exported for tests only. How long a lane waits after `streak` machine-side failures in a row. */
 export function infraBackoffMs(streak: number): number {
   return streak <= 1 ? 0 : Math.min(INFRA_BACKOFF_MS * 2 ** (streak - 2), INFRA_BACKOFF_MAX_MS)
@@ -190,6 +217,17 @@ export function infraBackoffMs(streak: number): number {
 /** @internal Exported for tests only. A run the machine or the agent account failed, not the code. */
 export function machineFailed(result: string, failureKind: 'infra' | 'code' | undefined, detail: string): boolean {
   return (result === 'failed' && failureKind === 'infra') || AGENT_UNAVAILABLE.test(detail)
+}
+
+/**
+ * @internal Exported for tests only. The model a lane's run gets. Lane models
+ * are set in the console for Cursor (grok-4.7-xhigh, gpt-5); handed to Claude
+ * Code, every run would fail, so a claude worker uses only Claude model ids
+ * and otherwise Claude Code's own default.
+ */
+export function modelFor(agent: LocalAgent, model: string | null | undefined): string | undefined {
+  if (!model) return undefined
+  return agent === 'claude' && !isClaudeModel(model) ? undefined : model
 }
 
 /** Heartbeats in a row on which the server must refuse the key before the worker stops for good. */
@@ -206,6 +244,7 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
     nextClaimAt: 0,
     nextFollowupAt: 0,
     infraStreak: 0,
+    servedAt: 0,
     state: deps.notReady?.has(local.name) ? 'not-ready' : 'starting',
     seenState: '',
     stateAt: deps.now(),
@@ -222,6 +261,13 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
   let stopped: string | null = null
   /** The account the agents must run as: worker.json's, until the console names another. */
   let account = deps.cursorAccount
+  const agent: LocalAgent = deps.agent ?? 'cursor'
+  /** Run models the agent cannot use, said once each. */
+  const model = (m: string | null | undefined): string | undefined => {
+    const use = modelFor(agent, m)
+    if (m && !use) once(`model:${m}`, null, `the lane model ${m} is not a ${agentSpec(agent).label} model; using ${agentSpec(agent).label}'s default`)
+    return use
+  }
   const reported = new Set<string>()
   const pending = new Set<Promise<void>>()
 
@@ -293,6 +339,8 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
       host: { ...deps.host, takes: deps.freshEyes ? ['fresh_eyes'] : [], can: deps.cursorLogin ? ['cursor_login'] : [] },
       status: {
         state: hostState,
+        // Which coding agent the lanes run, so the console names its account (not always Cursor).
+        agent: deps.agent ?? 'cursor',
         agents: agents(),
         ...(guards ? { maxAgents: guards.max_agents } : {}),
         ...(lastReadings?.memAvailableGb != null ? { memAvailableGb: lastReadings.memAvailableGb } : {}),
@@ -317,7 +365,16 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
   }
 
   /** Count machine-side failures in a row and hold the lane's next claim back accordingly. */
-  function afterRun(lane: LaneRuntime, failedOnMachine: boolean): void {
+  function afterRun(lane: LaneRuntime, failedOnMachine: boolean, agentDown = false): void {
+    if (agentDown) {
+      // One account serves every lane here: all of them wait, not just this one.
+      const until = deps.now() + AGENT_UNAVAILABLE_WAIT_MS
+      for (const l of lanes) {
+        l.nextClaimAt = Math.max(l.nextClaimAt, until)
+        l.nextFollowupAt = Math.max(l.nextFollowupAt, until)
+      }
+      say(lane, `  the ${agentSpec(agent).label} agent could not run (out of usage or signed out): no lane claims for ${AGENT_UNAVAILABLE_WAIT_MS / 60_000} min`)
+    }
     if (!failedOnMachine) {
       lane.infraStreak = 0
       return
@@ -334,8 +391,9 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
     lane.running.set(claim.id, ac)
     lane.state = 'working'
     const t0 = deps.now()
-    const model = claim.model ?? lane.config?.model ?? undefined
-    const track = newRun(claim.id, 'fix', { reportId: claim.report.id, model, now: t0, stage: 'prepare' })
+    lane.servedAt = t0
+    const runModel = model(claim.model ?? lane.config?.model)
+    const track = newRun(claim.id, 'fix', { reportId: claim.report.id, model: runModel, now: t0, stage: 'prepare' })
     lane.tracks.set(claim.id, track)
     say(lane, `claimed ${claim.report.id.slice(0, 8)}: ${(claim.report.summary ?? '').slice(0, 80)}`)
     const run = (async () => {
@@ -343,8 +401,8 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
       try {
         out = await deps.workOne(api, claim.report, {
           repoDir: lane.local.repoDir,
-          agent: 'cursor',
-          model,
+          agent,
+          model: runModel,
           log: (l) => {
             pushLog(track, l)
             say(lane, l.trim())
@@ -364,7 +422,7 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
       if (out.result === 'failed') lane.counters.errors++
       lane.last = `${claim.report.id.slice(0, 8)} → ${out.outcome}`.slice(0, 160)
       say(lane, `  → ${out.outcome}${out.prUrl ? ` ${out.prUrl}` : ''}`)
-      afterRun(lane, machineFailed(out.result, out.failureKind, out.outcome))
+      afterRun(lane, machineFailed(out.result, out.failureKind, out.outcome), out.agentUnavailable === true)
       const done = await deps.call<{ requeued: boolean }>(`/v1/worker/claims/${claim.id}/done`, {
         method: 'POST',
         body: JSON.stringify({
@@ -372,7 +430,8 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
           failureKind: out.result === 'failed' ? (out.failureKind ?? 'code') : null,
           fixId: out.fixId ?? null,
           prUrl: out.prUrl ?? null,
-          detail: out.outcome.slice(0, 1000),
+          // `gone`: the server closes the report with this as its team note.
+          detail: (out.result === 'gone' && out.note ? out.note : out.outcome).slice(0, 1000),
         }),
       })
       if (!done.ok) say(lane, `  outcome not recorded: ${done.error.code} ${done.error.message}`)
@@ -394,6 +453,7 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
     lane.running.set(claimId, ac)
     lane.state = 'working'
     const t0 = deps.now()
+    lane.servedAt = t0
     const track = newRun(claimId, kind, { model: lane.config?.model ?? null, now: t0 })
     lane.tracks.set(claimId, track)
     const log = (l: string) => {
@@ -415,7 +475,7 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
       if (out.result === 'failed') lane.counters.errors++
       lane.last = `${out.result}: ${out.detail}`.slice(0, 160)
       say(lane, `  → ${out.result}: ${out.detail}`)
-      afterRun(lane, machineFailed(out.result, out.failureKind, out.detail))
+      afterRun(lane, machineFailed(out.result, out.failureKind, out.detail), out.result === 'failed' && AGENT_UNAVAILABLE.test(out.detail))
       const done = await deps.call<{ requeued: boolean }>(`/v1/worker/claims/${claimId}/done`, {
         method: 'POST',
         body: JSON.stringify({
@@ -448,6 +508,7 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
   function startFollowup(lane: LaneRuntime, f: LocalFollowupCandidate): void {
     lane.followup = true
     const t0 = deps.now()
+    lane.servedAt = t0
     // A follow-up holds an agent space like a claim does, so the console sees it too.
     const runId = `followup-${f.fixId.replace(/-/g, '').slice(0, 8).toLowerCase()}`
     const track = newRun(runId, 'followup', { model: lane.config?.model ?? null, now: t0, stage: 'prepare' })
@@ -456,8 +517,8 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
     const run = deps
       .followUpOne(api, f, {
         repoDir: lane.local.repoDir,
-        agent: 'cursor',
-        model: lane.config?.model ?? undefined,
+        agent,
+        model: model(lane.config?.model),
         log: (l) => {
           pushLog(track, l)
           say(lane, l.trim())
@@ -470,6 +531,7 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
         if (/^failed/.test(r.outcome)) lane.counters.errors++
         lane.last = `follow-up → ${r.outcome}`.slice(0, 160)
         say(lane, `  → ${r.outcome}`)
+        if (r.agentUnavailable) afterRun(lane, true, true)
       })
       .catch((err: unknown) => {
         lane.counters.errors++
@@ -557,17 +619,17 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
         return
       }
       const k = parsed.value
-      const model = k.model ?? lane.config?.model ?? undefined
+      const jobModel = model(k.model ?? lane.config?.model)
       if (k.kind === 'fix' && (c.mode === 'fix' || c.mode === 'skill')) {
         startRun(lane, k.raw as unknown as ClaimFromServer)
       } else if (k.kind === 'conflict' && c.mode === 'conflicts') {
         const t = k.conflict
         startJob(lane, k.id, 'conflict', `conflict ${t.repo}#${t.prNumber} (${t.headRef} at ${t.headSha.slice(0, 7)})`, (signal, log) =>
-          (deps.resolveConflict ?? resolveConflict)(t, { repoDir: lane.local.repoDir, model, log, signal }),
+          (deps.resolveConflict ?? resolveConflict)(t, { repoDir: lane.local.repoDir, agent, model: jobModel, log, signal }),
         )
       } else if (k.kind === 'audit' && c.mode === 'audit') {
         startJob(lane, k.id, 'audit', `audit pass (${k.audit.findingsLeft} finding(s) left this hour)`, (signal, log) =>
-          (deps.auditPass ?? auditPass)(api, k.id, { repoDir: lane.local.repoDir, laneName: lane.local.name, model, reviewModel: k.audit.reviewModel, log, signal }),
+          (deps.auditPass ?? auditPass)(api, k.id, { repoDir: lane.local.repoDir, laneName: lane.local.name, agent, model: jobModel, reviewModel: model(k.audit.reviewModel) ?? null, recheck: k.audit.recheck, propose: k.audit.propose, log, signal }),
         )
       } else if (k.kind === 'fresh_eyes' && deps.freshEyes) {
         // Any lane of the app runs it: the test needs no clone. Never log the target (it can hold passwords).
@@ -657,7 +719,7 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
     waitWhy = null
     hostState = 'working'
     const now = deps.now()
-    for (const l of lanes) {
+    for (const l of fairOrder(lanes)) {
       if (stopped) break
       await laneStep(l, now, guards)
     }
@@ -733,7 +795,7 @@ export function assertWorkerKey(key: string, cliKey: string | undefined): string
 /**
  * @internal Exported for tests only. The sign-in, narrowed to one account when the worker config names it: a
  * clear "signed in" as anyone else counts as signed out (lane-v4 spent only
- * spare's credits this way). An unclear answer stays unclear.
+ * the worker account's credits this way). An unclear answer stays unclear.
  */
 export function cursorStateFor(s: { state: CursorSignIn; output: string }, account: string | undefined): CursorSignIn {
   if (!account || s.state !== 'signed_in') return s.state
@@ -834,8 +896,19 @@ export function createHostReadings(o: {
   }
 }
 
-export async function runDaemon(opts: { configPath?: string } = {}): Promise<void> {
+/** @internal Exported for tests only. How to stop the daemon where it runs: Windows has no systemctl. */
+export function stopHint(platform: NodeJS.Platform): string {
+  if (platform === 'linux') return 'Stop with Ctrl-C or systemctl --user stop mushi-worker.'
+  if (platform === 'win32') return 'Stop with Ctrl-C, or end its node.exe in Task Manager; `mushi worker revoke` removes it.'
+  return 'Stop with Ctrl-C.'
+}
+
+export async function runDaemon(opts: { configPath?: string; agent?: LocalAgent; anyRepo?: boolean } = {}): Promise<void> {
   const cfg = loadWorkerConfig(opts.configPath)
+  // `mushi work --daemon --agent` wins over worker.json's `agent`.
+  const agent: LocalAgent = opts.agent ?? cfg.agent ?? 'cursor'
+  // A Cursor account and "Switch account" are Cursor's: a Claude Code worker checks `claude auth status` only.
+  const cursorAccount = agent === 'cursor' ? cfg.cursorAccount : undefined
   const cli = loadConfig()
   const key = readWorkerKey(cli.apiKey)
   const endpoint = cfg.endpoint ?? process.env['MUSHI_API_ENDPOINT'] ?? cli.endpoint
@@ -850,6 +923,7 @@ export async function runDaemon(opts: { configPath?: string } = {}): Promise<voi
   if (gh.code !== 0) process.stdout.write('worker: gh is not signed in on this machine; lanes take nothing until it is (run: gh auth login).\n')
   const repos = new Map<string, string>()
   const notReady = new Map<string, string>()
+  const origins = new Map<string, string>()
   for (const lane of cfg.lanes) {
     const g = await runProc('git', ['rev-parse', '--git-dir'], { cwd: lane.repoDir, timeoutMs: 30_000 })
     if (g.code !== 0) {
@@ -861,11 +935,39 @@ export async function runDaemon(opts: { configPath?: string } = {}): Promise<voi
     const origin = await runProc('git', ['remote', 'get-url', 'origin'], { cwd: lane.repoDir, timeoutMs: 30_000 })
     const repo = origin.code === 0 ? repoOfRemote(origin.stdout) : null
     if (repo) repos.set(lane.name, repo)
+    if (origin.code === 0 && origin.stdout.trim()) origins.set(lane.name, origin.stdout.trim())
   }
 
   const conf: CliConfig = { apiKey: key, endpoint }
+  // A lane whose clone is not a repo the key's project is linked to stays out:
+  // it would fix that project's reports in another app's repo (2026-11-11).
+  // whoami answers for the key's own project only, so other lanes are not checked.
+  if (!opts.anyRepo) {
+    const who = await apiCall<WhoamiData>('/v1/sync/whoami', conf, {}, { timeoutMs: 30_000 })
+    if (who.ok) {
+      for (const lane of cfg.lanes) {
+        if (notReady.has(lane.name) || lane.projectId !== who.data.project_id) continue
+        const problem = wrongRepoMessage({
+          projectName: who.data.project_name,
+          projectId: who.data.project_id,
+          repoUrls: who.data.repo_urls,
+          origin: origins.get(lane.name) ?? null,
+          repoDir: lane.repoDir,
+        })
+        if (!problem) continue
+        process.stdout.write(`worker: lane ${lane.name}: ${problem.message} The lane stays out until it is fixed (or restart with --any-repo).\n`)
+        notReady.set(lane.name, `Its clone is not a repo ${who.data.project_name || 'this project'} is linked to (${who.data.repo_urls!.join(', ')}); point the lane at a clone of one, or restart the worker with --any-repo`)
+      }
+    }
+  }
   let wake: () => void = () => undefined
-  const readings = createHostReadings({ cursorAccount: cfg.cursorAccount, now: () => Date.now(), log: (l) => process.stdout.write(`${l}\n`) })
+  const readings = createHostReadings({
+    ...(cursorAccount ? { cursorAccount } : {}),
+    // The account slot of the readings (and the heartbeat's `cursor` field) holds whichever agent runs.
+    ...(agent === 'cursor' ? {} : { checkCursor: () => checkAgentSignIn(agent) }),
+    now: () => Date.now(),
+    log: (l) => process.stdout.write(`${l}\n`),
+  })
   // "Switch account" from the console. It counts the daemon's runs, which exist once the daemon does.
   const live = { agents: () => 0 }
   const cursorLogin = createCursorLogin({
@@ -884,9 +986,9 @@ export async function runDaemon(opts: { configPath?: string } = {}): Promise<voi
     readings: () => readings.read(),
     recheck: () => readings.recheck(),
     notReady,
-    ...(cfg.cursorAccount ? { cursorAccount: cfg.cursorAccount } : {}),
-    setCursorAccount: (a) => readings.setAccount(a),
-    cursorLogin,
+    ...(cursorAccount ? { cursorAccount } : {}),
+    agent,
+    ...(agent === 'cursor' ? { setCursorAccount: (a: string) => readings.setAccount(a), cursorLogin } : {}),
     now: () => Date.now(),
     log: (l) => process.stdout.write(`${l}\n`),
     host: { hostId, hostname: nodeHostIO.hostname.split('.')[0]!.slice(0, 80) || 'host', platform, version: MUSHI_CLI_VERSION },
@@ -896,7 +998,7 @@ export async function runDaemon(opts: { configPath?: string } = {}): Promise<voi
   })
   live.agents = daemon.agents
   onInterrupt((signal) => daemon.shutdown(signal))
-  process.stdout.write(`mushi worker: ${cfg.lanes.length} lane(s) on ${platform}; heartbeat every ${HEARTBEAT_MS / 1000} s. Stop with Ctrl-C or systemctl --user stop mushi-worker.\n`)
+  process.stdout.write(`mushi worker: ${cfg.lanes.length} lane(s) on ${platform}, agent ${agentSpec(agent).label} (${agentSpec(agent).bin}); heartbeat every ${HEARTBEAT_MS / 1000} s. ${stopHint(process.platform)}\n`)
 
   while (!daemon.stopped) {
     await daemon.tick().catch((err: unknown) => process.stdout.write(`worker: tick failed: ${err instanceof Error ? err.message : String(err)}\n`))

@@ -23,19 +23,17 @@ import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { storageVerdict } from '../components/storage/storageVerdict'
 import { StorageReadout } from '../components/storage/StorageReadout'
 import { EMPTY_STORAGE_STATS, type StorageStats, type StorageTabId } from '../components/storage/types'
-import { Card, Btn, Badge, ErrorAlert, Input, SecretInput, SelectField, SegmentedControl } from '../components/ui'
+import { Card, Btn, Badge, ErrorAlert, Input, InfoHint, SecretInput, SelectField, SegmentedControl } from '../components/ui'
+import { StatusPill, type RunStatus } from '../components/signal/StatusMark'
+import { relativeTime } from '../lib/setupGuideSteps'
+import { isStaleCheck, sortStorageCards, sortUsageRows, storageFieldsFor, storageProblems } from '../lib/storageView'
 import { SettingDefaultActions } from '../components/settings/SettingDefaultActions'
 import { describeApiFailure } from '../lib/humanizeApiError'
 import { PageHeaderBar } from '../components/PageHeaderBar'
-import {
-  ContainedBlock,
-  InlineProof,
-  SignalChip,
-} from '../components/report-detail/ReportSurface'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { NextStep } from '../components/NextStep'
 import { useToast } from '../lib/toast'
-import { CHIP_TONE, runStatusChipTone } from '../lib/chipTone'
+import { CHIP_TONE } from '../lib/chipTone'
 import { PageLoadError } from '../components/PageLoadError'
 
 type Provider = 'supabase' | 's3' | 'r2' | 'gcs' | 'minio'
@@ -78,11 +76,20 @@ interface StorageUsageRow {
   last_write_at: string | null
 }
 
-const HEALTH_CHIP: Record<StorageSetting['health_status'], string> = {
-  unknown: runStatusChipTone('unknown'),
-  healthy: runStatusChipTone('healthy'),
-  degraded: runStatusChipTone('degraded'),
-  failing: runStatusChipTone('failing'),
+/** Bucket state as a drawn mark: unknown is hollow "Not checked", never a ✓. */
+const HEALTH_STATUS: Record<StorageSetting['health_status'], { status: RunStatus; label: string }> = {
+  unknown: { status: 'idle', label: 'Not checked' },
+  healthy: { status: 'passed', label: 'Working' },
+  degraded: { status: 'waiting', label: 'Having trouble' },
+  failing: { status: 'failed', label: 'Failing' },
+}
+
+const PROVIDER_LABEL: Record<Provider, string> = {
+  supabase: 'Supabase Storage',
+  s3: 'AWS S3',
+  r2: 'Cloudflare R2',
+  gcs: 'Google Cloud Storage',
+  minio: 'MinIO',
 }
 
 // New cards (no DB row yet) need a sensible baseline so the user can hit Save
@@ -157,6 +164,7 @@ function validateProvider(m: StorageSetting & StorageSecretDraft): ValidationHin
 }
 
 const STORAGE_CHIP_TONE = {
+  neutral: CHIP_TONE.neutral,
   ok: CHIP_TONE.okSubtle,
   info: CHIP_TONE.neutral,
   warn: CHIP_TONE.warnSubtle,
@@ -191,7 +199,8 @@ export function StoragePage() {
   const [searchParams, setSearchParams] = useSearchParams()
 
   const tabParam = searchParams.get('tab')
-  const activeTab: StorageTabId = isStorageTab(tabParam) ? tabParam : 'overview'
+  // Usage is part of Overview now (it repeated the same table); old ?tab=usage links land there.
+  const activeTab: StorageTabId = isStorageTab(tabParam) && tabParam !== 'usage' ? tabParam : 'overview'
   const activeTabMeta = STORAGE_TABS.find((t) => t.id === activeTab) ?? STORAGE_TABS[0]
 
   const statsPath = activeProjectId ? '/v1/admin/storage/stats' : null
@@ -252,6 +261,21 @@ export function StoragePage() {
   const [liveDebug, setLiveDebug] = useState<Record<string, HealthDebugStep[]>>({})
   // Which cards have their debug panel open
   const [debugOpen, setDebugOpen] = useState<Record<string, boolean>>({})
+  // One app's form open at a time (`?app=` keeps it across reloads and links).
+  const openAppId = searchParams.get('app')
+  const setOpenApp = useCallback(
+    (id: string | null, tab?: StorageTabId) => {
+      const next = new URLSearchParams(searchParams)
+      if (id) next.set('app', id)
+      else next.delete('app')
+      if (tab) {
+        if (tab === 'overview') next.delete('tab')
+        else next.set('tab', tab)
+      }
+      setSearchParams(next, { replace: true, preventScrollReset: true })
+    },
+    [searchParams, setSearchParams],
+  )
   const toast = useToast()
 
   // Show one card per owned project. Projects with an existing row use their
@@ -266,6 +290,11 @@ export function StoragePage() {
         : { setting: defaultsFor(p.id), existing: false }
     })
   }, [settings, projects])
+
+  const nameOf = useCallback((id: string) => projects.find((p) => p.id === id)?.name ?? id, [projects])
+  const sortedCards = useMemo(() => sortStorageCards(cards, (c) => nameOf(c.setting.project_id)), [cards, nameOf])
+  // One source for "failing": the saved rows themselves, drawn as rows at the top.
+  const problems = useMemo(() => storageProblems(settings, nameOf), [settings, nameOf])
 
   const draftFor = (projectId: string): StorageDraft => drafts[projectId] ?? {}
   const merged = (s: StorageSetting): StorageSetting & StorageSecretDraft => ({ ...s, ...draftFor(s.project_id) })
@@ -335,72 +364,107 @@ export function StoragePage() {
       {
         id: 'configure' as const,
         label: 'Configure',
-        count: stats.failingCount > 0 ? stats.failingCount : stats.configuredCount > 0 ? stats.configuredCount : undefined,
-      },
-      {
-        id: 'usage' as const,
-        label: 'Usage',
-        count: stats.totalObjects > 0 ? stats.totalObjects : undefined,
+        count: problems.length > 0 ? problems.length : undefined,
       },
     ],
-    [stats.failingCount, stats.configuredCount, stats.totalObjects],
+    [problems.length],
+  )
+
+  const usageList = sortUsageRows(
+    projects.map((p) => {
+      const u = usageByProject.get(p.id)
+      return { id: p.id, name: p.name, objects: u?.object_count ?? 0, lastWrite: u?.last_write_at ?? null }
+    }),
   )
 
   const usageTable = (
     <Card className="p-3">
-      <div className="text-xs font-medium uppercase tracking-wider mb-2" data-dav-anchor="storage:verify">
-        Per-project usage
+      <div className="text-xs font-semibold mb-2 flex items-center gap-1" data-dav-anchor="storage:verify">
+        Screenshots per app
+        <InfoHint content="Uploaded screenshots and the most recent write, per app. Use it to spot an app burning through storage, or to confirm a quiet app before changing its provider." />
       </div>
-      <ContainedBlock tone="muted" className="mb-2">
-        <p className="text-xs leading-relaxed text-fg-muted">
-          Counts uploaded screenshots and the most recent write timestamp. Helpful to spot a project burning through
-          storage or to confirm a quiet project before changing its provider.
-        </p>
-      </ContainedBlock>
       {usageRows.length === 0 ? (
         <p className="text-xs text-fg-muted">No screenshot uploads recorded yet.</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
-            <thead className="text-fg-muted uppercase tracking-wider text-3xs">
+            <thead className="text-fg-secondary text-3xs font-semibold">
               <tr className="border-b border-edge-subtle">
-                <th className="py-1.5 text-left">Project</th>
-                <th className="text-right">Objects</th>
-                <th className="text-left pl-3">Last write</th>
+                <th className="py-1.5 text-left">App</th>
+                <th className="text-right">Screenshots</th>
+                <th className="text-left pl-3">Last saved</th>
               </tr>
             </thead>
             <tbody>
-              {projects.map((p) => {
-                const u = usageByProject.get(p.id)
-                const isActive = p.id === activeProjectId
+              {usageList.map((r) => {
+                const isActive = r.id === activeProjectId
                 return (
                   <tr
-                    key={p.id}
-                    className={`border-b border-edge-subtle/40 ${isActive ? 'bg-surface-overlay' : ''}`}
+                    key={r.id}
+                    className={`border-b border-edge-subtle/40 ${r.objects === 0 ? 'text-fg-faint' : ''} ${isActive ? 'bg-surface-overlay' : ''}`}
                   >
                     <td className="py-1.5">
-                      {p.name}
-                      {isActive ? (
-                        <SignalChip tone="brand" className="ml-1.5 uppercase text-3xs">Active</SignalChip>
-                      ) : null}
+                      {r.name}
+                      {isActive ? <span className="ml-1.5 text-3xs font-semibold text-fg-secondary">This app</span> : null}
                     </td>
-                    <td className="text-right font-mono">{(u?.object_count ?? 0).toLocaleString()}</td>
-                    <td className="pl-3">
-                      {u?.last_write_at ? (
-                        <InlineProof className="inline-block">{new Date(u.last_write_at).toLocaleString()}</InlineProof>
+                    <td className="text-right font-mono tabular-nums">{r.objects.toLocaleString()}</td>
+                    <td className="pl-3 whitespace-nowrap">
+                      {r.lastWrite ? (
+                        <time dateTime={r.lastWrite} title={new Date(r.lastWrite).toLocaleString()} className="text-fg-muted">
+                          {relativeTime(r.lastWrite) ?? new Date(r.lastWrite).toLocaleDateString()}
+                        </time>
                       ) : (
-                        <span className="text-fg-muted">—</span>
+                        <span>—</span>
                       )}
                     </td>
                   </tr>
                 )
               })}
             </tbody>
+            <tfoot>
+              <tr className="font-semibold">
+                <td className="pt-1.5">All apps</td>
+                <td className="pt-1.5 text-right font-mono tabular-nums">
+                  {usageList.reduce((n, r) => n + r.objects, 0).toLocaleString()}
+                </td>
+                <td />
+              </tr>
+            </tfoot>
           </table>
         </div>
       )}
     </Card>
   )
+
+  /** Failing buckets lead the page, worst first, each with a Fix button. */
+  const problemRows =
+    problems.length > 0 ? (
+      <ul className="space-y-1.5" aria-label="Storage problems" data-testid="storage-problems">
+        {problems.map((pr) => (
+          <li
+            key={pr.projectId}
+            className={`flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md border px-3 py-2 text-xs ${
+              pr.status === 'failing' ? 'border-st-failed/55 bg-st-failed-soft' : 'border-st-waiting/50 bg-st-waiting-soft'
+            }`}
+          >
+            <StatusPill status={HEALTH_STATUS[pr.status].status} label={HEALTH_STATUS[pr.status].label} />
+            <span className="min-w-0 flex-1 basis-48 text-fg">
+              <span className="font-semibold">{pr.name}</span> bucket
+              {pr.error ? <span className="text-fg-secondary"> — {pr.error}</span> : null}
+              {pr.checkedAt ? (
+                // Wraps: a nowrap run here pushed under the Fix button at 390 (2026-11-19).
+                <span className={`ml-1 text-2xs ${isStaleCheck(pr.checkedAt) ? 'text-warn-foreground' : 'text-fg-muted'}`}>
+                  · checked {relativeTime(pr.checkedAt) ?? new Date(pr.checkedAt).toLocaleDateString()}
+                </span>
+              ) : null}
+            </span>
+            <Btn size="sm" variant="primary" className="shrink-0" onClick={() => setOpenApp(pr.projectId, 'configure')}>
+              Fix
+            </Btn>
+          </li>
+        ))}
+      </ul>
+    ) : null
 
   const renderProjectCard = ({ setting: s, existing }: { setting: StorageSetting; existing: boolean }) => {
         const m = merged(s)
@@ -412,38 +476,13 @@ export function StoragePage() {
         const saveBlocked = existing ? (!dirty || blockingHints.length > 0) : blockingHints.length > 0
         const debugSteps = liveDebug[s.project_id] ?? s.last_health_debug ?? null
         const isDebugOpen = debugOpen[s.project_id] ?? false
-        const isActive = s.project_id === activeProjectId
+        const fields = storageFieldsFor(m)
 
         return (
-          <Card key={s.project_id} className={`p-3 ${isActive ? 'ring-1 ring-brand/40' : ''}`}>
-            <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
-              <div className="min-w-0">
-                <div className="text-xs font-semibold text-fg truncate">
-                  {projectName}
-                  {isActive ? <span className="ml-1.5 text-3xs text-brand uppercase">Active</span> : null}
-                </div>
-                <code className="text-3xs opacity-70 font-mono wrap-anywhere">{s.project_id}</code>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {!existing ? (
-                  <span className={`inline-flex rounded px-2 py-0.5 text-2xs ${CHIP_TONE.infoSubtle}`}>
-                    Using cluster default — save to override
-                  </span>
-                ) : (
-                  <>
-                    <span className={`inline-flex rounded px-2 py-0.5 text-3xs border ${HEALTH_CHIP[s.health_status]}`}>
-                      {s.health_status.toUpperCase()}
-                    </span>
-                    {s.last_health_check_at ? (
-                      <span className="text-2xs text-fg-muted">
-                        Checked {new Date(s.last_health_check_at).toLocaleString()}
-                      </span>
-                    ) : null}
-                  </>
-                )}
-              </div>
+          <div key={s.project_id} className="px-3 pb-3 pt-2" aria-label={`Storage settings for ${projectName}`}>
+            <div className="mb-2 text-3xs text-fg-muted">
+              App ID <code className="font-mono wrap-anywhere">{s.project_id}</code>
             </div>
-
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <SelectField
                 label="Provider"
@@ -463,20 +502,24 @@ export function StoragePage() {
                 value={m.bucket}
                 onChange={(e) => updateDraft(s.project_id, { bucket: e.target.value })}
               />
-              <Input
-                label="Region"
-                helpId="storage.region"
-                value={m.region ?? ''}
-                placeholder={m.provider === 'r2' ? 'auto' : 'us-east-1'}
-                onChange={(e) => updateDraft(s.project_id, { region: e.target.value || null as unknown as string })}
-              />
-              <Input
-                label="Endpoint (S3-compatible only)"
-                helpId="storage.endpoint"
-                value={m.endpoint ?? ''}
-                placeholder="https://s3.us-east-1.amazonaws.com"
-                onChange={(e) => updateDraft(s.project_id, { endpoint: e.target.value || null as unknown as string })}
-              />
+              {fields.region ? (
+                <Input
+                  label="Region"
+                  helpId="storage.region"
+                  value={m.region ?? ''}
+                  placeholder={m.provider === 'r2' ? 'auto' : 'us-east-1'}
+                  onChange={(e) => updateDraft(s.project_id, { region: e.target.value || null as unknown as string })}
+                />
+              ) : null}
+              {fields.endpoint ? (
+                <Input
+                  label="Endpoint (S3-compatible only)"
+                  helpId="storage.endpoint"
+                  value={m.endpoint ?? ''}
+                  placeholder="https://s3.us-east-1.amazonaws.com"
+                  onChange={(e) => updateDraft(s.project_id, { endpoint: e.target.value || null as unknown as string })}
+                />
+              ) : null}
               <Input
                 label="Path prefix"
                 helpId="storage.path_prefix"
@@ -484,37 +527,44 @@ export function StoragePage() {
                 placeholder="mushi-mushi/"
                 onChange={(e) => updateDraft(s.project_id, { path_prefix: e.target.value })}
               />
-              <Input
-                label="Signed URL TTL (seconds)"
-                helpId="storage.signed_url_ttl_secs"
-                type="number"
-                value={String(m.signed_url_ttl_secs)}
-                onChange={(e) => updateDraft(s.project_id, { signed_url_ttl_secs: parseInt(e.target.value, 10) || 3600 })}
-              />
-              <SettingDefaultActions
-                id={`ttl-${s.project_id}`}
-                current={m.signed_url_ttl_secs}
-                defaultValue={3600}
-                format={(v) => `${v} s`}
-                onApply={(v) => updateDraft(s.project_id, { signed_url_ttl_secs: v })}
-              />
+              {/* The default sits under its own field, not orphaned in the next grid cell. */}
+              <div className="space-y-1">
+                <Input
+                  label="Signed URL TTL (seconds)"
+                  helpId="storage.signed_url_ttl_secs"
+                  type="number"
+                  value={String(m.signed_url_ttl_secs)}
+                  onChange={(e) => updateDraft(s.project_id, { signed_url_ttl_secs: parseInt(e.target.value, 10) || 3600 })}
+                />
+                <SettingDefaultActions
+                  id={`ttl-${s.project_id}`}
+                  current={m.signed_url_ttl_secs}
+                  defaultValue={3600}
+                  format={(v) => `${v} s`}
+                  onApply={(v) => updateDraft(s.project_id, { signed_url_ttl_secs: v })}
+                />
+              </div>
               {/* Raw keys: the server stores them in Vault and keeps only the
                   name. These fields never show a saved key back. */}
-              <SecretInput
-                label="Access key ID"
-                helpId="storage.access_key_ref"
-                value={m.access_key ?? ''}
-                placeholder={m.access_key_vault_ref ? 'Saved — paste a new key to replace it' : 'AKIA…'}
-                onChange={(e) => updateDraft(s.project_id, { access_key: e.target.value })}
-              />
-              <SecretInput
-                label="Secret access key"
-                helpId="storage.secret_key_ref"
-                value={m.secret_key ?? ''}
-                placeholder={m.secret_key_vault_ref ? 'Saved — paste a new key to replace it' : 'Your secret access key'}
-                onChange={(e) => updateDraft(s.project_id, { secret_key: e.target.value })}
-              />
-              {m.provider === 'gcs' ? (
+              {fields.accessKeys ? (
+                <>
+                  <SecretInput
+                    label="Access key ID"
+                    helpId="storage.access_key_ref"
+                    value={m.access_key ?? ''}
+                    placeholder={m.access_key_vault_ref ? 'Saved — paste a new key to replace it' : 'AKIA…'}
+                    onChange={(e) => updateDraft(s.project_id, { access_key: e.target.value })}
+                  />
+                  <SecretInput
+                    label="Secret access key"
+                    helpId="storage.secret_key_ref"
+                    value={m.secret_key ?? ''}
+                    placeholder={m.secret_key_vault_ref ? 'Saved — paste a new key to replace it' : 'Your secret access key'}
+                    onChange={(e) => updateDraft(s.project_id, { secret_key: e.target.value })}
+                  />
+                </>
+              ) : null}
+              {fields.serviceAccount ? (
                 <SecretInput
                   label="GCS service-account key (JSON)"
                   value={m.service_account_json ?? ''}
@@ -522,12 +572,14 @@ export function StoragePage() {
                   onChange={(e) => updateDraft(s.project_id, { service_account_json: e.target.value })}
                 />
               ) : null}
-              <Input
-                label="KMS Key ID (optional)"
-                helpId="storage.kms_key_id"
-                value={m.kms_key_id ?? ''}
-                onChange={(e) => updateDraft(s.project_id, { kms_key_id: e.target.value || null as unknown as string })}
-              />
+              {fields.kms ? (
+                <Input
+                  label="KMS Key ID (optional)"
+                  helpId="storage.kms_key_id"
+                  value={m.kms_key_id ?? ''}
+                  onChange={(e) => updateDraft(s.project_id, { kms_key_id: e.target.value || null as unknown as string })}
+                />
+              ) : null}
               <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
                 <input
                   type="checkbox"
@@ -591,7 +643,7 @@ export function StoragePage() {
                 {isDebugOpen && (
                   <div className="mt-1 overflow-x-auto rounded border border-edge-subtle bg-surface-overlay">
                     <table className="w-full text-2xs font-mono">
-                      <thead className="text-fg-muted uppercase tracking-wider text-3xs border-b border-edge-subtle">
+                      <thead className="text-fg-secondary text-3xs border-b border-edge-subtle font-semibold">
                         <tr>
                           <th className="py-1 px-2 text-left">Step</th>
                           <th className="px-2">Result</th>
@@ -617,7 +669,10 @@ export function StoragePage() {
               </div>
             )}
 
-            <div className="mt-3 flex items-center justify-end gap-2">
+            <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+              {!existing ? (
+                <span className="text-2xs text-fg-muted">Save first to run a health check.</span>
+              ) : null}
               <Btn
                 variant="ghost"
                 size="sm"
@@ -638,11 +693,63 @@ export function StoragePage() {
                 {existing ? 'Save' : 'Save & enable'}
               </Btn>
             </div>
-          </Card>
+          </div>
         )
   }
 
-  const activeCard = cards.find((c) => c.setting.project_id === activeProjectId)
+  /** One compact row per app (provider, bucket, status); the form opens on click. */
+  const storageList = (
+    <div data-dav-anchor="storage:decide">
+    <Card className="p-0 overflow-hidden">
+      <ul className="divide-y divide-edge-subtle" aria-label="Storage per app" data-testid="storage-app-list">
+        {sortedCards.map((card) => {
+          const st = card.setting
+          const m = merged(st)
+          const name = nameOf(st.project_id)
+          const open = openAppId === st.project_id
+          const isActive = st.project_id === activeProjectId
+          const health = HEALTH_STATUS[st.health_status]
+          const stale = isStaleCheck(st.last_health_check_at)
+          return (
+            <li key={st.project_id} className={open ? 'bg-surface-overlay/40' : ''}>
+              <button
+                type="button"
+                aria-expanded={open}
+                onClick={() => setOpenApp(open ? null : st.project_id)}
+                // mushi-mushi-allowlist: row columns line up with the table header
+                className="grid w-full min-w-0 grid-cols-[1fr_auto] items-center gap-x-3 gap-y-1 px-3 py-2 text-left text-xs hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 md:grid-cols-[minmax(8rem,1.2fr)_minmax(8rem,1fr)_minmax(8rem,1fr)_auto]"
+              >
+                <span className="min-w-0 truncate font-semibold text-fg">
+                  <span aria-hidden className="mr-1.5 inline-block w-3 text-fg-faint">{open ? '▾' : '▸'}</span>
+                  {name}
+                  {isActive ? <span className="ml-1.5 text-3xs font-semibold text-fg-secondary">This app</span> : null}
+                </span>
+                <span className="justify-self-end md:order-last">
+                  {card.existing ? (
+                    <StatusPill status={health.status} label={health.label} />
+                  ) : (
+                    <span className="text-2xs text-fg-muted whitespace-nowrap">Built-in</span>
+                  )}
+                </span>
+                <span className="min-w-0 truncate text-fg-secondary">{PROVIDER_LABEL[m.provider]}</span>
+                <span className="min-w-0 truncate font-mono text-2xs text-fg-muted">
+                  {m.bucket}
+                  {card.existing && st.last_health_check_at ? (
+                    <span className={`ml-2 font-sans whitespace-nowrap ${stale ? 'text-warn-foreground' : ''}`}>
+                      checked {relativeTime(st.last_health_check_at) ?? new Date(st.last_health_check_at).toLocaleDateString()}
+                    </span>
+                  ) : null}
+                </span>
+              </button>
+              {open ? renderProjectCard(card) : null}
+            </li>
+          )
+        })}
+      </ul>
+    </Card>
+    </div>
+  )
+
 
   if (!activeProjectId) {
     return (
@@ -712,8 +819,13 @@ export function StoragePage() {
       >
         {/* Scoped to the active project in words: next to the team-wide
             "Healthy buckets" count, a bare "UNKNOWN" read as a contradiction. */}
-        <Badge className={STORAGE_CHIP_TONE[storageVerdict(stats).tone]}>This app: {storageVerdict(stats).chip}</Badge>
+        {/* Built-in storage is said by the status line; the chip only marks a configured bucket. */}
+        {storageVerdict(stats).action !== 'configure' && (
+          <Badge className={STORAGE_CHIP_TONE[storageVerdict(stats).tone]}>This app: {storageVerdict(stats).chip}</Badge>
+        )}
       </PageHeaderBar>
+
+      {problemRows}
 
       <PagePosture
         slots={[
@@ -745,15 +857,8 @@ export function StoragePage() {
 
       {activeTab === 'overview' && (
         <>
-          <StorageReadout
-            stats={stats}
-            fetchedAt={statsFetchedAt}
-            isValidating={statsValidating}
-          />
           {usageTable}
-          {activeCard ? (
-            <div data-dav-anchor="storage:decide">{renderProjectCard(activeCard)}</div>
-          ) : cards.length === 0 ? (
+          {cards.length === 0 ? (
             <NextStep
               variant="inline"
               requires={['project_created']}
@@ -761,6 +866,11 @@ export function StoragePage() {
               emptyDescription="Create a project first — every project gets its own storage backend."
             />
           ) : null}
+          <StorageReadout
+            stats={stats}
+            fetchedAt={statsFetchedAt}
+            isValidating={statsValidating}
+          />
         </>
       )}
 
@@ -774,14 +884,10 @@ export function StoragePage() {
               emptyDescription="Create a project first — every project gets its own storage backend."
             />
           ) : (
-            <div data-dav-anchor="storage:decide" className="space-y-3">
-              {cards.map((card) => renderProjectCard(card))}
-            </div>
+            storageList
           )}
         </>
       )}
-
-      {activeTab === 'usage' && usageTable}
     </div>
   )
 }

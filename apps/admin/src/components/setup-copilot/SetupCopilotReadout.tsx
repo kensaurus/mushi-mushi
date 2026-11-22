@@ -56,7 +56,8 @@ export function SetupCopilotReadout({
   ]
 
   return (
-    <ReadoutPanel title="Copilot setup readout" freshness={{ at: fetchedAt ?? null, isValidating: validating }}>
+    // The same "Setup endpoints and raw signals" label as on the other Set up tabs (round-3 review).
+    <ReadoutPanel title="Setup readout" freshness={fetchedAt === undefined ? undefined : { at: fetchedAt, isValidating: validating }}>
       <p className="mb-4 text-xs leading-relaxed text-fg-muted">
         Canonical endpoints and refs for this project — paste the connect command in your repo, then
         verify heartbeat on the steps below.
@@ -65,7 +66,7 @@ export function SetupCopilotReadout({
         <ReadoutSection title="Endpoints" icon={<IconGlobe size={14} aria-hidden />}>
           <EndpointCodeRow label="Ingest API" url={RESOLVED_EXTERNAL_API_URL} />
           <div className="mt-2 rounded-md border border-edge-subtle bg-surface-root/40 px-3 py-2">
-            <div className="mb-1 flex items-center gap-1.5 text-3xs font-medium uppercase tracking-wider text-fg-faint">
+            <div className="mb-1 flex items-center gap-1.5 text-3xs font-semibold text-fg-secondary">
               <IconTerminal size={12} aria-hidden />
               Connect command
             </div>

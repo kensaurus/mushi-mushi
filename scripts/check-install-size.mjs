@@ -3,7 +3,8 @@
  * FILE: scripts/check-install-size.mjs
  * PURPOSE: Size budget for the packages people run through `npx`, where every
  *          byte is downloaded on each cold start: @mushi-mushi/mcp (spawned by
- *          the editor) and @mushi-mushi/cli (behind `npx mushi-mushi`).
+ *          the editor), @mushi-mushi/cli (behind `npx mushi-mushi`) and
+ *          `mushi-mushi` itself (the launcher and the one SDK package).
  *
  * Packs each package with `pnpm pack` (the release's own packer) and fails
  * when the tarball (download) or its unpacked contents (node_modules) exceed
@@ -99,13 +100,76 @@ const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 export const BUDGETS = [
   // 2026-10-28: 965 → 975 kB unpacked: the bundled docs index (search_mushi_docs)
   // now carries the Free/Builder/Studio pricing and Production Check pages.
-  { name: '@mushi-mushi/mcp', dir: 'packages/mcp', packed: 250_000, unpacked: 975_000 },
+  // 2026-11-03: 975 → 985 kB unpacked: the docs index gained the How it works
+  // page, and every excerpt and the README spell the full product name
+  // ("Mushi Mushi"). Text only, no code or dependency change; measured 976.0 kB.
+  // 2026-11-11: 985 → 995 kB unpacked: the docs index gained the beginner pages
+  // (what it is, glossary, three persona pages) and the client registry gained
+  // Lovable (ADR 0056). Text only, no dependency change; measured 986.2 kB.
+  // 2026-11-11 (round 2): packed 250 → 255 kB: the docs index gained the agency
+  // compare page and the Japanese page. Text only; measured 250.2 kB packed.
+  // 2026-11-13: packed 255 → 262 kB, unpacked 995 → 1,025 kB: the Journey
+  // optimizer (ADR 0058): three tools (get_journeys, scan_site_journeys,
+  // record_journeys) with their shaping in report-shapes.ts, and the docs index
+  // gained the Journeys page plus the repositioned landing copy. No new
+  // dependencies; measured 257.8 kB packed, 1,015.8 kB unpacked.
+  // 2026-11-19: unpacked 1,025 → 1,035 kB: `--help` / `--version` text (stdio-args.ts) and the
+  // docs index gained the curl, Bolt and Replit quickstarts and the reach-first pricing copy
+  // (ADR 0063). Text only, no dependency change; measured 260.6 kB packed, 1,026.4 kB unpacked.
+  // 2026-11-20: packed 262 → 265 kB: the docs index gained the "What leaves the browser"
+  // security page (#1198). Text only, no code or dependency change; measured 262.1 kB packed.
+  { name: '@mushi-mushi/mcp', dir: 'packages/mcp', packed: 265_000, unpacked: 1_035_000 },
   // 2026-10-28: packed 262 → 270 kB: release 5's version bump adds its CHANGELOG
   // entries (the changelog ships in the tarball), measured 265.4 kB packed.
   // 2026-10-29: 990 → 995 kB unpacked: `mushi doctor` reads the Health check
   // registry (ADR 0054, plan-simplicity Phase 1): one more check and its
   // warning rows. No new dependencies; measured at 990.0 kB unpacked in CI.
-  { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 270_000, unpacked: 995_000 },
+  // 2026-11-11: packed 270 → 275 kB, unpacked 995 → 1,010 kB: `mushi work
+  // --agent claude` (work-agents.ts: the agent table, the out-of-usage stop) so
+  // fixes run on Claude Code when Cursor credits are out. No new dependencies;
+  // measured 270.3 kB packed, 1,001.3 kB unpacked in CI.
+  // 2026-11-12: packed 275 → 280 kB, unpacked 1,010 → 1,020 kB: `mushi work`
+  // rechecks a report for free before an agent run (work-recheck.ts, the
+  // `gone` outcome, `--recheck` sweep; ADR 0048 amendment b), plus the 0.36.x
+  // CHANGELOG entries. No new dependencies; measured 275.1 kB packed,
+  // 1,013.9 kB unpacked in CI.
+  // 2026-11-13: unpacked 1,020 → 1,030 kB: `mushi journeys` (show, scan,
+  // record; ADR 0058). No new dependencies; measured 269.1 kB packed,
+  // 1,022.9 kB unpacked.
+  // 2026-11-13: packed 280 → 285 kB, unpacked 1,030 → 1,050 kB: the Vue,
+  // Svelte and Node starters moved in from create-mushi-mushi (templates/,
+  // 21 files) with `--template` and the shared `wizard-bin` entry both
+  // unscoped bins now call (ADR 0060 Phase 1b); the rest of the growth since
+  // the 1,022.9 kB figure includes the 0.39.0 CHANGELOG. No new dependencies;
+  // measured 281.7 kB packed, 1,041.4 kB unpacked (57 files).
+  // 2026-11-19: packed 285 → 300 kB, unpacked 1,050 → 1,100 kB: `mushi selfhost` that works
+  // on a clean machine (selfhost.ts: compose secrets and signed anon/service keys, the runtime
+  // config upsert, plan limits lifted, `selfhost secrets`) and the easier first run (init.ts:
+  // `--dry-run`, the sample bug, the MCP key upgrade). No new dependencies; measured 294.4 kB
+  // packed, 1,087.6 kB unpacked (59 files).
+  // 2026-11-20: packed 300 → 310 kB, unpacked 1,100 → 1,130 kB: a Windows worker that runs
+  // without administrator rights (the Startup-folder launcher when schtasks is refused), pnpm
+  // found on PATH, the heartbeat naming its agent, and `mushi login` asking outside an app
+  // folder. No new dependencies; measured 300.4 kB packed, 1,097.1 kB unpacked (59 files).
+  { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 310_000, unpacked: 1_130_000 },
+  // 2026-11-13 (ADR 0060): `mushi-mushi` is the one package users install and
+  // the `npx mushi-mushi` launcher. Its own tarball is the bin plus thin
+  // re-exports and the four small framework adapters bundled in; measured
+  // 31.2 kB packed, 110.1 kB unpacked (60 files) before the README rewrite.
+  // `npx mushi-mushi` now also downloads its SDK dependencies: with cli,
+  // core, web and node the cold start is about 1,767 kB packed (web alone is
+  // 979 kB, mostly source maps), up from about 300 kB (launcher + cli). This
+  // budget guards what the umbrella itself adds; the SDK tarballs are not
+  // budgeted here (their size-limit checks cover the shipped bundle, not the
+  // tarball).
+  // 2026-11-13 (ADR 0060 Phase 1b): packed 38 → 60 kB, unpacked 135 → 235 kB
+  // for `mushi-mushi/eslint`, the ESLint rules bundled from the now-private
+  // eslint-plugin-mushi-mushi (eslint.js 60.8 kB + eslint.cjs 61.8 kB +
+  // 2 × 2.9 kB types = 128.3 kB unpacked, unminified like the other
+  // entries). The rest of the growth is the README rewrite and the CHANGELOG.
+  // No new dependencies (eslint is an optional peer); measured 54.8 kB
+  // packed, 225.2 kB unpacked (64 files), with the README still being edited.
+  { name: 'mushi-mushi', dir: 'packages/launcher', packed: 60_000, unpacked: 235_000 },
 ]
 
 const fmt = (n) => `${(n / 1000).toFixed(1)} kB`

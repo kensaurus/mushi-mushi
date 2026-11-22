@@ -21,10 +21,19 @@
  *          roadmap, submission and redemption review, Tremendous webhook),
  *          the per-app Home, setup gaps and the release batch (console ops
  *          plan P1), the Health check registry (plan-simplicity-2026-10 Phase 1), local workers (`mushi work --daemon`, ADR 0048), repo clean-up (ADR 0051)
- *          fresh-eyes runs (ADR 0053), the public free Production Check and
+ *          fresh-eyes runs (ADR 0053), the UX scorecard (ADR 0067), the Journey optimizer (ADR 0058), the public free Production Check and
  *          scoreboard (docs /check and /proof, GTM plan November 2026), and the
  *          cookieless landing page-view count with the daily GTM scorecard
- *          (landing-visits.ts).
+ *          (landing-visits.ts), the design CI push and recipe drift
+ *          (recipe-ingest.ts) and the org's bill imports (spend-ledger.ts),
+ *          the org's accounts and domains register (accounts-register.ts, 2026-11-18),
+ *          the Ops hub (ops.ts: app events, the Ops feed, the team's Slack
+ *          bot commands and buttons, added 2026-11-17), the operator's
+ *          Providers & AI routes proxy to kensaurus-ops (kensaurus-ops.ts, 2026-11-18),
+ *          moved 2026-11-11 to make room in `api` for the runner push and the
+ *          worker heartbeat, which `api` now serves itself (one invocation
+ *          each instead of two). api-ext still registers those two routes for
+ *          callers that reach it directly.
  */
 
 import { Hono } from 'npm:hono@4'
@@ -33,6 +42,7 @@ import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts'
 import { requestLoggingMiddleware } from '../_shared/request-logging.ts'
 import { stdioMcpUsage } from '../_shared/mcp-stdio-usage.ts'
 import { registerCiRoutes } from '../api/routes/ci.ts'
+import { registerReportPipelineRoutes } from '../api/routes/report-pipeline.ts'
 import { registerCiPlacementRoutes } from '../api/routes/ci-placement.ts'
 import { registerCiBillRoutes } from '../api/routes/ci-bill.ts'
 import { registerCiCostFixRoutes } from '../api/routes/ci-cost-fix.ts'
@@ -44,6 +54,7 @@ import { registerCodebaseUnderstandRoutes } from '../api/routes/codebase-underst
 import { registerModernizationHealthSuperRoutes } from '../api/routes/modernization-health-super.ts'
 import { registerSkillsRoutes } from '../api/routes/skills.ts'
 import { registerAnthropicModelRoutes } from '../api/routes/anthropic-models.ts'
+import { registerSdkUpgradeRoutes } from '../api/routes/sdk-upgrade.ts'
 import { registerQaCoverageRoutes } from '../api/routes/qa-coverage.ts'
 import { registerFullstackAuditRoutes } from '../api/routes/fullstack-audit.ts'
 import { registerUxRunsRoutes } from '../api/routes/ux-runs.ts'
@@ -56,6 +67,8 @@ import { registerLocalFollowupRoutes } from '../api/routes/local-followups.ts'
 import { registerSdkHealthRoutes } from '../api/routes/sdk-health.ts'
 import { registerPipelineRoutes } from '../api/routes/pipeline.ts'
 import { registerReportSentryRoutes } from '../api/routes/report-sentry.ts'
+import { registerPublishedAppsRoutes } from '../api/routes/published-apps.ts'
+import { registerDigestRoutes } from '../api/routes/digest.ts'
 import { registerTesterMarketplaceRoutes } from '../api/routes/tester-marketplace.ts'
 import { registerProjectHomeRoutes } from '../api/routes/project-home.ts'
 import { registerSetupGapsRoutes } from '../api/routes/setup-gaps.ts'
@@ -69,9 +82,17 @@ import { registerReleaseBatchRoutes } from '../api/routes/release-batch.ts'
 import { registerWorkRoutes } from '../api/routes/work.ts'
 import { registerRepoHousekeepingRoutes } from '../api/routes/repo-housekeeping.ts'
 import { registerFreshEyesRoutes } from '../api/routes/fresh-eyes.ts'
+import { registerUxScorecardRoutes } from '../api/routes/ux-scorecard.ts'
+import { registerJourneyRoutes } from '../api/routes/journeys.ts'
 import { registerProductionCheckRoutes } from '../api/routes/production-check.ts'
 import { registerPublicScoreboardRoutes } from '../api/routes/public-scoreboard.ts'
 import { registerLandingVisitRoutes } from '../api/routes/landing-visits.ts'
+import { registerBillingChangePlanRoutes } from '../api/routes/billing-change-plan.ts'
+import { registerRecipeIngestRoutes } from '../api/routes/recipe-ingest.ts'
+import { registerSpendLedgerRoutes } from '../api/routes/spend-ledger.ts'
+import { registerAccountsRegisterRoutes } from '../api/routes/accounts-register.ts'
+import { registerOpsRoutes } from '../api/routes/ops.ts'
+import { registerKensaurusOpsRoutes } from '../api/routes/kensaurus-ops.ts'
 
 ensureSentry('api-ext')
 
@@ -84,6 +105,8 @@ app.use('/v1/*', stdioMcpUsage())
 registerAskMushiRoutes(app)
 registerInventoryRoutes(app)
 registerCiRoutes(app)
+// One report's pipeline trail + stage retry (console UX overhaul 2026-11-19); api forwards it.
+registerReportPipelineRoutes(app)
 registerCiPlacementRoutes(app)
 registerCiBillRoutes(app)
 registerCiCostFixRoutes(app)
@@ -93,6 +116,7 @@ registerCodebaseUnderstandRoutes(app)
 registerModernizationHealthSuperRoutes(app)
 registerSkillsRoutes(app)
 registerAnthropicModelRoutes(app)
+registerSdkUpgradeRoutes(app)
 registerQaCoverageRoutes(app)
 registerFullstackAuditRoutes(app)
 registerUxRunsRoutes(app)
@@ -105,6 +129,8 @@ registerLocalFollowupRoutes(app)
 registerSdkHealthRoutes(app)
 registerPipelineRoutes(app)
 registerReportSentryRoutes(app)
+registerPublishedAppsRoutes(app)
+registerDigestRoutes(app)
 registerTesterMarketplaceRoutes(app)
 registerProjectHomeRoutes(app)
 registerSetupGapsRoutes(app)
@@ -118,9 +144,21 @@ registerReleaseBatchRoutes(app)
 registerWorkRoutes(app)
 registerRepoHousekeepingRoutes(app)
 registerFreshEyesRoutes(app)
+registerUxScorecardRoutes(app)
+registerJourneyRoutes(app)
 registerProductionCheckRoutes(app)
 registerPublicScoreboardRoutes(app)
 registerLandingVisitRoutes(app)
+// Plan change for paying teams (forwarded from api; api size budget).
+registerBillingChangePlanRoutes(app)
+registerRecipeIngestRoutes(app)
+registerSpendLedgerRoutes(app)
+// The org's accounts and domains (accounts-register.ts), moved 2026-11-18 for the api size budget.
+registerAccountsRegisterRoutes(app)
+// The Ops hub: app events, the console feed, the team's Slack bot (docs/execplans/ops-hub-slack.md).
+registerOpsRoutes(app)
+// Providers & AI routes (operator only): proxy to the kensaurus-ops API on kenji.
+registerKensaurusOpsRoutes(app)
 
 app.notFound((c) => c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'No such route.' } }, 404))
 

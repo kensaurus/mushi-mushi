@@ -50,8 +50,8 @@ export function BillingStatusBanner({ stats, onManage, onUpgrade, onTab, plainBa
         title={plainBanner ? 'Create a project first' : 'No projects yet'}
         subtitle={
           plainBanner
-            ? 'Billing is per app — set one up on Projects first.'
-            : 'Billing is per-project — create an app first, then usage and invoices appear here.'
+            ? 'Plans are per team — add your first app on Projects, then usage appears here.'
+            : 'A plan covers every app in your team — create an app first, then usage and invoices appear here.'
         }
         action={
           <Btn to="/projects" size="sm" variant="ghost">{actions.projects ?? 'Create project'}</Btn>
@@ -151,7 +151,8 @@ export function BillingStatusBanner({ stats, onManage, onUpgrade, onTab, plainBa
       // Not a problem, so not the red brand tone; usage is the tile right below.
       <StatusBannerShell
         tone="info"
-        title={plainBanner ? 'Admin account — no charges' : 'Admin account — complimentary billing'}
+        // Ink, not the info blue: a title in link colour that isn't a link (2026-11-19).
+        title={<span className="text-fg">{plainBanner ? 'Admin account — no charges' : 'Admin account — complimentary billing'}</span>}
         subtitle={`${stats.planDisplayName} features on ${projectLabel}; nothing is billed.`}
         action={
           <Btn to="/team?view=spend" size="sm" variant="ghost">{actions.cost ?? 'See AI spend'}</Btn>

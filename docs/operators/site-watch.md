@@ -1,11 +1,57 @@
 # Live-site watch: operator notes
 
 The live-site watch ([ADR 0024](../adr/0024-live-site-watch-files-broken-pages-as-reports.md))
-crawls an app's public pages once a day through a Firecrawl monitor on the
+loads an app's public pages once a day through a Firecrawl monitor on the
 project's own Firecrawl key, and files each newly broken page as a report.
 Users turn it on from **Inventory → Discovery → Watch your live site**; the
 user-facing description is in
 [`apps/docs/content/admin/inventory.mdx`](../../apps/docs/content/admin/inventory.mdx).
+
+## The page list (ADR 0059)
+
+Since 2026-11-13 the monitor is not a crawl. It is scrape targets over an
+explicit page list, and every URL carries `mushi_monitor=watch`
+([ADR 0059](../adr/0059-site-watch-loads-a-marked-page-list-not-a-crawl.md)).
+A crawl marked only its seed URL, so about 500 page loads a day reached the
+apps unmarked.
+
+- **Building the list** (`selectWatchUrls`). The list holds at most
+  `page_limit` pages, base first. It takes:
+  1. the pages already watched;
+  2. the newest check's pages (on the switch, the crawl's link-found pages);
+  3. `/v2/map` pages, shallow first.
+
+  Sitemaps, feeds, data downloads and files are left out. Each new page is
+  resolved to the site's own spelling first (`resolveSameSiteRedirects`: a
+  HEAD, no redirect followed, no page script), because kensaur.us 301s
+  `/glot-it` to `/glot-it/` and drops the query, and with it the marker.
+- **When a page leaves:** only when the map no longer lists it, it answered
+  404/410, and it holds no open finding: a suspect, or filed with its report
+  still open. A broken link stays watched, with its finding open, until a
+  person closes its report, so link-found 404s still reach a report and stay
+  visible. A dead URL the map lists is
+  loaded, and its 404 files.
+- **Refresh** (`refreshWatchPages`). The list refreshes once a day, after the
+  poll reads the scheduled check (1 map credit), and on a stale shape (the old
+  crawl, a missing UA or marker). The console's Save builds it the same way.
+- **Every PATCH resets every page's history**, even with an unchanged list
+  (verified 2026-11-13: the next check reports all pages `new`). So the poll
+  PATCHes only when the page set changes or the shape is stale.
+  - A failed or thin map (under 2 pages, or under half the watched ones)
+    cannot shrink the list.
+- **Closed on PATCH:** open findings of pages outside the new list
+  (`resolvePagesOutside`).
+- **Limits:** 100 URLs per scrape target (Firecrawl accepted 100 on
+  2026-11-13; its docs name no limit), up to 50 targets per monitor. With
+  `page_limit` ≤ 100, one target holds a watch.
+- **Budget:** unchanged. The cap is 800 page loads a day over 8 watches, about
+  529 computed from the 2026-11-13 checks and maps (509 loaded today),
+  plus 8 map credits a day. The +20 is mostly tsumagoi, whose crawl stopped
+  at 79 pages while the map lists 98. Lower `page_limit` to trim a watch.
+
+**First poll after the deploy:** each crawl monitor is switched to a page
+list. The next check reports every page `new`, so open judged-break findings
+resolve once and the judge starts over for one check.
 
 ## A broken page files only when it is seen failing twice
 
@@ -62,38 +108,128 @@ on its side. If our 55 s abort fires first, Firecrawl may still charge.
 `site_watch_pages.last_confirm` keeps the last verdict. The poll's response
 lists `confirmScrapes` and `dismissed` per watch.
 
+## Edge canaries (ADR 0061)
+
+The watch's pages go through Firecrawl's browser, which follows every
+redirect. A CDN rule that answers the wrong status or Location (a slash
+redirect that drops the query, a missing asset that returns 200 HTML or a
+5xx) is invisible to it. Edge canaries check that directly
+([ADR 0061](../adr/0061-cloudwatch-alarms-and-edge-canaries-file-reports.md)).
+
+- **What runs:** `site-watch-poll`'s hourly cron pass (not "Check now") does
+  one GET per enabled `edge_canaries` row. It uses `redirect: 'manual'` and
+  the MushiSiteWatch User-Agent, and runs no page script. A canary passes
+  when the status is in `expect_status` and, when set, the Location (resolved
+  against the URL) equals `expect_location`.
+- **When it files:** a failure is fetched again 3 s later. A canary files as a
+  `site_watch` report (`custom_metadata.source = 'edge_canary'`) on its second
+  failing run in a row. Five or more failing together in one app file one
+  report. Passing again resets `fail_streak` and leaves the report open.
+- **Cost:** no Firecrawl credits.
+- **Adding one:** insert a row, since there is no console screen yet:
+
+  ```sql
+  insert into edge_canaries (project_id, label, url, expect_status, expect_location)
+  values ('<project uuid>', 'Bare app root keeps its query',
+          'https://example.com/app?utm_source=canary', '{301}',
+          'https://example.com/app/?utm_source=canary');
+  ```
+
+- **State:** each row's `last_status`, `last_location`, `last_detail` and
+  `fail_streak` show the newest answer. The poll's JSON response has a
+  `canaries` summary.
+
+## CloudWatch alarms (ADR 0061)
+
+`webhooks-cloudwatch` files CloudWatch alarm state changes delivered by
+Amazon SNS. To connect one:
+
+1. Bind the topic to the app:
+   `update project_settings set cloudwatch_sns_topic_arn = '<topic arn>' where project_id = '<uuid>'`.
+   One app per topic.
+2. Subscribe the topic, protocol HTTPS, endpoint
+   `https://<project-ref>.supabase.co/functions/v1/webhooks-cloudwatch`. The
+   function verifies the SubscriptionConfirmation and confirms it itself.
+
+Each alarm gets one `source = 'cloudwatch'` report (`cloudwatch_alarms` keeps
+its state):
+
+- ALARM files the report, or dedupes onto the one still open.
+- ALARM after the report is closed reopens it.
+- OK annotates `custom_metadata.cloudwatch` and leaves the report open.
+- Any other message on the topic is answered 200 and ignored.
+
+Each delivery leaves a row in `webhook_audit_log` with
+`webhook_source = 'cloudwatch'`.
+
 ## Filter the crawler out of your monitoring and analytics
 
-Every page fetch the watch makes sends this `User-Agent` header (a normal
-Chrome UA with a Mushi token appended):
+Firecrawl's browser loads every page with `document.referrer` set to
+`https://www.google.com/` and a stock Linux Chrome `navigator.userAgent`. In
+your analytics, Mushi's scheduled jobs therefore look like Google visitors.
+Before 2026-11-13 that was about 5× the real traffic of each KENSAURUS app.
+
+Since 2026-11-13, every Mushi job that loads a page of your app through
+Firecrawl marks the request in two ways (`_shared/monitor-url.ts`).
+
+**The URL** gets these params, after any query the URL already has. The
+fragment stays last, and a param that is already there is not added again:
+
+```
+?mushi_monitor=<watch|audit|qa>&utm_source=mushi-monitor&utm_medium=<watch|audit|qa>
+```
+
+- Firecrawl strips `utm_*` (and `gclid`) before its browser navigates, so
+  filter on **`mushi_monitor`**. It reaches the server and `location.href`
+  (verified 2026-11-13).
+- The UTM pair is there for crawlers that keep it.
+
+| `mushi_monitor` | Job |
+| --- | --- |
+| `watch` | Live-site watch: every listed page and the confirm scrapes, and the Home card screenshot |
+| `audit` | Site audit batch, Production Check, inventory renders |
+| `qa` | QA stories (`firecrawl_actions`), story-mapper page scrapes |
+
+**The `User-Agent` request header** is a normal Chrome UA with a Mushi token
+appended:
 
 ```
 Mozilla/5.0 (…) Chrome/141.0.0.0 Safari/537.36 MushiSiteWatch/1.0 (+https://kensaur.us/mushi-mushi)
 ```
 
-Filter on the substring `MushiSiteWatch` so the daily crawl does not show up
-as visitors, sessions or errors:
+Filters to set:
 
-- **Sentry:** drop the event in `beforeSend` when the request's `User-Agent`
-  header contains `MushiSiteWatch`, or add an inbound filter on that string.
-- **Analytics** (PostHog, GA4, Plausible, …): exclude requests or sessions
-  whose user agent contains `MushiSiteWatch`.
-- **Server logs and rate limits:** match the same substring.
+- **Analytics** (PostHog, GA4, Plausible, …): exclude page views whose URL
+  contains `mushi_monitor=`.
+- **Sentry:** drop the event in `beforeSend` when the page URL contains
+  `mushi_monitor=` or the request's `User-Agent` contains `MushiSiteWatch`.
+- **Server logs and rate limits:** match either string.
 
-The header is set on the HTTP request. Whether the page's JavaScript sees it in
-`navigator.userAgent` depends on Firecrawl's browser engine and has not been
-verified yet, so prefer a server-side or request-header filter.
+Known limits:
 
-The constant is `SITE_WATCH_USER_AGENT` in
-`packages/server/supabase/functions/_shared/site-watch.ts`. Only the watch
-sends it; known-issue search, site maps and other Firecrawl calls do not.
+- **A redirect can drop the marker.** A host redirect that drops the query
+  string, such as kensaur.us's slash redirect, removes it. The watch resolves
+  each new page to its redirect target first; other jobs (site audit,
+  Production Check) send the URL as given.
+- **The User-Agent header is unverified at the HTTP level.** Mushi sends it on
+  every page load, but there was no Firecrawl key to check what Firecrawl's
+  browser actually sends.
+- **The page's JavaScript can't see the header.** It reads Firecrawl's stock
+  `navigator.userAgent` (verified 2026-11-13), so a client-side filter has to
+  match the URL marker.
+- **Map calls are not marked.** They discover URLs and render no page.
+- **Non-customer Firecrawl calls are not marked:** known-issue search,
+  research, changelogs.
 
-## Monitors created before the header existed
+`monitor-url-guard.test.ts` fails when a new Firecrawl call site is neither
+marked nor classified as loading no customer page. It also fails when anything
+starts a crawl or builds a crawl monitor target.
 
-The header is part of the monitor's crawl target, so a monitor created before
-it was added does not send it until its target is saved again. Turning the
-watch off and on, or saving it again from the console, sends the full target
-to Firecrawl.
+## Monitors created before ADR 0059
+
+The poll switches a stale monitor itself (`monitorNeedsReconcile`). Stale
+means a crawl target, a target without the current User-Agent, or an unmarked
+URL. Nobody needs to re-save a watch.
 
 Firecrawl does not cache a scrape sent with custom headers, so each check is a
 live fetch. Credit use is unchanged.

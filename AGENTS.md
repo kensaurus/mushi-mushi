@@ -10,15 +10,20 @@ can execute without additional context.
 
 ## Positioning — read this before you touch any user-facing surface
 
-> The canonical constitution is [`/VISION.md`](./VISION.md). This block is the
+> The canonical constitution is [`docs/VISION.md`](./docs/VISION.md). This block is the
 > compressed copy so on-message behavior survives even when an agent only loads
-> `AGENTS.md`. If this and `VISION.md` ever disagree, `VISION.md` wins — fix it
+> `AGENTS.md`. If this and `docs/VISION.md` ever disagree, `docs/VISION.md` wins — fix it
 > here, don't fork it. Drift is enforced against by
 > [`scripts/check-positioning-consistency.mjs`](./scripts/check-positioning-consistency.mjs).
 
-**North star.** Your AI shipped it. Mushi Mushi tells you why it broke — in plain English, in your editor, with the fix ready to go — so a bug costs you five minutes instead of your whole afternoon.
+**North star.** Your AI built it. Mushi Mushi makes it better: it finds what breaks, where people get stuck and what the code needs, then hands your editor the fix in plain English.
 
-**Category we own.** The bug mediator for AI-built apps — one queue between your users, your monitoring (Sentry/Crashlytics/Rollbar), your tracker (Linear/Jira/GitHub), your chat (Slack/Discord/Teams), and your coding agents, where every bug gets a plain-English diagnosis and a ready fix. (Not "error monitoring", not "observability" — those are someone else's ops-coded words.)
+**Category we own.** One place to improve AI-built apps ([ADR 0058](./docs/adr/0058-one-stop-platform-to-enhance-vibe-coded-apps.md), the owner, 2026-11-13; it superseded "Bug fixing for AI-built apps", ADR 0056). Bug fixing is one pillar, not the category. Three pillars, inside the editor or agent the user already has (MCP, CLI, skills):
+1. **Fix what breaks** — bug reports, the free Production Check, the live-site watch, Sentry; each bug gets a plain-English diagnosis and a ready fix.
+2. **Improve the journeys people take** — the Journey optimizer (`/journeys`), the first-time user test (`/first-user-test`).
+3. **Improve the code** — known holes, code audits, design system, repo clean-up, CI cost; changes land as reviewed draft PRs.
+
+"Bug mediator" is the inside view (one queue between your users, your monitoring, your tracker, your chat and your coding agents), never a hero word. (Not "error monitoring", not "observability", not "growth analytics" — those are someone else's words.)
 
 **The app recipe** (ADR 0016) is diagnosis context, not a new category: every
 recipe element is optional, renders "not connected" when empty, and changes
@@ -26,11 +31,12 @@ ship only as reviewed draft PRs. It never leads a public surface.
 
 **Primary buyer.** The solo / indie **vibe coder** who builds fast with AI (Cursor, Claude Code, Lovable, Bolt), ships to real users, then loses afternoons when something breaks because they don't fully grasp the generated code. Small teams and agencies are secondary; the enterprise SRE running Sentry + Datadog + Firebase is explicitly *not* who we lead with.
 
-**The public surface leads with one job** ([ADR 0052](./docs/adr/0052-public-surface-leads-with-one-job.md)):
-the landing and the README's first screen say only "a user said your app is
-broken; Mushi Mushi tells you why in plain English and hands Cursor, Claude Code or
-Lovable the fix", with one install action and one readable sample diagnosis.
-Integrations, CI cost, voice, rewards and self-host live on docs pages one
+**The public surface leads with the category and its three pillars** ([ADR 0058](./docs/adr/0058-one-stop-platform-to-enhance-vibe-coded-apps.md), replacing the one job of ADR 0056 and ADR 0052):
+the free Production Check stays the first action (ADR 0056), and each pillar
+is named with what it needs. Only what works free with no key of the user's
+own is promised as free (for example: the journey map from real visits is
+keyless, the site scan needs a Firecrawl key, code audits need the user's own
+agent). Integrations, voice, rewards and self-host live on docs pages one
 click away; the operator cockpit never appears on the public path.
 
 **Portfolio operator** (ADR 0017) is the same vibe coder with several apps.
@@ -43,7 +49,7 @@ Portfolio and radar features never lead a public surface; the claim is
 2. **We will not make you rip anything out.** Sentry, Linear, Slack, your agents all stay — Mushi mediates between them. Enterprise plumbing (SSO, region routing, Helm) still lives in `docs/operators/` and never leads.
 3. **We will not let the surfaces diverge.** The tagline, the north-star sentence, and the buyer stay identical across npm, repo, landing, and this file.
 
-The "is this drift?" test for any feature you build or surface you write: *"Does this help a solo vibe-coder understand and fix a bug faster, without leaving their editor?"* Yes → it can lead. No, but operators need it → `docs/operators/`, never the hero.
+The "is this drift?" test for any feature you build or surface you write: *"Does this help a solo vibe-coder find and fix what is wrong with their app — a bug, a journey where people get stuck, or a code problem — faster, without leaving their editor?"* Yes → it can lead. No, but operators need it → `docs/operators/`, never the hero.
 
 **Engineering yardstick** ([ADR 0039](./docs/adr/0039-better-models-make-mushi-better.md)). Before you build or change a feature, ask: *"When the models get better, does this get better on its own?"* The model is a setting, never a constant (project or organization column → edge secret → code default). Facts and safety (advisory matching, merge gates, test proof, budgets, permissions) are deterministic code; judgement (diagnosis, fix plans, review) goes to the model. Feed the model evidence, not prompt workarounds, and store outcomes per model so "better" shows.
 
@@ -61,8 +67,8 @@ The "is this drift?" test for any feature you build or surface you write: *"Does
 |-------|----------|---------|-------------|
 | `classify-report` | `supabase/functions/classify-report/` | `reports` INSERT | LLM triage: severity, category, blast-radius |
 | `fix-worker` | `supabase/functions/fix-worker/` | manual / classify result | Opens a draft GitHub PR for a fix and queues its Opus review; the PR stays a draft (no host CI) until `agent-pr-review` says merge on its head (ADR 0047). Refactored to import branch/commit/PR helpers from `_shared/github-pr.ts`. A cloud dispatch on a report that had earlier attempts adds what they did (each PR's latest Opus review and serious findings, or the agent's no-PR note), screened and fenced (`_shared/prior-attempts.ts`), so a re-dispatch does not repeat a rejected theory. |
-| `sdk-upgrade-worker` | `supabase/functions/sdk-upgrade-worker/` | POST from `sdk-upgrade` route | **NEW** Reads the connected repo's `package.json`(s), bumps `@mushi-mushi/*` to latest npm versions, opens a draft PR + marks ready. Writes result to `sdk_upgrade_jobs`. When the host has `.github/workflows/mushi-sdk-lockfile.yml` (ADR 0019) it pushes the bump as one commit and parks the job in `awaiting_lockfile` instead of opening the PR. Guards: allow-listed paths, semver-only bumps, vault token resolution, `requireServiceRoleAuth`. |
-| `sdk-versions-cron` | `supabase/functions/sdk-versions-cron/` | pg_cron daily 02:30 UTC + release.yml | **NEW** Fetches latest stable version for every `@mushi-mushi/*` package from the npm registry and upserts into `sdk_versions` so freshness chips are accurate between hand-authored migrations. Service-role bearer (pg_cron) or a GitHub OIDC token from `release.yml` (`_shared/github-oidc.ts`). |
+| `sdk-upgrade-worker` | `supabase/functions/sdk-upgrade-worker/` | POST from `sdk-upgrade` route | **NEW** Reads the connected repo's `package.json`(s), bumps `mushi-mushi` and `@mushi-mushi/*` to latest npm versions, opens a draft PR + marks ready. Writes result to `sdk_upgrade_jobs`. When the host has `.github/workflows/mushi-sdk-lockfile.yml` (ADR 0019) it pushes the bump as one commit and parks the job in `awaiting_lockfile` instead of opening the PR. Guards: allow-listed paths, semver-only bumps, vault token resolution, `requireServiceRoleAuth`. |
+| `sdk-versions-cron` | `supabase/functions/sdk-versions-cron/` | pg_cron daily 02:30 UTC + release.yml | **NEW** Fetches latest stable version for `mushi-mushi` and every `@mushi-mushi/*` package from the npm registry and upserts into `sdk_versions` so freshness chips are accurate between hand-authored migrations. Service-role bearer (pg_cron) or a GitHub OIDC token from `release.yml` (`_shared/github-oidc.ts`). |
 | `sdk-release-sync` | `supabase/functions/sdk-release-sync/` | pg_cron every 5 min | **NEW** Polls GitHub for active SDK upgrade jobs (`pr_opened \| ready_to_merge \| blocked \| merged \| deploying`): fetches PR detail, latest check-run, and deployment status (normalized via `normalizeDeployStatus`), then upserts CI/deploy/release status into `sdk_upgrade_jobs` to drive the release-cockpit chips. First opens the PR for `awaiting_lockfile` jobs once the host lockfile workflow pushed (or after 30 min, with a note). `requireServiceRoleAuth`. |
 | `inventory-propose` | `supabase/functions/inventory-propose/` | manual / cron | Proposes user-story inventory from SDK observation data |
 | `story-mapper` | `supabase/functions/story-mapper/` | POST /map-from-live | Crawls live app URL (Firecrawl/Browserbase) → Claude drafts `inventory.yaml` → `inventory_proposals` (source=live_crawl); opt-in Cursor Cloud PR |
@@ -121,7 +127,7 @@ Cron, billing, retention, and platform hygiene workers live alongside the 19 pip
 | `radar-scan` | Daily (04:05 UTC) hole checks per project (Plan 020): public probes (store names, listing locales, domain and certificate expiry, security headers, privacy link) and store-policy rules read from the repo → `gate_runs` gate `portfolio_radar`. Host CI pushes `portfolio_radar_ci` via `POST /v1/ingest/radar` (`mushi radar scan --push`) |
 | `operator-digest` | Hourly at :20; sends each organization's opt-in daily digest (new reports, holes, releases, AI spend jump; weekly signups/activations per app on `gtm_weekday`) once a day at its `send_hour_utc` to Slack, Discord, Teams, Telegram (each through one project's existing connection), email or push (Plan 020 §9; `operator_digest_settings`, off by default) |
 | `store-review-intake` | Every 6 hours at :45; per-project opt-in (`project_settings.store_review_intake_enabled`): reads App Store / Google Play reviews through the project's bound store connectors, dedupes in `store_review_items`, files reviews at or under `store_review_max_rating` (default 2) as reports with `source = 'store_review'` |
-| `site-watch-poll` | Hourly at :14, and about 1 and 2.5 min after "Check now"; reads the finished checks of each project's Firecrawl crawl monitor (live-site watch, ADR 0024; `site_watches`, billed to the project's Firecrawl key) and records each broken page (5xx, linked 4xx, load error, judged breakage) as a suspect in `site_watch_pages`. A suspect files as a report with `source = 'site_watch'` only after a second failure (ADR 0029): a confirm scrape on the project's own key (`/v2/scrape`, `waitFor` 10 s, fresh; ≤6 per run shared fairly across watches, never on the platform env key) still sees it broken, or, for 5xx/4xx/load errors only, two checks in a row. Low-severity fallbacks: a confident judged break left inconclusive for 2 checks ("unconfirmed"), a 5xx found healthy 3 times in 7 days ("intermittent"). Judge fail-open is never evidence; a healthy confirm drops the suspect; one open finding per page |
+| `site-watch-poll` | Hourly at :14, and about 1 and 2.5 min after "Check now"; reads the finished checks of each project's Firecrawl monitor (live-site watch, ADR 0024; `site_watches`, billed to the project's Firecrawl key). The monitor is scrape targets over a page list, every URL marked `mushi_monitor=watch` (ADR 0059, no crawl), refreshed once a day after the check from `/v2/map` and the check's pages, PATCHed only when the page set changes; and records each broken page (5xx, linked 4xx, load error, judged breakage) as a suspect in `site_watch_pages`. A suspect files as a report with `source = 'site_watch'` only after a second failure (ADR 0029): a confirm scrape on the project's own key (`/v2/scrape`, `waitFor` 10 s, fresh; ≤6 per run shared fairly across watches, never on the platform env key) still sees it broken, or, for 5xx/4xx/load errors only, two checks in a row. Low-severity fallbacks: a confident judged break left inconclusive for 2 checks ("unconfirmed"), a 5xx found healthy 3 times in 7 days ("intermittent"). Judge fail-open is never evidence; a healthy confirm drops the suspect; one open finding per page |
 | `site-audit` | Hourly at :29, and right after "Run now" (`POST /v1/admin/projects/:id/site-audit/run`, 3 an hour per app); the site audit (ADR 0040, `site_audits`, off by default, billed to the project's Firecrawl key): every `cadence_days` (default 7) maps the live site and starts a fresh Firecrawl batch scrape (html + links + markdown, ≤`page_limit` pages under `base_url`, the site watch's user agent), then on a later tick runs deterministic rules (`_shared/site-audit.ts`: dead internal/external links and images by 404/410/5xx/unreachable only, missing title/description/lang, localized metadata in another script, another locale's text in the body, links that drop the locale, images without alt) and files one report per failing rule (`source = 'site_audit'`, `site_audit_findings`); an open report is refreshed, a dismissed one never refiled, a fixed one refiled when the rule fails again. Settings and Run now on /credits |
 | `search-rank` | Daily at 04:47, and right after "Check now" (`POST /v1/admin/projects/:id/search-ranks/run`, 3 an hour per app); search rank check: for each keyword in `search_rank_keywords` not checked in 7 days (≤40 a run), Firecrawl `/v2/search` top 20 in its country on the app's own Firecrawl key, stores the app's position (`_shared/search-rank.ts`, its watched/audited address as target), the leading hosts and a `search_rank_history` row. Keywords edited on /credits; files no reports |
 | `spend-down-worker` | Every 10 minutes (:08 to :58); spend-down mode (ADR 0028): for each Cursor key with spend-down on and inside its window (`byok_keys.credits_expire_at` minus `spend_down_window_days`), dispatches the best open reports of the apps the key already serves (ADR 0023 order) as automatic `cursor_cloud` fixes, up to `spend_down_daily_limit` a day, inside each app's auto-fix caps, ≤3 running per app (`project_settings.autofix_max_concurrent` lowers it where every agent push runs slow or shared CI); the stop-loss (ADR 0028 amendment) pauses an app when, over its spend-down runs of the last 14 days (newest 40, 20+ samples, after its last Resume), the one-sided 95% Wilson bound puts its Opus merge rate under 20%, hold rate over 35% or no-PR share over 50%; a paused app gets 1 probe dispatch a day and resumes on 25% / 30% / 45% point estimates, 2 merged probes (which also reset its window), aging out, or Resume (`POST /v1/admin/byok/spend-down/projects/:projectId/resume`, console); logs `spend-down.paused` / `spend-down.resumed` once per change; a report whose newest PR Opus held is retried after 12 h, under 3 attempts, with the earlier attempts' findings in the prompt (ADR 0028 amendment 2026-10-24, `reportsToRetryAfterHold`); a key Cursor refuses for its usage limit is marked `byok_keys.exhausted_until` (6 h): new agents and spend-down's app assignment go to the next key in the pool while its running agents keep polling with the key recorded on the attempt (`external_agent_ref.key_id`); one tick per key via the `byok_keys.spend_down_claimed_until` lease; skips a report a local worker holds (ADR 0048) or that waits in a local lane's queue (ADR 0042 amendment); writes `spend_down_last_summary`. `GET /v1/admin/byok/spend-down` adds each key's 7-day scoreboard (runs → PRs → Opus verdicts → merged, latest review cost per PR) computed on read, per-app detail limited to the caller's apps |
@@ -298,6 +304,7 @@ Live App URL
 | **Setup & account** | `mushi init`, `mushi setup`, `mushi connect`, `mushi login`, `mushi upgrade`, `mushi reset`, `mushi whoami`, `mushi status`, `mushi doctor`, `mushi ping`, `mushi test` (synthetic report through ingest), `mushi migrate` (suggests a migration guide), `mushi completion`, `mushi nudge`, `mushi profile list/current/use` |
 | **Project & deploy** | `mushi project`, `mushi config`, `mushi deploy check`, `mushi selfhost up/doctor`, `mushi index`, `mushi sourcemaps upload`, `mushi audit`, `mushi radar scan/show`, `mushi recipe init/check/show/sources/change`, `mushi store pull/reviews/reviews-pull/reviews-set`, `mushi repo digest/cleanup/diagram`, `mushi code-health show/stats`, `mushi design settings/set/dispatch-findings` |
 | **Reports & lessons** | `mushi reports list/show/search/triage/file/…`, `mushi lessons list/show`, `mushi sync-lessons`, `mushi feedback board`, `mushi sentry import`, `mushi outbox list/edit/release/discard` |
+| **Journeys** | `mushi journeys`, `mushi journeys scan`, `mushi journeys record` |
 | **Fixes & releases** | `mushi fix`, `mushi fixes tail/refresh-ci/rerun-ci/merge/review/verify`, `mushi work` (a local Cursor CLI agent; you push and open the PR; `--followups` fixes Opus "fix first" findings on those PRs, and on cloud-agent PRs while cloud follow-ups are off), `mushi work --daemon` and `mushi worker install/status/revoke` (a local worker the console steers, ADR 0048; lanes fix reports, run follow-ups, resolve merge-queue conflicts (ADR 0049), audit the code (ADR 0050) or run skill-run rounds; any claiming lane also runs the first-time user tests the console queues, ADR 0053 amendment), `mushi console watch <reportId>`, `mushi releases draft/list/show/edit/publish/delete/stats/auto-release/calendar` |
 | **QA / TDD** | `mushi qa stories/runs/run`, `mushi tdd gen/pending/approve/improve/run`, `mushi stories map`, `mushi ux discover/login/run/open` (local UX loop, `@mushi-mushi/ux`, ADR 0020), `mushi ux-runs list/show/file` |
 | **Skills / pipeline** | `mushi skills list/show/sync`, `mushi pipeline start/watch/checkin` |
@@ -378,11 +385,13 @@ mushi billing cap 0                    # clear spend cap
 
 ### MCP Tools
 
-Full catalog: **130 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/catalog.ts) — generated docs at [`apps/docs/content/sdks/mcp-tools.mdx`](apps/docs/content/sdks/mcp-tools.mdx). Vibe-coder incident loop: [`apps/docs/content/quickstart/incident-loop.mdx`](apps/docs/content/quickstart/incident-loop.mdx) (`get_fix_context` → prompt `summarize_report_for_fix`).
+Full catalog: **133 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/catalog.ts) — generated docs at [`apps/docs/content/sdks/mcp-tools.mdx`](apps/docs/content/sdks/mcp-tools.mdx). Vibe-coder incident loop: [`apps/docs/content/quickstart/incident-loop.mdx`](apps/docs/content/quickstart/incident-loop.mdx) (`get_fix_context` → prompt `summarize_report_for_fix`).
 
 Core MCP tools (`mcp:read` scope): `get_recent_reports`, `get_report_detail`, `get_fix_context`, `query_lessons`, `list_lessons`, `list_qa_story_runs`, `get_qa_story_run`
 
 Notification tools (`mcp:write` scope): `test_notification_channel`
+
+Journey optimizer tools: `get_journeys` (`mcp:read`), `scan_site_journeys` and `record_journeys` (`mcp:write`).
 
 Usage / billing tool (`mcp:read` scope): `get_usage` — diagnoses used / limit / spend cap for the current period.
 
@@ -395,6 +404,30 @@ TDD MCP tools: `map_user_stories`, `get_map_run_status`, `generate_tdd_from_stor
 - `test_notification_channel` — send a test ping to verify Slack or Discord is wired up
 
 ---
+
+## Agent skills shipped from this repo
+
+`skills/` is the only hand-edited copy of the Mushi Mushi agent skills (ADR
+0060, "Skills: one source"). `npx skills add kensaurus/mushi-mushi` installs
+from it:
+
+| Skill | Covers |
+|-------|--------|
+| `mushi-mushi` | Start here: the loop, and which skill to use next |
+| `mushi-setup` | Wizard install, sign-in, MCP wiring |
+| `mushi-triage` | Evidence → diagnosis → fix here or `dispatch_fix` |
+| `mushi-debug` | Pass/fail health check, then targeted debugging |
+| `mushi-test` | Story mapping, generated tests, end-to-end smoke test |
+| `mushi-sdk-upgrade` | `mushi-mushi` 1.x, scoped `@mushi-mushi/*`, the 0.x launcher rule |
+| `mushi-check-live-app` | The free Production Check for a live site |
+
+The Cursor plugin (`packages/cursor-plugin/skills/`) and the Claude Code
+plugin (`plugins/mushi-debugger/skills/`) ship generated copies. Edit
+`skills/<name>/SKILL.md`, run `pnpm sync:skills`, and commit the copies;
+`pnpm check:skills` (pre-commit and CI) fails on drift, and also when the
+Connect pages' `CONNECT_SKILLS.skillNames` disagree with `skills/`. Never add
+a `skills` field to `.claude-plugin/marketplace.json`: the skills CLI would
+then list every skill twice.
 
 ## Skill-Driven Triage Pipelines
 
@@ -525,11 +558,32 @@ Admin UI: `MergeFixPreflight`, `FixCiFeedback`, `pickPrimaryFixAttempt()` in
 
 ---
 
+## One package for users (ADR 0060, Nov 2026)
+
+Users install ONE package: `npm install mushi-mushi`, then import from
+`mushi-mushi` (browser SDK), `mushi-mushi/react`, `/vue`, `/svelte`,
+`/angular`, `/node` (+ `/node/express`, `/fastify`, `/hono`), `/core`,
+`/headless`, `/i18n`, `/otel`, `/test-utils`. `npx mushi-mushi` still runs
+the wizard (bin = `packages/launcher/dist/bin.js`). React Native
+(`@mushi-mushi/react-native`) and Capacitor (`@mushi-mushi/capacitor`) stay
+scoped; the wizard installs them itself.
+
+- Every install snippet a user sees (console, docs, README, CLI, emails) uses
+  `mushi-mushi`. Scoped names stay only for React Native, Capacitor,
+  self-host packages and "already on `@mushi-mushi/*`? it keeps working".
+- Code that reads a host's dependencies recognises `mushi-mushi` next to the
+  old `@mushi-mushi/*` names (CLI `isMushiSdkPackage`, server
+  `isMushiPackageName` / `UPGRADEABLE_PACKAGES`). Never a bare
+  `startsWith('@mushi-mushi/')` check for "is the SDK installed".
+- `packages/launcher` must never depend on an adapter package: the adapters
+  are devDependencies bundled into their entry, so npm never auto-installs
+  their required framework peer.
+
 ## One-click SDK Install & Upgrade (Jun 2026)
 
 Extends the "one-click MCP install" to **SDK/CLI install and upgrades**. The
 headline capability is a **"Create Upgrade PR"** that opens a reviewed GitHub PR
-bumping `@mushi-mushi/*` in the connected repo, reusing the existing GitHub App
+bumping `mushi-mushi` and `@mushi-mushi/*` in the connected repo, reusing the existing GitHub App
 + draft-PR machinery.
 
 ### Architecture
@@ -853,8 +907,8 @@ Reporter opens widget (capture.screenshot on-report/auto)
 | SdkInstallCard | `apps/admin/src/components/SdkInstallCard.tsx` | Checkbox + optional custom text for screenshot privacy caption |
 | ConfigHelp | `sdk-install.screenshot_sensitive_hint` in `configDocs.ts` | Operator docs + link to deep-dive |
 
-**Introduced in:** `@mushi-mushi/core` / `@mushi-mushi/web` **1.19.0** (current: **1.33.0** — see root `CHANGELOG.md`).
-`@mushi-mushi/react-native` **0.19.0** (current: **0.24.0**). Full doc:
+**Introduced in:** `@mushi-mushi/core` / `@mushi-mushi/web` **1.19.0** (current: **1.37.0** — see `docs/CHANGELOG.md`).
+`@mushi-mushi/react-native` **0.19.0** (current: **0.25.0**). Full doc:
 [`docs/SDK_SCREENSHOT_PREVIEW.md`](docs/SDK_SCREENSHOT_PREVIEW.md).
 
 ---
@@ -1013,6 +1067,26 @@ automations it `blocks` and its part. Route in `api/routes/health-checks.ts`
 | `health_gate_shadow` | Per app, automation, check, UTC day and mode: how often the gate would pause (observe) or paused (enforce); `health_gate_record()` RPC. Service role only. Migration `20261029150000_health_gate_shadow.sql` |
 | `pipeline-view.ts` `tagRootCauses` | A stuck /pipeline group gets `rootCause: { checkId, count }` when that check is a problem for every item's app; Home then shows the cause once instead of the group |
 
+## Journey optimizer (Nov 2026)
+
+Pillar 2 of [ADR 0058](./docs/adr/0058-one-stop-platform-to-enhance-vibe-coded-apps.md):
+how people move through the app, and what in the site map gets in their way.
+Console page `/journeys` (`apps/admin/src/pages/JourneysPage.tsx`). Routes in
+`api/routes/journeys.ts`, served by `api-ext` (`api` forwards these paths).
+
+| Route | Auth | Role |
+| --- | --- | --- |
+| `GET /v1/admin/projects/:id/journeys?days=7|30|90` | `adminOrApiKey(mcp:read)` (members) | The map: page-to-page moves from real visits (`session_page_views`), the newest finished scan's links, and findings, each with a plain-English suggestion and a copy-ready prompt for the coding agent. No key needed |
+| `POST /v1/admin/projects/:id/journeys/scan` | `adminOrApiKey(mcp:write)` (non-viewers) | `{ base_url? }`. Starts a site scan: Firecrawl maps the live site and starts a batch scrape of up to 40 pages, no LLM. Firecrawl runs the batch on its side; each GET of the journeys route checks it (`advanceScan`) and saves the pages once it is done, so no edge isolate waits on slow pages. One scan at a time per app, at most one every 10 minutes. Needs a Firecrawl key (`FIRECRAWL_NOT_CONFIGURED` otherwise) |
+| `PUT /v1/admin/projects/:id/journeys/recording` | `adminOrApiKey(mcp:write)` (non-viewers) | `{ hours: 0–168, sample_rate?: (0,1] }`. Opens, extends or stops (hours 0) the on-demand visit recording window for apps whose SDK runs `trackSessions: 'on-demand'`. Returns `{ recording: { until, sampleRate } }`; GET returns the same block |
+
+| Object | Role |
+| --- | --- |
+| `_shared/journey-map.ts` | Pure. Builds transitions from `session_page_views` and the findings: `broken`, `dead_end`, `high_exit`, `loop`, `reload`, `duplicate_page` (content fingerprint), `route_variant`, `duplicate_title`, `orphan`, `deep_page`, `unvisited`; `agentPrompt()` writes the prompt for each |
+| `site_structure_scans` | One row per scan: status, base URL, the Firecrawl `batch_id`, and per page its title, internal links and a content fingerprint |
+
+Also from the editor: MCP `get_journeys` (`mcp:read`), `scan_site_journeys` and `record_journeys` (`mcp:write`); CLI `mushi journeys`, `mushi journeys scan` and `mushi journeys record`.
+
 ---
 
 ## HTTP API surfaces — operator reference
@@ -1100,6 +1174,20 @@ ADR 0053 (amended 2026-10-28). In the console it is the **First-time user test**
 | Run now on a local worker (amendment 2026-10-28) | Claim kind `fresh_eyes` (`api/routes/work-fresh-eyes.ts`, rules in `_shared/fresh-eyes-queue.ts`): any claiming lane of the app whose daemon sends `takes: ['fresh_eyes']` takes it first; the daemon runs `mushi-ux fresh-eyes --request-stdin --sync [--file \| --dry-run]` with Node, no shell, the run on stdin (`packages/cli/src/worker/fresh-eyes.ts`); test accounts minted at claim time only on the granting operator's own machine, sent once in the claim answer (`no-store`), never stored or logged |
 
 Operator guide: [`docs/operators/fresh-eyes.md`](docs/operators/fresh-eyes.md). A charter-driven `ux` lane mode for other UX runs is still BL-138.
+
+## Ops hub (Nov 17 2026)
+
+Plan: [`docs/execplans/ops-hub-slack.md`](docs/execplans/ops-hub-slack.md). User docs: `apps/docs/content/integrations/ops-hub.mdx`. Migration `20261117120000_ops_hub.sql` (apply before deploying `api`, `api-ext`, `webhooks-github-indexer`, `site-watch-poll`, `sentry-seer-poll`).
+
+| Object | Role |
+| --- | --- |
+| `POST /v1/ops/events` | An app server's payment / release / alert. Key scope `ops:write` only (refused from a browser, implied by nothing), 422 `PII_REJECTED`, dedupe, 120/min per app (fails closed). Served by `api-ext`; `api` forwards. |
+| `POST /v1/ops/slack/commands`, `/v1/ops/slack/interactions` | The team's own Slack bot: slash command (`status`, `sales`, `releases`, `alerts`, `bugs`, `ci`, `apps`, `mute`, `unmute`, `help`) and the Acknowledge / Mute 24h buttons. Verified with the org's signing secret, found by `team_id`. |
+| `/v1/admin/ops/*`, `POST /v1/admin/projects/:id/ops-key` | Console (`jwtAuth`): feed, ack, coverage, Slack settings (secrets in Vault, never returned), the ops key. |
+| `_shared/ops-format.ts` / `ops-events.ts` / `ops-slack.ts` / `ops-commands.ts` | Pure payload + PII guard + threads; record + deliver (`chat.postMessage`, `chat.update`, `reactions.add`, webhook fallback, mutes); command answers. |
+| `_shared/ops-sources.ts` | Mushi Mushi's own sources for orgs with the bot on: GitHub production `deployment_status`, Sentry new errors / regressions / resolves, edge canary down / up. |
+| `ops_events`, `ops_slack_settings`, `ops_mutes`, `ops_coverage(uuid)` | RLS on all: members read events and mutes; settings and the function are service role only. |
+| Console `/ops` | `OpsPage` + `components/ops/*`; Settings → Slack bot (`SlackBotCard`); Projects → Ops key (`OpsKeyRow`). |
 
 ## ExecPlans
 

@@ -1,18 +1,34 @@
-# Flutter quickstart
+# Bug report widget for Flutter
 
 Source: https://kensaur.us/mushi-mushi/docs/quickstart/flutter
 
 ---
-title: Flutter quickstart
-description: Add the Mushi Mushi Flutter SDK as a git dependency. Shake-to-report, a Material bottom sheet and an offline queue for iOS and Android. Not on pub.dev yet.
+title: Bug report widget for Flutter
+description: "Free, open-source bug report widget for Flutter (preview): shake-to-report, a Material bottom sheet and an offline queue. A git dependency, not on pub.dev yet."
 ---
 
-# Flutter quickstart
+# Bug report widget for Flutter
+
+This quickstart adds the Mushi Mushi shake-to-report widget to a Flutter app
+for iOS and Android.
 
   **Preview, not on pub.dev yet.** A plain version constraint for `mushi_mushi`
   will not resolve until the package is published. Until then, depend on it straight from the
   repository with a `git:` dependency, as below. `npx mushi-mushi` does not set
   up Flutter projects.
+
+## Get your project ID and API key
+
+The SDK needs two values from a Mushi Mushi project.
+
+- **By hand:** [create a free account](https://kensaur.us/mushi-mushi/admin/signup?src=quickstart-flutter)
+  (no card) and create a project. The panel that opens shows the **project ID**
+  and an **API key** that starts with `mushi_`. Copy the key now: it is shown
+  once. You can mint another under **Set up → Test it → Generate API key**.
+- **Self-hosting?** Your own console gives you the same two values. See
+  [Self-hosting](/self-hosting).
+
+They go into the config in the Initialize step below.
 
 ## Install
 

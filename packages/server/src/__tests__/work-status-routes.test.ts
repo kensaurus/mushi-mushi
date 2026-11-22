@@ -146,7 +146,16 @@ describe('GET /v1/admin/work/lanes and /stats carry the same flags', () => {
     expect(stuck.actions[0]).toMatchObject({ kind: 'stop_run', claimId: CLAIM })
     expect(flags.map((f) => f.kind)).toEqual(expect.arrayContaining(['run_stuck', 'account_check', 'machine_busy']))
     const stats = await s.app.call('GET', '/v1/admin/work/stats', console_('u1'))
-    expect(stats.body.data).toEqual({ flags: flags.length, danger: flags.filter((f) => (f as { severity?: string }).severity === 'danger').length, top: (flags[0] as { title: string }).title })
+    // Since 2026-11-11 /stats also says whether the fix agents have credits and
+    // whether the caller has a worker (the console's out-of-credits card and the
+    // report page's "Send to my local worker" read them).
+    expect(stats.body.data).toEqual({
+      flags: flags.length,
+      danger: flags.filter((f) => (f as { severity?: string }).severity === 'danger').length,
+      top: (flags[0] as { title: string }).title,
+      agentCredits: { out: false, since: null, refused: 0, backAt: null, backLabel: null },
+      hasWorker: true,
+    })
   })
 })
 
@@ -201,7 +210,7 @@ describe('POST /v1/admin/work/hosts/:id/recheck', () => {
 const LINK = 'https://cursor.com/loginDeepControl?challenge=abcDEF123_-xyz&uuid=1f95da85-6fc6-4e9c-8795-0ef1b7913f90&mode=login&redirectTarget=cli'
 /** A heartbeat from a daemon that can switch (or an older one, can: undefined), with its switch report. */
 const hbSwitch = (cursorLogin?: Record<string, unknown>, can: string[] | null = ['cursor_login']) => {
-  const b = hb([], [], { cursor: { result: 'expected', ageSec: 30, detail: 'Logged in', account: 's***@g***.com' } }) as Record<string, any>
+  const b = hb([], [], { cursor: { result: 'expected', ageSec: 30, detail: 'Logged in', account: 'w***@e***.com' } }) as Record<string, any>
   return { ...b, host: { ...b.host, ...(can ? { can } : {}) }, status: { ...b.status, ...(cursorLogin ? { cursorLogin } : {}) } }
 }
 
@@ -313,7 +322,7 @@ describe('Switch the Cursor account from the console', () => {
     await s.app.call('POST', '/v1/worker/heartbeat', { body: hbSwitch({ requestId, state: 'link_ready', url: 'https://evil.example/login' }) })
     expect((await readSwitch(s)).body.data.login.state).toBe('requested')
     await s.app.call('POST', '/v1/worker/heartbeat', { body: hbSwitch({ requestId, state: 'wrong_account', detail: 'Signed in as worker.account@example.com, not kensaurus@gmail.com.' }) })
-    expect((await readSwitch(s)).body.data.login).toMatchObject({ state: 'wrong_account', detail: 'Signed in as s***@g***.com, not k***@g***.com.' })
+    expect((await readSwitch(s)).body.data.login).toMatchObject({ state: 'wrong_account', detail: 'Signed in as w***@e***.com, not k***@g***.com.' })
   })
 
   it('the account flag offers Switch account', async () => {

@@ -42,7 +42,7 @@ export function ReporterNotificationsToggle({ enabled, onChanged }: Props) {
     if (!check.ok) {
       setOutcome({
         ok: true,
-        text: "Saved, but Mushi couldn't confirm it. Reload the page to check.",
+        text: "Saved, but Mushi Mushi couldn't confirm it. Reload the page to check.",
         at: new Date().toISOString(),
       })
       onChanged()
@@ -68,12 +68,13 @@ export function ReporterNotificationsToggle({ enabled, onChanged }: Props) {
   return (
     <div className="space-y-2">
       <Toggle
-        label={enabled ? 'Reporter updates are on' : 'Reporter updates are off'}
+        // The switch shows on or off; the label names it, it doesn't restate it (2026-11-19).
+        label="Reporter updates"
         checked={enabled}
         disabled={saving}
         onChange={(v) => void setEnabled(v)}
       />
-      <p className="text-sm text-fg-secondary">
+      <p className="text-xs text-fg-secondary">
         When it is on, people who reported a bug see when it is triaged, fixed and shipped, in the bug widget.
       </p>
       {outcome && (

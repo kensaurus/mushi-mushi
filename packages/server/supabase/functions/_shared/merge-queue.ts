@@ -42,6 +42,14 @@ export interface ChecksView {
 }
 
 /**
+ * Checks that report on a repo and never on a PR. They stay visible on GitHub
+ * but do not hold a PR or a train: "Compare @mushi-mushi/* to npm latest" stays
+ * red until the host's SDK upgrade lands, whatever the PR changes, so on
+ * 2026-11-01 it held fix PRs in the queue on a check none of them could pass.
+ */
+export const ADVISORY_CHECKS: ReadonlySet<string> = new Set(['Compare @mushi-mushi/* to npm latest'])
+
+/**
  * Whether a head's failed checks are the base branch's, not its own: at
  * least one also fails on the base, and every other one fails there too or
  * did not run there. The second rule sees through aggregator jobs: glot.it's
@@ -127,6 +135,7 @@ export function reviewRefusal(
  * that ran more than once counts by its newest run: a draft's CI stops on
  * purpose ("Draft PRs run no CI") and runs again on the same commit once
  * the PR is marked ready, so the old stop must not read as a failure.
+ * ADVISORY_CHECKS never wait or fail, but still count as having run.
  */
 export function checksView(runs: Array<{ id?: number; name?: string; status?: string; conclusion?: string | null; started_at?: string | null }>): ChecksView {
   const newest = new Map<string, (typeof runs)[number]>()
@@ -140,9 +149,11 @@ export function checksView(runs: Array<{ id?: number; name?: string; status?: st
   const failed: string[] = []
   const ran: string[] = []
   for (const r of newest.values()) {
-    if (r.status !== 'completed') pending++
-    else {
-      if (r.conclusion && ['failure', 'timed_out', 'action_required', 'startup_failure'].includes(r.conclusion)) failed.push(r.name ?? 'a check')
+    const advisory = ADVISORY_CHECKS.has(r.name ?? '')
+    if (r.status !== 'completed') {
+      if (!advisory) pending++
+    } else {
+      if (!advisory && r.conclusion && ['failure', 'timed_out', 'action_required', 'startup_failure'].includes(r.conclusion)) failed.push(r.name ?? 'a check')
       if (r.conclusion !== 'skipped') ran.push(r.name ?? 'a check')
     }
   }

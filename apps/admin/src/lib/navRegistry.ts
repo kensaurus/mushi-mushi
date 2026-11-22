@@ -25,7 +25,7 @@ import type { FeatureFlag } from './useEntitlements'
 
 export type NavSectionId = 'start' | 'plan' | 'do' | 'check' | 'act' | 'workspace'
 
-export type CheckSubGroupId = 'quality-gates' | 'system-health'
+export type CheckSubGroupId = 'system-health' | 'ci' | 'quality-gates'
 
 type PaletteGroup = 'Start' | 'Plan' | 'Do' | 'Check' | 'Act' | 'Workspace'
 
@@ -102,7 +102,14 @@ export interface NavRegistryEntry {
   requiresFeature?: FeatureFlag
   requiresAdvancedMode?: boolean
   superAdmin?: boolean
-  /** Mushi-operator-only (entitlements `operator`) — company dashboards like /growth. */
+  /**
+   * Mushi-operator-only (entitlements `operator`): company dashboards like
+   * /growth, and since 2026-11-11 the operator cockpit (ADR 0052): pages about
+   * Mushi Mushi's own machinery (processing jobs, triage grading, prompts,
+   * agent skills, CI runners, Mushi's health) or the local-agent studios. A
+   * builder's sidebar, More pages and ⌘K leave them out; OPERATOR_ROUTES are
+   * also guarded in App.tsx.
+   */
   operatorOnly?: boolean
   /** false = palette-only utility route */
   inSidebar?: boolean
@@ -116,13 +123,20 @@ export const CHECK_SUB_GROUPS: Record<
   CheckSubGroupId,
   { title: string; hint: string }
 > = {
+  // Three plain buckets (owner, 2026-11-19: "group … so it's easier to read"):
+  // what checks YOUR app, what runs YOUR builds, and Mushi Mushi's own
+  // health and AI quality. Ids kept so saved state and tests stay valid.
   'system-health': {
-    title: 'App checks',
-    hint: 'Is the app itself sound: scheduled tests, user stories, audits, its blueprint, design tokens and content, a first-time user test, plus Mushi’s own health.',
+    title: 'Your app',
+    hint: 'Is your app sound: scheduled tests, user stories, audits, its blueprint, design tokens, content and a first-time user test.',
+  },
+  ci: {
+    title: 'Builds & tests (CI)',
+    hint: 'Where your GitHub Actions jobs run, what failed and why, and what slows your fixes down.',
   },
   'quality-gates': {
-    title: 'AI quality',
-    hint: 'How good the AI’s triage is: grading, lessons learned and the prompts behind it.',
+    title: 'Mushi Mushi itself',
+    hint: 'Mushi Mushi’s own health, AI providers, and how good its triage is: grading, lessons and prompts.',
   },
 }
 
@@ -146,7 +160,7 @@ export const NAV_SECTION_META: Record<
   start: {
     title: 'Connect',
     step: 1,
-    hint: 'Install Mushi in your app and connect your editor, your tools and your coding agents.',
+    hint: 'Install Mushi Mushi in your app and connect your editor, your tools and your coding agents.',
     defaultCollapsed: true,
   },
   plan: {
@@ -165,7 +179,7 @@ export const NAV_SECTION_META: Record<
     title: 'Verify',
     step: 4,
     stage: 'C',
-    hint: 'Prove the app works before you ship: scheduled tests, audits, Mushi’s own health, and how good the AI’s triage is.',
+    hint: 'Prove the app works before you ship: scheduled tests, audits, Mushi Mushi’s own health, and how good the AI’s triage is.',
   },
   act: {
     title: 'Ship & watch',
@@ -226,6 +240,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   {
     id: 'nav:skills',
     path: '/skills',
+    operatorOnly: true,
     label: 'Agent skills',
     sectionId: 'start',
     iconKey: 'skills',
@@ -349,6 +364,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   {
     id: 'nav:ux-runs',
     path: '/ux-runs',
+    operatorOnly: true,
     label: 'UX runs',
     sectionId: 'do',
     pdcaStage: 'do',
@@ -360,6 +376,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   {
     id: 'nav:iterate',
     path: '/iterate',
+    operatorOnly: true,
     label: 'Improvement runs',
     sectionId: 'do',
     pdcaStage: 'do',
@@ -380,6 +397,18 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     paletteDescription: 'Browser tests of your user stories that run on a schedule and alert when one breaks.',
     paletteKeywords: ['qa coverage', 'qa', 'playwright', 'stories', 'coverage', 'test', 'tests'],
     paletteGroup: 'Check',
+  },
+  {
+    // Journey optimizer (ADR 0058): how people move through the app and what in the site map gets in their way.
+    id: 'nav:journeys',
+    path: '/journeys',
+    label: 'Journey optimizer',
+    sectionId: 'plan',
+    pdcaStage: 'plan',
+    iconKey: 'explore',
+    paletteDescription: 'A map of how people move through your app: dead ends, pages people leave from, duplicate pages and pages nothing links to, each with a fix to hand your coding agent.',
+    paletteKeywords: ['journey', 'journeys', 'journey optimizer', 'user journey', 'user flow', 'flow map', 'site map', 'sitemap', 'navigation', 'dead end', 'drop-off', 'exit rate', 'duplicate page', 'orphan page', 'information architecture', 'ia', 'ux'],
+    paletteGroup: 'Plan',
   },
   {
     // Fresh-eyes runs (ADR 0053): a tab of UX runs called "Fresh eyes" until 2026-10-28.
@@ -416,13 +445,14 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     pdcaStage: 'check',
     checkSubGroup: 'system-health',
     iconKey: 'shield-check',
-    paletteDescription: 'Every automatic check on this app in one place: scheduled tests, audits, user stories, design, content, AI triage quality and Mushi’s own health.',
+    paletteDescription: 'Every automatic check on this app in one place: scheduled tests, audits, user stories, design, content, AI triage quality and Mushi Mushi’s own health.',
     paletteKeywords: ['checks', 'verify', 'quality', 'health', 'audit', 'tests', 'qa'],
     paletteGroup: 'Check',
   },
   {
     id: 'nav:fullstack-audit',
     path: '/fullstack-audit',
+    operatorOnly: true,
     label: 'Full-stack audit',
     sectionId: 'check',
     pdcaStage: 'check',
@@ -447,33 +477,51 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   {
     id: 'nav:ci',
     path: '/ci',
+    operatorOnly: true,
     label: 'CI runners',
     sectionId: 'check',
     pdcaStage: 'check',
-    checkSubGroup: 'system-health',
+    checkSubGroup: 'ci',
     iconKey: 'gauge',
     paletteDescription: 'Where your tests run, how long they wait for a machine, and what slows your fixes down.',
     paletteKeywords: ['ci', 'ci runners', 'runners', 'self-hosted', 'github actions', 'actions', 'queue', 'build queue', 'test machine', 'runner', 'slow ci', 'jobs'],
     paletteGroup: 'Check',
   },
   {
+    id: 'nav:providers',
+    path: '/providers',
+    operatorOnly: true,
+    // The shared AI provider accounts and model routes of every Kensaurus app
+    // (kensaurus-ops on kenji, 2026-11-18). Operator only: route-guarded too.
+    label: 'Providers & AI routes',
+    sectionId: 'check',
+    pdcaStage: 'check',
+    checkSubGroup: 'quality-gates',
+    iconKey: 'cost',
+    paletteDescription: 'The AI provider accounts behind every app: health and balance, spend against sales, the model each app tries first, and who changed what.',
+    paletteKeywords: ['providers', 'ai providers', 'ai routes', 'model routes', 'routing', 'llm providers', 'provider health', 'balance', 'spend', 'margin', 'kensaurus', 'provider watch', 'models'],
+    paletteGroup: 'Check',
+  },
+  {
     id: 'nav:health',
     path: '/health',
+    operatorOnly: true,
     // Mushi's own AI calls and background jobs, not the user's app (pattern
     // P6, console journeys 2026-10-27). The app's uptime and errors are on
     // Home. "app health" stays a keyword: every former label must.
-    label: 'Mushi health',
+    label: 'Mushi Mushi health',
     sectionId: 'check',
     pdcaStage: 'check',
-    checkSubGroup: 'system-health',
+    checkSubGroup: 'quality-gates',
     iconKey: 'health',
-    paletteDescription: 'Is Mushi itself working: its AI calls and background jobs. Also your code size, schema changes and unusual spikes.',
+    paletteDescription: 'Is Mushi Mushi itself working: its AI calls and background jobs. Also your code size, schema changes and unusual spikes.',
     paletteKeywords: ['app health', 'health', 'mushi health', 'status', 'ai calls', 'llm', 'cron', 'background jobs', 'verification hub'],
     paletteGroup: 'Check',
   },
   {
     id: 'nav:design',
     path: '/design',
+    operatorOnly: true,
     label: 'Design system',
     sectionId: 'check',
     pdcaStage: 'check',
@@ -498,6 +546,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   {
     id: 'nav:judge',
     path: '/judge',
+    operatorOnly: true,
     label: 'Triage grading',
     sectionId: 'check',
     pdcaStage: 'check',
@@ -522,6 +571,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   {
     id: 'nav:prompt-lab',
     path: '/prompt-lab',
+    operatorOnly: true,
     label: 'AI prompts',
     sectionId: 'check',
     pdcaStage: 'check',
@@ -555,6 +605,20 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     paletteGroup: 'Act',
   },
   {
+    // The Ops hub (docs/execplans/ops-hub-slack.md): every app's payments,
+    // releases and alerts, and the team's own Slack bot. A product page for
+    // every team (each connects its own bot), not an operator page.
+    id: 'nav:ops',
+    path: '/ops',
+    label: 'Ops',
+    sectionId: 'act',
+    pdcaStage: 'act',
+    iconKey: 'bell',
+    paletteDescription: "Payments, releases and alerts from every app in one feed, which app is not reporting, and your team's Slack bot.",
+    paletteKeywords: ['ops', 'ops hub', 'payments', 'sales', 'revenue', 'releases', 'deploys', 'alerts', 'incidents', 'slack bot', 'slash command', 'uptime', 'is everything connected'],
+    paletteGroup: 'Act',
+  },
+  {
     id: 'nav:notifications',
     path: '/notifications',
     label: 'Reporter updates',
@@ -568,6 +632,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   {
     id: 'nav:experiments',
     path: '/experiments',
+    operatorOnly: true,
     label: 'Experiments',
     sectionId: 'act',
     pdcaStage: 'act',
@@ -579,6 +644,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   {
     id: 'nav:research',
     path: '/research',
+    operatorOnly: true,
     label: 'Research',
     sectionId: 'act',
     pdcaStage: 'act',
@@ -594,7 +660,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     label: 'Spend credits',
     sectionId: 'workspace',
     iconKey: 'cost',
-    paletteDescription: 'Expiring Cursor and Firecrawl credits, and a switch for every way Mushi can spend them finding and fixing bugs.',
+    paletteDescription: 'Expiring Cursor and Firecrawl credits, and a switch for every way Mushi Mushi can spend them finding and fixing bugs.',
     paletteKeywords: ['credits', 'spend credits', 'spend down', 'spend-down', 'expiring credits', 'cursor credits', 'firecrawl credits', 'usage', 'site watch', 'follow-ups', 'budget'],
     paletteGroup: 'Workspace',
   },
@@ -641,6 +707,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   {
     id: 'nav:queue',
     path: '/queue',
+    operatorOnly: true,
     label: 'Processing jobs',
     sectionId: 'workspace',
     iconKey: 'queue',
@@ -661,6 +728,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   {
     id: 'nav:query',
     path: '/query',
+    operatorOnly: true,
     label: 'SQL query',
     sectionId: 'workspace',
     iconKey: 'query',
@@ -685,7 +753,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     label: 'Help & support',
     sectionId: 'workspace',
     iconKey: 'chat',
-    paletteDescription: 'Ask the Mushi team for help and read their replies to feedback you sent.',
+    paletteDescription: 'Ask the Mushi Mushi team for help and read their replies to feedback you sent.',
     paletteKeywords: ['support', 'feedback', 'help', 'contact', 'bug', 'request'],
     paletteGroup: 'Workspace',
   },
@@ -722,7 +790,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     inSidebar: false,
     sectionId: 'check',
     pdcaStage: 'check',
-    checkSubGroup: 'system-health',
+    checkSubGroup: 'quality-gates',
     iconKey: 'gauge',
     paletteDescription: 'Bundle-size trends and very large files, pushed from your repo’s CI.',
     paletteKeywords: ['code health', 'bundle', 'loc', 'god file', 'refactor', 'gzip', 'ci', 'budget', 'file size'],
@@ -736,7 +804,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     inSidebar: false,
     sectionId: 'check',
     pdcaStage: 'check',
-    checkSubGroup: 'system-health',
+    checkSubGroup: 'quality-gates',
     iconKey: 'drift',
     paletteDescription: 'Your database schema compared with the last scan: dropped columns, missing access rules, unexpected changes.',
     paletteKeywords: ['drift', 'schema', 'backend', 'migration', 'database'],
@@ -750,7 +818,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     inSidebar: false,
     sectionId: 'check',
     pdcaStage: 'check',
-    checkSubGroup: 'system-health',
+    checkSubGroup: 'quality-gates',
     iconKey: 'anomalies',
     paletteDescription: 'Sudden jumps in errors or reports, including ones that started with a release.',
     paletteKeywords: ['anomalies', 'anomaly', 'spike', 'outlier', 'metrics'],
@@ -919,7 +987,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     sectionId: 'start',
     iconKey: 'key',
     inSidebar: false,
-    paletteDescription: 'Approve the Mushi CLI sign-in from your terminal.',
+    paletteDescription: 'Approve the Mushi Mushi CLI sign-in from your terminal.',
     paletteKeywords: ['cli auth', 'cli', 'oauth', 'auth', 'terminal', 'login'],
     paletteGroup: 'Start',
   },
@@ -941,7 +1009,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     sectionId: 'start',
     iconKey: 'catalog',
     inSidebar: false,
-    paletteDescription: 'Browse 70+ agent skills from kenji skills by category.',
+    paletteDescription: 'Browse the agent skills catalog by category.',
     paletteKeywords: ['catalog', 'skill catalog', 'cursor-kenji', 'kenji skills'],
     paletteGroup: 'Start',
   },
@@ -1037,10 +1105,10 @@ export function checkEntriesBySubGroup(subGroup: CheckSubGroupId): NavRegistryEn
  * Listed before registry matchers so `/reports/:id` wins over `/reports`.
  */
 const EXTRA_ROUTE_TITLE_MATCHERS: ReadonlyArray<readonly [RegExp, string]> = [
-  [/^\/reports\/[^/]+$/, 'Report'],
+  [/^\/reports\/[^/]+$/, 'Bug report'],
   [/^\/content\/[^/]+$/, 'Content checks'],
   [/^\/projects\/[^/]+\/qa-coverage\/[^/]+$/, 'Scheduled tests'],
-  [/^\/rewards\/tester-review$/, 'Rewards'],
+  [/^\/rewards\/tester-review$/, 'Review submissions'],
   [/^\/integrations$/, 'Integrations'],
   [/^\/fine-tuning$/, 'AI prompts'],
   [/^\/console$/, 'Home'],
@@ -1067,6 +1135,10 @@ export function buildRouteTitleMatchers(): ReadonlyArray<readonly [RegExp, strin
 
   const byBase = new Map<string, string>()
   for (const entry of NAV_REGISTRY) {
+    // A super-admin page answers everyone else with a look-alike 404
+    // (UsersPage). Naming it in the breadcrumb or tab title gave that away
+    // ("Account › All users" over "We can't find that page").
+    if (entry.superAdmin) continue
     const base = entry.path.split('?')[0]
     if (!byBase.has(base)) byBase.set(base, entry.label)
   }
@@ -1139,6 +1211,7 @@ export const CORE_NAV_PATHS: readonly string[] = [
   '/dashboard',
   '/reports',
   '/fixes',
+  '/journeys',
   '/pipeline',
   '/portfolio',
   '/connect',
@@ -1148,13 +1221,38 @@ export const CORE_NAV_PATHS: readonly string[] = [
   '/settings',
 ]
 
+/**
+ * The sidebar a builder sees (console audit 2026-11-11, finding 8): someone
+ * who built an app with Lovable or Bolt needs Home, Bugs, Fixes, Journeys
+ * (ADR 0058: make the app better, not only fix it), Connect and Settings; every other page they may open is under "More pages". Pipeline
+ * stays core for every account (ADR 0027 amendment 2026-10-27). Operators
+ * (entitlements `operator`) keep CORE_NAV_PATHS.
+ */
+/** @internal Exported for tests. */
+export const BUILDER_CORE_NAV_PATHS: readonly string[] = ['/dashboard', '/reports', '/fixes', '/journeys', '/pipeline', '/connect', '/settings']
+
+/** The core sidebar for this viewer. */
+export function coreNavPathsFor(viewer: { isOperator: boolean }): readonly string[] {
+  return viewer.isOperator ? CORE_NAV_PATHS : BUILDER_CORE_NAV_PATHS
+}
+
+/**
+ * Operator pages that are also route-guarded (App.tsx OperatorRoute): Mushi
+ * Mushi's own processing queue, SQL console, triage grading and prompts. The
+ * other operator-only pages are left out of a builder's navigation but still
+ * open from a link, since product pages link to them.
+ */
+/** @internal Exported for tests. */
+export const OPERATOR_ROUTES: readonly string[] = ['/queue', '/query', '/judge', '/prompt-lab', '/providers']
+
 /** Every check on the Checks page, in order within its group. Every path must exist in NAV_REGISTRY. */
 export const CHECK_GROUPS: ReadonlyArray<{ id: CheckSubGroupId; paths: readonly string[] }> = [
   {
     id: 'system-health',
-    paths: ['/qa-coverage', '/health', '/ci', '/fullstack-audit', '/inventory', '/recipe', '/design', '/content', '/first-user-test'],
+    paths: ['/qa-coverage', '/first-user-test', '/inventory', '/fullstack-audit', '/recipe', '/design', '/content'],
   },
-  { id: 'quality-gates', paths: ['/judge', '/lessons', '/prompt-lab'] },
+  { id: 'ci', paths: ['/ci'] },
+  { id: 'quality-gates', paths: ['/health', '/providers', '/judge', '/lessons', '/prompt-lab'] },
 ]
 
 const SECTION_BY_STAGE: Record<PdcaStageId, NavSectionId> = {
@@ -1177,7 +1275,7 @@ function cycleStepForStage(stage: PdcaStageId): { step: number; title: string; h
 export function stageChipCopy(chip: 'overview' | PdcaStageId): { glyph: string; label: string; hint: string; ariaLabel: string } {
   if (chip === 'overview') {
     const hint = 'Everything that needs you across your bugs, fixes and releases.'
-    return { glyph: '∞', label: 'Overview', hint, ariaLabel: `Overview: ${hint}` }
+    return { glyph: '∞', label: 'Home', hint, ariaLabel: `Home: ${hint}` }
   }
   const { step, title, hint } = cycleStepForStage(chip)
   return { glyph: String(step), label: title, hint, ariaLabel: `Step ${step}: ${title}. ${hint}` }

@@ -8,14 +8,14 @@
  * "Apache-2.0 server" copy left over from a rejected relicense attempt.
  *
  * Since ADR 0036 (docs/adr/0036-licensing-posture.md) it also checks:
- *   - TRADEMARK.md, NOTICE and CONTRIBUTING.md carry no BSL / Business Source
+ *   - docs/legal/TRADEMARK.md, docs/legal/NOTICE and .github/CONTRIBUTING.md carry no BSL / Business Source
  *     wording (the server left BSL 1.1 in June 2026) and name the AGPL split;
- *   - TRADEMARK.md claims no registration and quotes the current hero tagline
+ *   - docs/legal/TRADEMARK.md claims no registration and quotes the current hero tagline
  *     from packages/brand/src/index.js;
  *   - no license surface calls the console (apps/admin) MIT;
  *   - every AGPL LICENSE file says version 3 *only* (matching its SPDX
  *     AGPL-3.0-only) and the full text exists at LICENSES/AGPL-3.0-only.txt;
- *   - every "Copyright (c)" line in LICENSE files and NOTICE names the same
+ *   - every "Copyright (c)" line in LICENSE files and docs/legal/NOTICE names the same
  *     holder;
  *   - every package.json "SEE LICENSE IN <file>" points at a file that exists.
  *
@@ -69,8 +69,8 @@ if (readme) {
   if (serverIsAgpl && /server Apache-2\.0|Apache-2\.0 \(server\)/i.test(readme)) {
     failures.push('README.md still describes server as Apache-2.0 — should be AGPLv3 + commercial dual-license')
   }
-  if (serverIsAgpl && !readme.includes('COMMERCIAL-LICENSE.md')) {
-    failures.push('README.md license section should link to COMMERCIAL-LICENSE.md for dual licensing')
+  if (serverIsAgpl && !readme.includes('docs/legal/COMMERCIAL-LICENSE.md')) {
+    failures.push('README.md license section should link to docs/legal/COMMERCIAL-LICENSE.md for dual licensing')
   }
 }
 
@@ -91,8 +91,8 @@ if (rootLicense && serverIsAgpl) {
     'apps/admin/',
     'AGPL-3.0-only',
     'LICENSES/AGPL-3.0-only.txt',
-    'COMMERCIAL-LICENSE.md',
-    'TRADEMARK.md',
+    'docs/legal/COMMERCIAL-LICENSE.md',
+    'docs/legal/TRADEMARK.md',
   ]
   for (const needle of carveOut) {
     const at = rootLicense.indexOf(needle)
@@ -129,12 +129,12 @@ if (blogAgpl?.includes('Superseded') && blogAgpl.includes('Apache-2.0')) {
 }
 
 // ── ADR 0036 surfaces ─────────────────────────────────────────────────────
-// The server moved off BSL 1.1 in June 2026; TRADEMARK.md kept saying BSL for
+// The server moved off BSL 1.1 in June 2026; docs/legal/TRADEMARK.md kept saying BSL for
 // months because nothing read it. These files state the license to people
 // deciding whether they may fork, so they are checked like the README.
 const BSL_RE = /\bBSL\b|Business Source License/i
 const CONSOLE_MIT_RE = /(apps\/admin|admin console|\bconsole\b)[^\n]*\bMIT\b|\bMIT\b[^\n]*(apps\/admin|admin console)/i
-const legalSurfaces = ['TRADEMARK.md', 'NOTICE', 'CONTRIBUTING.md', 'README.md', 'COMMERCIAL-LICENSE.md']
+const legalSurfaces = ['docs/legal/TRADEMARK.md', 'docs/legal/NOTICE', '.github/CONTRIBUTING.md', 'README.md', 'docs/legal/COMMERCIAL-LICENSE.md']
 for (const rel of legalSurfaces) {
   const text = read(rel)
   if (!text) continue
@@ -147,23 +147,23 @@ for (const rel of legalSurfaces) {
   }
 }
 
-const trademark = read('TRADEMARK.md')
+const trademark = read('docs/legal/TRADEMARK.md')
 if (trademark) {
   // Claiming a registration that has not issued is itself unlawful in Japan
   // and the US. "unregistered" / "not registered" are fine.
   if (/®/.test(trademark) || /(?<!un)registered trademarks?\b/i.test(trademark)) {
-    failures.push('TRADEMARK.md claims a registered trademark (® or "registered trademark") — the marks are not registered')
+    failures.push('docs/legal/TRADEMARK.md claims a registered trademark (® or "registered trademark") — the marks are not registered')
   }
   const hero = brandSrc?.match(/\bhero:\s*'([^']+)'/)?.[1]
   if (!hero) failures.push('could not read MUSHI_TAGLINE_V2.hero from packages/brand/src/index.js')
-  else if (!trademark.includes(hero)) failures.push(`TRADEMARK.md must quote the current hero tagline "${hero}" (packages/brand/src/index.js)`)
+  else if (!trademark.includes(hero)) failures.push(`docs/legal/TRADEMARK.md must quote the current hero tagline "${hero}" (packages/brand/src/index.js)`)
 }
 
-const contributing = read('CONTRIBUTING.md')
-if (contributing && !contributing.includes('CLA.md')) {
-  failures.push('CONTRIBUTING.md must link CLA.md (outside contributions come in under the CLA, ADR 0036)')
+const contributing = read('.github/CONTRIBUTING.md')
+if (contributing && !contributing.includes('docs/legal/CLA.md')) {
+  failures.push('.github/CONTRIBUTING.md must link docs/legal/CLA.md (outside contributions come in under the CLA, ADR 0036)')
 }
-if (!existsSync(join(ROOT, 'CLA.md'))) failures.push('MISSING FILE  CLA.md')
+if (!existsSync(join(ROOT, 'docs/legal/CLA.md'))) failures.push('MISSING FILE  docs/legal/CLA.md')
 
 // AGPL LICENSE files: "-only" in SPDX must match the grant text, and the full
 // license text must ship in the repo (AGPL §4 asks for a copy of the License).
@@ -192,7 +192,7 @@ function* walkFiles(dir, match) {
   }
 }
 const holders = new Map()
-const licenseFiles = [...walkFiles(ROOT, (name) => name === 'LICENSE'), join(ROOT, 'NOTICE')]
+const licenseFiles = [...walkFiles(ROOT, (name) => name === 'LICENSE'), join(ROOT, 'docs/legal/NOTICE')]
 for (const file of licenseFiles) {
   if (!existsSync(file)) continue
   for (const m of readFileSync(file, 'utf8').matchAll(/^\s*Copyright \(c\) [0-9–-]+ (.+?)\.?\s*(?:All rights reserved\.)?\s*$/gm)) {

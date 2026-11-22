@@ -31,7 +31,24 @@ describe('ReportPdcaStory plan stage', () => {
       idle,
     )
     expect(nodes.plan.state).toBe('done')
-    expect(nodes.plan.headline).toBe('Login button does nothing on iPad Safari')
+    // The summary shows once, higher on the page (sweep 2026-11-18): step 1 says what was decided.
+    expect(nodes.plan.headline).toBe('Sorted as bug')
+    expect(nodes.plan.headline).not.toContain('Login button')
+  })
+
+  // Re-audit 2026-11-11: "precomputed", "0ms" and "No judge or CI signal yet" on a builder's sample report.
+  it('keeps the judge wording for operator accounts and never repeats the model on the story', () => {
+    const r = report({ status: 'classified', stage1_classification: { category: 'bug' }, stage1_model: 'precomputed', stage1_latency_ms: 0 })
+    const outside = buildStoryNodes(r, idle)
+    expect(outside.plan.details).toContain('Sample explanation (written in advance)')
+    expect(outside.plan.details?.join(' ')).not.toMatch(/precomputed|0ms/)
+    expect(outside.check.headline).toBe('Not checked yet. The checks run once a fix is dispatched.')
+    const real = report({ status: 'classified', stage1_classification: { category: 'bug' }, stage1_model: 'claude-haiku-5-5', stage1_latency_ms: 812 })
+    expect(buildStoryNodes(real, idle).plan.details?.join(' ')).not.toMatch(/claude-haiku|812ms/)
+    const operator = buildStoryNodes(real, idle, true)
+    // Round-3 sweep 2026-11-19: the model and latency are in the classification card only.
+    expect(operator.plan.details?.join(' ')).not.toMatch(/claude-haiku|812ms|severity|conf/)
+    expect(operator.check.headline).toContain('No judge or CI signal yet')
   })
 
   it('a report nobody classified yet is pending', () => {

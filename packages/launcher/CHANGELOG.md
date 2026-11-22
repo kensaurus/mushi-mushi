@@ -1,5 +1,148 @@
 # mushi-mushi
 
+## 1.38.0
+
+### Patch Changes
+
+- Updated dependencies [11c99a5]
+- Updated dependencies [e5f813d]
+- Updated dependencies [c98879e]
+  - @mushi-mushi/cli@0.41.0
+  - @mushi-mushi/web@1.38.0
+
+## 1.37.2
+
+### Patch Changes
+
+- fa71919: Self-hosting is easier to follow and to check:
+
+  - `mushi selfhost doctor` exits 0 on a healthy minimal install. Optional extras that are not set up (Langfuse, Sentry, an AI key, a console address) print as `INFO` and never change the exit code; `WARN` exits 2 and `FAIL` exits 1 as before.
+  - The doctor now also checks that the console answers at the saved address (and warns when the CLI would sign you in on Mushi Mushi Cloud instead), that `/health` reports a stamped, self-hosted deploy, and, on the server, the AI key, that cron jobs no longer call Mushi Mushi Cloud, and that the private screenshots bucket exists. Lines lead with a plain name and the app's name, never `codebase_index:<uuid>`. `--console-url` checks another address.
+  - `mushi selfhost up` stamps the deploy with your commit (using the clone's own `scripts/deploy-edge-function.mjs` helper), so `/health` no longer reports `"dev"`, and sets `MUSHI_INSTANCE_MODE=self-hosted` so the server and console agree on what the instance is.
+  - With `--console-url`, `up` also sets `MUSHI_ADMIN_ORIGIN_ALLOWLIST` to the console's origin, so the API answers a console served on your own domain (before, only Mushi Mushi Cloud and localhost dev ports were allowed). The server now sends `mushi login` to that console (`ADMIN_BASE_URL`) on a self-host, instead of Mushi Mushi Cloud's.
+  - The no-key note points at Settings → AI keys (it said API Keys).
+  - The MCP docs index includes the new self-hosting pages (Environment variables, Operate and upgrade).
+
+- Updated dependencies [fa71919]
+  - @mushi-mushi/cli@0.40.4
+
+## 1.37.1
+
+### Patch Changes
+
+- 141c554: The setup wizard's first run is easier:
+
+  - No more false "newer version 0.40.2 → 1.37.0" line on every run. The wizard now checks the package you ran (`mushi-mushi`, `create-mushi-mushi`, or the CLI for `mushi init`) against its own latest version, and says nothing when you are on it.
+  - `--yes` now adds the init snippet to your entry file, the same safe way the interactive run does (a marker block a re-run updates in place, only for plain-import entry files). When it can't, it names the one file to paste the snippet into.
+  - New `--dry-run`: prints what the wizard would install and write, then stops. No sign-in, no install, no file changes.
+  - When a run ends with only the app's ingest key (a pasted or `--api-key` key, or a reused one), the wizard says your editor's MCP server needs a key that can read reports, and offers one browser approval to make it (or prints `npx mushi-mushi login --project-id <id>` under `--yes`). `mushi setup` prints the same one command in a non-interactive shell, and no longer asks for the project again when it upgrades the key.
+  - After the test report, the wizard prints the one call that sends a sample bug from your own app, for your framework, plus `npx mushi-mushi test` for no code change.
+
+- 141c554: `mushi selfhost up` now deploys a working self-hosted instance:
+
+  - Cron jobs call your project, not Mushi Mushi Cloud. `up` writes `supabase_url`, `service_role_key` and `internal_caller_token` into `mushi_runtime_config`, using the same secret it sets as `MUSHI_INTERNAL_CALLER_SECRET`. Before this, the migrations' Mushi Mushi Cloud URL stayed in place and no token was written.
+  - Works with Supabase CLI 3.x. `db push` and `db query` target the linked project (`--remote`; `--linked` on 2.x), and `up` asks once for consent (or takes `--yes`), so the CLI's own consent prompts don't fail when output is piped.
+  - No Mushi Mushi Cloud plan limits on your instance. `up` updates every `pricing_plans` row on your project: unlimited diagnoses, apps and seats, retention of at least 3650 days, and the `byok`, `sso`, `plugins`, `intelligence_reports`, `audit_log`, `self_hosted` and `teams` feature flags on. Before, a new org stopped at 100 diagnoses a month (reports went to `quota_exceeded`), with 1 app and 14-day retention. `inventory_v2` and `soc2` are left as the plan has them, because they start background jobs.
+  - `up` refuses to run against the Mushi Mushi Cloud project, including a checkout already linked to it.
+  - The broken `supabase storage create` step is gone, along with the "fine if it already exists" message that hid its failure. The private `screenshots` bucket is checked with SQL.
+  - Every edge function is deployed, with `verify_jwt` taken from `config.toml` as in production. Before, only six were deployed.
+  - The LLM key is optional. Pass `--anthropic-key` or `--openai-key` (either provider works), set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, or paste one at the prompt. If you skip it, `up` says what won't work.
+  - Secrets go through 0600 temp files, never argv. `MUSHI_INTERNAL_CALLER_SECRET` from your shell is reused.
+  - `--console-url` sets `ADMIN_BASE_URL` and saves the console URL to the CLI config, so `mushi login` signs in on your console instead of Mushi Mushi Cloud. The endpoint is saved too, unless the config holds a key for another endpoint.
+  - The `/v1/admin/bootstrap` call was removed. It always returned 401.
+  - New command: `mushi selfhost secrets` writes a `.env` for `deploy/docker-compose.yml`. It contains a random Postgres password, JWT secret and internal caller secret, plus anon and service_role JWTs signed with the JWT secret.
+
+- Updated dependencies [141c554]
+- Updated dependencies [141c554]
+  - @mushi-mushi/cli@0.40.3
+
+## 1.37.0
+
+### Patch Changes
+
+- ef8ca8d: README: a page-by-page tour of the console, with a short clip of each page recorded on real apps and a line on when to open it. Lazycow Studio joins "More apps from the same maker".
+- Updated dependencies [fd05f9a]
+  - @mushi-mushi/core@1.37.0
+  - @mushi-mushi/web@1.37.0
+
+## 1.36.0
+
+### Minor Changes
+
+- 0ce3357: One package for users, continued (ADR 0060 Phase 1b).
+
+  - `mushi-mushi/eslint`: the Mushi Mushi ESLint rules (`no-dead-handler`,
+    `no-mock-leak`) now ship inside `mushi-mushi`. Use
+    `import mushi from 'mushi-mushi/eslint'` and `mushi.configs.recommended`
+    (or `import { recommended } from 'mushi-mushi/eslint'`) in a flat config.
+    `eslint` is an optional peer. `eslint-plugin-mushi-mushi` is no longer
+    published; 0.3.7 is its last version.
+  - `npx mushi-mushi --template <vue|svelte|node> [dir]` scaffolds a starter app.
+    The starters moved from `create-mushi-mushi` into `@mushi-mushi/cli`, and
+    they now install `mushi-mushi` and import from `mushi-mushi/vue`,
+    `mushi-mushi/svelte` and `mushi-mushi/node`, the same as the docs.
+  - `create-mushi-mushi` is now an alias of `npx mushi-mushi`: it forwards every
+    argument to the same code, so `npm create mushi-mushi` also forwards `mushi`
+    commands (`npm create mushi-mushi setup`). A bare word that is not a command
+    (`npm create mushi-mushi my-app`) still runs the wizard, after one hint line
+    about `--template`. Errors from both bins now start with the bin name.
+
+### Patch Changes
+
+- 0ce3357: The npm page and the setup docs now explain Mushi Mushi in plain words: one command, what happens next, and a prompt to paste into your AI editor.
+- Updated dependencies [0ce3357]
+  - @mushi-mushi/cli@0.40.0
+
+## 1.35.0
+
+### Minor Changes
+
+- f318574: `mushi-mushi` is now the one package you install. `npm install mushi-mushi`, then import from `mushi-mushi` (the browser SDK) or `mushi-mushi/react`, `mushi-mushi/vue`, `mushi-mushi/svelte`, `mushi-mushi/angular` and `mushi-mushi/node`. `npx mushi-mushi` still runs the setup wizard, and the wizard now installs `mushi-mushi` and writes imports from it (React Native and Capacitor still get their own package). `mushi upgrade` and `mushi doctor` recognise `mushi-mushi` next to the `@mushi-mushi/*` names. Already on `@mushi-mushi/react`, `@mushi-mushi/web` or another scoped SDK? Nothing changes: it keeps working and keeps getting updates.
+
+  The MCP server's built-in docs search (`search_mushi_docs`) now answers install questions with `mushi-mushi`.
+
+### Patch Changes
+
+- Updated dependencies [f318574]
+- Updated dependencies [f318574]
+- Updated dependencies [f318574]
+  - @mushi-mushi/core@1.35.0
+  - @mushi-mushi/web@1.35.0
+  - @mushi-mushi/cli@0.39.0
+  - @mushi-mushi/node@1.3.7
+
+## 0.8.15
+
+### Patch Changes
+
+- d597fb0: New npm description and README hero (ADR 0058): Mushi Mushi is one place to improve AI-built apps. It fixes bugs, smooths the journeys people take through the app and cleans up the code, from your editor. Bug fixing is now one of three pillars instead of the whole product. No API changes.
+- Updated dependencies [d597fb0]
+- Updated dependencies [d597fb0]
+  - @mushi-mushi/cli@0.38.0
+
+## 0.8.14
+
+### Patch Changes
+
+- Updated dependencies [59d7cd0]
+  - @mushi-mushi/cli@0.37.0
+
+## 0.8.13
+
+### Patch Changes
+
+- Updated dependencies [7f3dd9a]
+- Updated dependencies [7f3dd9a]
+  - @mushi-mushi/cli@0.36.0
+
+## 0.8.12
+
+### Patch Changes
+
+- 184d4ea: The README and the npm description now use the full product name, Mushi Mushi, everywhere instead of a shortened "Mushi". In `@mushi-mushi/mcp`, `search_mushi_docs` and `get_mushi_doc` also return the updated docs pages and the corrected auto-fix-loop blog post.
+- Updated dependencies [184d4ea]
+  - @mushi-mushi/cli@0.35.6
+
 ## 0.8.11
 
 ### Patch Changes

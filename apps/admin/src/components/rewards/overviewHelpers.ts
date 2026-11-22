@@ -34,3 +34,81 @@ export function tierEmptyMessage(activeContributors30d: number): { title: string
   }
   return { title: 'No testers yet', description: 'Testers show up here once your app sends their first activity with rewards on.' }
 }
+
+/**
+ * A tester's name for a list (2026-11-18): the display name, else a short "Tester #23ba"
+ * for a raw UUID or long hex id (Plain language: never a raw UUID), else the external id.
+ */
+export function testerLabel(user: { external_user_id: string; display_name: string | null } | null | undefined): string {
+  if (!user) return 'Anonymous tester'
+  const name = user.display_name?.trim()
+  if (name) return name
+  const id = user.external_user_id ?? ''
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(id) || /^[0-9a-f]{20,}$/i.test(id)) return `Tester #${id.slice(0, 4)}`
+  return id || 'Anonymous tester'
+}
+
+/** Ladder order, low to high: the threshold when the tier list is loaded, else the default ladder. */
+const DEFAULT_LADDER = ['free', 'explorer', 'contributor', 'champion', 'legend']
+
+export function sortTiersByLadder(
+  entries: ReadonlyArray<readonly [string, number]>,
+  tiers?: ReadonlyArray<{ slug: string; points_threshold: number }> | null,
+): Array<[string, number]> {
+  const threshold = new Map((tiers ?? []).map((t) => [t.slug.toLowerCase(), t.points_threshold]))
+  const byThreshold = entries.length > 0 && entries.every(([slug]) => threshold.has(slug.toLowerCase()))
+  const rank = (slug: string): number => {
+    const key = slug.toLowerCase()
+    if (byThreshold) return threshold.get(key)!
+    const i = DEFAULT_LADDER.indexOf(key)
+    return i === -1 ? Number.MAX_SAFE_INTEGER : i
+  }
+  return entries.map(([slug, n]) => [slug, n] as [string, number]).sort((a, b) => rank(a[0]) - rank(b[0]) || b[1] - a[1])
+}
+
+export interface ActivityGroup<T> {
+  key: string
+  action: string
+  tester: string
+  count: number
+  points: number
+  rejectedReason: string | null
+  /** The newest event of the group (the feed arrives newest first). */
+  latest: T
+}
+
+/**
+ * The 24 h feed grouped by tester, action and outcome (2026-11-18: 32 "session minute
+ * +1" rows, mostly one tester). Groups keep the order of their newest event.
+ */
+export function groupActivityEvents<T extends {
+  action: string
+  points_awarded: number | null
+  rejected_reason: string | null
+  created_at: string
+  end_users: { external_user_id: string; display_name: string | null } | null
+}>(events: readonly T[]): ActivityGroup<T>[] {
+  const groups = new Map<string, ActivityGroup<T>>()
+  for (const ev of events) {
+    const who = ev.end_users?.external_user_id ?? 'anonymous'
+    const key = `${who}|${ev.action}|${ev.rejected_reason ?? ''}`
+    const g = groups.get(key)
+    if (g) {
+      g.count += 1
+      g.points += ev.rejected_reason ? 0 : (ev.points_awarded ?? 0)
+      if (Date.parse(ev.created_at) > Date.parse(g.latest.created_at)) g.latest = ev
+    } else {
+      groups.set(key, {
+        key,
+        action: ev.action,
+        tester: testerLabel(ev.end_users),
+        count: 1,
+        points: ev.rejected_reason ? 0 : (ev.points_awarded ?? 0),
+        rejectedReason: ev.rejected_reason,
+        latest: ev,
+      })
+    }
+  }
+  return [...groups.values()].sort((a, b) => Date.parse(b.latest.created_at) - Date.parse(a.latest.created_at))
+}
+

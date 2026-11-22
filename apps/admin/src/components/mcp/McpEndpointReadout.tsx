@@ -11,11 +11,10 @@ import { IconGlobe, IconIntegrations } from '../icons'
 
 interface Props {
   stats: McpStats
-  fetchedAt: string | null
-  validating?: boolean
 }
 
-export function McpEndpointReadout({ stats, fetchedAt, validating }: Props) {
+/** No freshness pill of its own: the page status above carries the page's one (round-3 review). */
+export function McpEndpointReadout({ stats }: Props) {
   if (!stats.projectId) return null
 
   const signalRows: DetailRowItem[] = [
@@ -46,7 +45,7 @@ export function McpEndpointReadout({ stats, fetchedAt, validating }: Props) {
   ]
 
   return (
-    <ReadoutPanel title="MCP readout" freshness={{ at: fetchedAt, isValidating: validating }}>
+    <ReadoutPanel title="MCP readout">
       <div className="grid gap-4 lg:grid-cols-2">
         <ReadoutSection title="Endpoints" icon={<IconGlobe size={14} aria-hidden />}>
           <EndpointCodeRow label="MCP HTTP transport (with API-key header)" url={RESOLVED_MCP_HTTP_URL} />

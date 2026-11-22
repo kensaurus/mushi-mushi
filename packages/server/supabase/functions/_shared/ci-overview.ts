@@ -21,9 +21,18 @@ import type { CiJobKind, CiOverview } from './ci-overview-types.ts'
 import type { RepoPermissions } from './ci-collector.ts'
 
 // deno-lint-ignore no-explicit-any
-type Db = { from: (table: string) => any }
+type Db = { from: (table: string) => any; rpc?: (fn: string, args: Record<string, unknown>) => any }
 
 export const OVERVIEW_JOB_LIMIT = 200
+/**
+ * Finished jobs always sent, however many are queued (2026-11-07: with 214 queued or running, the
+ * 200 limit left no room for finished jobs and the Now view said "Finished 3 in the last 2 hours").
+ */
+export const OVERVIEW_FINISHED_MIN = 100
+/** Job types in stats.byJob, slowest (p90) first. */
+export const OVERVIEW_JOB_TYPES = 60
+/** Newest test-machine stops sent on top of OVERVIEW_JOB_LIMIT, so the Machines list matches its count. */
+export const OVERVIEW_INFRA_JOBS = 10
 const FINISHED_READ_LIMIT = 1000
 /** Projects whose job windows are read at once. Each read is one index range. */
 const JOB_PROJECT_CONCURRENCY = 4
@@ -111,6 +120,20 @@ export interface OverviewRows {
   /** The newest overview live sync of these projects (ci_collector_state.last_live_sync_at). */
   lastLiveSyncAt: string | null
   workflows: Array<{ projectId: string; repo: string; path: string; text: string }>
+  /**
+   * Jobs per UTC hour over the whole window, counted in the database (`ci_jobs_hourly`); null
+   * when the function is unavailable, and the overview falls back to the capped job list.
+   */
+  hourCounts?: HourCount[] | null
+}
+
+/** One row of `ci_jobs_hourly`. */
+export interface HourCount {
+  hour: string
+  jobs: number
+  passed: number
+  code_failures: number
+  infra_failures: number
 }
 
 /** Everything the overview reads except `steps` (loaded later, by primary key). */
@@ -183,6 +206,16 @@ async function readOverviewJobs(db: Db, projectIds: string[], fromIso: string): 
   return { unfinished, finished }
 }
 
+/**
+ * The first step that failed, so the console can say what "tests failed" means
+ * ("Dead code (production)", "Draft PRs run no CI") instead of only the job name
+ * (2026-11-16). Null when no step failed or the steps were not read.
+ */
+export function firstFailedStep(steps: JobRow['steps']): string | null {
+  for (const st of steps ?? []) if (st?.conclusion === 'failure' && typeof st.name === 'string' && st.name.trim()) return st.name.trim()
+  return null
+}
+
 function repoOf(url: unknown): string | null {
   if (typeof url !== 'string') return null
   const m = /^(?:https?:\/\/(?:www\.)?github\.com\/)?([^/\s]+)\/([^/\s#?]+?)(?:\.git)?\/?$/i.exec(url.trim())
@@ -196,13 +229,14 @@ export async function loadCiOverviewRows(db: Db, projectIds: string[], from: Dat
     throwIfReadFailed(what, res.error)
     return (res.data ?? []) as T[]
   }
-  const [projectsRes, reposRes, runnersRes, stateRes, snapsRes, jobs] = await Promise.all([
+  const [projectsRes, reposRes, runnersRes, stateRes, snapsRes, jobs, hourCounts] = await Promise.all([
     db.from('projects').select('id, name, organization_id').in('id', projectIds),
     db.from('project_repos').select('project_id, repo_url').in('project_id', projectIds),
     db.from('ci_runners').select('project_id, repo, runner_name, status, busy, labels, kind, first_seen_at, last_job_at').in('project_id', projectIds),
     db.from('ci_collector_state').select('project_id, permissions, last_live_sync_at').in('project_id', projectIds),
     db.from('connector_snapshots').select('project_id, snapshot').in('project_id', projectIds).eq('kind', 'github').eq('is_current', true).eq('ok', true),
     readOverviewJobs(db, projectIds, fromIso),
+    readHourCounts(db, projectIds, fromIso),
   ])
   const projects = check<OverviewRows['projects'][number]>(projectsRes, 'projects')
   const orgIds = [...new Set(projects.map((p) => p.organization_id).filter((x): x is string => !!x))]
@@ -247,6 +281,34 @@ export async function loadCiOverviewRows(db: Db, projectIds: string[], from: Dat
     permissions,
     lastLiveSyncAt,
     workflows,
+    hourCounts,
+  }
+}
+
+/**
+ * Jobs per UTC hour over the whole window (`ci_jobs_hourly`). The finished-job read stops at
+ * FINISHED_READ_LIMIT, which a busy day fills in hours (1,005 jobs in 8 hours on 2026-11-17,
+ * against 10,954 in the week), so the week's shape is counted in the database. A missing or
+ * failing function only drops back to the capped list, whose gaps the console hatches.
+ */
+async function readHourCounts(db: Db, projectIds: string[], fromIso: string): Promise<HourCount[] | null> {
+  if (typeof db.rpc !== 'function' || projectIds.length === 0) return null
+  try {
+    const res = await db.rpc('ci_jobs_hourly', { p_project_ids: projectIds, p_from: fromIso })
+    if (res?.error) {
+      console.warn('[ci-overview] ci_jobs_hourly failed; the week falls back to the capped job list', res.error.message ?? res.error)
+      return null
+    }
+    return ((res?.data ?? []) as Array<Record<string, unknown>>).map((r) => ({
+      hour: String(r.hour),
+      jobs: Number(r.jobs ?? 0),
+      passed: Number(r.passed ?? 0),
+      code_failures: Number(r.code_failures ?? 0),
+      infra_failures: Number(r.infra_failures ?? 0),
+    }))
+  } catch (err) {
+    console.warn('[ci-overview] ci_jobs_hourly threw; the week falls back to the capped job list', err instanceof Error ? err.message : err)
+    return null
   }
 }
 
@@ -294,6 +356,81 @@ function aggregatePermission(values: Array<'ok' | 'missing' | 'unknown' | undefi
   if (values.includes('missing')) return 'missing'
   if (values.includes('ok')) return 'ok'
   return 'unknown'
+}
+
+const HOUR_MS = 3_600_000
+/** At most this many hours in `stats.hourly` (a 31-day window). */
+const HOURLY_MAX = 31 * 24
+
+type HourlyPoint = CiOverview['stats']['hourly'][number]
+
+/**
+ * Jobs started per UTC hour over the window, oldest first, one entry per hour
+ * (zeros included) so the console can draw a day × hour heatmap and a daily
+ * pass rate in the viewer's own time zone. `coveredFrom` is the first hour the
+ * read fully covers: when the finished-job read hit its limit, older hours are
+ * incomplete and the console greys them instead of drawing them as quiet.
+ */
+export function hourlySeries(
+  jobs: readonly Pick<JobRow, 'gh_created_at' | 'ci_kind' | 'infra' | 'status'>[],
+  from: Date,
+  now: Date,
+  coveredFrom: Date,
+): { hourly: HourlyPoint[]; hourlyFrom: string } {
+  const first = Math.max(Math.floor(from.getTime() / HOUR_MS), Math.floor(now.getTime() / HOUR_MS) - HOURLY_MAX + 1)
+  const last = Math.floor(now.getTime() / HOUR_MS)
+  const hourly: HourlyPoint[] = []
+  for (let h = first; h <= last; h++) hourly.push({ at: new Date(h * HOUR_MS).toISOString(), jobs: 0, passed: 0, codeFailures: 0, infraFailures: 0 })
+  for (const j of jobs) {
+    const t = Date.parse(j.gh_created_at)
+    if (!Number.isFinite(t)) continue
+    const slot = hourly[Math.floor(t / HOUR_MS) - first]
+    if (!slot) continue
+    slot.jobs++
+    if (j.ci_kind === 'passed') slot.passed++
+    else if (j.ci_kind === 'code_failure') slot.codeFailures++
+    if (j.infra && j.status === 'completed') slot.infraFailures++
+  }
+  const coveredHour = Math.max(first, Math.ceil(coveredFrom.getTime() / HOUR_MS))
+  return { hourly, hourlyFrom: new Date(coveredHour * HOUR_MS).toISOString() }
+}
+
+/**
+ * `hourlySeries` from database counts (`ci_jobs_hourly`): the whole window is covered, so
+ * `hourlyFrom` is the window's first full hour. Also returns the window's true totals.
+ */
+export function hourlyFromCounts(
+  counts: readonly HourCount[],
+  from: Date,
+  now: Date,
+): { hourly: HourlyPoint[]; hourlyFrom: string; windowJobs: number; windowPassRate: number | null } {
+  const first = Math.max(Math.floor(from.getTime() / HOUR_MS), Math.floor(now.getTime() / HOUR_MS) - HOURLY_MAX + 1)
+  const last = Math.floor(now.getTime() / HOUR_MS)
+  const hourly: HourlyPoint[] = []
+  for (let h = first; h <= last; h++) hourly.push({ at: new Date(h * HOUR_MS).toISOString(), jobs: 0, passed: 0, codeFailures: 0, infraFailures: 0 })
+  let jobs = 0
+  let passed = 0
+  let failed = 0
+  for (const c of counts) {
+    const t = Date.parse(c.hour)
+    if (!Number.isFinite(t)) continue
+    jobs += c.jobs
+    passed += c.passed
+    failed += c.code_failures
+    const slot = hourly[Math.floor(t / HOUR_MS) - first]
+    if (!slot) continue
+    slot.jobs += c.jobs
+    slot.passed += c.passed
+    slot.codeFailures += c.code_failures
+    slot.infraFailures += c.infra_failures
+  }
+  const coveredHour = Math.max(first, Math.ceil(from.getTime() / HOUR_MS))
+  return {
+    hourly,
+    hourlyFrom: new Date(coveredHour * HOUR_MS).toISOString(),
+    windowJobs: jobs,
+    windowPassRate: passed + failed > 0 ? Math.round((passed / (passed + failed)) * 1000) / 1000 : null,
+  }
 }
 
 export function buildCiOverview(rows: OverviewRows, opts: { now: Date; days: number; from: Date; refreshedAt: string | null }): CiOverview {
@@ -408,7 +545,12 @@ export function buildCiOverview(rows: OverviewRows, opts: { now: Date; days: num
     if (s.phase !== 'completed' || s.mem_peak_mb == null) continue
     peakOf.set(`${s.repo}|${s.run_id}|${s.run_attempt}|${s.runner_name}`, s.mem_peak_mb)
   }
-  const shown = [...rows.unfinished, ...rows.finished.slice(0, Math.max(0, OVERVIEW_JOB_LIMIT - rows.unfinished.length))]
+  const newest = [...rows.unfinished, ...rows.finished.slice(0, Math.max(OVERVIEW_FINISHED_MIN, OVERVIEW_JOB_LIMIT - rows.unfinished.length))]
+  // The newest test-machine stops always ride along (2026-11-07): the Machines tab badge counts
+  // every stop in the window, but its list read only the newest 200 jobs, so it said "No test
+  // machine stopped a job" under a badge of 121.
+  const newestIds = new Set(newest.map((j) => j.id))
+  const shown = [...newest, ...rows.finished.filter((j) => j.infra && !newestIds.has(j.id)).slice(0, OVERVIEW_INFRA_JOBS)]
   const jobs = shown.map((j) => ({
     id: j.id,
     projectId: j.project_id,
@@ -434,6 +576,7 @@ export function buildCiOverview(rows: OverviewRows, opts: { now: Date; days: num
     completedAt: j.completed_at,
     htmlUrl: j.html_url,
     memPeakMb: j.runner_name ? peakOf.get(`${j.repo}|${j.run_id}|${j.run_attempt}|${j.runner_name}`) ?? null : null,
+    failedStep: firstFailedStep(j.steps),
   }))
 
   const finished = rows.finished
@@ -462,6 +605,36 @@ export function buildCiOverview(rows: OverviewRows, opts: { now: Date; days: num
       failRate: tested.length ? Math.round((tested.filter((j) => j.ci_kind === 'code_failure').length / tested.length) * 1000) / 1000 : null,
     }
   }).sort((a, b) => b.jobs - a.jobs)
+
+  // Per job (repo + workflow + job name): run time, wait and failures, the way GitHub's Actions
+  // performance metrics and Buildkite's insights break a pipeline down. Skipped runs are left out
+  // (GitHub excludes them too); a run time needs a start, so only jobs a machine took count.
+  const jobKeys = new Map<string, JobRow[]>()
+  for (const j of finished) {
+    if (j.ci_kind === 'skipped') continue
+    const k = `${j.repo}|${j.workflow_name ?? '(unnamed)'}|${j.job_name}`
+    const list = jobKeys.get(k)
+    if (list) list.push(j)
+    else jobKeys.set(k, [j])
+  }
+  const byJob = [...jobKeys.values()].map((mine) => {
+    const tested = mine.filter((j) => FINISHED_TESTING.has(j.ci_kind))
+    const durations = nums(mine.filter((j) => j.started_at), 'duration_seconds')
+    return {
+      repo: mine[0].repo,
+      workflow: mine[0].workflow_name ?? '(unnamed)',
+      job: mine[0].job_name,
+      runs: mine.length,
+      durationP50s: percentile(durations, 50),
+      durationP90s: percentile(durations, 90),
+      durationMaxS: durations.length ? Math.max(...durations) : null,
+      queueP50s: percentile(nums(mine, 'queue_seconds'), 50),
+      codeFailures: mine.filter((j) => j.ci_kind === 'code_failure').length,
+      infraFailures: mine.filter((j) => j.infra).length,
+      failRate: tested.length ? Math.round((tested.filter((j) => j.ci_kind === 'code_failure').length / tested.length) * 1000) / 1000 : null,
+      lastRunAt: mine.map((j) => j.completed_at ?? j.gh_created_at).sort().at(-1) ?? null,
+    }
+  }).sort((a, b) => (b.durationP90s ?? 0) - (a.durationP90s ?? 0)).slice(0, OVERVIEW_JOB_TYPES)
 
   const advisorJobs: AdvisorJob[] = all.map((j) => ({
     repo: j.repo,
@@ -508,6 +681,7 @@ export function buildCiOverview(rows: OverviewRows, opts: { now: Date; days: num
     permissions: {
       jobs: aggregatePermission(permissionValues.map((p) => p?.jobs)),
       runners: aggregatePermission(permissionValues.map((p) => p?.runners)),
+      jobsMissingRepos: [...scopedRepos].filter((r) => rows.permissions[r]?.jobs === 'missing').sort(),
     },
     hosts,
     runners,
@@ -525,7 +699,17 @@ export function buildCiOverview(rows: OverviewRows, opts: { now: Date; days: num
       codeFailures: finished.filter((j) => j.ci_kind === 'code_failure').length,
       byRunner,
       byWorkflow,
+      byJob,
       slowSteps: slowSteps(advisorJobs),
+      ...(rows.hourCounts
+        ? hourlyFromCounts(rows.hourCounts, opts.from, now)
+        : hourlySeries(
+            all,
+            opts.from,
+            now,
+            // The finished read stops at FINISHED_READ_LIMIT: hours older than its oldest job are partial.
+            rows.finished.length >= FINISHED_READ_LIMIT ? new Date(rows.finished[rows.finished.length - 1]!.gh_created_at) : opts.from,
+          )),
     },
     advice,
   }

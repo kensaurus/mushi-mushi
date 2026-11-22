@@ -32,3 +32,16 @@ export function pullSummary(r: StoreIntakeResult): string {
     : `${storeLabel(s.store)}: ${s.detail ?? (s.status === 'not_connected' ? 'not connected' : 'could not be read')}`))
   return [head, ...lines].join(' · ')
 }
+
+/**
+ * Why "Pull now" cannot run, in one line; null when it can. The button is disabled only for
+ * one of these, and the line stands beside it (2026-11-18: it was disabled with the reason
+ * below the controls, or with no reason at all).
+ */
+export function pullBlocker(data: { settings: { enabled: boolean }; sources: ReadonlyArray<{ connected: boolean }>; canPull: boolean } | null | undefined): string | null {
+  if (!data) return 'Reading the settings…'
+  if (!data.canPull) return 'Viewers cannot pull store reviews.'
+  if (!data.settings.enabled) return 'Turn on "File new store reviews as reports" first.'
+  if (!data.sources.some((s) => s.connected)) return 'Connect App Store Connect or Google Play first.'
+  return null
+}

@@ -220,7 +220,7 @@ export function ExploreSearchBar({ projectId, onHighlight, onSelectHit, seedQuer
                 type="button"
                 onClick={() => setActiveLayer(null)}
                 className={[
-                  'text-2xs px-2 py-0.5 rounded-sm border transition-opacity',
+                  'text-2xs px-2 py-px rounded-sm transition-opacity',
                   activeLayer === null
                     ? 'border-edge bg-surface-overlay text-fg font-medium'
                     : 'border-edge-subtle bg-surface-raised text-fg-secondary hover:text-fg hover:border-edge',
@@ -236,7 +236,7 @@ export function ExploreSearchBar({ projectId, onHighlight, onSelectHit, seedQuer
                     type="button"
                     onClick={() => setActiveLayer(l)}
                     className={[
-                      'text-2xs px-2 py-0.5 rounded-sm border transition-opacity flex items-center gap-1',
+                      'text-2xs px-2 py-px rounded-sm transition-opacity flex items-center gap-1',
                       activeLayer === l
                         ? 'border-current font-medium'
                         : 'border-edge-subtle bg-surface-raised hover:border-current',
@@ -276,7 +276,7 @@ export function ExploreSearchBar({ projectId, onHighlight, onSelectHit, seedQuer
                       </code>
                       {hit.layer && (
                         <span
-                          className="text-2xs px-1 py-px rounded-sm border"
+                          className="text-2xs px-1 py-px rounded-sm"
                           style={{
                             backgroundColor: `${LAYER_COLORS[hit.layer as ExploreLayer]}15`,
                             borderColor: `${LAYER_COLORS[hit.layer as ExploreLayer]}35`,
@@ -318,7 +318,7 @@ export function ExploreSearchBar({ projectId, onHighlight, onSelectHit, seedQuer
             </p>
           </div>
           <div>
-            <div className="text-2xs uppercase tracking-wider text-fg-faint mb-1.5">Example queries</div>
+            <div className="text-2xs text-fg-secondary mb-1.5 font-semibold">Example queries</div>
             <div className="flex flex-wrap gap-1.5">
               {EXAMPLE_QUERIES.map((ex) => (
                 <button

@@ -6,10 +6,14 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import Link from 'next/link'
 import {
+  CHECK_NEXT,
   CHECK_PAGE_URL,
-  CHECK_SIGNUP_HREF,
+  allFindingsPrompt,
+  cachedFromSearch,
   cachedNotice,
+  findingPrompt,
   checkIdFromLocation,
   countLine,
   groupBySeverity,
@@ -23,11 +27,31 @@ import {
   type Severity,
 } from '@/lib/production-check'
 
+/**
+ * The report as the API sends it since 2026-11-11 (ADR 0056): a site no page
+ * of which could be read is `failed` with `failure: 'unreachable'`, a short
+ * `error`, `advice` (what to try) and `summary.unreachable.reason`.
+ */
+type CheckApiReport = CheckReport & {
+  failure?: 'unreachable' | 'error' | null
+  advice?: string | null
+  summary: CheckReport['summary'] & { imagesChecked?: number; unreachable?: { reason?: string } }
+}
+
+/**
+ * Could not reach the site. Also true for a report an older API stored as
+ * "done" with no page read and no finding: that was never a pass.
+ */
+function isUnreachable(report: CheckApiReport): boolean {
+  if (report.failure === 'unreachable' || report.summary?.unreachable) return true
+  return report.status === 'done' && Array.isArray(report.summary?.pages) && report.summary.pages.length === 0 && (report.findings ?? []).length === 0
+}
+
 type View =
   | { kind: 'form'; error?: string }
   | { kind: 'loading' }
   | { kind: 'running'; id: string; host: string }
-  | { kind: 'report'; report: CheckReport }
+  | { kind: 'report'; report: CheckApiReport }
   | { kind: 'missing'; message: string }
 
 const POLL_MS = 2_500
@@ -50,7 +74,7 @@ export function CheckClient() {
     const tick = async () => {
       const r = await loadCheck(id)
       if (r.ok && r.data.status !== 'running') {
-        setView({ kind: 'report', report: r.data })
+        setView({ kind: 'report', report: r.data as CheckApiReport })
         return
       }
       if (!r.ok && r.status === 404) {
@@ -68,8 +92,11 @@ export function CheckClient() {
 
   useEffect(() => {
     const id = checkIdFromLocation(window.location.pathname, window.location.search)
-    if (id) follow(id, '')
-    else setView({ kind: 'form' })
+    if (id) {
+      // The landing's address box landed on a report that already existed.
+      if (cachedFromSearch(window.location.search)) setNotice(cachedNotice(true, false, false))
+      follow(id, '')
+    } else setView({ kind: 'form' })
     return () => {
       if (pollTimer.current) clearTimeout(pollTimer.current)
     }
@@ -80,13 +107,14 @@ export function CheckClient() {
     const form = new FormData(e.currentTarget)
     const url = String(form.get('url') ?? '').trim()
     const email = String(form.get('email') ?? '').trim()
-    if (!url) return setView({ kind: 'form', error: 'Enter your site’s address.' })
+    if (!url) return setView({ kind: 'form', error: 'Enter your app’s address, like https://my-app.lovable.app.' })
     setView({ kind: 'loading' })
     const r = await startCheck({ url, email: email || undefined, src: srcFromSearch(window.location.search) })
     if (!r.ok) return setView({ kind: 'form', error: r.message })
     setNotice(cachedNotice(r.data.cached, Boolean(email), r.data.emailed === true))
     const next = new URL(window.location.href)
     next.searchParams.set('id', r.data.id)
+    next.searchParams.delete('cached')
     window.history.replaceState(null, '', next)
     follow(r.data.id, hostOf(url.includes('://') ? url : `https://${url}`))
   }
@@ -116,9 +144,9 @@ function CheckForm({ error, onSubmit, defaultUrl }: { error?: string; onSubmit: 
         <p className="text-xs font-semibold uppercase tracking-wide text-mushi-vermillion">Free Production Check</p>
         <h1 className="text-3xl font-bold tracking-tight text-mushi-ink sm:text-4xl">Is your live app broken for new visitors?</h1>
         <p className="text-base text-mushi-ink-muted">
-          Paste your address. In about 30 seconds Mushi Mushi reads your home page and three pages it links to, the way a first
-          visitor sees them, and tells you in plain English what to fix: error pages, dead links, missing security
-          headers, published source maps.
+          Paste your address. In about 30 seconds Mushi Mushi opens your home page and three pages it links to, the way a
+          first visitor sees them, and tells you in plain English what to fix: pages that error or show nothing, dead
+          links and images, a title still saying “Lovable App” or “Vite + React”, then security headers.
         </p>
       </header>
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
@@ -197,11 +225,63 @@ function Missing({ message }: { message: string }) {
   )
 }
 
-function Report({ report }: { report: CheckReport }) {
+function Unreachable({ report, host }: { report: CheckApiReport; host: string }) {
+  return (
+    <div className="space-y-4" role="alert">
+      <p className="text-xs font-semibold uppercase tracking-wide text-mushi-danger">Production Check failed</p>
+      <h1 className="text-2xl font-bold tracking-tight text-mushi-ink sm:text-3xl">We could not reach {host}</h1>
+      <p className="text-base text-mushi-ink">
+        This is not a pass. Mushi Mushi tried to open your site the way a first-time visitor would, and no page loaded, so
+        nothing on it could be checked.
+      </p>
+      <p className="rounded-md border border-mushi-danger bg-mushi-paper-wash px-3 py-2 text-sm text-mushi-ink">
+        {report.error ?? 'Nothing answered at this address.'}
+      </p>
+      <p className="text-sm text-mushi-ink">
+        <span className="font-medium">What to try: </span>
+        {report.advice ?? 'Open the address yourself in a private window. If it works for you, check again in a few minutes.'}
+      </p>
+      <a
+        href={`${CHECK_PAGE_URL}?url=${encodeURIComponent(report.url)}`}
+        data-mushi-cta="production_check_retry"
+        data-mushi-location="check_unreachable"
+        className="inline-block rounded-md bg-mushi-vermillion px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+      >
+        Check again
+      </a>
+    </div>
+  )
+}
+
+/** Copies `text`; the label flips to "Copied" for two seconds. Falls back to a prompt box. */
+function CopyButton({ text, label, ctaId, className }: { text: string; label: string; ctaId: string; className: string }) {
+  const [copied, setCopied] = useState(false)
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      window.prompt('Copy this text', text)
+    }
+  }
+  return (
+    <button type="button" onClick={copy} data-mushi-cta={ctaId} data-mushi-location="check_report" className={className}>
+      <span aria-live="polite">{copied ? 'Copied' : label}</span>
+    </button>
+  )
+}
+
+const COPY_PRIMARY = 'min-h-11 rounded-md bg-mushi-vermillion px-4 py-2 text-sm font-semibold text-white hover:opacity-90'
+const COPY_QUIET = 'min-h-11 rounded-md border border-mushi-rule bg-mushi-paper px-3 py-2 text-sm font-semibold text-mushi-ink hover:bg-mushi-paper-wash'
+
+function Report({ report }: { report: CheckApiReport }) {
   const [copied, setCopied] = useState(false)
   const host = hostOf(report.url)
   const checkedOn = new Date(report.finished_at ?? report.created_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })
-  const groups = groupBySeverity(report.findings ?? [])
+  const findings = report.findings ?? []
+  const groups = groupBySeverity(findings)
+  const allPrompt = allFindingsPrompt(report.url, findings)
   const pages = report.summary?.pages ?? []
 
   async function share() {
@@ -213,6 +293,8 @@ function Report({ report }: { report: CheckReport }) {
       window.prompt('Copy this link', reportShareUrl(report.id))
     }
   }
+
+  if (isUnreachable(report)) return <Unreachable report={report} host={host} />
 
   if (report.status === 'failed') {
     return (
@@ -234,13 +316,25 @@ function Report({ report }: { report: CheckReport }) {
         <p className="text-base text-mushi-ink">{countLine(report.findings ?? [])}.</p>
         <p className="text-xs text-mushi-ink-muted">
           Checked {checkedOn}: {pages.length ? `${pages.length} ${pages.length === 1 ? 'page' : 'pages'}` : 'the home page'}
-          {report.summary?.linksChecked ? `, ${report.summary.linksChecked} links` : ''}. Public pages only.
+          {report.summary?.linksChecked ? `, ${report.summary.linksChecked} links` : ''}
+          {report.summary?.imagesChecked ? `, ${report.summary.imagesChecked} images` : ''}. Public pages only.
           {report.summary?.incomplete?.length ? ` Could not check: ${report.summary.incomplete.join(', ')}.` : ''}
         </p>
         <button type="button" onClick={share} className="text-sm font-medium text-mushi-vermillion underline underline-offset-2">
           {copied ? 'Link copied' : 'Share this report'}
         </button>
       </header>
+
+      {allPrompt ? (
+        <section className="space-y-2 rounded-md border border-mushi-rule bg-mushi-paper-wash p-4" aria-label="Fix everything with your AI builder">
+          <p className="text-sm text-mushi-ink">
+            <span className="font-medium">No coding needed. </span>
+            Each problem below comes with a short prompt. Paste it into Lovable, Bolt or your AI editor and it makes the
+            fix.
+          </p>
+          <CopyButton text={allPrompt} label={findings.length === 1 ? 'Copy the prompt' : 'Copy all as one prompt'} ctaId="check_copy_all_prompts" className={COPY_PRIMARY} />
+        </section>
+      ) : null}
 
       {groups.map((g) => (
         <section key={g.severity} className="space-y-3">
@@ -264,10 +358,20 @@ function Report({ report }: { report: CheckReport }) {
                   <span className="font-medium">Why it matters: </span>
                   {f.why}
                 </p>
-                <p className="mt-1 text-sm text-mushi-ink">
-                  <span className="font-medium">How to fix: </span>
-                  {f.fix}
-                </p>
+                <div className="mt-3 space-y-2">
+                  <p className="text-sm font-medium text-mushi-ink">Paste this into Lovable, Bolt or your AI editor</p>
+                  <p className="whitespace-pre-wrap rounded-md border border-mushi-rule bg-mushi-paper px-3 py-2 text-sm text-mushi-ink">
+                    {findingPrompt(f)}
+                  </p>
+                  <CopyButton text={findingPrompt(f)} label="Copy" ctaId="check_copy_prompt" className={COPY_QUIET} />
+                </div>
+                {/* Reports stored before prompts existed show the fix text above already. */}
+                {f.prompt?.trim() ? (
+                  <details className="mt-3 text-sm text-mushi-ink">
+                    <summary className="cursor-pointer py-1 font-medium text-mushi-ink-muted">If you use a code editor</summary>
+                    <p className="mt-1">{f.fix}</p>
+                  </details>
+                ) : null}
               </li>
             ))}
           </ul>
@@ -275,19 +379,26 @@ function Report({ report }: { report: CheckReport }) {
       ))}
 
       <section className="space-y-3 rounded-md border border-mushi-rule p-5">
-        <h2 className="text-lg font-semibold text-mushi-ink">This checked what a visitor sees today. Your users find the rest.</h2>
-        <p className="text-sm text-mushi-ink-muted">
-          Mushi Mushi sits in your app, takes the bug reports your users send, explains each one in plain English and hands
-          Cursor, Claude Code or Lovable the fix.
-        </p>
-        <a
-          href={CHECK_SIGNUP_HREF}
-          data-mushi-cta="check_signup"
-          data-mushi-location="check_report"
-          className="inline-block rounded-md bg-mushi-vermillion px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
-        >
-          Install Mushi Mushi free (1 app)
-        </a>
+        <h2 className="text-lg font-semibold text-mushi-ink">{CHECK_NEXT.heading}</h2>
+        <p className="text-sm text-mushi-ink-muted">{CHECK_NEXT.body}</p>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+          <Link
+            href={CHECK_NEXT.primary.href}
+            data-mushi-cta={CHECK_NEXT.primary.ctaId}
+            data-mushi-location="check_report"
+            className="inline-block rounded-md bg-mushi-vermillion px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+          >
+            {CHECK_NEXT.primary.label}
+          </Link>
+          <Link
+            href={CHECK_NEXT.secondary.href}
+            data-mushi-cta={CHECK_NEXT.secondary.ctaId}
+            data-mushi-location="check_report"
+            className="text-sm font-medium text-mushi-vermillion underline underline-offset-2"
+          >
+            {CHECK_NEXT.secondary.label}
+          </Link>
+        </div>
       </section>
     </div>
   )

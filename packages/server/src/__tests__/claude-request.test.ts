@@ -271,7 +271,8 @@ describe('refusal handling', () => {
 
   it('a spent Anthropic key (a 400 "usage limits", not a 429) is quota, so failover tries the next key', () => {
     expect(classifyLlmError(new Error('You have reached your specified API usage limits. You will regain access on 2026-11-01 at 00:00 UTC.'))).toBe('quota')
-    expect(classifyLlmError(new Error('Your credit balance is too low to access the Anthropic API.'))).toBe('quota')
+    // A spent balance is its own class since 2026-11-21 ('payment'); it fails over the same way.
+    expect(classifyLlmError(new Error('Your credit balance is too low to access the Anthropic API.'))).toBe('payment')
   })
 
   it('withAnthropicOrOpenAi hands a Claude refusal to OpenAI', async () => {
@@ -279,7 +280,7 @@ describe('refusal handling', () => {
       throw refusal
     })
     const openai = vi.fn(async () => 'openai-answer')
-    const { result, usedProvider } = await withAnthropicOrOpenAi(db, 'project-1', anthropic, openai)
+    const { result, usedProvider } = await withAnthropicOrOpenAi(db, 'project-1', anthropic, openai, { feature: 'test', tier: 'fast' })
     expect(anthropic).toHaveBeenCalledTimes(1)
     expect(usedProvider).toBe('openai')
     expect(result).toBe('openai-answer')
@@ -288,7 +289,7 @@ describe('refusal handling', () => {
   it('still re-throws an unrelated Anthropic error instead of falling back', async () => {
     const err = Object.assign(new Error('invalid_request_error'), { status: 400 })
     await expect(
-      withAnthropicOrOpenAi(db, 'project-1', async () => { throw err }, async () => 'x'),
+      withAnthropicOrOpenAi(db, 'project-1', async () => { throw err }, async () => 'x', { feature: 'test', tier: 'fast' }),
     ).rejects.toBe(err)
   })
 })

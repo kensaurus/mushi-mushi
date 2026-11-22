@@ -80,6 +80,8 @@ export interface SetupProject {
   project_name: string
   project_slug: string
   created_at: string
+  /** The owning team, from the server (absent on older servers). */
+  organization_id?: string | null
   steps: SetupStep[]
   required_total: number
   required_complete: number

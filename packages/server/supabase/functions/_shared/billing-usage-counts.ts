@@ -11,23 +11,24 @@ import type { getServiceClient } from './db.ts'
 type ServiceDb = ReturnType<typeof getServiceClient>;
 
 /**
- * This period's usage for one project as exact head counts (no rows read).
+ * This period's usage for one project, or for every app in a team, as exact
+ * head counts (no rows read).
  * Diagnoses exclude Phase-1 shadow rows: shadow = all − shadow:true, which
  * keeps rows that have no `shadow` key (a `not.eq.true` filter drops them,
  * because NULL <> 'true' is NULL).
  */
 export async function countPeriodUsage(
   db: ServiceDb,
-  projectId: string,
+  /** One app, or every app in a team (a plan's quota is the team's). */
+  projectId: string | string[],
   sinceIso: string,
 ): Promise<{ reports: number; fixes: number; fixesSucceeded: number; diagnoses: number } | Error> {
-  const count = (event: string) =>
-    db
-      .from('usage_events')
-      .select('id', { count: 'exact', head: true })
-      .eq('project_id', projectId)
+  const count = (event: string) => {
+    const q = db.from('usage_events').select('id', { count: 'exact', head: true });
+    return (Array.isArray(projectId) ? q.in('project_id', projectId) : q.eq('project_id', projectId))
       .eq('event_name', event)
       .gte('occurred_at', sinceIso);
+  };
   const [reports, fixes, fixesSucceeded, diagnosesAll, diagnosesShadow] = await Promise.all([
     count('reports_ingested'),
     count('fixes_attempted'),

@@ -13,10 +13,10 @@ When a Mushi Mushi fix merges, writes a `mushi_resolved_` flag to your
 Firebase Remote Config, which your mobile app can read to stop showing a
 stale crash notice. It does not create Crashlytics issues.
 
-**Not in the Mushi Cloud Marketplace yet.** The console has no Crashlytics
-listing, so you can't install it from there. On a Mushi server you run
+**Not in the Mushi Mushi Cloud Marketplace yet.** The console has no Crashlytics
+listing, so you can't install it from there. On a Mushi Mushi server you run
 yourself, add a `plugin_registry` row for it and install it like any listed
-plugin. To bring Crashlytics crashes *into* Mushi, use `@mushi-mushi/adapters`.
+plugin. To bring Crashlytics crashes *into* Mushi Mushi, use `@mushi-mushi/adapters`.
 
 ## Setup (self-hosted Mushi Mushi)
 
@@ -41,4 +41,4 @@ about an hour). Point the plugin's webhook URL at
 
 | Event | Action |
 | --- | --- |
-| `fix.applied` | Set Remote Config `mushi_resolved_` to `"true"` (dashes in the report id become underscores); close the Crashlytics issue only if the event carries `crashlyticsIssueId` (Mushi does not send it today) |
+| `fix.applied` | Set Remote Config `mushi_resolved_` to `"true"` (dashes in the report id become underscores); close the Crashlytics issue only if the event carries `crashlyticsIssueId` (Mushi Mushi does not send it today) |

@@ -19,6 +19,7 @@ import { ConfirmDialog } from '../ConfirmDialog'
 import { Badge, Btn, Callout, CodeValue } from '../ui'
 import { IconExternalLink } from '../icons'
 import { SwitchCursorAccountDialog } from './SwitchCursorAccount'
+import { StatusGlyph } from '../signal/StatusGlyph'
 import { useToast } from '../../lib/toast'
 import { durationLabel, patchLane, recheckAccount, STAGE_LABEL, stopRun, type WorkerFlag, type WorkerFlagAction, type WriteResult } from '../../lib/workers'
 
@@ -34,6 +35,27 @@ const KIND_LABEL: Record<string, string> = {
   hook_failures: 'Git hooks failing',
   unmanaged_run: 'Run outside the worker',
   credits_idle: 'Credits idle',
+}
+
+/**
+ * The tone a flag is drawn in. Idle credits are money left unspent, a warning, never a failure:
+ * the server sends them as `danger` and the card was red (round-2 review, 2026-11-18).
+ */
+export function flagTone(flag: Pick<WorkerFlag, 'kind' | 'severity'>): 'danger' | 'warn' {
+  if (flag.kind === 'credits_idle') return 'warn'
+  return flag.severity === 'danger' ? 'danger' : 'warn'
+}
+
+/**
+ * A flag's small label and duration, only where they add to its title: "Credits idle" over
+ * "Cursor credits idle for 33 h", then "for 33 h" again, said one thing three times
+ * (2026-11-18).
+ */
+function flagHeading(flag: Pick<WorkerFlag, 'id' | 'kind' | 'title' | 'sinceSec'>): { label: string | null; since: string | null } {
+  const label = flag.id === 'credits_out' ? 'Out of credits' : (KIND_LABEL[flag.kind] ?? 'Worker problem')
+  const title = flag.title.toLowerCase()
+  const since = flag.sinceSec != null ? durationLabel(flag.sinceSec) : null
+  return { label: title.includes(label.toLowerCase()) ? null : label, since: since && !title.includes(since.toLowerCase()) ? since : null }
 }
 
 /** An agent space, explained once wherever flags show. */
@@ -117,15 +139,25 @@ function FlagAction({ flag, action, onChanged }: { flag: WorkerFlag; action: Wor
   }
 }
 
+/**
+ * A link to the Workers tab, drawn on the Workers tab, goes nowhere: "Open Workers" on the idle
+ * credits card linked to the page it sat on (round-3 review, 2026-11-19). @internal Exported for tests.
+ */
+export function isWorkersTabLink(action: WorkerFlagAction): boolean {
+  return action.kind === 'open_page' && /^\/pipeline(\?|#|$)/.test(action.to) && /[?&]tab=workers(&|#|$)/.test(action.to)
+}
+
 function FlagItem({ flag, onChanged }: { flag: WorkerFlag; onChanged: () => void }) {
   const commands = flag.actions.filter((a): a is Extract<WorkerFlagAction, { kind: 'copy_command' }> => a.kind === 'copy_command')
-  const buttons = flag.actions.filter((a) => a.kind !== 'copy_command')
+  // These cards show on the Workers tab: a button back to it is dropped.
+  const buttons = flag.actions.filter((a) => a.kind !== 'copy_command' && !isWorkersTabLink(a))
+  const head = flagHeading(flag)
   return (
-    <li data-testid={`worker-flag-${flag.kind}`} data-flag-id={flag.id}>
+    <li data-testid={`worker-flag-${flag.kind}`} data-flag-id={flag.id} data-tone={flagTone(flag)}>
       <Callout
-        tone={flag.severity === 'danger' ? 'danger' : 'warn'}
-        label={KIND_LABEL[flag.kind] ?? 'Worker problem'}
-        action={flag.sinceSec != null ? <span className="text-2xs tabular-nums text-fg-muted">for {durationLabel(flag.sinceSec)}</span> : undefined}
+        tone={flagTone(flag)}
+        label={head.label ?? undefined}
+        action={head.since ? <span className="text-2xs tabular-nums text-fg-muted">for {head.since}</span> : undefined}
       >
         <div className="space-y-1.5">
           <p className="text-sm font-semibold text-fg">{flag.title}</p>
@@ -153,8 +185,9 @@ function FlagItem({ flag, onChanged }: { flag: WorkerFlag; onChanged: () => void
           )}
           {commands.map((a) => (
             <div key={a.command} className="space-y-0.5">
-              <p className="text-2xs text-fg-muted">{a.label}, on {flag.hostname ?? 'the machine'}:</p>
-              <CodeValue value={a.command} multiline />
+              <p className="text-2xs text-fg-muted">{flag.id === 'credits_out' ? `${a.label}:` : `${a.label}, on ${flag.hostname ?? 'the machine'}:`}</p>
+              {/* Not `multiline`: its copy button is absolute inside the Tooltip anchor and landed outside the card (2026-11-18). */}
+              <CodeValue value={a.command} className="w-full" />
             </div>
           ))}
         </div>
@@ -168,15 +201,17 @@ interface Props {
   onChanged: () => void
 }
 
+/** "2 things stop your local workers from fixing bugs (1 needs you now)." The Workers status says it once, above the cards. */
+export function flagsSentence(flags: ReadonlyArray<Pick<WorkerFlag, 'kind' | 'severity'>>): string {
+  const danger = flags.filter((f) => flagTone(f) === 'danger').length
+  return `${flags.length === 1 ? '1 thing stops' : `${flags.length} things stop`} your local workers from fixing bugs${danger ? ` (${danger} ${danger === 1 ? 'needs' : 'need'} you now)` : ''}.`
+}
+
 /** Every flag, worst first, each with its actions. Empty → nothing. */
 export function WorkerFlags({ flags, onChanged }: Props) {
   if (flags.length === 0) return null
-  const danger = flags.filter((f) => f.severity === 'danger').length
   return (
     <section aria-label="Local worker problems" className="space-y-2" data-testid="worker-flags">
-      <p className="text-sm font-semibold text-fg">
-        {flags.length === 1 ? '1 thing stops' : `${flags.length} things stop`} your local workers from fixing bugs{danger ? ` (${danger} need you now)` : ''}.
-      </p>
       {flags.some((f) => f.kind === 'lanes_waiting' || f.kind === 'run_stuck') && <p className="text-2xs text-fg-muted">{AGENT_SPACE}</p>}
       <ul className="space-y-2">
         {flags.map((f) => (
@@ -187,26 +222,54 @@ export function WorkerFlags({ flags, onChanged }: Props) {
   )
 }
 
-/** Above the Pipeline tabs: how many, the worst titles, and the way to the Workers tab. */
+/**
+ * Above the Pipeline tabs: how many, the worst titles, and the way to the Workers tab. Failures sit
+ * in a red banner; warnings (idle credits) are amber lines under it, never inside it: the red
+ * banner listed "Cursor credits idle for 34 h" beside the offline machine while the Workers tab
+ * drew it amber (round-3 review, 2026-11-19).
+ */
 export function WorkerFlagsStrip({ flags, workersHref }: { flags: WorkerFlag[]; workersHref: string }) {
   if (flags.length === 0) return null
-  const danger = flags.some((f) => f.severity === 'danger')
+  const failing = flags.filter((f) => flagTone(f) === 'danger')
+  const warnings = flags.filter((f) => flagTone(f) !== 'danger')
+  const open = (danger: boolean) => (
+    <Btn size="sm" variant={danger ? 'danger' : 'ghost'} to={workersHref} data-testid="worker-flags-strip-open">
+      Open Workers
+    </Btn>
+  )
+  // One count with the tab ("Workers (2 problems)") and the Workers status: every problem, whatever its colour.
+  const label = `Local workers: ${flags.length} problem${flags.length === 1 ? '' : 's'}`
+  const list = (items: WorkerFlag[], testId: string, more: number) => (
+    <ul className="space-y-0.5 text-xs text-fg" data-testid={testId}>
+      {items.map((f) => (
+        <li key={f.id}>{f.title}.</li>
+      ))}
+      {more > 0 && <li className="text-fg-muted">and {more} more on the Workers tab.</li>}
+    </ul>
+  )
+  if (failing.length === 0) {
+    return (
+      <Callout tone="warn" label={label} action={open(false)}>
+        {list(warnings.slice(0, 3), 'worker-flags-strip', warnings.length - 3)}
+      </Callout>
+    )
+  }
   return (
-    <Callout
-      tone={danger ? 'danger' : 'warn'}
-      label={`Local workers: ${flags.length} problem${flags.length === 1 ? '' : 's'}`}
-      action={
-        <Btn size="sm" variant={danger ? 'danger' : 'ghost'} to={workersHref} data-testid="worker-flags-strip-open">
-          Open Workers
-        </Btn>
-      }
-    >
-      <ul className="space-y-0.5 text-xs text-fg" data-testid="worker-flags-strip">
-        {flags.slice(0, 3).map((f) => (
-          <li key={f.id}>{f.title}.</li>
-        ))}
-        {flags.length > 3 && <li className="text-fg-muted">and {flags.length - 3} more on the Workers tab.</li>}
-      </ul>
-    </Callout>
+    <div className="space-y-1" data-testid="worker-flags-strip-wrap">
+      <Callout tone="danger" label={label} action={open(true)}>
+        {list(failing.slice(0, 3), 'worker-flags-strip', failing.length - 3)}
+      </Callout>
+      {warnings.length > 0 && (
+        <ul className="space-y-0.5 px-1 text-xs text-fg" data-testid="worker-flags-strip-warn">
+          {warnings.slice(0, 3).map((f) => (
+            <li key={f.id} className="flex items-baseline gap-1.5">
+              <StatusGlyph tone="warn" label="Warning" />
+              <span>{f.title}.</span>
+            </li>
+          ))}
+          {warnings.length > 3 && <li className="pl-4 text-fg-muted">and {warnings.length - 3} more on the Workers tab.</li>}
+        </ul>
+      )}
+    </div>
   )
 }

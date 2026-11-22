@@ -23,6 +23,7 @@ import {
   decideFixingReport,
   FIXING_GRACE_MS,
   PR_CLOSED_UNMERGED_LABEL,
+  closedUnmergedReportStatus,
   preFixReportStatus,
   shouldRevertReportOnPrClose,
   type FixingAttemptView,
@@ -463,7 +464,7 @@ export async function finalizeFixClosedUnmerged(
 
   const { data: report } = await db
     .from('reports')
-    .select('id, status, category, severity, stage1_classification, fix_pr_url')
+    .select('id, status, source, custom_metadata, fix_pr_url')
     .eq('id', attempt.report_id)
     .eq('project_id', attempt.project_id)
     .maybeSingle();
@@ -481,13 +482,16 @@ export async function finalizeFixClosedUnmerged(
     return { justClosed, reportStatus: report.status };
   }
 
-  const nextStatus = preFixReportStatus(report);
+  // ADR 0063: never back to `new`; a rejected fix of Mushi's own finding waits for a recheck.
   const now = new Date().toISOString();
+  const next = closedUnmergedReportStatus(report, attempt, now);
+  const nextStatus = next.status;
   const { data: reverted, error: revertErr } = await db
     .from('reports')
     .update({
       status: nextStatus,
       updated_at: now,
+      ...(next.fixRejected ? { custom_metadata: { ...((report.custom_metadata as Record<string, unknown> | null) ?? {}), fix_rejected: next.fixRejected } } : {}),
       ...(report.fix_pr_url && report.fix_pr_url === attempt.pr_url ? { fix_pr_url: null, fix_branch: null } : {}),
     })
     .eq('id', attempt.report_id)

@@ -3,7 +3,7 @@
   • Branch from master and target master — PRs to any other base are closed automatically.
   • Claim the issue first by commenting on it, so two people don't duplicate work.
   • No automated / AI-generated / bulk submissions. One PR per issue, one issue per PR.
-  See CONTRIBUTING.md §"What we don't accept" for the full policy.
+  See .github/CONTRIBUTING.md §"What we don't accept" for the full policy.
 -->
 
 ## What
@@ -31,7 +31,7 @@ Implementation approach (if non-obvious).
 - [ ] Documentation updated in the same PR if behavior, routes, env vars, or CLI commands changed (docs-as-code)
 - [ ] Documentation updated (if API changed)
 - [ ] Repositioning copy labels unshipped features as **Target** (not shipped)
-- [ ] Positioning stays on-message (`pnpm check:narrative`) — hero, north-star, buyer, and the three "will not"s match [`/VISION.md`](../VISION.md); changed a tagline? update `packages/brand` first
+- [ ] Positioning stays on-message (`pnpm check:narrative`) — hero, north-star, buyer, and the three "will not"s match [`docs/VISION.md`](../docs/VISION.md); changed a tagline? update `packages/brand` first
 - [ ] If MCP catalog changed: `pnpm gen:mcp-tools-doc && pnpm check:onboarding-drift`
 - [ ] If API routes changed: `pnpm gen:route-manifest && pnpm check:route-manifest`
 - [ ] If `.env.example` or onboarding docs changed: `pnpm check:env-docs && pnpm check:onboarding-drift`

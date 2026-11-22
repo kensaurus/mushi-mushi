@@ -301,7 +301,7 @@ export function registerRecipeChangeRoutes(app: Hono<{ Variables: Variables }>, 
       const rs = ((runs ?? []) as Array<{ project_id: string; est_billable_minutes: number | null }>).filter((r) => r.project_id === id && r.est_billable_minutes != null)
       if (rs.length) minutes[id] = Math.round(rs.reduce((n, r) => n + Number(r.est_billable_minutes), 0) / rs.length)
     }
-    return c.json({ ok: true, data: { ...releaseCalendar(apps, minutes), note: 'CI minutes are estimated from past runs. Mushi proposes the batch; your CI builds and submits.' } })
+    return c.json({ ok: true, data: { ...releaseCalendar(apps, minutes), note: 'CI minutes are estimated from past runs. Mushi Mushi proposes the batch; your CI builds and submits.' } })
   })
 
   app.get('/v1/admin/orgs/:orgId/connector-actions', deps.adminOrApiKeyRead, async (c) => {

@@ -30,12 +30,15 @@
 
 import type { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
+import { useEdgeFade } from '../lib/useEdgeFade'
 
-export interface TabbedSubNavTab {
+interface TabbedSubNavTab {
   to: string
   label: string
   /** Optional counter rendered as a small chip after the label (e.g. "3"). */
   badge?: number | string
+  /** What the counter counts, read aloud and shown on hover ("22 jobs the test machine stopped"). Defaults to "N items". */
+  badgeLabel?: string
   /** Optional custom match function — called with the react-router Location
    *  object. Defaults to exact pathname match + hash (if the `to` includes
    *  one); most consumers can leave it unset. */
@@ -51,6 +54,8 @@ export interface TabbedSubNavProps {
 }
 
 export function TabbedSubNav({ ariaLabel, tabs, trailing }: TabbedSubNavProps) {
+  // A right-edge fade while more tabs sit past the edge (lib/useEdgeFade).
+  const fade = useEdgeFade<HTMLUListElement>(tabs.length)
   const location = useLocation()
   return (
     <nav
@@ -58,14 +63,17 @@ export function TabbedSubNav({ ariaLabel, tabs, trailing }: TabbedSubNavProps) {
       data-tabbed-sub-nav
       className="mb-5 flex items-center justify-between gap-3 border-b border-edge"
     >
-      <ul className="flex items-center gap-1 overflow-x-auto" role="tablist">
+      {/* overflow-x-auto alone also lets the strip scroll a pixel vertically (the active tab's -mb-px), which drew a stray scrollbar (2026-11-06). */}
+      {/* At 390px "Speed and cost" wrapped to three lines, Settings was cut off and a native
+          scrollbar with arrows showed (2026-11-07): tabs stay one line, the strip still swipes. */}
+      <ul ref={fade.ref} data-more={fade.more || undefined} className={`flex min-w-0 items-center gap-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${fade.className}`} role="tablist">
         {tabs.map((tab) => {
           const isActive = (tab.match ?? defaultMatch(tab.to))({
             pathname: location.pathname,
             hash: location.hash,
           })
           return (
-            <li key={tab.to} role="presentation">
+            <li key={tab.to} role="presentation" className="shrink-0">
               <Link
                 to={tab.to}
                 role="tab"
@@ -74,7 +82,7 @@ export function TabbedSubNav({ ariaLabel, tabs, trailing }: TabbedSubNavProps) {
                 data-tabbed-sub-nav-tab={tab.to}
                 data-active={isActive || undefined}
                 className={[
-                  'inline-flex items-center gap-2 px-3 py-2 -mb-px text-xs font-medium',
+                  'inline-flex items-center gap-2 whitespace-nowrap px-3 py-2 -mb-px text-xs font-medium',
                   'motion-safe:transition-[transform,opacity] motion-safe:duration-[var(--duration-fast,200ms)]',
                   'border-b-2 rounded-t-sm',
                   isActive
@@ -85,7 +93,8 @@ export function TabbedSubNav({ ariaLabel, tabs, trailing }: TabbedSubNavProps) {
                 {tab.label}
                 {tab.badge !== undefined && (
                   <span
-                    aria-label={`${tab.badge} items`}
+                    aria-label={tab.badgeLabel ?? `${tab.badge} items`}
+                    title={tab.badgeLabel}
                     className={[
                       'inline-flex items-center justify-center rounded-full text-2xs font-semibold',
                       'min-w-[1.25rem] h-5 px-1.5',
@@ -112,13 +121,4 @@ function defaultMatch(to: string): (loc: { pathname: string; hash: string }) => 
     if (!hash) return !loc.hash
     return loc.hash === `#${hash}`
   }
-}
-
-/** True when Advanced IA v2 is enabled for this deploy. Read once and
- *  memoised implicitly by the Vite env system — safe to call inside
- *  render paths. */
-export function isAdvancedIaV2Enabled(): boolean {
-  const raw = import.meta.env.VITE_ADVANCED_IA_V2
-  if (raw === undefined || raw === null || raw === '') return false
-  return String(raw).toLowerCase() === 'true' || raw === '1'
 }

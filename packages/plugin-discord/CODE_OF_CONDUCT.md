@@ -1,6 +1,6 @@
 <!--
-  AUTO-SYNCED from repo root by scripts/sync-community-files.mjs.
-  Do not edit here — edit the canonical file at the repository root and
+  AUTO-SYNCED from .github/ by scripts/sync-community-files.mjs.
+  Do not edit here — edit the canonical file in .github/ and
   re-run `node scripts/sync-community-files.mjs` (pre-commit hook does this
   automatically).
 -->

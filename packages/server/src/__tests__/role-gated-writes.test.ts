@@ -90,7 +90,8 @@ function seed() {
       project_settings: [{ project_id: P, linear_access_token_ref: 'vault://fake', quota_alert_email: null }],
       project_plugins: [],
       project_retention_policies: [{ project_id: P, reports_retention_days: 365, legal_hold: true }],
-      billing_subscriptions: [{ project_id: P, status: 'active', monthly_spend_cap_usd_override: 50 }],
+      // A plan belongs to the team (organization_id is NOT NULL on the table).
+      billing_subscriptions: [{ project_id: P, organization_id: ORG, status: 'active', monthly_spend_cap_usd_override: 50 }],
       report_groups: [
         { id: G1, project_id: P, report_count: 1 },
         { id: G2, project_id: P, report_count: 1 },
@@ -192,6 +193,17 @@ describe('manual cron run', () => {
     expect(fetchMock).not.toHaveBeenCalled()
     expect((await call(ADMIN, 'POST', '/v1/admin/health/cron/judge-batch/trigger')).status).toBe(200)
     expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('pipeline recovery by hand: admins only, this app only, no edge-function call and no cron_runs row', async () => {
+    const denied = await call(MEMBER, 'POST', '/v1/admin/health/cron/pipeline-recovery/trigger')
+    expect(denied.status).toBe(403)
+    const ok = await call(ADMIN, 'POST', '/v1/admin/health/cron/pipeline-recovery/trigger')
+    expect(ok.status).toBe(200)
+    expect(ok.json.data).toMatchObject({ reports: 0, queue: 0, reconciled: 0, message: 'Nothing was stuck; nothing to recover.' })
+    // pipeline-recovery is a SQL cron, not an edge function: nothing is fetched.
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(db.tables.cron_runs ?? []).toHaveLength(0)
   })
 })
 

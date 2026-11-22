@@ -112,7 +112,7 @@ Cross-customer benchmarks available: ${benchmarks.optedIn ? 'yes' : 'no (project
               keySource = resolved.source;
               const { text, usage } = await claudeGenerateText({
                 apiKey: resolved.key,
-                model: INTELLIGENCE_MODEL,
+                model: resolved.model ?? INTELLIGENCE_MODEL,
                 effort: INTELLIGENCE_EFFORT,
                 messages: [
                   {
@@ -134,17 +134,18 @@ Cross-customer benchmarks available: ${benchmarks.optedIn ? 'yes' : 'no (project
                 ...(resolved.baseUrl ? { baseURL: resolved.baseUrl } : {}),
               });
               const { text, usage } = await generateText({
-                model: openai(INTELLIGENCE_FALLBACK),
+                model: openai(resolved.model ?? INTELLIGENCE_FALLBACK),
                 system: intelSystemPrompt,
                 prompt: statsContext,
               });
               return { text, usage };
             },
+            { feature: 'intelligence-report', tier: 'fast' },
           );
           digest = generation.result.text;
           usage = generation.result.usage;
-          fallbackUsed = generation.usedProvider === 'openai';
-          usedModel = fallbackUsed ? INTELLIGENCE_FALLBACK : INTELLIGENCE_MODEL;
+          fallbackUsed = generation.fallbackUsed;
+          usedModel = generation.model ?? (generation.usedProvider === 'openai' ? INTELLIGENCE_FALLBACK : INTELLIGENCE_MODEL);
         } catch (err) {
           const diagnostic = sanitizeLlmError(
             err instanceof LlmFailoverError ? `${err.code}: ${err.lastError}` : err,

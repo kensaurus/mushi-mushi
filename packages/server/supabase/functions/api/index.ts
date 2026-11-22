@@ -11,7 +11,6 @@ import { registerSdkAssistantRoutes } from './routes/sdk-assistant.ts';
 import { registerConsoleKnowledgeRoutes } from './routes/console-knowledge.ts';
 import { registerAdminOpsRoutes } from './routes/admin-ops.ts';
 import { registerSiteWatchRoutes } from './routes/site-watch.ts';
-import { registerBillingChangePlanRoutes } from './routes/billing-change-plan.ts';
 import { registerBillingProjectsQueueGraphRoutes } from './routes/billing-projects-queue-graph.ts';
 import { registerCodebaseRoutes } from './routes/codebase.ts';
 import { registerRepoDigestRoutes } from './routes/repo-digest.ts';
@@ -50,7 +49,6 @@ import { registerAnomaliesRoutes } from './routes/anomalies.ts';
 import { registerCostsRoutes } from './routes/costs.ts';
 import { registerEvolutionRoutes } from './routes/evolution.ts';
 import { registerCommunityRoutes } from './routes/community.ts';
-import { registerPublishedAppsRoutes } from './routes/published-apps.ts';
 import { registerContentQualityRoutes } from './routes/content-quality.ts';
 import { registerFeatureBoardRoutes } from './routes/feature-board.ts';
 import { registerBackendRoutes } from './routes/backend.ts';
@@ -58,20 +56,15 @@ import { registerCodeHealthRoutes } from './routes/code-health.ts';
 import { registerRecipeRoutes } from './routes/recipe.ts';
 import { registerPortfolioRoutes } from './routes/portfolio.ts';
 import { registerRadarRoutes } from './routes/radar.ts';
-import { registerDigestRoutes } from './routes/digest.ts';
 import { registerConnectorRoutes } from './routes/connectors.ts';
-import { registerRecipeIngestRoutes } from './routes/recipe-ingest.ts';
-import { registerAccountsRegisterRoutes } from './routes/accounts-register.ts';
 import { registerRecipeChangeRoutes } from './routes/recipe-changes.ts';
 import { registerStoreOpsRoutes } from './routes/store-ops.ts';
 import { registerFindingExplainRoutes } from './routes/finding-explain.ts';
 import { registerGateFindingDismissRoutes } from './routes/gate-finding-dismiss.ts';
 import { registerPortfolioFunnelRoutes } from './routes/portfolio-funnel.ts';
-import { registerSpendLedgerRoutes } from './routes/spend-ledger.ts';
 import { registerStoreReviewIntakeRoutes } from './routes/store-review-intake.ts';
 import { registerWorkspaceNavMetaRoutes } from './routes/workspace-nav-meta.ts';
 import { registerActivationRoutes } from './routes/activation.ts';
-import { registerSdkUpgradeRoutes } from './routes/sdk-upgrade.ts';
 import { registerPullRequestRoutes } from './routes/pull-requests.ts';
 import { registerUxCloudRoutes } from './routes/ux-cloud.ts';
 import { registerProjectGroupRoutes } from './routes/project-groups.ts';
@@ -89,6 +82,8 @@ import { registerIntakeVoiceRoutes } from './routes/intake-voice.ts';
 import { registerPushRoutes } from './routes/push.ts';
 import { registerSentryImportRoutes } from './routes/sentry-import.ts';
 import { registerReportFileRoutes } from './routes/report-file.ts';
+import { registerRunnerIngestRoute } from './routes/ci-runner-ingest.ts';
+import { registerWorkerHeartbeatRoute } from './routes/work-heartbeat.ts';
 
 ensureSentry('api');
 
@@ -636,7 +631,7 @@ registerBillingProjectsQueueGraphRoutes(app);
 
 registerActivationRoutes(app);
 
-forwardToApiExt(['/v1/admin/ask-mushi', '/v1/admin/ask-mushi/*', '/v1/admin/assist']);
+forwardToApiExt(['/v1/admin/ask-mushi', '/v1/admin/ask-mushi/*']);
 registerConsoleKnowledgeRoutes(app);
 registerSdkAssistantRoutes(app);
 
@@ -672,8 +667,12 @@ forwardToApiExt([
   '/v1/webhooks/github/app-authorize',
 ]);
 
-// In-app plan change (Indie ↔ Pro, monthly ↔ annual) for paying projects.
-registerBillingChangePlanRoutes(app);
+// In-app plan change (Builder ↔ Studio, monthly ↔ annual) for paying teams:
+// served by api-ext (api size budget, 2026-11-11 team billing).
+forwardToApiExt([
+  '/v1/admin/billing/change-plan/preview',
+  '/v1/admin/billing/change-plan',
+]);
 
 // Server doctor: served by api-ext with the Health check that reuses its checks (ADR 0054).
 forwardToApiExt(['/v1/admin/doctor']);
@@ -744,7 +743,16 @@ forwardToApiExt([
   '/v1/webhooks/tremendous',
 ]);
 registerCommunityRoutes(app);
-registerPublishedAppsRoutes(app);
+// published-apps.ts (marketplace listing, admin only): served by api-ext (api size budget, 2026-11-17).
+forwardToApiExt([
+  '/v1/admin/published-apps/:projectId',
+  '/v1/admin/published-apps/:projectId/publish',
+  '/v1/admin/published-apps/:projectId/pause',
+  '/v1/admin/published-apps/:projectId/targeting',
+  '/v1/admin/published-apps/:projectId/bounties',
+  '/v1/admin/published-apps/:projectId/marketplace-settings',
+  '/v1/admin/published-apps/:projectId/stats',
+]);
 // Database health (advisors + stats, _shared/db-health.ts): served by api-ext (api size budget).
 forwardToApiExt(['/v1/admin/projects/:id/db-advisors']);
 registerContentQualityRoutes(app);
@@ -773,23 +781,43 @@ registerCodeHealthRoutes(app);
 registerRecipeRoutes(app);
 registerPortfolioRoutes(app);
 registerRadarRoutes(app);
-registerDigestRoutes(app);
+// The operator digest (_shared/operator-digest.ts): served by api-ext (api size budget, 2026-11-21, ADR 0065).
+forwardToApiExt(['/v1/admin/orgs/:orgId/digest', '/v1/admin/orgs/:orgId/digest/settings', '/v1/admin/orgs/:orgId/digest/send']);
 registerConnectorRoutes(app);
-registerRecipeIngestRoutes(app);
-registerAccountsRegisterRoutes(app);
+// recipe-ingest.ts (design CI push, portfolio resources, recipe drift): served
+// by api-ext, so `api` has room for the runner and worker heartbeats it now
+// serves itself. Under ten calls a day (2026-11-11), so the forward is cheap.
+forwardToApiExt([
+  '/v1/ingest/recipe',
+  '/v1/ingest/recipe/events',
+  '/v1/ingest/recipe/csv',
+  '/v1/admin/orgs/:orgId/portfolio/resources',
+  '/v1/admin/projects/:id/recipe/drift',
+]);
+// accounts-register.ts (the org's accounts and domains): served by api-ext (api size
+// budget, 2026-11-18); a few calls a day, and it alone pulls in the secret scanner.
+forwardToApiExt([
+  '/v1/admin/orgs/:orgId/accounts',
+  '/v1/admin/orgs/:orgId/accounts/export',
+  '/v1/admin/orgs/:orgId/accounts/:id',
+  '/v1/admin/orgs/:orgId/domains/:id',
+]);
 registerRecipeChangeRoutes(app);
 registerStoreOpsRoutes(app);
 registerFindingExplainRoutes(app);
 registerGateFindingDismissRoutes(app);
 registerPortfolioFunnelRoutes(app);
-registerSpendLedgerRoutes(app);
+// spend-ledger.ts (the org's bill imports): served by api-ext for the same
+// reason; a few calls a day.
+forwardToApiExt(['/v1/admin/orgs/:orgId/spend', '/v1/admin/orgs/:orgId/spend/imports', '/v1/admin/orgs/:orgId/spend/imports/:importId']);
 registerStoreReviewIntakeRoutes(app);
 registerWorkspaceNavMetaRoutes(app);
 // Agent skills (skills.ts); deploy size limit, 2026-10-22.
 forwardToApiExt(['/v1/admin/skills', '/v1/admin/skills/*']);
 // Claude models the app's Anthropic key can use (anthropic-models.ts), for the settings model pickers.
 forwardToApiExt(['/v1/admin/byok/anthropic/models']);
-registerSdkUpgradeRoutes(app);
+// SDK upgrade PRs (sdk-upgrade.ts); api size budget, 2026-11-21 (hosted LLM order + Langfuse OTLP).
+forwardToApiExt(['/v1/admin/projects/:pid/sdk-upgrade', '/v1/admin/projects/:pid/sdk-upgrade/*']);
 registerUxCloudRoutes(app);
 forwardToApiExt([
   // ux-runs.ts; deploy size limit, 2026-10-22.
@@ -812,6 +840,15 @@ forwardToApiExt([
   '/v1/admin/projects/:pid/fresh-eyes/:runId/findings',
   '/v1/admin/projects/:pid/fresh-eyes/:runId/cancel',
 ]);
+// The UX scorecard (ux-scorecard.ts, ADR 0067).
+forwardToApiExt([
+  '/v1/admin/projects/:pid/ux-scorecard',
+  '/v1/admin/projects/:pid/ux-scorecard/:runId',
+  '/v1/admin/projects/:pid/ux-scorecard/:runId/uploads',
+  '/v1/admin/projects/:pid/ux-scorecard/:runId/score',
+  '/v1/admin/projects/:pid/ux-scorecard/:runId/group',
+  '/v1/admin/projects/:pid/ux-scorecard/:runId/file',
+]);
 registerPullRequestRoutes(app);
 registerProjectGroupRoutes(app);
 registerBootstrapRoutes(app);
@@ -822,7 +859,7 @@ registerGrowthRoutes(app);
 // Daily GTM scorecard and the cookieless landing page-view beacon
 // (landing-visits.ts in api-ext; api only hashes the visitor IP into the
 // beacon's rate-limit bucket, page-view-forward.ts).
-forwardToApiExt(['/v1/admin/growth/daily']);
+forwardToApiExt(['/v1/admin/growth/daily', '/v1/admin/kensaurus/ops']);
 app.post('/v1/public/page-view', forwardPageView);
 registerEventsAdminRoutes(app);
 registerLifecycleEmailRoutes(app);
@@ -832,8 +869,14 @@ registerIntakeVoiceRoutes(app);
 registerPushRoutes(app);
 registerSentryImportRoutes(app);
 registerReportFileRoutes(app);
-// CI runners you can see (Plan 022): runner ingest, CI overview, re-run tests.
-forwardToApiExt(['/v1/admin/ci/*', '/v1/ingest/runner', '/v1/admin/fixes/:id/ci/rerun', '/v1/admin/projects/:id/runner-key']);
+// CI runners you can see (Plan 022): CI overview, re-run tests, runner keys.
+// The runner push (about one a minute per runner) is served here, not
+// forwarded: a forward costs a second edge invocation (2026-11-11 audit).
+registerRunnerIngestRoute(app);
+forwardToApiExt(['/v1/admin/ci/*', '/v1/admin/fixes/:id/ci/rerun', '/v1/admin/projects/:id/runner-key']);
+// A report's pipeline trail and its stage retry (report-pipeline.ts): served by api-ext so api
+// stays under its upload budget (scripts/deploy-edge-function.test.mjs, 2026-11-19).
+forwardToApiExt(['/v1/admin/reports/:id/pipeline', '/v1/admin/reports/:id/pipeline/retry']);
 // Verified fixes (Plan 024, ADR 0035): settings, gates, re-check, the verify workflow.
 forwardToApiExt([
   '/v1/admin/projects/:id/verify-settings',
@@ -842,17 +885,38 @@ forwardToApiExt([
   '/v1/admin/projects/:id/verify-workflow',
   '/v1/admin/projects/:id/verify-workflow/pr',
 ]);
+// The Ops hub (ops.ts, docs/execplans/ops-hub-slack.md): app events (ops:write key), the console
+// feed and settings, the ops key, and the team's Slack bot (slash command, buttons). Served by
+// api-ext (api size budget); the Slack Request URLs stay /functions/v1/api/v1/ops/slack/*.
+forwardToApiExt([
+  '/v1/ops/events',
+  '/v1/ops/slack/commands',
+  '/v1/ops/slack/interactions',
+  '/v1/admin/ops/events',
+  '/v1/admin/ops/events/:id/ack',
+  '/v1/admin/ops/coverage',
+  '/v1/admin/ops/slack-settings',
+  '/v1/admin/ops/slack-settings/test',
+  '/v1/admin/projects/:id/ops-key',
+  // Service role only; sentry-ingest posts straight to api-ext, this keeps the paths aligned.
+  '/v1/internal/ops/sentry',
+]);
 // Known holes in dependencies and the runtime (ADR 0038).
 forwardToApiExt(['/v1/admin/projects/:id/vulnerabilities', '/v1/admin/projects/:id/vulnerabilities/*']);
 // sdk-health.ts: SDK problems and their fix tasks; deploy size limit, 2026-10-26.
 forwardToApiExt(['/v1/admin/projects/:id/sdk-health', '/v1/admin/projects/:id/sdk-health/tasks']);
 // project-home.ts: the per-app Home in one call; deploy size limit, 2026-10-27.
 forwardToApiExt(['/v1/admin/projects/:id/home', '/v1/admin/projects/:id/home/thumbnail']);
+// journeys.ts: the Journey optimizer (ADR 0058); deploy size limit, 2026-11-13.
+forwardToApiExt(['/v1/admin/projects/:id/journeys', '/v1/admin/projects/:id/journeys/scan', '/v1/admin/projects/:id/journeys/recording']);
 // setup-gaps.ts and release-batch.ts (console ops plan P1, read-only); deploy size limit, 2026-10-27.
 forwardToApiExt(['/v1/admin/setup-gaps', '/v1/admin/release-batch']);
 // health-checks.ts: the Health check registry (plan-simplicity-2026-10 Phase 1, read-only); deploy size limit.
 forwardToApiExt(['/v1/admin/health-checks']);
 // work.ts: local workers (`mushi work --daemon`, ADR 0048); deploy size limit, 2026-10-27.
+// The heartbeat (once a minute per daemon) is served here and registered
+// before the /v1/worker/* forward, so it costs one edge invocation, not two.
+registerWorkerHeartbeatRoute(app);
 forwardToApiExt(['/v1/worker/*', '/v1/admin/work/*']);
 // repo-housekeeping.ts (ADR 0051, console ops plan P4): repo clean-up from /repo; deploy size limit, 2026-10-27.
 forwardToApiExt(['/v1/admin/projects/:id/repo-cleanup', '/v1/admin/projects/:id/repo-cleanup/*']);

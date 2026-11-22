@@ -2,12 +2,15 @@
  * FILE: apps/admin/src/components/CopyViewLinkButton.tsx
  * PURPOSE: One-click share for the current filtered admin view.
  *
- * Now an icon-only affordance (link glyph + copy semantics) so the
- * action bar reads as a row of consistent 28×28 chrome buttons rather
- * than a wide "Copy view" pill that wraps on narrower viewports. The
- * tooltip still surfaces the meaning ("Copy view link") and we flip to
- * a check + green tone for ~1.5s on success — same visual language as
- * the rest of the admin's copy buttons.
+ * A compact 28px-tall chrome button: link glyph plus a short visible
+ * "Copy link" label (an icon alone did not say what it does; Mushi report
+ * 3d5c1f99). The tooltip adds the detail ("Copy link to this filtered
+ * view") and we flip to a check + "Copied" in green for ~1.5s on success.
+ * `whitespace-nowrap` + `shrink-0` keep the label on one line and the target
+ * at full size in crowded headers (the old wide pill wrapped there); the
+ * header's action row wraps instead, so on a phone help + Copy link move to
+ * their own line. CopyViewLinkButton.browser.test.tsx measures this in
+ * Chromium at 320–1024px.
  */
 
 import { useState } from 'react'
@@ -37,7 +40,7 @@ export function CopyViewLinkButton() {
         type="button"
         onClick={copy}
         aria-label={copied ? 'View link copied' : 'Copy link to this filtered view'}
-        className={`inline-flex h-7 w-7 items-center justify-center rounded-md border border-edge-subtle bg-surface-raised/60 shadow-card motion-safe:transition-opacity hover:border-brand/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
+        className={`inline-flex h-7 shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-md px-2 text-xs font-medium border border-edge-subtle bg-surface-raised/60 shadow-card motion-safe:transition-opacity hover:border-brand/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
           copied ? 'text-ok hover:text-ok' : 'text-fg-muted hover:text-fg'
         }`}
       >
@@ -71,6 +74,7 @@ export function CopyViewLinkButton() {
             </>
           )}
         </svg>
+        <span>{copied ? 'Copied' : 'Copy link'}</span>
       </button>
     </Tooltip>
   )

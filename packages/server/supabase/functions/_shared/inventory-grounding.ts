@@ -254,6 +254,8 @@ export async function linkReportToAction(
     .eq('project_id', projectId)
     .eq('node_type', 'report_group')
     .eq('label', reportId)
+    .order('created_at', { ascending: true })
+    .limit(1)
     .maybeSingle()
   let reportNodeId: string
   if (existing) {

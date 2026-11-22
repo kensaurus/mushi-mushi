@@ -17,6 +17,8 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const state = vi.hoisted(() => ({
+  // The full sidebar is the operator's (navRegistry coreNavPathsFor); a builder test sets false.
+  isOperator: true,
   collapsed: false,
   enabledLabs: new Set<string>(),
   sliceCalls: [] as Array<readonly string[] | null | undefined>,
@@ -46,7 +48,7 @@ vi.mock('../lib/auth', () => ({
   useAuth: () => ({ user: { id: 'u1', email: 'owner@example.com' }, signOut: async () => {} }),
 }))
 vi.mock('../lib/useEntitlements', () => ({
-  useEntitlements: () => ({ isSuperAdmin: false, isOperator: false, has: () => true, loading: false }),
+  useEntitlements: () => ({ isSuperAdmin: false, isOperator: state.isOperator, has: () => true, loading: false }),
 }))
 vi.mock('../lib/useSetupStatus', () => ({
   useSetupStatus: () => ({ loading: false, activeProject: null, selectors: { done: true } }),
@@ -99,6 +101,7 @@ let root: Root | null = null
 let container: HTMLDivElement | null = null
 
 beforeEach(() => {
+  state.isOperator = true
   // jsdom has no matchMedia; the theme control in the account menu reads it.
   window.matchMedia ??= ((query: string) =>
     ({ matches: false, media: query, addEventListener: () => {}, removeEventListener: () => {} }) as unknown as MediaQueryList)
@@ -212,5 +215,74 @@ describe('the icon rail shows where you are too', () => {
     state.collapsed = true
     renderAt('/credits')
     expect(rail().querySelector('a[href="/credits"]')).not.toBeNull()
+  })
+})
+
+/**
+ * Owner, 2026-11-14: "clicking on the icon brings user back to the landing
+ * page". The brand (Kenji's face + wordmark) is one link to the landing; the
+ * Beta chip stays its own link to /feedback, never nested inside it.
+ */
+describe('the brand mark links home', () => {
+  function brandLinks(): HTMLAnchorElement[] {
+    return [...container!.querySelectorAll<HTMLAnchorElement>('aside [data-testid="brand-home-link"]')]
+  }
+
+  it('links the full sidebar brand to the landing page, with the Beta chip beside it', () => {
+    renderAt('/reports')
+    const [link] = brandLinks()
+    expect(link).toBeDefined()
+    expect(link.getAttribute('href')).toBe('https://kensaur.us/mushi-mushi')
+    expect(link.getAttribute('aria-label')).toBe('Mushi Mushi home')
+    expect(link.querySelector('img')?.getAttribute('alt')).toBe('')
+    expect(link.textContent).toBe('mushimushi')
+    expect(link.querySelector('a')).toBeNull()
+    const beta = container!.querySelector('aside a[href="/feedback"][aria-label="Beta: send feedback"]')
+    expect(beta).not.toBeNull()
+    expect(link.contains(beta)).toBe(false)
+  })
+
+  it('puts the face link in the phone header, which covers the drawer brand row', () => {
+    renderAt('/reports')
+    const link = container!.querySelector<HTMLAnchorElement>('header [data-testid="brand-home-link-mobile"]')
+    expect(link?.getAttribute('href')).toBe('https://kensaur.us/mushi-mushi')
+    expect(link?.getAttribute('aria-label')).toBe('Mushi Mushi home')
+    expect(link?.querySelector('img')?.getAttribute('alt')).toBe('')
+    // A 32 px hit area like the menu and search buttons beside it.
+    expect(link?.className).toContain('size-8')
+  })
+
+  it('shows only the face in the icon rail, with the same link', () => {
+    state.collapsed = true
+    renderAt('/reports')
+    const [link] = brandLinks()
+    expect(link.getAttribute('href')).toBe('https://kensaur.us/mushi-mushi')
+    expect(link.getAttribute('aria-label')).toBe('Mushi Mushi home')
+    expect(link.querySelector('img')).not.toBeNull()
+    expect(link.textContent).toBe('')
+  })
+})
+
+/**
+ * Console audit 2026-11-11, finding 8: a builder (not a Mushi Mushi operator)
+ * saw 21 More pages including SQL query, Processing jobs and Agent skills.
+ */
+describe('a builder gets the short sidebar', () => {
+  it('lists Home, Bugs, Fixes, Pipeline, Connect and Settings as the pages, the rest under More pages', () => {
+    state.isOperator = false
+    renderAt('/credits')
+    for (const p of ['/dashboard', '/reports', '/fixes', '/pipeline', '/connect', '/settings']) {
+      expect(nav().querySelector(`a[href="${p}"]`), p).not.toBeNull()
+    }
+    const more = nav().querySelector('[data-testid="nav-more-pages"]')!
+    // Team, Apps and Checks moved under More pages for a builder.
+    for (const p of ['/team', '/checks']) {
+      const links = [...nav().querySelectorAll(`a[href="${p}"]`)]
+      expect(links.length, p).toBeGreaterThan(0)
+      expect(links.every((a) => more.contains(a)), p).toBe(true)
+    }
+    for (const op of ['/queue', '/query', '/skills', '/judge', '/prompt-lab']) {
+      expect(nav().querySelector(`a[href="${op}"]`), op).toBeNull()
+    }
   })
 })

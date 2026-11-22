@@ -35,6 +35,9 @@ import { trackSelf } from './track'
 
 /** Answer options for "How did you hear about us?" — values are the analytics keys. */
 export const SIGNUP_SOURCE_OPTIONS: ReadonlyArray<{ value: SignupSource; label: string }> = [
+  // Listed first: the no-code builders are the buyer too (ADR 0056). A new
+  // value; the ones below keep their stored keys.
+  { value: 'lovable_bolt', label: 'Lovable / Bolt' },
   { value: 'cursor_directory', label: 'Cursor / cursor.directory' },
   { value: 'claude_code', label: 'Claude Code community' },
   { value: 'github', label: 'GitHub' },
@@ -47,6 +50,7 @@ export const SIGNUP_SOURCE_OPTIONS: ReadonlyArray<{ value: SignupSource; label: 
 ]
 
 export type SignupSource =
+  | 'lovable_bolt'
   | 'cursor_directory'
   | 'claude_code'
   | 'github'

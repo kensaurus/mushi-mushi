@@ -71,7 +71,7 @@ describe('ReporterNotificationsToggle', () => {
     )
     await act(async () => toggle().click())
     await flush()
-    expect(container.textContent).toContain("Saved, but Mushi couldn't confirm it")
+    expect(container.textContent).toContain("Saved, but Mushi Mushi couldn't confirm it")
     expect(container.textContent).not.toContain('Not saved')
   })
 

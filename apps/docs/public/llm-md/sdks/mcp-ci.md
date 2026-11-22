@@ -45,7 +45,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      # Gates 1 + 2 read your ESLint report (eslint-plugin-mushi-mushi rules).
+      # Gates 1 + 2 read your ESLint report (mushi-mushi/eslint rules).
       - run: npx eslint -f json -o mushi-eslint.json src/ || true
       - uses: kensaurus/mushi-mushi/packages/mcp-ci@master
         with:
@@ -66,7 +66,7 @@ jobs:
 | `dispatch-fix`       | Queues an agent fix for `report-id` (optionally pinned with `inventory-action-node-id`). |
 | `query`              | Runs a plain-English `question` against your reports and prints the answer. |
 | `gates`              | Runs the gates for `commit-sha` (`all` = `dead_handler`, `mock_leak`, `api_contract`, `status_claim`, `orphan_endpoint`, `unknown_call`) and fails the step when one fails, errors or returns no result. |
-| `discover-api`       | Walks your repo for Next.js route handlers and OpenAPI files (plus optional Supabase introspection) and sends the routes to Mushi for the `api_contract` gate. |
+| `discover-api`       | Walks your repo for Next.js route handlers and OpenAPI files (plus optional Supabase introspection) and sends the routes to Mushi Mushi for the `api_contract` gate. |
 | `spec-drift`         | Gate 6: runs `oasdiff breaking` between `base-spec` and `head-spec`, records the findings and sets the `findings` output; fails on a breaking change unless `fail-on-breaking: false`. |
 | `discovery-status`   | Reads what the SDK has observed; sets `ready_to_propose`, `total_events` and `route_count` outputs. |
 | `propose`            | Asks the LLM proposer for an `inventory.yaml` draft and sets `proposal_id`. It does not open a PR. |
@@ -74,7 +74,7 @@ jobs:
 
 The action fails the step; it does not post a separate GitHub commit status.
 `dead_handler` and `mock_leak` judge the findings in `eslint-report` (an
-ESLint JSON report made with [`eslint-plugin-mushi-mushi`](/sdks/eslint-plugin)).
+ESLint JSON report made with [`mushi-mushi/eslint`](/sdks/eslint-plugin)).
 A run that asks for them without a report fails, so a missing lint step can
 never pass as "no findings". `crawl` is not run by this command: start a crawl
 with **Reconcile** on the Inventory page; `api_contract` reads its result. A
@@ -106,7 +106,7 @@ page; see [Admin → User stories · Inventory](/admin/inventory).
 | `commit-sha`  |          | `GITHUB_SHA`  | For `gates` and `spec-drift`: the commit to check.   |
 | `pr-number`   |          | —             | For `gates` and `spec-drift`: the PR the findings belong to. |
 | `gates`       |          | `all`         | For `gates`: a comma-separated subset; `crawl` is refused. |
-| `eslint-report` | for `gates` with `dead_handler` / `mock_leak` | — | ESLint JSON report (`eslint -f json`) made with `eslint-plugin-mushi-mushi`. |
+| `eslint-report` | for `gates` with `dead_handler` / `mock_leak` | — | ESLint JSON report (`eslint -f json`) made with `mushi-mushi/eslint`. |
 | `repo-root`   |          | the workspace | For `discover-api`: where to look for routes. For `gates`: the root `eslint-report` paths are made relative to. |
 | `openapi-file` |         | `openapi.yaml` in `repo-root` | For `discover-api`: an explicit OpenAPI file. |
 | `supabase-url`, `supabase-anon-key` | | — | For `discover-api`: optional Supabase introspection. |
@@ -117,7 +117,7 @@ page; see [Admin → User stories · Inventory](/admin/inventory).
 
 | Output             | Set by             | Description                                              |
 | ------------------ | ------------------ | -------------------------------------------------------- |
-| `result`           | most commands      | JSON returned by the Mushi API.                          |
+| `result`           | most commands      | JSON returned by the Mushi Mushi API.                          |
 | `coverage`         | `check-coverage`   | Observed classified ratio.                               |
 | `findings`         | `spec-drift`       | JSON array of the oasdiff findings.                      |
 | `ready_to_propose` | `discovery-status` | `"true"` once there is enough discovery data to propose. |

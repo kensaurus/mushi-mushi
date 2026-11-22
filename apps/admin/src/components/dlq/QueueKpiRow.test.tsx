@@ -46,7 +46,7 @@ function tileText(label: string): string {
 describe('QueueKpiRow', () => {
   it('shows no growth arrow on an empty Pending tile', async () => {
     await act(async () => {
-      root.render(createElement(MemoryRouter, null, createElement(QueueKpiRow, { stats: { ...EMPTY_QUEUE_STATS, completed: 188 }, throughput })))
+      root.render(createElement(MemoryRouter, null, createElement(QueueKpiRow, { stats: { ...EMPTY_QUEUE_STATS, completed: 188, failed: 1 }, throughput })))
     })
     expect(tileText('pending')).toContain('0')
     expect(tileText('pending')).not.toContain('%')
@@ -55,7 +55,7 @@ describe('QueueKpiRow', () => {
 
   it('names each stat help icon on a role that allows aria-label', async () => {
     await act(async () => {
-      root.render(createElement(MemoryRouter, null, createElement(QueueKpiRow, { stats: EMPTY_QUEUE_STATS, throughput })))
+      root.render(createElement(MemoryRouter, null, createElement(QueueKpiRow, { stats: { ...EMPTY_QUEUE_STATS, pending: 1 }, throughput })))
     })
     const icons = [...container.querySelectorAll('[role="img"]')].filter((el) => el.textContent?.trim() === 'i')
     expect(icons).toHaveLength(5)
@@ -63,5 +63,13 @@ describe('QueueKpiRow', () => {
       expect(icon.tagName).toBe('SPAN')
       expect(icon.getAttribute('aria-label')?.length).toBeGreaterThan(0)
     }
+  })
+
+  it('folds the tiles into one line when nothing is pending, running or failing', async () => {
+    await act(async () => {
+      root.render(createElement(MemoryRouter, null, createElement(QueueKpiRow, { stats: { ...EMPTY_QUEUE_STATS, completed: 2 }, throughput })))
+    })
+    expect(container.querySelector('[aria-label="Queue processing metrics"]')).toBeNull()
+    expect(container.querySelector('[data-testid="queue-quiet-line"]')?.textContent).toBe('0 pending · 0 failed · 0 dead letter· 2 completed')
   })
 })

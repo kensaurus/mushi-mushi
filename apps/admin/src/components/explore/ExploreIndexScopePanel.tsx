@@ -127,7 +127,7 @@ export function ExploreIndexScopePanel({ projectId, onScopeChange }: Props) {
         Limit indexing and RAG to specific folders. Leave scope empty for the whole repo.
       </p>
       <label className="block space-y-1">
-        <span className="text-2xs uppercase tracking-wider text-fg-faint">Scope paths</span>
+        <span className="text-2xs text-fg-secondary font-semibold">Scope paths</span>
         <textarea
           value={scopePaths}
           onChange={(e) => setScopePaths(e.target.value)}
@@ -137,7 +137,7 @@ export function ExploreIndexScopePanel({ projectId, onScopeChange }: Props) {
         />
       </label>
       <label className="block space-y-1">
-        <span className="text-2xs uppercase tracking-wider text-fg-faint">Exclude globs</span>
+        <span className="text-2xs text-fg-secondary font-semibold">Exclude globs</span>
         <textarea
           value={excludeGlobs}
           onChange={(e) => setExcludeGlobs(e.target.value)}
@@ -147,7 +147,7 @@ export function ExploreIndexScopePanel({ projectId, onScopeChange }: Props) {
         />
       </label>
       <label className="block space-y-1">
-        <span className="text-2xs uppercase tracking-wider text-fg-faint">LLM output language</span>
+        <span className="text-2xs text-fg-secondary font-semibold">LLM output language</span>
         <input
           value={outputLanguage}
           onChange={(e) => setOutputLanguage(e.target.value)}

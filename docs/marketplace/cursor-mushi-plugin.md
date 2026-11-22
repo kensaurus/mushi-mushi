@@ -40,7 +40,15 @@ Mushi gives Cursor agents access to **user-felt bug reports** — the bugs real 
 
 ### Skills included
 
+Generated from the repo's `skills/` folder by `scripts/sync-skills.mjs` (`pnpm check:skills` fails on drift):
+
+- `mushi-mushi` — start here; explains the loop and routes to the others
+- `mushi-setup` — install the SDK and wire the MCP server
 - `mushi-triage` — teaches agents the safe 8-step triage order
+- `mushi-debug` — pass/fail health check, then targeted debugging
+- `mushi-test` — story mapping, generated tests and the end-to-end smoke test
+- `mushi-sdk-upgrade` — upgrade the SDK, or move from `@mushi-mushi/*` to `mushi-mushi`
+- `mushi-check-live-app` — the free Production Check for a live site
 
 ### Rules included
 

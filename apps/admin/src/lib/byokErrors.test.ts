@@ -24,7 +24,7 @@ describe('describeByokError', () => {
       'Your session expired — sign in again.',
     )
     expect(describeByokError({ code: 'NETWORK_ERROR', message: 'Failed to fetch (api.example)' }, FALLBACK)).toEqual({
-      message: "Couldn't reach Mushi — check your connection and retry.",
+      message: "Couldn't reach Mushi Mushi — check your connection and retry.",
       where: 'form',
     })
   })
@@ -53,8 +53,8 @@ describe('describeByokError', () => {
     )
     expect(describeByokError({ code: 'BAD_PROVIDER' }, FALLBACK).message).toMatch(/key pool/)
     expect(
-      describeByokError({ code: 'BAD_PROVIDER', message: 'Mushi has no single-key slot for "cursor".' }, FALLBACK).message,
-    ).toBe('Mushi has no single-key slot for "cursor".')
+      describeByokError({ code: 'BAD_PROVIDER', message: 'Mushi Mushi has no single-key slot for "cursor".' }, FALLBACK).message,
+    ).toBe('Mushi Mushi has no single-key slot for "cursor".')
     expect(describeByokError({ code: 'DB_ERROR', message: 'relation x' }, FALLBACK).message).toMatch(/on our side/)
     expect(describeByokError(undefined, FALLBACK)).toEqual({ message: FALLBACK, where: 'form' })
   })
@@ -83,13 +83,13 @@ describe('describeByokTestResult', () => {
         status: 'error_network',
         detail: 'Provider validation endpoint returned HTTP 503',
         ok: false,
-        message: "Mushi couldn't reach Anthropic (Claude). Test again in a minute.",
+        message: "Mushi Mushi couldn't reach Anthropic (Claude). Test again in a minute.",
       },
       {
         status: 'error_network',
         detail: 'Provider validation request could not be completed',
         ok: false,
-        message: "Mushi couldn't reach Anthropic (Claude). Test again in a minute.",
+        message: "Mushi Mushi couldn't reach Anthropic (Claude). Test again in a minute.",
       },
     ]
     for (const row of cases) {

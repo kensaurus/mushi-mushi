@@ -11,11 +11,11 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 
-const seen: Array<{ baseURL?: string; modelId: string; wrappedFetch: boolean }> = []
+const seen: Array<{ baseURL?: string; modelId: string; wrappedFetch: boolean; fetch?: typeof fetch }> = []
 vi.mock('npm:@ai-sdk/openai@1', () => ({
   createOpenAI: (opts: { baseURL?: string; fetch?: unknown }) => {
     const provider = (modelId: string) => {
-      seen.push({ baseURL: opts.baseURL, modelId, wrappedFetch: typeof opts.fetch === 'function' })
+      seen.push({ baseURL: opts.baseURL, modelId, wrappedFetch: typeof opts.fetch === 'function', fetch: opts.fetch as typeof fetch | undefined })
       return { modelId }
     }
     return Object.assign(provider, { embedding: (id: string) => ({ id }) })
@@ -90,13 +90,22 @@ describe('max_completion_tokens on api.openai.com (2026-10-31)', () => {
     expect(sent.map((x) => x.body)).toEqual([{ max_completion_tokens: 2 }, { max_tokens: 5 }, 'not json'])
   })
 
-  it('only OpenAI itself gets the wrapper; OpenRouter and other hosts keep max_tokens', () => {
+  it('only OpenAI itself gets max_completion_tokens; OpenRouter and other hosts keep max_tokens', async () => {
     seen.length = 0
-    openAiProvider({ apiKey: 'k' })('gpt-6.1-sol')
-    openAiProvider({ apiKey: 'k', baseURL: 'https://api.openai.com/v1' })('gpt-6.1-sol')
-    openAiProvider({ apiKey: 'k', baseURL: 'https://openrouter.ai/api/v1' })('gpt-6.1-sol')
-    openAiProvider({ apiKey: 'k', baseURL: 'https://api.together.xyz/v1' })('gpt-6.1-sol')
-    expect(seen.map((x) => x.wrappedFetch)).toEqual([true, true, false, false])
+    const sent: Array<Record<string, unknown>> = []
+    const inner = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+      sent.push(JSON.parse(String(init?.body)))
+      return new Response('{}', { status: 200 })
+    }) as typeof fetch
+    const hosts = [undefined, 'https://api.openai.com/v1', 'https://openrouter.ai/api/v1', 'https://api.together.xyz/v1']
+    for (const baseURL of hosts) openAiProvider({ apiKey: 'k', fetch: inner, ...(baseURL ? { baseURL } : {}) })('gpt-6.1-sol')
+    for (const s of seen) await s.fetch!(`${s.baseURL ?? 'https://api.openai.com/v1'}/chat/completions`, { method: 'POST', body: JSON.stringify({ model: 'm', max_tokens: 64 }) })
+    expect(sent.map((b) => ('max_tokens' in b ? 'max_tokens' : 'max_completion_tokens'))).toEqual([
+      'max_completion_tokens',
+      'max_completion_tokens',
+      'max_tokens',
+      'max_tokens',
+    ])
   })
 })
 
@@ -177,6 +186,17 @@ describe('call sites', () => {
       expect(src, f).not.toMatch(/createOpenAI\(/)
       expect(src, f).toMatch(/openAiProvider\(/)
     }
+  })
+
+  it('the judge leaves the vendor prefix to openAiProvider', () => {
+    // Every saved OpenAI key stores api.openai.com as its base URL. judge-batch
+    // prefixed the model whenever a base URL was set, so OpenAI got
+    // `openai/gpt-5.4` and answered "invalid model ID" on every judge call
+    // (MUSHI-MUSHI-SERVER-3N, 2026-10-30..11-03).
+    const src = read('judge-batch/index.ts')
+    expect(src).not.toMatch(/normalizeGatewayModel|`openai\/\$\{/)
+    expect(openAiCompatibleModelId('gpt-5.4', 'https://api.openai.com/v1')).toBe('gpt-5.4')
+    expect(openAiCompatibleModelId('gpt-5.4', 'https://openrouter.ai/api/v1')).toBe('openai/gpt-5.4')
   })
 
   it('a resolved key always brings its base URL, so an OpenRouter key never reaches api.openai.com', () => {

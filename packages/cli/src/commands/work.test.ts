@@ -9,12 +9,15 @@ import {
   wrongAppReason,
   inLocalCooldown,
   installCommand,
+  windowsInstaller,
+  signInDetail,
   freeBranchName,
   isMissingModuleFailure,
   failureTail,
   hookFailureDetail,
   isHookRejection,
   pushWithHooks,
+  commitWithHooks,
   agentEnv,
   branchNameFor,
   runProc,
@@ -112,6 +115,8 @@ describe('mushi work: branch, prompt and PR', () => {
     expect(prompt).not.toContain('Nit.')
     expect(prompt).toContain('Do NOT commit, push, open a pull request')
     expect(prompt).toContain('Mushi verdict: <verdict>')
+    expect(prompt).toContain("run the project's own checks for what you touched")
+    expect(prompt).toContain('they run once on the release train')
   })
 
   it('falls back to the report fields when Mushi has no fix packet', () => {
@@ -202,6 +207,13 @@ describe('failureTail', () => {
     expect(failureTail({ stdout: '', stderr: 'fatal: not a git repository' })).toBe('fatal: not a git repository')
     expect(failureTail({ stdout: 'x'.repeat(50), stderr: '' }, 10)).toBe(`[…] ${'x'.repeat(10)}`)
   })
+
+  it('drops terminal colour codes from a hook run', () => {
+    const stdout = '\u001b[38;2;56;56;56m│\u001b[0m \u001b[1;31mtypecheck\u001b[0m failed'
+    const out = failureTail({ stdout, stderr: '' })
+    expect(out).toBe('│ typecheck failed')
+    expect(out).not.toContain('\u001b')
+  })
 })
 
 describe('inLocalCooldown', () => {
@@ -258,6 +270,39 @@ describe('installCommand', () => {
     expect(installCommand((f) => f === 'package-lock.json')?.[0]).toBe('npm')
     expect(installCommand((f) => f === 'yarn.lock')?.[0]).toBe('yarn')
     expect(installCommand(() => false)).toBeNull()
+  })
+})
+
+describe('windowsInstaller', () => {
+  const pnpm: [string, string[]] = ['pnpm', ['install', '--frozen-lockfile', '--prefer-offline']]
+  const node = String.raw`C:\Users\me\fnm\node.exe`
+
+  it('leaves Linux and macOS alone', () => {
+    expect(windowsInstaller(pnpm, 'linux', '/usr/bin/node', () => false)).toEqual(pnpm)
+    expect(windowsInstaller(pnpm, 'darwin', '/usr/bin/node', () => false)).toEqual(pnpm)
+  })
+
+  it("runs the package manager's own script with this Node on Windows, never cmd.exe", () => {
+    const corepack = String.raw`C:\Users\me\fnm\node_modules\corepack\dist\pnpm.js`
+    expect(windowsInstaller(pnpm, 'win32', node, (p) => p === corepack)).toEqual([node, [corepack, 'install', '--frozen-lockfile', '--prefer-offline']])
+    const npm = String.raw`C:\Users\me\fnm\node_modules\npm\bin\npm-cli.js`
+    expect(windowsInstaller(['npm', ['ci']], 'win32', node, (p) => p === npm)).toEqual([node, [npm, 'ci']])
+  })
+
+  it('gives up (no install) rather than reach for a shell', () => {
+    expect(windowsInstaller(pnpm, 'win32', node, () => false)).toBeNull()
+    expect(windowsInstaller(pnpm, 'win32', node, () => false, [String.raw`C:\Windows`])).toBeNull()
+  })
+
+  it('finds a global `npm i -g pnpm` on PATH, which is not beside node.exe (2026-11-20)', () => {
+    const global = String.raw`C:\Users\me\AppData\Roaming\npm\node_modules\pnpm\bin\pnpm.cjs`
+    const path = [String.raw`C:\Windows\system32`, String.raw`"C:\Users\me\AppData\Roaming\npm"`, '']
+    expect(windowsInstaller(pnpm, 'win32', node, (p) => p === global, path)).toEqual([node, [global, 'install', '--frozen-lockfile', '--prefer-offline']])
+  })
+
+  it('starts a standalone pnpm.exe on PATH directly', () => {
+    const exe = String.raw`C:\Users\me\AppData\Local\pnpm\pnpm.exe`
+    expect(windowsInstaller(pnpm, 'win32', node, (p) => p === exe, [String.raw`C:\Users\me\AppData\Local\pnpm`])).toEqual([exe, ['install', '--frozen-lockfile', '--prefer-offline']])
   })
 })
 
@@ -410,6 +455,13 @@ describe('local workers (ADR 0048): infra failures never count against a report'
     expect(classifyFailure('git push failed: pre-push hook timed out', 'push')).toBe('infra')
     expect(classifyFailure('git fetch: fatal: unable to access https://github.com/o/r: Could not resolve host', 'commit')).toBe('infra')
     expect(classifyFailure("fatal: Unable to create '/x/.git/index.lock': File exists", 'commit')).toBe('infra')
+    // A hook whose tool crashed is the machine, not the change (2026-11-12: Node segfaulted in check:design-system).
+    expect(classifyFailure('git commit failed: hook steps failed: design-system. .husky/pre-commit: line 21: 45927 Segmentation fault npm run check:design-system', 'commit')).toBe('infra')
+    expect(classifyFailure('git commit failed: hook steps failed: lint. npm run lint exit status 139', 'commit')).toBe('infra')
+    // Node itself dying in a hook (V8 fatal, heap exhausted) is the machine too (2026-11-12, SBC check:design-system).
+    expect(classifyFailure('git commit failed: […] # / #FailureMessage Object: 000000686B1FE770 / ----- Native stack trace -----', 'commit')).toBe('infra')
+    expect(classifyFailure('git commit failed: hook steps failed: tsc. FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory', 'commit')).toBe('infra')
+    expect(classifyFailure('git commit failed: hook steps failed: lint. src/a.ts: 2 errors', 'commit')).toBe('code')
     expect(classifyFailure('git commit failed: ✗ check-dead-buttons: 1 violation', 'commit')).toBe('code')
     expect(classifyFailure('gh pr create failed: a pull request already exists', 'pr')).toBe('code')
   })
@@ -419,7 +471,9 @@ describe('local workers (ADR 0048): infra failures never count against a report'
     expect(env.MUSHI_WORKER_KEY).toBeUndefined()
     expect(env.MUSHI_API_KEY).toBeUndefined()
     expect(env.CREDENTIALS_DIRECTORY).toBeUndefined()
-    expect(Object.keys(env).filter((k) => /KEY|TOKEN|SECRET|CRED/i.test(k))).toEqual([])
+    // GIT_CONFIG_KEY_0 names a git setting (credential.helper, emptied), not a secret.
+    expect(Object.keys(env).filter((k) => /KEY|TOKEN|SECRET|CRED/i.test(k) && k !== 'GIT_CONFIG_KEY_0')).toEqual([])
+    expect(env.GIT_CONFIG_VALUE_0).toBe('')
   })
 })
 
@@ -554,6 +608,44 @@ describe('isHookRejection', () => {
   })
 })
 
+describe('commitWithHooks', () => {
+  const repoWithHook = (hook: (root: string) => string) => {
+    const root = mkdtempSync(join(tmpdir(), 'mushi-work-commit-'))
+    const sh = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, stdio: 'pipe' }).toString()
+    sh(root, 'init', '-q', '-b', 'main')
+    sh(root, 'config', 'user.email', 'w@example.com')
+    sh(root, 'config', 'user.name', 'worker')
+    writeFileSync(join(root, 'a.txt'), 'one\n')
+    sh(root, 'add', 'a.txt')
+    writeFileSync(join(root, '.git', 'hooks', 'pre-commit'), hook(root), { mode: 0o755 })
+    return { root, sh }
+  }
+
+  it.skipIf(process.platform === 'win32')('runs a failed pre-commit hook once more and commits when it passes the second time', async () => {
+    // Fails once (a typecheck that died under load), passes on the same staged change.
+    const { root, sh } = repoWithHook((r) => `#!/bin/sh\nif [ -f '${r}/.flaky-seen' ]; then exit 0; fi\ntouch '${r}/.flaky-seen'\necho '┃  typecheck-changed ❯ '\necho '🥊 typecheck-changed (3.25 seconds)'\nexit 1\n`)
+    const logs: string[] = []
+    try {
+      await commitWithHooks(root, ['-q', '-m', 'fix: a thing'], (l) => logs.push(l))
+      expect(sh(root, 'log', '--oneline').trim()).toContain('fix: a thing')
+      expect(logs[0]).toContain('running the hooks once more')
+      expect(logs[1]).toContain('passed the second time')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it.skipIf(process.platform === 'win32')("a pre-commit hook that fails twice is the change's failure", async () => {
+    const { root, sh } = repoWithHook(() => `#!/bin/sh\necho '┃  typecheck-changed ❯ '\necho 'src/a.ts(3,1): error TS2322: nope'\necho '🥊 typecheck-changed (40 seconds)'\nexit 1\n`)
+    try {
+      await expect(commitWithHooks(root, ['-q', '-m', 'fix: a thing'], () => {})).rejects.toThrow(/hook steps failed: typecheck-changed/)
+      expect(() => sh(root, 'log', '--oneline')).toThrow()
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+})
+
 describe('pushWithHooks', () => {
   const setup = (hook: (root: string) => string) => {
     const root = mkdtempSync(join(tmpdir(), 'mushi-work-push-'))
@@ -592,5 +684,20 @@ describe('pushWithHooks', () => {
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
+  })
+})
+
+describe('signInDetail (the console account check line)', () => {
+  it('summarises Claude Code\'s JSON status, never with the e-mail', () => {
+    // The console read `checked 2 min ago: "{"` (2026-11-20).
+    const json = '{\n  "loggedIn": true,\n  "authMethod": "claude.ai",\n  "email": "someone@example.com"\n}'
+    expect(signInDetail(json)).toBe('logged in (claude.ai)')
+    expect(signInDetail('{"loggedIn": false}')).toBe('logged out')
+    expect(signInDetail(json)).not.toContain('@')
+  })
+
+  it('keeps the first line of a plain answer (cursor-agent status)', () => {
+    expect(signInDetail('✓ Logged in as a***@g***.com\nmore')).toBe('✓ Logged in as a***@g***.com')
+    expect(signInDetail('{ not json')).toBe('{ not json')
   })
 })

@@ -1,5 +1,89 @@
 # @mushi-mushi/web
 
+## 1.38.0
+
+### Minor Changes
+
+- c98879e: - **A screenshot is never sent without the reporter seeing it.** With `capture.screenshot: 'on-report'`, pressing Send took the screenshot and sent it in the same moment, so the reporter never saw it. Send now takes it, shows it with Mark up and Remove and the line "Check the screenshot below, then press Send again", and the second Send sends it.
+  - **A removed screenshot stays removed.** With `'auto'` or `'on-report'`, pressing Remove and then Send took a new screenshot and sent it. Remove now holds until that report is sent or closed.
+  - **The selected element's text follows the privacy rules.** Pointing at an element sent up to 200 characters of its text unscrubbed, even inside `data-private`. Text from inside (or around) a redacted, masked or blocked area is now left out, and the rest goes through the PII scrubber.
+
+## 1.37.3
+
+### Patch Changes
+
+- 3f060d3: Reports now keep the error that caused a bug. Uncaught errors and unhandled promise rejections are recorded in the console log: an exception thrown in an event handler never passes through `console.*`, so it was missing. An `Error` passed to `console.error` (for example `console.error("save failed", err)`) is recorded as its name and message with its stack, where it used to be stored as `{}`.
+- 56dd276: Screenshots attached to reports now show what the user was looking at.
+
+  - **Scroll position** — the capture shows the part of the page the user had scrolled to, including pages that scroll inside an app shell (`<main>`) and sticky headers. It used to always show the top of the page.
+  - **Layout** — sections above the viewport keep their live size, so the visible part no longer drifts out of frame on long pages. Each stylesheet's own text is used, in document order. Chrome's CSSOM dropped `font: … var()` shorthands, and the old order broke `@layer` cascades. CSS-in-JS rules added with `insertRule` are kept.
+  - **Images and canvases** — they are embedded at their natural size and keep transparency, so pixel sprites no longer turn into black boxes. CSS background images (sprites, hero art, icons) are embedded too. Running animations keep their current frame. Unreadable media becomes a grey box of the same size.
+  - **Hidden stays hidden** — what the page hides (display, visibility, opacity) stays hidden, so hover-only buttons no longer show up.
+  - **Pages that failed outright** — pages with a `--` comment, framework attribute names (`@click`, `:href`) or control characters in text no longer fail with reason `error`.
+  - **Speed and size** — off-screen media is never read. The capture code is a separate chunk that loads with the first screenshot, so the core bundle is smaller (88.5 KB budget).
+
+## 1.37.0
+
+### Minor Changes
+
+- fd05f9a: **`setDiagnosticsProvider()`** attaches your app's own diagnostics (load timings, recent errors, connection) at the moment the reporter presses Send. The function gets 300 ms, its strings are scrubbed for personal data, and the result is size-capped. A slow or throwing provider never blocks or drops the report. Its keys merge into the report's metadata, and triage now reads `screenLoading` / `timings` lines as evidence.
+
+  React Native also gets:
+  - **App version.** `reports.app_version` now comes from the new `appVersion` option, then `expo-application` (version and build) or `react-native-device-info`. It never falls back to the OS version, which made Expo apps report Android's `36`.
+  - **`loadMyReports()`.** It resolves `null` when the list could not be loaded, so the report sheet shows an error with Retry instead of "no reports". `listMyReports()` keeps returning `[]` on failure.
+
+### Patch Changes
+
+- Updated dependencies [fd05f9a]
+  - @mushi-mushi/core@1.37.0
+
+## 1.35.0
+
+### Patch Changes
+
+- f318574: Stopping a Journeys recording window now takes effect on the next page load. With `trackSessions: 'on-demand'` the SDK reads its settings past the browser's HTTP cache, which could keep serving a stopped window for up to about 6 minutes. Apps on the default setting keep the cached read. The core bundle budget goes from 25.9 to 26.0 kB for this option.
+- Updated dependencies [f318574]
+  - @mushi-mushi/core@1.35.0
+
+## 1.34.1
+
+### Patch Changes
+
+- 0bc9bde: `trackSessions: 'on-demand'` now decides from the freshly fetched runtime config only. The cached copy the SDK applies on load could still hold a recording window that had been stopped in the console, so a returning visitor kept recording until the window's original end time. If the fetch fails, nothing is recorded.
+
+## 1.34.0
+
+### Minor Changes
+
+- d597fb0: New `trackSessions: 'on-demand'` for the Journey optimizer. In this mode the SDK sends no session, heartbeat or page-view request until you ask for one. You can open a recording window on the console's Journeys page (for 1 hour, 1 day or 1 week, for 10%, 50% or all visitors), or open your app with `?mushi_journeys=1` to record your own tab. Each device is drawn into or out of the sample once and keeps that result, so a visitor is never half recorded. The check uses the runtime config the SDK already loads, so outside a window it adds no request. `true` (the default) and `false` work as before.
+
+### Patch Changes
+
+- d597fb0: New npm description and README hero (ADR 0058): Mushi Mushi is one place to improve AI-built apps. It fixes bugs, smooths the journeys people take through the app and cleans up the code, from your editor. Bug fixing is now one of three pillars instead of the whole product. No API changes.
+- Updated dependencies [d597fb0]
+- Updated dependencies [d597fb0]
+  - @mushi-mushi/core@1.34.0
+
+## 1.33.8
+
+### Patch Changes
+
+- b6062d2: The Japanese widget text reads more naturally. It says 報告 throughout, uses a consistent polite tone, and no longer shows developer words (要素, ペイロード, キュー, API, Billing) to the people reporting a bug. No keys or placeholders changed.
+
+## 1.33.7
+
+### Patch Changes
+
+- 7f3dd9a: The widget's footer mark now uses the product's full name: "Bug reports by Mushi Mushi" (and the same in Japanese, Spanish, Thai and Chinese), matching the terms and the console settings page.
+
+## 1.33.6
+
+### Patch Changes
+
+- 184d4ea: The README and the npm description now use the full product name, Mushi Mushi, everywhere instead of a shortened "Mushi". In `@mushi-mushi/mcp`, `search_mushi_docs` and `get_mushi_doc` also return the updated docs pages and the corrected auto-fix-loop blog post.
+- Updated dependencies [184d4ea]
+  - @mushi-mushi/core@1.33.6
+
 ## 1.33.3
 
 ### Patch Changes

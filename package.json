@@ -1,7 +1,7 @@
 {
   "name": "mushi-mushi",
   "private": true,
-  "description": "Every bug in one queue — user reports, Sentry errors, Slack, coding agents. Plain-English diagnosis + a ready fix, in your editor. Open source.",
+  "description": "One place to improve your AI-built app. Fix bugs, smooth user journeys and clean up the code, from your editor. Open source.",
   "license": "MIT",
   "homepage": "https://kensaur.us/mushi-mushi",
   "author": "Kenji Sakuramoto <kensaurus@gmail.com> (https://github.com/kensaurus)",
@@ -50,7 +50,7 @@
     "check:changeset-orphans": "node scripts/check-changeset-orphans.mjs",
     "check:changeset-coverage": "node scripts/check-changeset-coverage.mjs",
     "check:secrets": "node scripts/check-no-secrets.mjs --all",
-    "check:spine": "node packages/marketing-ui/src/kensaurus/spine/check-spine.mjs",
+    "check:spine": "node scripts/check-spine-copies.mjs",
     "check:catalog-count": "node scripts/check-catalog-count.mjs",
     "check:server-json": "node scripts/sync-server-json-version.mjs --check",
     "check:dependency-overrides": "node scripts/check-dependency-overrides.mjs",
@@ -99,6 +99,8 @@
     "gen:error-catalog": "node scripts/generate-error-catalog.mjs",
     "check:community-files": "node scripts/sync-community-files.mjs --check",
     "sync:community-files": "node scripts/sync-community-files.mjs",
+    "check:skills": "node scripts/sync-skills.mjs --check",
+    "sync:skills": "node scripts/sync-skills.mjs",
     "release": "pnpm sync:community-files && pnpm check:narrative && turbo run build && pnpm check:publish && pnpm check:migration-catalog && changeset publish",
     "changelog:aggregate": "node scripts/aggregate-changelogs.mjs",
     "changelog:check": "node scripts/aggregate-changelogs.mjs --check",
@@ -119,6 +121,7 @@
     "bootstrap:new-package": "node scripts/bootstrap-new-package.mjs",
     "sync:helm-migrations": "node scripts/sync-helm-migrations.mjs",
     "check:helm-migrations": "node scripts/sync-helm-migrations.mjs --check",
+    "check:migration-ledger": "node scripts/check-migration-ledger.mjs",
     "docs-stats": "node scripts/docs-stats.mjs --print-markdown",
     "check:docs-stats": "node scripts/docs-stats.mjs --check",
     "check:tagline": "node scripts/check-tagline-consistency.mjs",
@@ -141,6 +144,7 @@
     "check:bundle-docs": "node scripts/check-bundle-docs.mjs",
     "gen:llms-txt": "node scripts/gen-llms-txt.mjs",
     "gen:llms-docs": "node scripts/generate-llms-full.mjs",
+    "gen:walkthroughs": "node scripts/record-docs-walkthroughs.mjs",
     "check:llms-docs": "node scripts/generate-llms-full.mjs --check",
     "gen:og-card": "node scripts/gen-og-card.mjs",
     "sync:public-schemas": "node scripts/sync-public-schemas.mjs",
@@ -148,7 +152,9 @@
     "gen:mcp-tools-doc": "node scripts/gen-mcp-tools-doc.mjs",
     "gen:route-manifest": "node scripts/gen-route-manifest.mjs",
     "check:route-manifest": "node scripts/gen-route-manifest.mjs --check",
-    "check:env-docs": "node scripts/check-env-docs.mjs",
+    "check:env-docs": "node scripts/check-env-docs.mjs && node scripts/gen-env-reference.mjs --check",
+    "gen:env-reference": "node scripts/gen-env-reference.mjs",
+    "check:env-reference": "node scripts/gen-env-reference.mjs --check",
     "check:onboarding-drift": "node scripts/check-onboarding-drift.mjs",
     "check:edge-fn-deploy-docs": "node scripts/check-edge-fn-deploy-docs.mjs",
     "check:admin-docs-coverage": "node scripts/check-admin-docs-coverage.mjs",
@@ -158,7 +164,7 @@
     "test:cloudfront": "node --test scripts/cloudfront-functions.test.mjs",
     "test:verify-hosted-mcp": "node --test scripts/verify-hosted-mcp-helpers.test.mjs",
     "test:strip-markup": "node --test scripts/strip-markup.test.mjs",
-    "test:scripts": "node --test scripts/cloudfront-functions.test.mjs scripts/verify-hosted-mcp-helpers.test.mjs scripts/strip-markup.test.mjs scripts/mcp-configs.test.mjs scripts/marketing/queue-policy.test.mjs scripts/normalize-package-metadata.test.mjs scripts/check-changeset-coverage.test.mjs scripts/aws-configure-docs-errors.test.mjs scripts/deploy-edge-function.test.mjs scripts/verify-published-tarballs.test.mjs scripts/release-workflow.test.mjs scripts/check-loader-cdn-url.test.mjs scripts/check-site-urls.test.mjs scripts/check-doc-snippets.test.mjs scripts/check-spdx-headers.test.mjs scripts/check-install-size.test.mjs scripts/check-surface-parity.test.mjs scripts/check-docs-versions.test.mjs scripts/check-docs-links.test.mjs scripts/check-dependency-overrides.test.mjs scripts/check-katex-version.test.mjs scripts/check-image-size-pin.test.mjs scripts/check-qs-version.test.mjs scripts/check-workflow-expressions.test.mjs scripts/gen-route-manifest.test.mjs scripts/e2e-realworld-workflow.test.mjs scripts/generate-llms-full.test.mjs scripts/confirmation-coverage-skip.test.mjs scripts/check-env-source-parity.test.mjs scripts/fix-verify-action.test.mjs scripts/actions-archive.test.mjs scripts/hono-version.test.mjs scripts/edge-fns-affected.test.mjs",
+    "test:scripts": "node --test scripts/cloudfront-functions.test.mjs scripts/verify-hosted-mcp-helpers.test.mjs scripts/strip-markup.test.mjs scripts/mcp-configs.test.mjs scripts/marketing/queue-policy.test.mjs scripts/normalize-package-metadata.test.mjs scripts/check-changeset-coverage.test.mjs scripts/aws-configure-docs-errors.test.mjs scripts/deploy-edge-function.test.mjs scripts/gen-env-reference.test.mjs scripts/verify-published-tarballs.test.mjs scripts/release-workflow.test.mjs scripts/check-loader-cdn-url.test.mjs scripts/check-site-urls.test.mjs scripts/check-doc-snippets.test.mjs scripts/check-spdx-headers.test.mjs scripts/check-install-size.test.mjs scripts/check-surface-parity.test.mjs scripts/check-docs-versions.test.mjs scripts/check-docs-links.test.mjs scripts/check-dependency-overrides.test.mjs scripts/check-katex-version.test.mjs scripts/check-image-size-pin.test.mjs scripts/check-qs-version.test.mjs scripts/check-workflow-expressions.test.mjs scripts/gen-route-manifest.test.mjs scripts/e2e-realworld-workflow.test.mjs scripts/generate-llms-full.test.mjs scripts/confirmation-coverage-skip.test.mjs scripts/check-env-source-parity.test.mjs scripts/fix-verify-action.test.mjs scripts/actions-archive.test.mjs scripts/hono-version.test.mjs scripts/edge-fns-affected.test.mjs scripts/viz-token-emit.test.mjs scripts/notify-slack-release.test.mjs",
     "verify:pipeline": "pnpm --filter @mushi-mushi/server test && cd packages/server/supabase && deno check functions/_shared/rag.ts functions/_shared/observability.ts functions/_shared/env-int.ts functions/api/routes/doctor.ts functions/api/routes/project-codebase.ts functions/webhooks-github-indexer/index.ts",
     "check:drift": "pnpm check:catalog-sync && pnpm check:mcp-tools-doc && pnpm check:internal-doc-links && pnpm check:onboarding-drift && pnpm check:env-docs && pnpm check:docs-drift && pnpm check:docs-stats && pnpm check:route-manifest && pnpm check:console-knowledge && pnpm check:edge-fn-deploy-docs && pnpm check:admin-docs-coverage && pnpm check:humanize-parity && pnpm check:error-codes && pnpm check:llms-docs",
     "check:mcp-tools-doc": "node scripts/gen-mcp-tools-doc.mjs --check",
@@ -181,8 +187,8 @@
   "pnpm": {
     "overrides": {
       "browserslist": ">=4.28.7 <5",
-      "node-forge": "1.4.2",
-      "fast-uri": ">=4.1.5 <5",
+      "node-forge": "1.4.3",
+      "fast-uri": ">=4.2.3 <5",
       "@xmldom/xmldom": ">=0.9.12 <0.10",
       "sharp": ">=0.35.5 <0.36",
       "js-yaml@3": ">=3.15.2 <4",
@@ -191,11 +197,11 @@
       "undici@6": ">=6.29.1 <7",
       "undici@7": ">=7.30.1 <8",
       "js-yaml@4": ">=4.3.2 <5",
-      "hono": ">=4.13.11 <5",
-      "fastify": ">=5.12.5 <6",
+      "hono": ">=4.13.16 <5",
+      "fastify": ">=5.12.6 <6",
       "mermaid": ">=11.16.1 <12",
       "dompurify": ">=3.4.17 <4",
-      "vitest": ">=4.1.11 <5",
+      "vitest": ">=4.1.12 <5",
       "devalue": "5.9.3",
       "@angular/core": ">=22.1.0 <23",
       "axios": ">=1.20.0 <2",
@@ -203,12 +209,14 @@
       "brace-expansion@2": ">=2.1.7 <3",
       "brace-expansion@5": ">=5.0.12 <6",
       "fflate@0.6": ">=0.6.11 <0.7",
-      "serialize-javascript@7": ">=7.1.2 <8",
+      "serialize-javascript@7": ">=7.1.3 <8",
       "qs@6": ">=6.16.1 <7",
       "body-parser@2": ">=2.4.0 <3",
       "zod@4": ">=4.6.6 <5",
-      "@hono/node-server@1": ">=1.19.15 <2",
-      "ip-address@10": ">=10.7.1 <11",
+      "@hono/node-server@1": ">=1.19.18 <2",
+      "@modelcontextprotocol/sdk>@hono/node-server": ">=2.1.6 <3",
+      "ip-address@10": ">=10.7.4 <11",
+      "glob@13": ">=13.0.7 <14",
       "proxy-addr@2": ">=2.0.8 <3",
       "shell-quote@1": ">=1.11.0 <2",
       "source-map-js@1": ">=1.2.2 <2",
@@ -222,6 +230,131 @@
       "@react-navigation/core@7": ">=7.23.0 <8",
       "katex": ">=0.18.2 <0.19",
       "image-size": ">=2.0.3 <3"
+    }
+  },
+  "prettier": {
+    "semi": true,
+    "singleQuote": true,
+    "trailingComma": "all",
+    "printWidth": 100,
+    "tabWidth": 2,
+    "arrowParens": "always",
+    "endOfLine": "lf"
+  },
+  "knip": {
+    "ignoreWorkspaces": [
+      "examples/realworld/*"
+    ],
+    "tags": [
+      "-public"
+    ],
+    "compilers": {
+      "mdx": true
+    },
+    "rules": {
+      "optionalPeerDependencies": "warn"
+    },
+    "workspaces": {
+      ".": {
+        "entry": [
+          "scripts/*.mjs!",
+          "scripts/cloudflare/*.mjs!",
+          "scripts/marketing/*.mjs!",
+          "scripts/docs-walkthroughs/overlay.js!",
+          "scripts/cloudfront-*.js!",
+          "scripts/vendor/*.js!",
+          ".github/actions/*/*.mjs!"
+        ],
+        "project": [
+          "**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts,mdx}!",
+          "!packages/android/**",
+          "!packages/ios/**",
+          "!packages/flutter/**",
+          "!packages/cursor-plugin/**",
+          "!deploy/**",
+          "!supabase/**",
+          "!session-artifacts/**",
+          "!tmp/**"
+        ],
+        "ignoreBinaries": [
+          "rg",
+          "netstat",
+          "findstr",
+          "schtasks",
+          "wscript.exe",
+          "ffmpeg"
+        ]
+      },
+      "apps/admin": {
+        "entry": [
+          "src/stubs/rrweb.ts",
+          "public/runtime-config.js"
+        ]
+      },
+      "apps/docs": {
+        "entry": [
+          "content/**/_meta.ts!",
+          "content/**/*.mdx!"
+        ],
+        "project": [
+          "**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts,mdx}!",
+          "!playground/**"
+        ]
+      },
+      "packages/react-native": {
+        "entry": [
+          "src/bundling/*.ts!"
+        ]
+      },
+      "packages/capacitor": {
+        "ignoreBinaries": [
+          "pod"
+        ]
+      },
+      "packages/marketing-ui": {
+        "ignore": [
+          "src/kensaurus/spine/**"
+        ]
+      },
+      "packages/cli": {
+        "ignoreBinaries": [
+          "supabase",
+          "icacls",
+          "cursor-agent"
+        ],
+        "project": [
+          "**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts,mdx}!",
+          "!templates/**"
+        ],
+        "ignoreIssues": {
+          "src/recipe/engine/**": [
+            "exports",
+            "types"
+          ]
+        }
+      },
+      "packages/server": {
+        "entry": [
+          "src/index.ts!",
+          "src/__tests__/__stubs__/npm-stub.ts"
+        ],
+        "project": [
+          "**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts,mdx}!",
+          "!supabase/**",
+          "!src/__tests__/**!"
+        ],
+        "ignoreDependencies": [
+          "npm"
+        ],
+        "node": false
+      },
+      "packages/web": {
+        "vite": {
+          "config": [
+            "ask-harness/vite.config.ts"
+          ]
+        }
+      }
     }
   }
 }

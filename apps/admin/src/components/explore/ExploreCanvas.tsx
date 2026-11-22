@@ -69,8 +69,8 @@ function ExploreNodeChip({
     >
       <Handle type="target" position={Position.Left} className="!bg-transparent !border-0 !w-2 !h-2" />
       <Handle type="source" position={Position.Right} className="!bg-transparent !border-0 !w-2 !h-2" />
-      <div className="flex items-center gap-1.5 min-w-0">
-        <span className="truncate flex-1" style={{ color: textColor }}>{node.label}</span>
+      <div className="flex items-start gap-1.5 min-w-0">
+        <span className="min-w-0 flex-1 wrap-anywhere" style={{ color: textColor }}>{node.label}</span>
         {ext && (
           <span
             className="shrink-0 text-3xs font-mono px-1 py-px rounded-sm"
@@ -217,7 +217,7 @@ function LayerLegend({ layerCounts }: { layerCounts?: Record<string, number> }) 
       </button>
       {open && (
         <div className="px-2.5 pb-2 pt-0 space-y-0.5 border-t border-edge-subtle">
-          <div className="text-3xs uppercase tracking-wider text-fg-faint mt-1.5 mb-1">Architectural layer</div>
+          <div className="text-3xs text-fg-secondary mt-1.5 mb-1 font-semibold">Architectural layer</div>
           {LAYER_ORDER.map((l) => {
             const count = layerCounts?.[l] ?? 0
             const pct = total > 0 ? (count / total) * 100 : 0

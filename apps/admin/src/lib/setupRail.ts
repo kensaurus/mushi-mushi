@@ -136,8 +136,10 @@ export function buildSetupRail(input: {
   }
 
   const detail: Record<SetupRailStepId, string> = {
-    project: done.project ? (when('Created', project?.created_at, now) ?? 'Created') : 'Name your app',
-    key: done.key ? (when('Made', ttfd?.keyMintedAt, now) ?? 'Ready') : 'Not made yet',
+    // The label already says "App created" / "Key made": the line under it
+    // is only when ("Created 19d ago" under "App created" said it twice).
+    project: done.project ? (relativeTime(project?.created_at ?? null, now) ?? 'Done') : 'Name your app',
+    key: done.key ? (relativeTime(ttfd?.keyMintedAt ?? null, now) ?? 'Ready') : 'Not made yet',
     sdk: heartbeat ? `Last heard ${heartbeat.ago ?? 'recently'}` : 'Not heard from your app yet',
     report: realReportAt
       ? (when('Diagnosed', realReportAt, now) ?? 'Diagnosed')
@@ -169,11 +171,29 @@ export function buildSetupRail(input: {
   }
 }
 
-/** One plain line about when the app last checked in: when, which key, from where. "Heartbeat" was jargon (2026-10-28). */
-export function heartbeatSentence(heartbeat: SdkHeartbeatView | null): string {
-  if (!heartbeat) return 'Mushi has not heard from your app yet. It does within a minute of the SDK loading in a browser or on a device.'
-  const parts = [`Your app last checked in ${heartbeat.ago ?? 'recently'}`]
-  if (heartbeat.keyLabel) parts.push(`key “${heartbeat.keyLabel}”`)
+/**
+ * One plain line about how the app checks in: which key, from where. "Heartbeat" was jargon
+ * (2026-10-28). The when is the "App connected · Last heard 37m ago" step right above it, so the
+ * sentence no longer says it again (round-3 review, 2026-11-19). Null when there is nothing to add.
+ */
+export function heartbeatSentence(heartbeat: SdkHeartbeatView | null): string | null {
+  if (!heartbeat) return 'Mushi Mushi has not heard from your app yet. It does within a minute of the SDK loading in a browser or on a device.'
+  const parts: string[] = []
+  if (heartbeat.keyLabel) parts.push(`with key “${heartbeat.keyLabel}”`)
   if (heartbeat.origin) parts.push(`from ${heartbeat.origin}`)
-  return `${parts.join(' · ')}.`
+  return parts.length > 0 ? `Checks in ${parts.join(' ')}.` : null
+}
+
+/** Format a millisecond interval as a short human string ("1m 48s", "42s", "14 d"). */
+export function formatDiagnosisDuration(ms: number): string {
+  const totalSec = Math.max(0, Math.round(ms / 1000))
+  if (totalSec < 60) return `${totalSec}s`
+  const m = Math.floor(totalSec / 60)
+  const s = totalSec % 60
+  if (m < 60) return s ? `${m}m ${s}s` : `${m}m`
+  const h = Math.floor(m / 60)
+  const rem = m % 60
+  // "346h 8m" made the reader do the sum: past a day it is days.
+  if (h >= 24) return `${Math.round(h / 24)} d`
+  return rem ? `${h}h ${rem}m` : `${h}h`
 }

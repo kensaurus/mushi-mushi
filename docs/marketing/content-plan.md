@@ -79,9 +79,11 @@ per post with a real `scheduled_for`.
 
 ## Backlog (kept from the June plan)
 
-- **"60 seconds from 'this is broken' to a draft PR"** — written
-  (`posts/01-auto-fix-loop.md`, docs mirror `blog/auto-fix-loop.mdx`). Re-run
-  on dev.to only after R1 with the canonical URL fixed; not a launch post.
+- **"From 'this is broken' to a draft PR: building Mushi Mushi"** — written
+  (`posts/01-auto-fix-loop.md`, docs mirror `blog/auto-fix-loop.mdx`);
+  re-checked against the code on 2026-11-03. The dev.to copy (2026-10-15)
+  still has the old text: re-sync it from `posts/01-auto-fix-loop.md` with the
+  canonical URL set; not a launch post.
 - **"Sentry + Mushi: the 2-tool stack"** — the alongside story with the
   `sentryEventId` correlation and one real merged fix Sentry missed. Write
   after there is one real example from an external project; until then the

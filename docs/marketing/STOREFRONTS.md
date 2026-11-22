@@ -50,9 +50,9 @@ Tick these off in order. Most are one-time.
 Keywords have been populated. Now confirm each package README opens strong:
 
 - [ ] Every SDK `README.md` leads with the canonical v2 hero (`MUSHI_TAGLINE_V2.hero`
-  / `MUSHI_TAGLINE.full` in `@mushi-mushi/brand`): *"Your AI wrote it. Mushi tells
-  you why it broke."* followed by the sub-hero *"Plain-English diagnosis + a
-  paste-ready fix, right inside Cursor."* The legacy 12-word Sentry-contrast line
+  / `MUSHI_TAGLINE.full` in `@mushi-mushi/brand`): *"Your AI built it. Mushi
+  Mushi makes it better."* (ADR 0058) followed by `MUSHI_TAGLINE_V2.subHero`.
+  The legacy 12-word Sentry-contrast line
   is comparison-tables-only — never the opener. CI enforces the v2 hero on every
   primary README via `scripts/check-tagline-consistency.mjs`.
 - [ ] 60-second install snippet immediately under the tagline. No wall-of-text.
@@ -111,7 +111,7 @@ cared-for.
   in `.env.local`, delete `.cache/bluesky-session.json`, and the next script run
   will mint a fresh session under the brand identity.
   **Not reserved as of 2026-09-21**: the handle does not resolve and the domain
-  is unregistered, so every public link (README, SUPPORT.md) points at
+  is unregistered, so every public link (README, .github/SUPPORT.md) points at
   `kensaur.us`. Do not link `mushimushi.dev` anywhere until it
   resolves.
 - [ ] **Self-label as a bot** — the script-posted account should mark itself in
@@ -121,8 +121,8 @@ cared-for.
 - [ ] X / Twitter: `@mushimushi_dev` (the underscore because `@mushimushi` is
   probably taken; check both). **Not reserved as of 2026-09-21** (the profile
   404s) — do not reference it in metadata or copy until it exists.
-- [ ] Bio on both: *"Your AI wrote it. Mushi Mushi tells you why it broke — plain-English
-  diagnosis + a paste-ready fix, in your editor. 🐛 OSS, self-hostable, MIT SDKs."*
+- [ ] Bio on both: *"Your AI built it. Mushi Mushi makes it better — fix bugs, smooth
+  user journeys, clean up the code, from your editor. 🐛 OSS, self-hostable, MIT SDKs."*
 - [ ] Profile image: Mushi-chan's happy cameo
   ([`docs/mascot/mushi-happy.png`](../mascot/mushi-happy.png)).
 - [ ] Header image: same canvas as the GitHub social preview
@@ -162,13 +162,13 @@ See [`canonical-urls.md`](./canonical-urls.md). Do not use `api.mushimushi.dev` 
 | Name | `Mushi Mushi` |
 | Registry name | `io.github.kensaurus/mushi-mushi` |
 | npm package | `@mushi-mushi/mcp` · install `npx -y @mushi-mushi/mcp@latest` |
-| Hosted HTTP URL | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp?features=triage,fixes,inventory,setup,docs` |
+| Hosted HTTP URL | `https://kensaur.us/mushi-mushi/hosted-mcp/` (OAuth sign-in; `server.json` `remotes`) |
 | API endpoint | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api` |
 | Repo | `https://github.com/kensaurus/mushi-mushi` |
 | Homepage | `https://kensaur.us/mushi-mushi` |
 | Connect | `https://kensaur.us/mushi-mushi/docs/connect` |
 | License | MIT (SDK) · AGPLv3 (server) |
-| One-liner | *Your AI shipped it. Mushi Mushi tells you why it broke — plain diagnosis and a paste-ready fix prompt in Cursor. No second LLM key.* |
+| One-liner | *Your AI built it. Mushi Mushi makes it better: fix bugs, smooth user journeys and clean up the code, with a paste-ready prompt in Cursor. No second LLM key.* |
 
 > **Publish to the official registry FIRST.** Glama, PulseMCP, and VS Code's
 > gallery all auto-index from `registry.modelcontextprotocol.io`. Release CI
@@ -194,7 +194,7 @@ See [`canonical-urls.md`](./canonical-urls.md). Do not use `api.mushimushi.dev` 
 - [x] **[awesome-remote-mcp-servers](https://github.com/jaw9c/awesome-remote-mcp-servers)** —
   PR [#428](https://github.com/jaw9c/awesome-remote-mcp-servers/pull/428) **closed** (listed non-resolving hostname). Re-open with row in [`awesome-list-submissions.md`](./awesome-list-submissions.md).
 - [x] **[mcp.so](https://mcp.so/server/mushi-mushi)** — live; refresh Overview via [`mcp-so-listing.md`](./mcp-so-listing.md)
-- [ ] **[smithery.ai](https://smithery.ai/servers/kensaurus/mushi-mushi)** — republish Streamable HTTP URL from [`smithery-external-publish.json`](./smithery-external-publish.json)
+- [x] **smithery.ai** — **gone.** Smithery shut down accounts and its proxy on 2026-10-31 and our listing returns "Not found"; nothing to republish (see [`GTM-DISTRIBUTION.md`](./GTM-DISTRIBUTION.md) § Smithery).
 - [ ] **[cursor.directory](https://cursor.directory/plugins/new)** — **submitted;
   the page exists but is hidden** ("Flagged by the security agent. Hidden from
   the directory pending manual review", `noindex`, checked 2026-09-21). The

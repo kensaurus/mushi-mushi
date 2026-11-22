@@ -1,6 +1,6 @@
 # @mushi-mushi/brand
 
-> **Your AI wrote it. Mushi Mushi tells you why it broke.**
+> **Your AI built it. Mushi Mushi makes it better.**
 
 Shared taglines and brand tokens for docs, npm, and the admin console.
 

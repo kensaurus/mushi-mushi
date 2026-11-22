@@ -5,11 +5,14 @@ Source: https://kensaur.us/mushi-mushi/docs/operating/deployment
 ---
 title: Deployment & releases
 description: How Mushi Mushi's maintainers ship the SDKs, edge functions, console and docs. A public summary of the release process; app developers never need to run it.
+robots:
+  index: false
+  follow: true
 ---
 
 # Deployment & releases
 
-A public summary of how Mushi ships. The full maintainer runbook lives in the
+A public summary of how Mushi Mushi ships. The full maintainer runbook lives in the
 repo at [`docs/DEPLOYMENT.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/DEPLOYMENT.md).
 
   Maintainers only. App developers integrating the SDK never need to run any of

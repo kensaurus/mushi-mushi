@@ -1,5 +1,5 @@
 /**
- * drift-agent.ts — Phase 4b (edge-deployable copy)
+ * drift-agent.ts — Phase 4b
  *
  * Contract-drift walker. Takes the latest contract_snapshot for a project and
  * walks the OpenAPI paths / inventory nodes, comparing:
@@ -11,7 +11,8 @@
  * Uses Thompson sampling (Phase 4c) to prioritise which paths to walk next
  * based on past drift findings (drift → higher priority).
  *
- * Canonical source: packages/agents/src/drift-agent.ts — keep in sync.
+ * This is the only copy: drift-walker imports it. (packages/agents kept an
+ * unimported duplicate until 2026-11-11.)
  */
 
 export interface DriftFinding {

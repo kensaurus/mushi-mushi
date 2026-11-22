@@ -125,12 +125,12 @@ export const PDCA_STAGE_OUTCOMES: Record<PdcaStageId, {
 }> = {
   plan: {
     headline: 'Capture user-felt bugs',
-    outcome: 'Your end-users flag what hurts. Mushi groups, scores, and sorts the noise.',
+    outcome: 'Your end-users flag what hurts. Mushi Mushi groups, scores, and sorts the noise.',
     pipelineLabel: 'Capture',
   },
   do: {
     headline: 'Auto-draft a fix PR',
-    outcome: 'Mushi opens a draft pull request with a one-paragraph rationale. You review the diff, not the ticket.',
+    outcome: 'Mushi Mushi opens a draft pull request with a one-paragraph rationale. You review the diff, not the ticket.',
     pipelineLabel: 'Auto-fix',
   },
   check: {

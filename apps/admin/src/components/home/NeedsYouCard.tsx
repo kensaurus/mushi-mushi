@@ -14,6 +14,8 @@
 import { Btn, Section, Skeleton } from '../ui'
 import type { FixFirstItem, HomeSection, NeedsYouItem } from '../../lib/projectHome'
 import { HomeSectionBody } from './HomeSectionBody'
+import { Mascot } from '../mascot/Mascot'
+import { HOME_ALL_CLEAR } from '../../lib/fieldGuide'
 
 const NEEDS_YOU_LIMIT = 5
 
@@ -25,6 +27,18 @@ interface Props {
   leading?: NeedsYouItem[]
   /** Reads the list could not use; it may be missing an item. */
   partial?: string[]
+  /**
+   * The app has received real reports. The field guide only says "all clear"
+   * for an app that has been watched: a brand-new app with nothing in it is
+   * not clear, it is unchecked (never fake healthy, docs/DESIGN-SYSTEM.md).
+   */
+  hasReports?: boolean
+  /**
+   * The page already shows the one "do this next" (the setup checklist), so
+   * every button here is quiet. Home had two primary next steps competing
+   * (owner's walkthrough, 2026-11-17).
+   */
+  primaryElsewhere?: boolean
 }
 
 function waitingLine(n: number | null): string | null {
@@ -33,7 +47,7 @@ function waitingLine(n: number | null): string | null {
 }
 
 /** One root cause: what is wrong, how much waits on it, and its one fix. */
-function FixFirstRow({ item }: { item: FixFirstItem }) {
+function FixFirstRow({ item, quiet }: { item: FixFirstItem; quiet: boolean }) {
   const fix = item.fix
   const waiting = waitingLine(item.affects)
   return (
@@ -45,7 +59,7 @@ function FixFirstRow({ item }: { item: FixFirstItem }) {
           {waiting && <p className="text-xs font-medium text-fg">{waiting}</p>}
         </div>
         {fix?.kind === 'one_click' && (
-          <Btn size="sm" variant="primary" to={fix.to}>
+          <Btn size="sm" variant={quiet ? 'ghost' : 'primary'} to={fix.to}>
             {fix.label}
           </Btn>
         )}
@@ -67,34 +81,45 @@ function FixFirstRow({ item }: { item: FixFirstItem }) {
   )
 }
 
-function FixFirst({ section }: { section: HomeSection<FixFirstItem[]> | undefined }) {
+function FixFirst({ section, quiet }: { section: HomeSection<FixFirstItem[]> | undefined; quiet: boolean }) {
   const items = section?.status === 'ok' ? (section.data ?? []) : []
   if (items.length === 0) return null
   return (
     <div className="mb-3 rounded-md border border-edge-subtle p-2" data-testid="home-fix-first">
-      <p className="mb-1 text-2xs font-semibold uppercase tracking-wide text-fg-secondary">Fix these first</p>
+      <p className="mb-1 text-2xs font-semibold text-fg-secondary">Fix these first</p>
       <ol className="divide-y divide-edge-subtle">
         {items.slice(0, 3).map((item) => (
-          <FixFirstRow key={item.key} item={item} />
+          <FixFirstRow key={item.key} item={item} quiet={quiet} />
         ))}
       </ol>
     </div>
   )
 }
 
-export function NeedsYouCard({ section, fixFirst, leading = [], partial = [] }: Props) {
+export function NeedsYouCard({ section, fixFirst, leading = [], partial = [], hasReports = false, primaryElsewhere = false }: Props) {
   const hasRootCauses = fixFirst?.status === 'ok' && (fixFirst.data ?? []).length > 0
+  // Every read answered, nothing waits, and the app has real reports.
+  const trulyClear = !hasRootCauses && partial.length === 0 && hasReports
   return (
     <Section title="Needs you" id="home-needs-you">
-      <FixFirst section={fixFirst} />
+      {primaryElsewhere && (
+        <p className="mb-2 text-2xs text-fg-muted" data-testid="home-needs-you-after-setup">
+          After the setup step above:
+        </p>
+      )}
+      <FixFirst section={fixFirst} quiet={primaryElsewhere} />
       <HomeSectionBody section={section} what="what needs you" notConnectedText="Nothing to check yet.">
         {(items) => {
           const all = [...leading, ...items].slice(0, NEEDS_YOU_LIMIT)
           return (
             <>
-              {all.length === 0 ? (
+              {all.length === 0 && trulyClear ? (
+                <div data-testid="home-needs-you-clear">
+                  <Mascot {...HOME_ALL_CLEAR} size="md" />
+                </div>
+              ) : all.length === 0 ? (
                 <p className="text-sm text-fg-secondary" data-testid="home-needs-you-clear">
-                  {hasRootCauses ? 'Nothing else needs you right now.' : 'Nothing needs you right now. Mushi will list it here when something does.'}
+                  {hasRootCauses ? 'Nothing else needs you right now.' : 'Nothing needs you right now. Mushi Mushi will list it here when something does.'}
                 </p>
               ) : (
                 <ol className="divide-y divide-edge-subtle" data-testid="home-needs-you">
@@ -102,7 +127,7 @@ export function NeedsYouCard({ section, fixFirst, leading = [], partial = [] }: 
                     <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 py-2 first:pt-0 last:pb-0" data-testid={`home-needs-you-${item.id}`}>
                       <p className="min-w-0 flex-1 text-sm text-fg">{item.text}</p>
                       {/* One primary action: the costliest item; the rest stay quiet. */}
-                      <Btn size="sm" variant={i === 0 ? 'primary' : 'ghost'} to={item.action.to}>
+                      <Btn size="sm" variant={i === 0 && !primaryElsewhere ? 'primary' : 'ghost'} to={item.action.to}>
                         {item.action.label}
                       </Btn>
                     </li>

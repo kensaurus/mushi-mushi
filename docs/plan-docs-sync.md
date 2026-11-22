@@ -24,7 +24,7 @@ Follows `plan-docs-sync` skill: every drift pairs doc claim + code fact; stale p
 |-------|--------|---------|
 | A | close_report, catalog-count tools-only, glama 68, docs-stats footers | Done — `check:docs-stats`, `check:catalog-count`, `check:config-docs` green |
 | B | AGENTS infra/CLI, plan-uplift checkboxes, DEPLOYMENT/SELF_HOSTED/edge-functions healthz | Done |
-| C | sampleRate / replaySampleRate / beforeSend in web.mdx + core.mdx + core README; fixed phantom `onBeforeSubmit` | Done — SECURITY.md already documents wrapUntrusted |
+| C | sampleRate / replaySampleRate / beforeSend in web.mdx + core.mdx + core README; fixed phantom `onBeforeSubmit` | Done — .github/SECURITY.md already documents wrapUntrusted |
 | AS-1/2 | Console + docs anti-slop | Done — see [`plan-antislop.md`](./plan-antislop.md) |
 
 ## MCP tools semantics (canonical)

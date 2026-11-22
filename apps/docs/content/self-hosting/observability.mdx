@@ -7,7 +7,7 @@ import { Callout } from 'nextra/components'
 
 # Observability
 
-Mushi Mushi integrates Langfuse (LLM traces) and Sentry (error tracking). Both are optional and configured as Edge Function secrets.
+**Use this when** you want a trace of every AI call (Langfuse) or the server's errors in Sentry. Both are optional function secrets. Without them `selfhost doctor` prints one `INFO` line and still exits 0; every AI call is recorded in the `llm_invocations` table either way. In Docker Compose, put the Langfuse keys in `deploy/.env`, and add any other secret to the `edge-functions` service's `environment:` block.
 
 ## Langfuse (LLM tracing)
 
@@ -40,7 +40,7 @@ Replace `LANGFUSE_BASE_URL` with your self-hosted Langfuse URL if needed.
 
 ### Viewing traces
 
-In Langfuse: **Traces**, then filter by the project ID in the trace metadata. The **Health** page in the Mushi admin console lists recent LLM calls from `llm_invocations`, each with its Langfuse trace ID.
+In Langfuse: **Traces**, then filter by the project ID in the trace metadata. The **Health** page in the Mushi Mushi admin console lists recent LLM calls from `llm_invocations`, each with its Langfuse trace ID.
 
 ## Sentry (error tracking)
 
@@ -48,7 +48,7 @@ Every Edge Function wraps its handler with `withSentry()` from `_shared/sentry.t
 
 ```bash
 cd packages/server
-npx supabase secrets set SENTRY_DSN_SERVER=https://…@sentry.io/…   # SENTRY_DSN also works
+npx supabase secrets set SENTRY_DSN_SERVER=https://…@sentry.io/…   # preferred; SENTRY_DSN also works
 npx supabase secrets set SUPABASE_ENV=production                     # Sentry environment
 npx supabase secrets set SENTRY_RELEASE=$GIT_SHA
 ```
@@ -69,11 +69,11 @@ When `OTEL_EXPORTER_OTLP_ENDPOINT` is set, `classify-report` exports an OTLP spa
 npx supabase secrets set OTEL_EXPORTER_OTLP_ENDPOINT=https://your-collector/v1/traces
 ```
 
-Spans carry `report.id` and `project.id` attributes so you can join them back to Mushi data.
+Spans carry `report.id` and `project.id` attributes so you can join them back to Mushi Mushi data.
 
 ## Health dashboard
 
-After deploying, open **Mushi health** (`/health`) in the admin console. It shows
+After deploying, open **Mushi Mushi health** (`/health`) in the admin console. It shows
 the AI calls behind diagnoses and fixes (count, error rate, fallback rate,
 latency and cost) and the background jobs' last runs. Integration probes
 (Anthropic, OpenAI, Langfuse, Sentry, GitHub) are on the **Integrations** page.

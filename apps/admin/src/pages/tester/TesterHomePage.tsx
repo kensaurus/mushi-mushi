@@ -310,7 +310,7 @@ export function TesterHomePage() {
                   key={r.id}
                   to="/tester/wallet"
                   icon={r.kind === 'mushi_pro_credit' ? '🚀' : '🎁'}
-                  label={r.kind === 'mushi_pro_credit' ? 'Mushi Pro credit' : `Gift card — $${r.faceValueUsd?.toFixed(0) ?? '?'}`}
+                  label={r.kind === 'mushi_pro_credit' ? 'Mushi Mushi Pro credit' : `Gift card — $${r.faceValueUsd?.toFixed(0) ?? '?'}`}
                   sub={`${r.pointsSpent.toLocaleString()} pts · ${new Date(r.requestedAt).toLocaleDateString()}`}
                   badge={r.status === 'processing' ? 'Processing' : 'Pending'}
                 />
@@ -338,7 +338,7 @@ export function TesterHomePage() {
               to="/tester/learn#bounty-math"
               icon="💰"
               title="The bounty math"
-              description="1,000 pts = $10 gift card or $13 Mushi Pro credit. How point values are set and calculated."
+              description="1,000 pts = $10 gift card or $13 Mushi Mushi Pro credit. How point values are set and calculated."
             />
             <TesterLearnTile
               to="/tester/learn#kyc"

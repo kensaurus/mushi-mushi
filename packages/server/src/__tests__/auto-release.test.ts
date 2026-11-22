@@ -328,6 +328,34 @@ describe('routeGithubShipEvent (GitHub App release / deployment_status)', () => 
     expect(schedule).not.toHaveBeenCalled()
   })
 
+  it('a production deployment_status records a deploy observation per bound project, opted in or not (BL-179)', async () => {
+    const db = makeFakeDb({
+      project_repos: [{ project_id: 'p-a', repo_url: 'https://github.com/acme/web', github_app_installation_id: 42 }],
+      deploy_observations: [],
+    })
+    const schedule = vi.fn()
+    const out = await routeGithubShipEvent(
+      db as never,
+      'deployment_status',
+      { deployment_status: { state: 'success', environment: 'production' }, deployment: { sha: 'a1b2c3d4e5f6a7b8' }, repository: { full_name: 'acme/web' }, installation: { id: 42 } },
+      schedule,
+    )
+    expect(out.status).toBe(202)
+    expect(db.table('deploy_observations')).toEqual([
+      expect.objectContaining({ project_id: 'p-a', target_id: 'production', environment: 'production', observed_commit: 'a1b2c3d4e5f6a7b8', observed_version: 'a1b2c3d', source: 'github_deployment', ok: true }),
+    ])
+    expect(schedule).toHaveBeenCalledTimes(1)
+  })
+
+  it('a release event records no deploy observation', async () => {
+    const db = makeFakeDb({
+      project_repos: [{ project_id: 'p-a', repo_url: 'https://github.com/acme/web', github_app_installation_id: 42 }],
+      deploy_observations: [],
+    })
+    await routeGithubShipEvent(db as never, 'release', release(), vi.fn())
+    expect(db.table('deploy_observations')).toEqual([])
+  })
+
   it('a failed project_repos lookup is a 500 so GitHub redelivers, never "no project"', async () => {
     const { db } = createFakeDb((q) => (q.table === 'project_repos' ? { error: { message: 'connection refused' } } : { data: null }))
     const schedule = vi.fn()

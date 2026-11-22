@@ -1,18 +1,39 @@
-# Angular quickstart
+# Bug report widget for Angular
 
 Source: https://kensaur.us/mushi-mushi/docs/quickstart/angular
 
 ---
-title: Angular quickstart
-description: "Add Mushi Mushi to an Angular 17+ app: one provideMushi() call registers the service and error handler, so uncaught errors and bug reports reach your queue."
+title: Bug report widget for Angular
+description: "Free, open-source bug report widget for Angular 17+: one provideMushi() call registers the service and error handler, so errors and reports reach your queue."
 ---
 
-# Angular quickstart
+# Bug report widget for Angular
 
-Same steps as the [React quickstart](/quickstart/react); only the install and the boot call differ.
+This page adds a report button to an Angular 17+ app. When something breaks,
+your users tap it and write one sentence. You get the likely cause in plain
+English, with a fix your AI editor can apply. Uncaught errors are reported
+too.
+
+The steps match the [React quickstart](/quickstart/react); only the install
+and the start-up call differ.
+
+## Get your project ID and API key
+
+The SDK needs two values from a Mushi Mushi project.
+
+- **By hand:** [create a free account](https://kensaur.us/mushi-mushi/admin/signup?src=quickstart-angular)
+  (no card) and create a project. The panel that opens shows the **project ID**
+  and an **API key** that starts with `mushi_`. Copy the key now: it is shown
+  once. You can mint another under **Set up → Test it → Generate API key**.
+- **Self-hosting?** Your own console gives you the same two values. See
+  [Self-hosting](/self-hosting).
+
+Angular keeps them in an environment file, shown below.
+
+## Install and register
 
 ```bash
-pnpm add @mushi-mushi/angular
+pnpm add mushi-mushi
 ```
 
 Angular CLI does not expose `import.meta.env`, so keep the project ID and the
@@ -25,13 +46,13 @@ export const environment = {
 }
 ```
 
-Register Mushi once in your app config. `provideMushi()` provides
-`MushiService`, routes uncaught errors to Mushi through Angular's
+Register Mushi Mushi once in your app config. `provideMushi()` provides
+`MushiService`, routes uncaught errors to Mushi Mushi through Angular's
 `ErrorHandler`, and starts the SDK at startup:
 
 ```ts filename="src/app/app.config.ts"
 import { type ApplicationConfig } from '@angular/core'
-import { provideMushi } from '@mushi-mushi/angular'
+import { provideMushi } from 'mushi-mushi/angular'
 import { environment } from '../environments/environment'
 
 export const appConfig: ApplicationConfig = {
@@ -41,13 +62,15 @@ export const appConfig: ApplicationConfig = {
 }
 ```
 
+**You'll see:** a small report button in the corner of your app after `ng serve` reloads.
+
   **1.0.2 and earlier:** `provideMushi()` did not return Angular providers,
   and the package needed the JIT compiler in production builds. Upgrade to
   1.0.3 or later. If you cannot, register the providers by hand:
 
   ```ts snippet-skip="1.0.2 fallback; the same file as the example above"
   import { ErrorHandler, type ApplicationConfig } from '@angular/core'
-  import { MUSHI_CONFIG, MushiErrorHandler, MushiService, type MushiConfig } from '@mushi-mushi/angular'
+  import { MUSHI_CONFIG, MushiErrorHandler, MushiService, type MushiConfig } from 'mushi-mushi/angular'
   import { environment } from '../environments/environment'
 
   const mushiConfig: MushiConfig = {
@@ -68,7 +91,7 @@ Report from a component:
 
 ```ts filename="src/app/feedback-button.component.ts"
 import { Component, inject } from '@angular/core'
-import { MushiService } from '@mushi-mushi/angular'
+import { MushiService } from 'mushi-mushi/angular'
 
 @Component({
   selector: 'app-feedback-button',
@@ -83,4 +106,4 @@ export class FeedbackButtonComponent {
 }
 ```
 
-API detail: [`@mushi-mushi/angular`](/sdks/angular). Widget behavior: [`@mushi-mushi/web`](/sdks/web).
+API detail: [`mushi-mushi/angular`](/sdks/angular). Widget behavior: [`mushi-mushi`](/sdks/web).

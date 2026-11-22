@@ -159,14 +159,11 @@ Operator-facing **admin console** UX lives in [`docs/admin/UX-UNIFICATION-BURNDO
 
 The docs site is deployed to **S3 + CloudFront** at `kensaur.us/mushi-mushi/docs/`, sharing the same distribution as the admin console (`kensaur.us-mushi-mushi`, `ap-northeast-1`). The static export from `pnpm build` is synced into the bucket under the `mushi-mushi/docs/` prefix.
 
-- **CI/CD**: `.github/workflows/deploy-docs.yml` triggers on push to `master` when `apps/docs/**` changes. Builds with `MUSHI_BASE_PATH=/mushi-mushi/docs`, syncs `out/` to S3, publishes both CloudFront Functions to the LIVE stage, then runs `scripts/associate-cloudfront-docs-functions.sh` to make sure the published functions are still attached to the docs cache behavior.
-- **CloudFront Functions** (live in `scripts/`):
-  - `cloudfront-mushi-docs-router.js` (viewer-request) — rewrites `/mushi-mushi/docs/foo` → `/mushi-mushi/docs/foo/index.html` so Nextra's static export resolves cleanly.
-  - `cloudfront-mushi-docs-response.js` (viewer-response) — synthesises a branded HTML body when the origin returns 403/404 from S3, so visitors never see the raw `NoSuchKey` XML.
-- **Infrastructure scripts** (idempotent — safe to re-run):
-  - `scripts/cloudfront-create-docs-behavior.sh` — clones the parent `/mushi-mushi/*` behavior into a dedicated `/mushi-mushi/docs/*` behavior and attaches the docs functions. One-shot; only needed when the behavior doesn't exist yet.
-  - `scripts/associate-cloudfront-docs-functions.sh` — re-asserts the function-association on every docs deploy. Soft-warns and exits 0 if the docs cache behavior is missing, so a missing infra step never blocks a content deploy.
-- **Manual infra workflow**: `.github/workflows/infra-cf-docs-behavior.yml` is a `workflow_dispatch` shim around `cloudfront-create-docs-behavior.sh`, with a `dry_run` input so an operator can preview the patched config before mutating the distribution. Lives outside `deploy-docs.yml` because it's a one-shot infra mutation, not a content deploy. Requires `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `CLOUDFRONT_DISTRIBUTION_ID` repo secrets.
+- **CI/CD**: `.github/workflows/deploy-docs.yml` triggers on push to `master` when `apps/docs/**` changes. Builds with `MUSHI_BASE_PATH=/mushi-mushi/docs`, syncs `out/` to S3 and publishes the code of `mushi-mushi-docs-response` to the LIVE stage. It never writes the kensaur.us distribution config.
+- **CloudFront Functions** (sources in `scripts/`):
+  - `cloudfront-mushi-docs-router.js` (viewer-request) — rewrites `/mushi-mushi/docs/foo` → `/mushi-mushi/docs/foo/index.html` so Nextra's static export resolves cleanly. Routing is owned and published by kensaurus/kensaur.us `infra/edge/`; this copy is kept for its tests until that repo takes them over.
+  - `cloudfront-mushi-docs-response.js` (viewer-response) — security headers and the `.txt` noindex tag. Published by `deploy-docs.yml`.
+- **Behaviours and associations**: the `/mushi-mushi/docs/*` cache behaviour, its function associations and its response headers policy attachment are owned by kensaurus/kensaur.us `infra/edge/`, the only writer of the kensaur.us distribution (E246VQ1C9QYZVB).
 
 ### Editorial 404 caveat
 

@@ -17,7 +17,7 @@
  */
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Badge, Btn, Callout, Card, Checkbox, DisclosurePanel, Loading } from '../ui'
+import { Badge, Btn, Callout, Card, Checkbox, DisclosurePanel, InfoHint, Loading } from '../ui'
 import { ConfirmDialog } from '../ConfirmDialog'
 import { PageLoadError } from '../PageLoadError'
 import { formatRelative } from '../ui/metrics'
@@ -25,7 +25,9 @@ import { apiFetchMutate } from '../../lib/supabase'
 import { usePageData } from '../../lib/usePageData'
 import {
   actionTitle,
+  cleanupBlockers,
   CLEANUP_STATUS,
+  GITHUB_TOKEN_SETTINGS_PATH,
   OUTCOME,
   shortSha,
   WHY_LABEL,
@@ -68,6 +70,7 @@ export function RepoCleanup({ projectId }: { projectId: string }) {
     return () => clearInterval(t)
   }, [running, reload])
   const finished = useMemo(() => (data?.actions ?? []).filter((a) => !waiting.includes(a)).slice(0, 10), [data, waiting])
+  const blockers = useMemo(() => cleanupBlockers(data?.repos ?? []), [data])
 
   if (error) return <PageLoadError error={error} resource="clean-up list" endpoint={base} onRetry={reload} />
   if (loading && !data) return <Loading text="Reading your repositories…" />
@@ -75,15 +78,22 @@ export function RepoCleanup({ projectId }: { projectId: string }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <Callout tone="info" label="How clean-up works">
-        <p className="text-xs text-fg-secondary">
-          Mushi lists only branches and pull requests it opened itself, each with the reason and the commit it points at.
-          Nothing changes until an owner or admin approves that exact list; the approval lasts {data.limits.approvalMinutes} minutes and runs once.
-          When it runs, Mushi checks every item again and refuses the default branch, protected branches, branches an open pull request uses, and anything that moved.
-          At most {data.limits.maxItems} items in one clean-up and {data.limits.perHour} clean-ups an hour per app.
-        </p>
-        <p className="mt-1 text-xs text-fg-muted">{data.raceNote}</p>
-      </Callout>
+      {/* What blocks the tab comes first, said once, with its fix. */}
+      {blockers.map((b) => (
+        <Callout
+          key={b.message}
+          tone="warn"
+          label={b.repos.length === data.repos.length ? 'Clean-up cannot read your repositories' : `Clean-up cannot read ${b.repos.join(', ')}`}
+          action={b.needsToken ? <Btn size="sm" to={GITHUB_TOKEN_SETTINGS_PATH}>Add token</Btn> : undefined}
+        >
+          <span className="text-xs" data-testid="repo-cleanup-blocker">{b.message}</span>
+        </Callout>
+      ))}
+      {/* How it works and the race note sit behind the info mark (round 3: three lines inline). */}
+      <div className="flex items-center gap-1.5 text-2xs text-fg-muted" data-testid="repo-cleanup-how">
+        <InfoHint content={`${howCleanupWorks(data.limits)} ${data.raceNote}`} />
+        <span>How clean-up works</span>
+      </div>
       {data.migrationPending && (
         <Callout tone="warn">
           <span className="text-xs">The clean-up log is not in this database yet (update 20261027183000_repo_housekeeping_items). You can read the list; running a clean-up waits for it.</span>
@@ -133,7 +143,7 @@ export function RepoCleanup({ projectId }: { projectId: string }) {
       {data.repos.length === 0 && <p className="text-xs text-fg-muted">No GitHub repository is connected to this app.</p>}
 
       {data.restorable.length > 0 && (
-        <RestoreCard items={data.restorable} canRequest={data.canRequest} busy={busy} onRestore={(itemIds) => post(`${base}/restore`, { itemIds }, () => 'Asked to restore. An owner or admin approves it before Mushi recreates the branches.')} />
+        <RestoreCard items={data.restorable} canRequest={data.canRequest} busy={busy} onRestore={(itemIds) => post(`${base}/restore`, { itemIds }, () => 'Asked to restore. An owner or admin approves it before Mushi Mushi recreates the branches.')} />
       )}
 
       {finished.length > 0 && (
@@ -149,7 +159,7 @@ export function RepoCleanup({ projectId }: { projectId: string }) {
           title={confirm.kind === 'execute' ? `${actionTitle(confirm.action)} now?` : `Reject "${actionTitle(confirm.action)}"?`}
           body={
             confirm.kind === 'execute'
-              ? 'Mushi checks each item again first and skips anything that moved or that an open pull request uses. Deleted branches can be restored from this tab at the commit shown; a closed pull request can be reopened on GitHub.'
+              ? 'Mushi Mushi checks each item again first and skips anything that moved or that an open pull request uses. Deleted branches can be restored from this tab at the commit shown; a closed pull request can be reopened on GitHub.'
               : 'The request closes and cannot be approved later. Ask again if you change your mind.'
           }
           details={confirm.kind === 'execute' ? <ItemList action={confirm.action} /> : undefined}
@@ -240,18 +250,15 @@ function RepoCard({ repo, canRequest, busy, staleDays, maxItems, onAsk }: {
         <h3 className="text-sm font-semibold text-fg">{repo.repo}</h3>
         {repo.defaultBranch && <span className="text-2xs text-fg-faint">default branch {repo.defaultBranch}</span>}
       </div>
-      {repo.error && (
-        <Callout tone="warn">
-          <span className="text-xs">{repo.error}</span>
-        </Callout>
-      )}
-      {repo.truncated && <p className="text-2xs text-fg-muted">GitHub listed more than Mushi reads at once; run another clean-up after this one to see the rest.</p>}
+      {/* The reason is stated once at the top of the tab (cleanupBlockers). */}
+      {repo.error && <p className="text-2xs text-fg-muted">Not read: see the note at the top.</p>}
+      {repo.truncated && <p className="text-2xs text-fg-muted">GitHub listed more than Mushi Mushi reads at once; run another clean-up after this one to see the rest.</p>}
 
       {!repo.error && (
         <section className="flex flex-col gap-1.5">
           <h4 className="text-xs font-medium text-fg">Branches to delete ({repo.branches.length})</h4>
           {repo.branches.length === 0 ? (
-            <p className="text-2xs text-fg-muted">Nothing to delete: every branch Mushi made is gone or still in use.{repo.gone > 0 ? ` ${repo.gone} are already gone from GitHub.` : ''}</p>
+            <p className="text-2xs text-fg-muted">Nothing to delete: every branch Mushi Mushi made is gone or still in use.{repo.gone > 0 ? ` ${repo.gone} are already gone from GitHub.` : ''}</p>
           ) : (
             <>
               <ul className="flex flex-col gap-1">
@@ -277,7 +284,7 @@ function RepoCard({ repo, canRequest, busy, staleDays, maxItems, onAsk }: {
         <section className="flex flex-col gap-1.5">
           <h4 className="text-xs font-medium text-fg">Fix pull requests to close ({repo.prs.length})</h4>
           {repo.prs.length === 0 ? (
-            <p className="text-2xs text-fg-muted">None: no open Mushi fix is replaced by a newer one, held by Opus, or without new commits for {staleDays} days.</p>
+            <p className="text-2xs text-fg-muted">None: no open Mushi Mushi fix is replaced by a newer one, held by Opus, or without new commits for {staleDays} days.</p>
           ) : (
             <>
               <ul className="flex flex-col gap-1">
@@ -306,7 +313,7 @@ function RepoCard({ repo, canRequest, busy, staleDays, maxItems, onAsk }: {
         <section className="flex flex-col gap-1">
           <h4 className="text-xs font-medium text-fg">Delete branches when a pull request merges</h4>
           <p className="text-2xs text-fg-muted">
-            GitHub can delete a pull request’s branch as soon as it merges, so branches stop piling up. This turns on “Automatically delete head branches” for {repo.repo}; Mushi never turns it off.
+            GitHub can delete a pull request’s branch as soon as it merges, so branches stop piling up. This turns on “Automatically delete head branches” for {repo.repo}; Mushi Mushi never turns it off.
             {!repo.canChangeSetting && ' The stored GitHub token cannot change repository settings: it needs "Administration: Read and write" on this repository.'}
           </p>
           <div>
@@ -344,7 +351,7 @@ function RestoreCard({ items, canRequest, busy, onRestore }: {
   return (
     <DisclosurePanel title="Restore a deleted branch" trailing={<span className="text-2xs font-normal text-fg-faint">{items.length}</span>}>
       <div className="flex flex-col gap-2 px-3 py-2">
-        <p className="text-2xs text-fg-muted">Mushi recreates the branch at the commit it pointed at when Mushi deleted it. It never overwrites a branch that exists again under the same name.</p>
+        <p className="text-2xs text-fg-muted">Mushi Mushi recreates the branch at the commit it pointed at when Mushi Mushi deleted it. It never overwrites a branch that exists again under the same name.</p>
         <ul className="flex flex-col gap-1">
           {items.map((i) => (
             <li key={i.id}>
@@ -371,4 +378,14 @@ function RestoreCard({ items, canRequest, busy, onRestore }: {
       </div>
     </DisclosurePanel>
   )
+}
+
+/** The rules of a clean-up, for the info mark (it was a five-line box above the list). @internal Exported for tests. */
+export function howCleanupWorks(limits: CleanupView['limits']): string {
+  return [
+    'Mushi Mushi lists only branches and pull requests it opened itself, each with the reason and the commit it points at.',
+    `Nothing changes until an owner or admin approves that exact list; the approval lasts ${limits.approvalMinutes} minutes and runs once.`,
+    'When it runs, Mushi Mushi checks every item again and refuses the default branch, protected branches, branches an open pull request uses, and anything that moved.',
+    `At most ${limits.maxItems} items in one clean-up and ${limits.perHour} clean-ups an hour per app.`,
+  ].join(' ')
 }

@@ -152,7 +152,7 @@ Anthropic is primary; OpenAI is the structured-output fallback.
 The client wiring ships in the SDK packages; you only publish page context.
 
 ```typescript
-import { useMushi } from '@mushi-mushi/react' // or the web/RN/Capacitor SDK
+import { useMushi } from 'mushi-mushi/react' // or the web/RN/Capacitor SDK
 
 function ActivityScreen() {
   const mushi = useMushi()

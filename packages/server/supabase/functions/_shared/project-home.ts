@@ -82,7 +82,7 @@ export const SDK_QUIET_MS = DAY
 export const SDK_SILENT_MS = 7 * DAY
 
 export const SITE_WATCH_HREF = '/inventory?tab=discovery'
-export const SITE_WATCH_CONNECT: ConnectHint = { label: 'Turn on the live-site watch', to: '/credits' }
+export const SITE_WATCH_CONNECT: ConnectHint = { label: 'Turn on the live-site watch', to: '/inventory?tab=discovery#site-watch' }
 
 export function errorSignal(id: HealthId, label: string, href: string, err: unknown): HealthSignal {
   const message = err instanceof Error ? err.message : String(err)
@@ -139,6 +139,31 @@ export interface ErrorsInput {
   everConnected: boolean
   latestAt: string | null
   sdkHref: string
+  /**
+   * Of today's reports, how many a person sent (not Sentry, an alarm, a setup
+   * task or a check). Undefined from callers that do not count it.
+   */
+  fromUsersToday?: number
+  /** The SDK has checked in at least once. */
+  sdkSeen?: boolean
+}
+
+/**
+ * Where today's reports came from, when not all were from users (owner's
+ * walkthrough, 2026-11-17: "1 new · Good" sat beside "Report button: Never
+ * checked in", which read as a contradiction). Null when it adds nothing.
+ */
+function sourceNote(input: ErrorsInput): string | null {
+  if (input.fromUsersToday == null || input.today === 0) return null
+  const other = input.today - input.fromUsersToday
+  if (other <= 0) return null
+  const users =
+    input.fromUsersToday > 0
+      ? `${input.fromUsersToday} from users`
+      : input.sdkSeen
+        ? 'none from users'
+        : 'no reports from users yet'
+  return `${other} from Sentry, alarms or Mushi Mushi checks · ${users}.`
 }
 
 export function errorsSignal(input: ErrorsInput): HealthSignal {
@@ -146,7 +171,8 @@ export function errorsSignal(input: ErrorsInput): HealthSignal {
   if (!input.everConnected) {
     return { ...base, status: 'not_connected', light: 'off', headline: 'No reports yet', detail: 'Install the SDK so your users can report bugs.', at: null, connect: { label: 'Install the SDK', to: input.sdkHref } }
   }
-  const before = `${input.yesterday} yesterday.`
+  const note = sourceNote(input)
+  const before = note ? `${note} ${input.yesterday} yesterday.` : `${input.yesterday} yesterday.`
   if (input.criticalToday > 0) {
     return { ...base, href: '/reports?days=1&severity=critical', status: 'ok', light: 'bad', headline: `${input.criticalToday} critical`, detail: `${plural(input.today, 'new report')} today; ${before}`, at: input.latestAt, connect: null }
   }
@@ -275,7 +301,7 @@ export interface Station {
 
 /** The pipeline stages each station adds up, in the pipeline's own order. */
 const STATION_STAGES: Array<{ id: StationId; label: string; stages: string[] }> = [
-  { id: 'fix', label: 'Fix ready', stages: ['pr', 'review'] },
+  { id: 'fix', label: 'Fix PRs', stages: ['pr', 'review'] },
   { id: 'ci', label: 'CI', stages: ['ci'] },
   { id: 'train', label: 'In train', stages: ['train'] },
   { id: 'merged', label: 'Merged', stages: ['merged'] },
@@ -455,6 +481,13 @@ export interface SitemapView {
 
 export const SITEMAP_MAX = 12
 const ID_SEGMENT = /^(?:\d+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{16,}|[A-Za-z0-9_-]{24,})$/i
+/**
+ * A kebab-case slug of words ("director-housing-rent-guide") is a page, not an
+ * id, however long: treating 24+ characters as an id merged distinct docs
+ * pages into one "/docs/:id" (Journey optimizer on Solo Boss Cloud,
+ * 2026-11-13). Ids and hashes carry digits or no dashes.
+ */
+const WORD_SLUG = /^[a-z]+(?:-[a-z]+)+$/
 
 /** A URL or route as a page path: no origin, query or hash; ids become `:id`. */
 export function normalizeRoute(raw: string | null | undefined): string | null {
@@ -470,7 +503,7 @@ export function normalizeRoute(raw: string | null | undefined): string | null {
   }
   path = path.split(/[?#]/)[0] ?? ''
   if (!path.startsWith('/')) path = `/${path}`
-  const segments = path.split('/').filter(Boolean).map((s) => (ID_SEGMENT.test(s) ? ':id' : s))
+  const segments = path.split('/').filter(Boolean).map((s) => (ID_SEGMENT.test(s) && !WORD_SLUG.test(s) ? ':id' : s))
   const out = `/${segments.join('/')}`
   return out.length > 120 ? out.slice(0, 120) : out
 }
@@ -616,6 +649,34 @@ export interface WeekRow {
   /** For this row, is more better? Drives the arrow's colour. */
   moreIsBetter: boolean
   href: string
+  /**
+   * Daily counts over both weeks, oldest first (WEEK_SERIES_DAYS UTC days
+   * from last week's first midnight; the last entry is today so far). Absent
+   * when the rows behind it could not all be read: no sparkline beats a
+   * wrong shape. Added 2026-11-18 for Home's per-row sparkline.
+   */
+  daily?: number[]
+}
+
+/** Days in a week row's series: last week and this week. */
+const WEEK_SERIES_DAYS = 14
+
+/**
+ * Count timestamps per UTC day from `start` (a UTC midnight), oldest first.
+ * Anything before `start` or past the last day is ignored; so is a bad date.
+ */
+export function dailyCounts(timestamps: ReadonlyArray<string | null | undefined>, start: string, days: number = WEEK_SERIES_DAYS): number[] {
+  const out = new Array<number>(days).fill(0)
+  const t0 = Date.parse(start)
+  if (!Number.isFinite(t0)) return out
+  for (const ts of timestamps) {
+    if (!ts) continue
+    const t = Date.parse(ts)
+    if (!Number.isFinite(t) || t < t0) continue
+    const i = Math.floor((t - t0) / DAY)
+    if (i < days) out[i] += 1
+  }
+  return out
 }
 
 export function buildWeek(c: {
@@ -623,13 +684,19 @@ export function buildWeek(c: {
   critical: [number, number]
   merged: [number, number]
   sessions: [number, number] | null
+  /** Per-row daily series (dailyCounts); a row left out or null gets none. */
+  daily?: Partial<Record<WeekRow['id'], number[] | null>>
 }): WeekRow[] {
+  const series = (id: WeekRow['id']) => {
+    const d = c.daily?.[id]
+    return d && d.length > 0 ? { daily: d } : {}
+  }
   const rows: WeekRow[] = [
-    { id: 'reports', label: 'Bug reports', thisWeek: c.reports[0], lastWeek: c.reports[1], moreIsBetter: false, href: '/reports?days=7' },
-    { id: 'critical', label: 'Critical bugs', thisWeek: c.critical[0], lastWeek: c.critical[1], moreIsBetter: false, href: '/reports?days=7&severity=critical' },
-    { id: 'merged', label: 'Fixes merged', thisWeek: c.merged[0], lastWeek: c.merged[1], moreIsBetter: true, href: FIXES_MERGED_HREF },
+    { id: 'reports', label: 'Bug reports', thisWeek: c.reports[0], lastWeek: c.reports[1], moreIsBetter: false, href: '/reports?days=7', ...series('reports') },
+    { id: 'critical', label: 'Critical bugs', thisWeek: c.critical[0], lastWeek: c.critical[1], moreIsBetter: false, href: '/reports?days=7&severity=critical', ...series('critical') },
+    { id: 'merged', label: 'Fixes merged', thisWeek: c.merged[0], lastWeek: c.merged[1], moreIsBetter: true, href: FIXES_MERGED_HREF, ...series('merged') },
   ]
-  if (c.sessions) rows.push({ id: 'sessions', label: 'User visits', thisWeek: c.sessions[0], lastWeek: c.sessions[1], moreIsBetter: true, href: '/dashboard?view=users' })
+  if (c.sessions) rows.push({ id: 'sessions', label: 'User visits', thisWeek: c.sessions[0], lastWeek: c.sessions[1], moreIsBetter: true, href: '/dashboard?view=users', ...series('sessions') })
   return rows
 }
 

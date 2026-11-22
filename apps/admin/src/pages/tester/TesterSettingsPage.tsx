@@ -296,9 +296,9 @@ export function TesterSettingsPage() {
           <hr className="border-edge" />
 
           <section className="space-y-3" id="feedback">
-            <h2 className="text-sm font-semibold text-fg">Send feedback about Mushi Bounties</h2>
+            <h2 className="text-sm font-semibold text-fg">Send feedback about Mushi Mushi Bounties</h2>
             <p className="text-2xs text-fg-secondary">
-              Found a bug in the platform itself? Have a suggestion? This goes directly to the Mushi team.
+              Found a bug in the platform itself? Have a suggestion? This goes directly to the Mushi Mushi team.
             </p>
             {feedbackState === 'sent' ? (
               <ContainedBlock tone="info">

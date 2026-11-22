@@ -1,19 +1,19 @@
-# @mushi-mushi/vue
+# mushi-mushi/vue
 
 Source: https://kensaur.us/mushi-mushi/docs/sdks/vue
 
 ---
-title: '@mushi-mushi/vue'
-description: Mushi Mushi for Vue 3, @mushi-mushi/vue. MushiPlugin, the useMushi, useMushiReport and useMushiWidget composables, user identity and submitting reports.
+title: 'mushi-mushi/vue'
+description: Mushi Mushi for Vue 3, mushi-mushi/vue. MushiPlugin, the useMushi, useMushiReport and useMushiWidget composables, user identity and submitting reports.
 ---
 
-# `@mushi-mushi/vue`
+# `mushi-mushi/vue`
 
-The Mushi Mushi Vue 3 plugin and composables over [`@mushi-mushi/web`](/sdks/web). Shared wrapper
+The Mushi Mushi Vue 3 plugin and composables over [`mushi-mushi`](/sdks/web). Shared wrapper
 notes: [Framework wrappers](/sdks/framework-wrappers).
 
 ```bash
-npm install @mushi-mushi/vue
+npm install mushi-mushi
 ```
 
   **Still on Vue 2?** This adapter requires Vue 3. See the [Vue 2 → Vue 3 migration guide](/migrations/vue-2-to-vue-3), which walks through the bridge build and the Mushi-specific bits.
@@ -23,7 +23,7 @@ See [Quickstart → Vue](/quickstart/vue) for the full setup walkthrough.
 ## API surface
 
 ```ts
-import { MushiPlugin, useMushi, useMushiReport, useMushiWidget } from '@mushi-mushi/vue'
+import { MushiPlugin, useMushi, useMushiReport, useMushiWidget } from 'mushi-mushi/vue'
 ```
 
 | Export | Purpose |
@@ -41,7 +41,7 @@ still runs, and the error is sent with `captureException()`.
 ```ts
 // main.ts
 import { createApp } from 'vue'
-import { MushiPlugin } from '@mushi-mushi/vue'
+import { MushiPlugin } from 'mushi-mushi/vue'
 import App from './App.vue'
 
 createApp(App)
@@ -57,7 +57,7 @@ createApp(App)
 ```vue
 <script setup lang="ts">
 import { watch } from 'vue'
-import { useMushi } from '@mushi-mushi/vue'
+import { useMushi } from 'mushi-mushi/vue'
 import { useAuth } from './auth'
 
 const mushi = useMushi()
@@ -73,7 +73,7 @@ watch(user, (u) => {
 
 ```vue
 <script setup lang="ts">
-import { useMushiReport } from '@mushi-mushi/vue'
+import { useMushiReport } from 'mushi-mushi/vue'
 
 const { submitReport } = useMushiReport()
 </script>

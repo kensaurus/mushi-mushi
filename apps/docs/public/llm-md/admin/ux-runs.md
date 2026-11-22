@@ -5,6 +5,9 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/ux-runs
 ---
 title: UX runs
 description: The UX runs page in Mushi Mushi shows each screen your agent worked on in a mushi ux run, with its plan, attempts, before/after screenshots, and what was kept.
+robots:
+  index: false
+  follow: true
 ---
 
 # UX runs
@@ -59,7 +62,7 @@ draft PR. You need, in the app's front end repo:
 
 Pick the model from your Cursor account's list (with its settings, such as
 effort and context; this needs a Cursor key under Settings → AI keys) and,
-optionally, a skill from the synced skills catalog. Mushi starts it with a
+optionally, a skill from the synced skills catalog. Mushi Mushi starts it with a
 `repository_dispatch` event through your GitHub connection,
 at most three times an hour per app. When it cannot (no workflow, no connection,
 GitHub refused), the card shows the `gh workflow run` command to start it yourself.
@@ -126,10 +129,14 @@ decides everything else:
 
 **Run now** starts it from the console. The start page comes from your app (its last
 test, its live-site watch or site audit address) and the goal is plain words you can
-change. The test runs on your own computer, where its browser and AI run: if Mushi runs
+change. The test runs on your own computer, where its browser and AI run: if Mushi Mushi runs
 there for this app (`mushi worker install`, shown on Pipeline → Workers), it picks the
-test up within a minute and the page follows it live. If not, the page says so and shows
-the one thing to set up. Pick **Look around, file nothing** to see where a visitor gets
+test up within a minute and the page follows it live. The status at the top of the page
+shows your computer's state (online, busy, offline, paused, out of date) and, when it
+cannot run a test, the one command that fixes it with a copy button: `mushi work --daemon`
+to start an offline worker, `mushi worker install` the first time, or
+`npm i -g @mushi-mushi/cli@latest` (then restart the worker) when it is too old. A paused
+computer gets **Open Workers**, where you turn a lane back on. Pick **Look around, file nothing** to see where a visitor gets
 stuck, or **File what stops them** to turn each problem into a bug report.
 
 From a terminal it is the same run:
@@ -146,8 +153,11 @@ The run is signed out in a clean browser. It may only write to your app's own or
 forms and anything labelled delete or revoke are refused. Without an account it stops at
 your sign-up page and says so; `--dry-run` never writes to your app.
 
-The page shows each test: time to first value, steps, how many visitors reached the goal,
-the trend over tests, and every step with its screenshot and wait. A waiting test can be
+The status also gives the last test's time to first value, how many visitors reached the
+goal, and the number of tests. The history lists each test with a state mark (reached ✓,
+stalled ✕, running, waiting, stopped) and the time-to-goal trend. A visitor's steps are a
+strip of screenshots, each with a bar for how long the app made them wait and read on one
+scale; the step where the visitor stalled is marked red. A waiting test can be
 cancelled; a failed one says why. Once an app has a finished test, Home shows a
 **First-time setup** light with the minutes and steps.
 

@@ -173,6 +173,10 @@ describe('MCP protocol handshake', () => {
       'refresh_recipe',
       'run_design_deviance',
       'run_store_review',
+      // Journey optimizer: starts a site scan (Firecrawl reads the live site).
+      'scan_site_journeys',
+      // Opens or stops the on-demand visit recording window.
+      'record_journeys',
       // Console parity: settings, the store review pull, and the operator records.
       'set_design_settings',
       'pull_store_reviews',
@@ -711,6 +715,16 @@ describe('deprecated-alias backward compatibility', () => {
     expect(JSON.parse(content[0]!.text)).toMatchObject({ mode: 'dispatch', ready: true })
     const last = content[content.length - 1]!.text
     expect(last.includes('setup_check') && last.includes('diagnose_setup')).toBe(true)
+  })
+
+  it('diagnoses ingest with an account key by naming the project on the admin route', async () => {
+    // The SDK route refuses account keys (they cannot ingest): fall back, don't fail.
+    fetchStub.enqueue({ ok: false, error: { code: 'ORG_KEY_NOT_ALLOWED', message: 'Org-scoped keys cannot be used for SDK ingest.' } }, 403)
+    fetchStub.enqueue({ ok: true, data: { ready: true, required_complete: 4, required_total: 4, steps: [], project_id: PROJECT_ID, project_name: 'Acme' } })
+    const result = await client.callTool({ name: 'diagnose_setup', arguments: { mode: 'ingest' } })
+    expect(result.isError).toBeFalsy()
+    expect(fetchStub.calls.map((c) => c.url).some((u) => u.endsWith(`/v1/admin/projects/${PROJECT_ID}/ingest-setup`))).toBe(true)
+    expect(JSON.parse((result.content as Array<{ type: string; text: string }>)[0]!.text)).toMatchObject({ mode: 'ingest', ready: true })
   })
 
   it('an explicit mode on a setup alias wins over its default', async () => {

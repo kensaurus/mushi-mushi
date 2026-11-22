@@ -1,13 +1,13 @@
 /**
  * FILE: PromptLabSnapshotStrip.tsx
- * PURPOSE: AI prompts status: which prompts are in use, which are being
- *          tested, and the best grade so far (PageStatus, P1).
+ * PURPOSE: AI prompts status: one recommendation in plain words with its button
+ *          (promptRecommendation), then prompts in use, steps testing and the best grade.
  */
 
-import { PageStatus } from '../ui'
+import { Btn, PageStatus } from '../ui'
+import { BarCell } from '../signal/BarCell'
 import type { PromptLabStats } from './PromptLabStatsTypes'
-import { bestScoreSource } from './types'
-import { pluralizeWithCount } from '../../lib/format'
+import type { PromptRecommendation, PromptRecommendationAction } from './promptRecommendation'
 
 const promptLabLinks = {
   active: '/prompt-lab?tab=prompts',
@@ -19,25 +19,30 @@ interface Props {
   stats: PromptLabStats
   statsFetchedAt: string | null
   statsValidating?: boolean
-  /** The best score belongs to a global default, scored on other projects. */
-  bestIsBuiltIn?: boolean
   statLabels?: Record<string, string>
+  /** "1 test running · 1 not started", from the prompt list (promptTestSummary). */
+  testSummary?: { text: string; testing: number } | null
+  /** The one recommendation the line leads with (promptRecommendation). */
+  recommendation: PromptRecommendation
+  /** Runs the recommendation's button. */
+  onAction?: (action: PromptRecommendationAction) => void
 }
 
-export function PromptLabSnapshotStrip({ stats, statsFetchedAt, statsValidating, bestIsBuiltIn = false, statLabels }: Props) {
+export function PromptLabSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels, testSummary = null, recommendation, onAction }: Props) {
+  // No grade is a dash in the tile: the sentence says "no grades" once (2026-11-19: 4 times).
   const best = stats.bestScore != null ? `${Math.round(stats.bestScore * 100)}%` : '—'
-  const source = bestScoreSource(stats) ?? (stats.bestScore != null ? 'grade' : null)
-  const testing =
-    stats.candidatePrompts > 0
-      ? `${pluralizeWithCount(stats.candidatePrompts, 'prompt')} being tested${stats.untestedAbCount > 0 ? `, ${stats.untestedAbCount} with no grades yet` : ''}`
-      : 'none being tested'
-  const bestPart =
-    stats.bestScore != null ? `; best grade ${best}${source ? ` (${source}${bestIsBuiltIn ? ', built-in default' : ''})` : ''}` : ''
   return (
     <PageStatus
       ariaLabel="AI prompts status"
-      tone={stats.untestedAbCount > 0 ? 'info' : 'ok'}
-      sentence={`${pluralizeWithCount(stats.activePrompts, 'prompt')} in use, ${testing}${bestPart}.`}
+      tone={recommendation.tone}
+      sentence={recommendation.sentence}
+      action={
+        recommendation.action && recommendation.actionLabel && onAction ? (
+          <Btn size="sm" variant={recommendation.tone === 'neutral' ? 'ghost' : 'primary'} onClick={() => onAction(recommendation.action!)} data-testid="prompt-lab-lead-action">
+            {recommendation.actionLabel}
+          </Btn>
+        ) : undefined
+      }
       freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
       metrics={[
         {
@@ -47,9 +52,11 @@ export function PromptLabSnapshotStrip({ stats, statsFetchedAt, statsValidating,
           to: promptLabLinks.active,
         },
         {
-          label: statLabels?.candidates ?? 'Being tested',
-          value: stats.candidatePrompts,
-          hint: 'Copies of a prompt collecting grades before they replace it.',
+          // Steps whose test gets reports: "2 steps with a test" beside one running read as two
+          // running (2026-11-19).
+          label: statLabels?.candidates ?? 'Steps testing',
+          value: testSummary ? testSummary.testing : stats.candidatePrompts,
+          hint: 'Steps whose test version gets a share of reports and collects grades before it can replace the one in use.',
           to: promptLabLinks.candidates,
         },
         {
@@ -57,6 +64,7 @@ export function PromptLabSnapshotStrip({ stats, statsFetchedAt, statsValidating,
           value: best,
           hint: 'Highest average grade across prompts in use and being tested. Opens Triage grading.',
           to: promptLabLinks.bestScore,
+          visual: stats.bestScore != null ? <BarCell value={Math.round(stats.bestScore * 100)} max={100} label={`Best grade ${best}`} tone={stats.bestScore >= 0.8 ? 'ok' : stats.bestScore >= 0.6 ? 'warn' : 'danger'} /> : undefined,
         },
       ]}
     />

@@ -248,10 +248,10 @@ export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }
     const { data: projects } = accessibleIds.length
       ? await db
           .from('projects')
-          .select('id, name, slug, created_at')
+          .select('id, name, slug, created_at, organization_id')
           .in('id', accessibleIds)
           .order('created_at', { ascending: true })
-      : { data: [] as Array<{ id: string; name: string; slug: string; created_at: string }> };
+      : { data: [] as Array<{ id: string; name: string; slug: string; created_at: string; organization_id: string | null }> };
 
     if (!projects || projects.length === 0) {
       return c.json({
@@ -454,6 +454,10 @@ export function registerOnboardingSetupRoutes(app: Hono<{ Variables: Variables }
         project_name: p.name,
         project_slug: p.slug,
         created_at: p.created_at,
+        // The team that owns it, from the row: the console's project→team memory
+        // reads only this (audit 2026-11-11: tagging the list with the ACTIVE team
+        // filed other teams' apps under an empty team and the switch reverted).
+        organization_id: (p as { organization_id?: string | null }).organization_id ?? null,
         steps,
         required_total: requiredSteps.length,
         required_complete: completeRequired,

@@ -107,19 +107,38 @@ const META_PILL_BASE =
   'inline-flex items-center rounded-sm border px-1.5 py-0.5 text-2xs font-semibold tabular-nums'
 
 const PLATFORM_PILL: Record<string, string> = {
-  ios: `${META_PILL_BASE} ${CHIP_TONE.infoSubtle} uppercase tracking-wide`,
-  android: `${META_PILL_BASE} ${CHIP_TONE.okSubtle} uppercase tracking-wide`,
-  web: `${META_PILL_BASE} ${CHIP_TONE.brandSubtle} uppercase tracking-wide`,
-  macos: `${META_PILL_BASE} bg-surface-overlay text-fg-secondary border-edge-subtle uppercase tracking-wide`,
-  darwin: `${META_PILL_BASE} bg-surface-overlay text-fg-secondary border-edge-subtle uppercase tracking-wide`,
-  windows: `${META_PILL_BASE} bg-surface-overlay text-fg-secondary border-edge-subtle uppercase tracking-wide`,
-  win32: `${META_PILL_BASE} bg-surface-overlay text-fg-secondary border-edge-subtle uppercase tracking-wide`,
-  linux: `${META_PILL_BASE} bg-surface-overlay text-fg-muted border-edge-subtle uppercase tracking-wide`,
+  ios: `${META_PILL_BASE} ${CHIP_TONE.infoSubtle}`,
+  android: `${META_PILL_BASE} ${CHIP_TONE.okSubtle}`,
+  web: `${META_PILL_BASE} ${CHIP_TONE.brandSubtle}`,
+  macos: `${META_PILL_BASE} bg-surface-overlay text-fg-secondary border-edge-subtle`,
+  darwin: `${META_PILL_BASE} bg-surface-overlay text-fg-secondary border-edge-subtle`,
+  windows: `${META_PILL_BASE} bg-surface-overlay text-fg-secondary border-edge-subtle`,
+  win32: `${META_PILL_BASE} bg-surface-overlay text-fg-secondary border-edge-subtle`,
+  linux: `${META_PILL_BASE} bg-surface-overlay text-fg-muted border-edge-subtle`,
+}
+
+/** A platform as people write it ("JavaScript", "iOS"), not the raw "JAVASCRIPT". */
+const PLATFORM_NAME: Record<string, string> = {
+  javascript: 'JavaScript',
+  node: 'Node.js',
+  ios: 'iOS',
+  android: 'Android',
+  web: 'Web',
+  macos: 'macOS',
+  darwin: 'macOS',
+  windows: 'Windows',
+  win32: 'Windows',
+  linux: 'Linux',
+  python: 'Python',
+}
+
+export function platformLabel(platform: string): string {
+  return PLATFORM_NAME[platform.toLowerCase()] ?? platform
 }
 
 export function platformPillClass(platform: string): string {
   const key = platform.toLowerCase()
-  return PLATFORM_PILL[key] ?? `${META_PILL_BASE} bg-surface-overlay text-fg-secondary border-edge-subtle uppercase tracking-wide`
+  return PLATFORM_PILL[key] ?? `${META_PILL_BASE} bg-surface-overlay text-fg-secondary border-edge-subtle`
 }
 
 export const BROWSER_CHIP: Record<'browser' | 'engine' | 'os', string> = {

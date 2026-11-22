@@ -1,8 +1,8 @@
 {
   "name": "mushi-mushi",
   "displayName": "Mushi Mushi",
-  "version": "0.30.2",
-  "description": "Triage user-felt bugs, pull evidence (screenshots, console logs, network requests), check blast radius, and dispatch fix PRs — all from your AI coding agent. Mushi sees what users feel; Sentry sees what code throws.",
+  "version": "0.31.8",
+  "description": "One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code. From your AI coding agent: triage user-felt bugs, pull evidence (screenshots, console logs, network requests), check blast radius, and dispatch fix PRs. Ships the Mushi Mushi skills for setup, triage, debugging, tests and SDK upgrades. Mushi sees what users feel; Sentry sees what code throws.",
   "author": {
     "name": "Mushi Mushi",
     "url": "https://kensaur.us/mushi-mushi"
@@ -13,11 +13,11 @@
   "license": "MIT",
   "keywords": [
     "bug-tracking",
-    "error-monitoring",
+    "vibe-coding",
     "mcp",
     "triage",
     "ai-debugging",
-    "observability",
+    "code-quality",
     "user-feedback",
     "auto-fix",
     "developer-tools"
@@ -44,6 +44,12 @@
     }
   },
   "skills": [
+    "skills/mushi-check-live-app",
+    "skills/mushi-debug",
+    "skills/mushi-mushi",
+    "skills/mushi-sdk-upgrade",
+    "skills/mushi-setup",
+    "skills/mushi-test",
     "skills/mushi-triage"
   ],
   "rules": [

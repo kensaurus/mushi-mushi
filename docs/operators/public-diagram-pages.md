@@ -81,7 +81,7 @@ The fix is already in the repo, but the deploy role cannot run it:
   Distribution-level custom error responses are deliberately not used,
   because the distribution serves every kensaur.us app.
 - **Same origin.** `/mushi-mushi/docs/*` was cloned from the `/mushi-mushi/*`
-  behavior (`scripts/cloudfront-create-docs-behavior.sh`), so both use the
+  behavior (kensaurus/kensaur.us `infra/edge/`), so both use the
   same S3 website origin. One per-bucket ErrorDocument covers docs paths and
   `/r/` paths alike.
 - **Status stays 404.** S3 serves the error document with status 404, never

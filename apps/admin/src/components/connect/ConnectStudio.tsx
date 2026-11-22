@@ -11,6 +11,7 @@
  * - @mushi-mushi/mcp/clients, ClientConnectButton, admin ui primitives
  */
 
+import { Fragment, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { McpClientDef } from '@mushi-mushi/mcp/clients'
 import {
@@ -20,7 +21,8 @@ import {
   type ConnectLane,
 } from '@mushi-mushi/marketing-ui'
 import { ClientConnectButton } from '../ClientConnectButton'
-import { CopyButton, Panel } from '../ui'
+import { CopyButton, Panel, RelativeTime } from '../ui'
+import { StatusPill } from '../signal/StatusMark'
 import { BrandIcon, resolveBrand } from '../ui/BrandIcon'
 import { LINK_ACCENT } from '../../lib/chipTone'
 import { IconTerminal } from '../icons'
@@ -82,9 +84,9 @@ function SkillsLane({ client }: { client: McpClientDef }) {
   // Agent-install prompt (Sentry "Copy Prompt" pattern) — mirrors the public
   // /connect page so both onboarding surfaces lead with the zero-typing path.
   const agentPrompt =
-    'Install the Mushi skills from github.com/kensaurus/mushi-mushi ' +
+    'Install the Mushi Mushi skills from github.com/kensaurus/mushi-mushi ' +
     '(`npx skills add kensaurus/mushi-mushi`), then run the mushi-setup skill to wire the ' +
-    'Mushi SDK and MCP server into this app and send a test report to verify the connection.'
+    'Mushi Mushi SDK and MCP server into this app and send a test report to verify the connection.'
 
   return (
     <div className="space-y-4">
@@ -92,7 +94,7 @@ function SkillsLane({ client }: { client: McpClientDef }) {
       <div className="space-y-2">
         <p className="text-xs font-medium text-fg">Fastest: paste this prompt into {client.label}</p>
         <div className="flex items-center gap-2">
-          <code className="min-w-0 flex-1 break-all rounded-md border border-edge-subtle bg-surface-raised px-2 py-1.5 font-mono text-xs text-fg-secondary">
+          <code className="min-w-0 flex-1 break-words rounded-md border border-edge-subtle bg-surface-raised px-2 py-1.5 font-mono text-xs text-fg-secondary">
             {agentPrompt}
           </code>
           <CopyButton value={agentPrompt} label="Copy" copiedLabel="Copied" size="sm" />
@@ -102,21 +104,25 @@ function SkillsLane({ client }: { client: McpClientDef }) {
         </p>
       </div>
       <div className="space-y-2">
-        <p className="text-xs font-medium text-fg">Or install Mushi skills yourself</p>
+        <p className="text-xs font-medium text-fg">Or install Mushi Mushi skills yourself</p>
         <div className="flex items-center gap-2">
-          <code className="min-w-0 flex-1 break-all rounded-md border border-edge-subtle bg-surface-raised px-2 py-1.5 font-mono text-xs text-fg-secondary">
+          <code className="min-w-0 flex-1 break-words rounded-md border border-edge-subtle bg-surface-raised px-2 py-1.5 font-mono text-xs text-fg-secondary">
             {skillsCmd}
           </code>
           <CopyButton value={skillsCmd} label="Copy" copiedLabel="Copied" size="sm" />
         </div>
         <p className="text-2xs text-fg-muted">
-          {/* The repo's skills/ folder ships these five; workflow-fix-and-ship
-              is not one of them (QA bug 267). */}
-          Adds <code className="font-mono text-2xs">mushi-setup</code>,{' '}
-          <code className="font-mono text-2xs">mushi-health</code>,{' '}
-          <code className="font-mono text-2xs">mushi-debug</code>,{' '}
-          <code className="font-mono text-2xs">mushi-integration</code> and{' '}
-          <code className="font-mono text-2xs">mushi-mushi</code> to {client.label}.
+          {/* The names come from CONNECT_SKILLS.skillNames, which
+              sync-skills --check holds to the repo's skills/ folder;
+              workflow-fix-and-ship is not one of them (QA bug 267). */}
+          Adds{' '}
+          {CONNECT_SKILLS.skillNames.map((name, i, all) => (
+            <Fragment key={name}>
+              {i > 0 && (i === all.length - 1 ? ' and ' : ', ')}
+              <code className="font-mono text-2xs">{name}</code>
+            </Fragment>
+          ))}{' '}
+          to {client.label}.
         </p>
       </div>
       <div className="rounded-md border border-edge-subtle bg-surface-hover/30 p-3 text-xs text-fg-muted space-y-1">
@@ -138,9 +144,21 @@ function SkillsLane({ client }: { client: McpClientDef }) {
 interface ConnectStudioProps {
   projectId?: string | null
   projectName?: string | null
+  /**
+   * An editor already connected (lib/connectEditor.ts): the picker folds to
+   * "Connected ✓ · add another" until opened (owner, 2026-11-18).
+   */
+  connectedEditor?: { lastSeenAt: string | null } | null
 }
 
-export function ConnectStudio({ projectId, projectName }: ConnectStudioProps) {
+const FOLD_TOGGLE =
+  'inline-flex h-7 items-center rounded-sm border border-edge bg-surface-raised px-2 text-2xs font-semibold text-fg ' +
+  'motion-safe:transition-transform motion-safe:duration-150 hover:-translate-y-px hover:border-accent hover:text-accent ' +
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent'
+
+export function ConnectStudio({ projectId, projectName, connectedEditor }: ConnectStudioProps) {
+  const [addingAnother, setAddingAnother] = useState(false)
+  const folded = Boolean(connectedEditor) && !addingAnother
   const {
     clients,
     selectedId,
@@ -188,7 +206,8 @@ export function ConnectStudio({ projectId, projectName }: ConnectStudioProps) {
         <div className="rounded-md border border-edge-subtle bg-surface-hover/30 px-3 py-2">
           <p className="text-2xs font-medium text-fg-muted mb-1">MCP endpoint for OAuth sign-in (manual setup)</p>
           <div className="flex items-center gap-2">
-            <code className="min-w-0 flex-1 break-all font-mono text-2xs text-fg-secondary">
+            {/* One line that scrolls: wrapping broke the URL at its hyphen ("mushi-/mushi") on a phone. */}
+            <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap font-mono text-2xs text-fg-secondary">
               {RESOLVED_MCP_OAUTH_URL}
             </code>
             <CopyButton value={RESOLVED_MCP_OAUTH_URL} label="Copy endpoint" copiedLabel="Copied" size="sm" />
@@ -207,8 +226,31 @@ export function ConnectStudio({ projectId, projectName }: ConnectStudioProps) {
 
   return (
     <div className="space-y-4">
+      {connectedEditor && (
+        <div
+          className="ci-rise flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-ok/45 bg-ok-muted px-3 py-2"
+          data-testid="connect-editor-connected"
+        >
+          <StatusPill status="passed" label="Editor connected" />
+          {connectedEditor.lastSeenAt ? (
+            <span className="text-xs text-fg-secondary">
+              Last check-in <RelativeTime value={connectedEditor.lastSeenAt} />
+            </span>
+          ) : null}
+          <button
+            type="button"
+            className={`${FOLD_TOGGLE} ml-auto`}
+            aria-expanded={!folded}
+            aria-controls="connect-client-picker"
+            onClick={() => setAddingAnother((v) => !v)}
+          >
+            {folded ? 'Add another editor' : 'Hide the editor list'}
+          </button>
+        </div>
+      )}
+      {!folded && (
       <Panel>
-        <div className="p-4 sm:p-5">
+        <div className="p-4 sm:p-5" id="connect-client-picker">
           <ConnectLanePicker
             bordered={false}
             surface="operator"
@@ -228,15 +270,14 @@ export function ConnectStudio({ projectId, projectName }: ConnectStudioProps) {
           />
         </div>
       </Panel>
+      )}
 
       <div className="flex items-center gap-2 text-2xs text-fg-muted px-1">
         <IconTerminal size={12} aria-hidden />
-        <span>
-          Want the full manual setup?{' '}
-          <Link to="/mcp" className={LINK_ACCENT}>
-            Open MCP console →
-          </Link>
-        </span>
+        {/* A link, not a question over it (round-3 review, 2026-11-19: stacked instruction lines). */}
+        <Link to="/mcp" className={LINK_ACCENT}>
+          Manual MCP setup →
+        </Link>
       </div>
     </div>
   )

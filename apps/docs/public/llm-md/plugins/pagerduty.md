@@ -13,7 +13,7 @@ Pages whoever is on call when Mushi Mushi triages a bug as critical, and resolve
 the page when the fix lands.
 
 **Most people don't need the plugin.** Add PagerDuty on the console's
-**Integrations** page (paste the Events API v2 routing key) and Mushi pages
+**Integrations** page (paste the Events API v2 routing key) and Mushi Mushi pages
 and resolves for you. The plugin below is for sending the PagerDuty calls
 from your own server.
 
@@ -21,7 +21,7 @@ from your own server.
 
 1. In PagerDuty, go to **Services → your service → Integrations** and add the **Events API v2** integration.
 2. Copy the 32-character **Integration Key** (the routing key).
-3. Start the server where Mushi can reach it over public HTTPS:
+3. Start the server where Mushi Mushi can reach it over public HTTPS:
 
    ```bash
    npm i @mushi-mushi/plugin-pagerduty
@@ -33,7 +33,7 @@ from your own server.
 
 4. In the console: **Marketplace → PagerDuty Escalation → Install**. Set the
    webhook URL to `https://<your-host>/mushi/webhook`, and use the form's
-   signing secret (Mushi generates one) as `MUSHI_PLUGIN_SECRET`. The listing subscribes to `report.classified` and
+   signing secret (Mushi Mushi generates one) as `MUSHI_PLUGIN_SECRET`. The listing subscribes to `report.classified` and
    `sla.breached`; add `fix.applied` and `report.status_changed` so pages
    resolve on their own.
 
@@ -42,19 +42,19 @@ from your own server.
 | Event | Action |
 | --- | --- |
 | `report.classified` with severity ≥ `SEVERITY_THRESHOLD` | Sends a PagerDuty `trigger` |
-| `sla.breached` | Sends a `trigger` (Mushi does not emit this event yet) |
+| `sla.breached` | Sends a `trigger` (Mushi Mushi does not emit this event yet) |
 | `fix.applied` | Sends a `resolve` with the same `dedup_key` |
 | `report.status_changed` to `fixed` or `resolved` | Sends a `resolve` with the same `dedup_key` |
 
 PagerDuty event fields:
 
-| PagerDuty field | Mushi source |
+| PagerDuty field | Mushi Mushi source |
 | --- | --- |
 | `dedup_key` | `mushi::`, so a re-sent event updates the same incident |
 | `summary` | report `title` (or `Mushi: `) |
 | `source` | `mushi-mushi` |
 | `severity` | `critical → critical`, `high → error`, `medium → warning`, `low → info` |
-| `custom_details` | the full Mushi event envelope |
+| `custom_details` | the full Mushi Mushi event envelope |
 
 ## Troubleshooting
 

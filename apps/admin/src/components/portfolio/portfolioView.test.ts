@@ -8,7 +8,6 @@ import {
   kindLabel,
   needsALook,
   openReportsText,
-  portfolioStatusSentence,
   radarLabel,
   groupRadarDetectors,
   radarErrorSentence,
@@ -17,6 +16,7 @@ import {
   sdkLabel,
   sortPortfolioCards,
   spendText,
+  splitPublicDemo,
 } from './portfolioView'
 
 const card = (over: Partial<PortfolioCard>): PortfolioCard => ({
@@ -64,7 +64,7 @@ describe('portfolioView', () => {
     expect(radarLabel({ checkedAt: '2026-10-02T00:00:00Z', status: 'error', open: { error: 0, warn: 0, info: 0 }, unchecked: 0, errored: 1 })).toMatchObject({ text: 'Risk checks failed', tone: 'danger' })
   })
 
-  it("a Mushi setup chore is named as a chore, never as the app's top problem", () => {
+  it("a Mushi Mushi setup chore is named as a chore, never as the app's top problem", () => {
     // Live 2026-10-27: every card read "Needs attention" with the same next
     // step, the no-spend-cap setup check, while the app had 33 open bugs.
     const c = card({
@@ -74,7 +74,7 @@ describe('portfolioView', () => {
     })
     expect(radarLabel(c.radar).text).toBe('No risks found')
     expect(needsALook(c)).toBe(false)
-    expect(appUrgency(c)).toMatchObject({ level: 'chores', chip: { text: 'Mushi setup' } })
+    expect(appUrgency(c)).toMatchObject({ level: 'chores', chip: { text: 'Mushi Mushi setup' } })
     const withBugs = appUrgency({ ...c, openReports: 33 })
     expect(withBugs).toMatchObject({ level: 'bugs', chip: { text: 'Bugs to fix' }, next: { text: 'Fix the worst of 33 open bugs', to: '/reports' } })
     expect(withBugs.next?.text).not.toMatch(/setup/i)
@@ -94,7 +94,7 @@ describe('portfolioView', () => {
       ruleId: 'spend_cap_unset',
       title: null,
       sampleMessage: "No monthly AI budget is set, so nothing limits this project's AI spend (triage, fixes and chat). Suggested: a $10 monthly AI budget.",
-      gateLabel: 'Mushi setup check',
+      gateLabel: 'Mushi Mushi setup check',
     })
     expect(spend).toBe("No monthly AI budget is set, so nothing limits this project's AI spend (triage, fixes and chat).")
     expect(spend).not.toContain('spend_cap_unset')
@@ -193,7 +193,7 @@ describe('cardStatusChips (chips instead of prose)', () => {
 
 describe('appUrgency', () => {
   it('names a failing part and sends the user to the page that fixes it', () => {
-    const u = appUrgency(card({ worst: 'error', needsLook: [{ element: 'ci', label: 'CI', state: 'error', reason: 'Mushi could not read your CI builds.' }] }))
+    const u = appUrgency(card({ worst: 'error', needsLook: [{ element: 'ci', label: 'CI', state: 'error', reason: 'Mushi Mushi could not read your CI builds.' }] }))
     expect(u).toMatchObject({ level: 'broken', chip: { text: 'CI failing', tone: 'danger' }, next: { to: '/ci' } })
     // Acronyms keep their case inside the status sentence.
     expect(u.short).toBe('CI failing')
@@ -226,15 +226,44 @@ describe('appUrgency', () => {
   })
 })
 
-describe('portfolioStatusSentence', () => {
-  it('says how many apps need you and which one first', () => {
-    const cards = sortPortfolioCards([card({ name: 'calm', needsLook: [SETUP_CHORE] }), card({ name: 'yen-yen', openReports: 29, needsLook: [] })])
-    expect(portfolioStatusSentence(cards)).toMatchObject({ sentence: '1 of 2 apps need you. Start with yen-yen: 29 open bugs.', tone: 'warn' })
+describe('splitPublicDemo', () => {
+  // Owner, 2026-11-17: "All 10 apps need you" counted the docs demo.
+  it('keeps the public demo out of the cards and the "need you" count', () => {
+    const demo = card({ projectId: 'demo', name: 'Mushi demo (sample data)', slug: 'mushi-demo', openReports: 6, needsLook: [] })
+    const mine = card({ projectId: 'mine', name: 'yen-yen', slug: 'yen-yen', openReports: 29, needsLook: [] })
+    const lookalike = card({ projectId: 'demo-app', name: 'demo-app', slug: 'demo-app', openReports: 1, needsLook: [] })
+    const { apps, demo: demos } = splitPublicDemo([demo, mine, lookalike])
+    expect(demos.map((c) => c.projectId)).toEqual(['demo'])
+    expect(apps.map((c) => c.projectId)).toEqual(['mine', 'demo-app'])
+    expect(apps.filter(needsALook)).toHaveLength(2)
   })
 
-  it('never says an app needs you when only chores are left', () => {
-    const out = portfolioStatusSentence([card({ name: 'a', needsLook: [SETUP_CHORE] }), card({ name: 'b', needsLook: [] })])
-    expect(out.first).toBeNull()
-    expect(out.sentence).toMatch(/^No app needs you right now\./)
+  it('matches the demo by its "(sample data)" name when the slug differs', () => {
+    expect(splitPublicDemo([card({ name: 'Mushi demo (sample data)', slug: 'renamed' })]).demo).toHaveLength(1)
+  })
+})
+
+describe('sortPortfolioCards order toggle', () => {
+  // Owner's walkthrough, 2026-11-17: "which app is worst" needed one look.
+  const apps = [
+    card({ projectId: 'b', name: 'beta', openReports: 0, needsLook: [] }),
+    card({ projectId: 'a', name: 'alpha', openReports: 3, needsLook: [] }),
+    card({ projectId: 'c', name: 'gamma', openReports: 40, needsLook: [] }),
+  ]
+  it('worst first by default: the most open bugs lead', () => {
+    expect(sortPortfolioCards(apps).map((c) => c.name)).toEqual(['gamma', 'alpha', 'beta'])
+  })
+  it('or by name', () => {
+    expect(sortPortfolioCards(apps, 'name').map((c) => c.name)).toEqual(['alpha', 'beta', 'gamma'])
+  })
+})
+
+describe('radarBadge (2026-11-18)', () => {
+  it('a serious finding is red Error, like Full-stack audit; the rest amber Warning', async () => {
+    const { radarBadge } = await import('./portfolioView')
+    expect(radarBadge({ state: 'finding', findings: [{ severity: 'error' }] })).toEqual({ label: 'Error', tone: 'dangerSubtle' })
+    expect(radarBadge({ state: 'finding', findings: [{ severity: 'warn' }, { severity: 'info' }] })).toEqual({ label: 'Warning', tone: 'warnSubtle' })
+    expect(radarBadge({ state: 'error', findings: [] }).label).toBe('Check failed')
+    expect(radarBadge({ state: 'unknown', findings: [] }).label).toBe('Not checked')
   })
 })

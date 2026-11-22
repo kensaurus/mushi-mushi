@@ -25,7 +25,9 @@ The split is:
 | [`propose-awesome-pr.mjs`](./propose-awesome-pr.mjs) | One-PR-at-a-time: forks an awesome-list, alphabetically inserts the Mushi entry into a named section, opens the PR. Reviews the diff before pushing. | already-authed `gh` CLI |
 | [`record-readme-gif.mjs`](./record-readme-gif.mjs) | Playwright walks the live demo end-to-end (dashboard → reports → detail → fixes) and outputs `docs/screenshots/hero.{webm,gif,webp}`. | Playwright (already in `examples/e2e-dogfood`) + `ffmpeg` on PATH |
 | [`capture-admin-screenshots.mjs`](./capture-admin-screenshots.mjs) | Authenticated static PNG capture for README/docs (`docs/screenshots/{slug}-dark.png` at 1600×1000). | enhance-readme skill Playwright + `TEST_USER_EMAIL` / `TEST_USER_PASSWORD` in `.env.local` |
-| [`record-glotit-sdk-tour.mjs`](./record-glotit-sdk-tour.mjs) | Records `docs/screenshots/glotit-report-flow.gif` — glot.it dogfood app walk-through for SDK README + docs landing. | enhance-readme skill's Playwright + ffmpeg |
+| [`record-glotit-sdk-tour.mjs`](./record-glotit-sdk-tour.mjs) | Records `docs/screenshots/glotit-report-flow.gif` — glot.it dogfood app walk-through for SDK README + docs landing. The GIF is for GitHub-rendered markdown only; run `demo-video.mjs` on it for the docs site. | enhance-readme skill's Playwright + ffmpeg |
+| [`record-admin-page-gifs.mjs`](./record-admin-page-gifs.mjs) | Records one demo clip per admin docs page: `docs/screenshots/{slug}-demo.{webm,mp4}` + `-poster.webp`, and sets the `video` field in `apps/docs/data/admin-screenshots.ts`. | enhance-readme skill's Playwright + ffmpeg + `TEST_USER_EMAIL` / `TEST_USER_PASSWORD` |
+| [`demo-video.mjs <clip>…`](./demo-video.mjs) | Encodes a clip (GIF or `.webm`) as the docs demo trio: H.264 MP4, VP9 WebM, last-frame WebP poster. The docs site never ships GIFs (each cost 2–8 MB of CloudFront egress per view); `--delete-source` removes the input. | `ffmpeg` on PATH (or `$FFMPEG`) |
 
 Every script accepts `--dry` to print the plan without sending. Every
 script falls back gracefully when its credential is missing, so a fresh

@@ -110,8 +110,31 @@ export function trainPrUrl(repo: string, prNumber: number | null): string | null
   return prNumber ? `https://github.com/${repo}/pull/${prNumber}` : null
 }
 
-/** How the batch stands across the shown repos, in one sentence. */
+/**
+ * A repo with nothing to say: no fix queued, no train running or leaving, release mode "train".
+ * Its card shows one quiet line instead of three ("nothing ready", "no fix queued", "no train
+ * merged"), and its real problem, if any (no deploy in 14 days), goes first.
+ */
+export function repoIdle(b: Pick<RepoBatch, 'mode' | 'members' | 'train'>): boolean {
+  return b.mode === 'train' && b.members.length === 0 && b.train.kind === 'next' && b.train.readyCount === 0
+}
+
+/** Repos where no deploy was seen in 14 days: reporters are never told their fix is live. */
+function deployGaps(repos: readonly RepoBatch[]): RepoBatch[] {
+  return repos.filter((r) => Boolean(r.deploy.setupGapHref))
+}
+
+/** How the batch stands across the shown repos, in one sentence; a deploy gap leads it. */
 export function batchSentence(repos: RepoBatch[]): { sentence: string; tone: Tone } {
+  const gaps = deployGaps(repos).length
+  // The count only: the amber row on the repo's card says why it matters ("so reporters are not
+  // told…"); the strip said the same sentence a second time (round 3).
+  const gap = gaps === 0 ? '' : `${gaps} ${gaps === 1 ? 'repo has' : 'repos have'} no deploy in 14 days. `
+  const base = batchSentenceBody(repos)
+  return gaps ? { sentence: `${gap}${base.sentence}`, tone: base.tone === 'danger' ? 'danger' : 'warn' } : base
+}
+
+function batchSentenceBody(repos: RepoBatch[]): { sentence: string; tone: Tone } {
   const open = repos.filter((r) => r.train.kind === 'open')
   const riding = repos.reduce((n, r) => n + r.members.filter((m) => m.rides).length, 0)
   const waiting = repos.reduce((n, r) => n + r.members.filter((m) => !m.rides).length, 0)
@@ -122,7 +145,7 @@ export function batchSentence(repos: RepoBatch[]): { sentence: string; tone: Ton
   if (riding) parts.push(`${fix(riding)} ${open.length ? 'riding or ready' : 'ready for the next train'}`)
   if (waiting) parts.push(`${fix(waiting)} waiting`)
   if (!parts.length) return { sentence: 'No fixes are waiting to ship.', tone: 'neutral' }
-  const tail = migrations ? ` The batch changes the database (${migrations} migration file${migrations === 1 ? '' : 's'}); Mushi does not run them.` : ''
+  const tail = migrations ? ` The batch changes the database (${migrations} migration file${migrations === 1 ? '' : 's'}); Mushi Mushi does not run them.` : ''
   const s = parts.join(', ')
   return { sentence: `${s[0].toUpperCase()}${s.slice(1)}.${tail}`, tone: migrations ? 'warn' : open.length || riding ? 'ok' : 'info' }
 }

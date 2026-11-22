@@ -84,6 +84,14 @@ async function selfOrganizationId(db: SupabaseClient): Promise<string | null> {
  * namespace with every other project in the self organization. The self
  * project was moved into its own org on 2026-09-22 (migration
  * 20260922000018); a second project landing there silently re-mixes them.
+ *
+ * Warn, not error (owner-delegated decision, 2026-11-11): the self project is
+ * back in the founder's org "kenji" (10 projects) on purpose for now. That org
+ * runs on OpenAI and holds the Cursor and OpenAI keys; `mushi-company` has only
+ * Anthropic keys, so moving back would put Mushi's own triage on Claude spend
+ * and stop auto-fix for its own reports. Events and funnels stay per project;
+ * only end_user identities share the org namespace. As an error it filed a
+ * Sentry issue about 10 times a day (MUSHI-MUSHI-SERVER 7817699433).
  */
 async function warnIfSelfOrgShared(db: SupabaseClient, orgId: string): Promise<void> {
   const { count, error } = await db
@@ -91,7 +99,7 @@ async function warnIfSelfOrgShared(db: SupabaseClient, orgId: string): Promise<v
     .select('id', { count: 'exact', head: true })
     .eq('organization_id', orgId)
   if (!error && (count ?? 0) > 1) {
-    log.error('product-events: self organization holds more than one project', { orgId, projects: count })
+    log.warn('product-events: self organization holds more than one project', { orgId, projects: count })
   }
 }
 

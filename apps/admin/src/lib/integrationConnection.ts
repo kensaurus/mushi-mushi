@@ -36,6 +36,8 @@ export interface ConnectionView {
   detail?: string
   /** The untouched probe message, for a tooltip. */
   raw?: string
+  /** Short status words that replace the state's default, e.g. "Repo linked · app access missing". */
+  label?: string
 }
 
 const HTTP_MEANING: Record<number, string> = {
@@ -43,7 +45,7 @@ const HTTP_MEANING: Record<number, string> = {
   401: 'the credentials were rejected',
   403: 'the credentials lack a permission this needs',
   404: 'the account, project or URL was not found',
-  429: 'the service is rate limiting Mushi',
+  429: 'the service is rate limiting Mushi Mushi',
 }
 
 /**

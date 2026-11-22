@@ -25,23 +25,31 @@ export function peopleHit(r: Pick<FixFirstInput, 'unique_users' | 'dedup_count'>
   return Math.max(1, r.unique_users ?? 0, r.dedup_count ?? 0)
 }
 
-/** Higher first: severity weight times how many people it reached (log scale, so 100 users do not drown a critical). */
-function fixFirstScore(r: FixFirstInput): number {
-  const weight = SEVERITY_WEIGHT[(r.severity ?? '').toLowerCase()] ?? 1
-  return weight * (1 + Math.log2(peopleHit(r)))
+function severityWeight(r: FixFirstInput): number {
+  return SEVERITY_WEIGHT[(r.severity ?? '').toLowerCase()] ?? 0
+}
+
+/**
+ * Worst severity first, then the most people reached. A weighted score put
+ * two Mediums that reached 12 and 9 people above two Criticals (fresh-eyes
+ * sweep 2026-11-18): a critical always goes before a medium.
+ */
+function compareFixFirst(a: FixFirstInput, b: FixFirstInput): number {
+  return severityWeight(b) - severityWeight(a) || peopleHit(b) - peopleHit(a) || b.created_at.localeCompare(a.created_at)
 }
 
 /**
  * Open reports with no fix on the way, best to fix first; newest wins a tie.
  * One per duplicate group: three Sentry imports of the same timeout filled
  * the top three rows (sweep 2026-10-29).
+ * @internal Exported for tests.
  */
 export function fixFirstOrder<T extends FixFirstInput>(reports: readonly T[], max = 5): T[] {
   const seen = new Set<string>()
   return reports
     .filter((r) => r.status !== 'fixing')
     .slice()
-    .sort((a, b) => fixFirstScore(b) - fixFirstScore(a) || b.created_at.localeCompare(a.created_at))
+    .sort(compareFixFirst)
     .filter((r) => {
       if (!r.report_group_id) return true
       if (seen.has(r.report_group_id)) return false
@@ -49,6 +57,41 @@ export function fixFirstOrder<T extends FixFirstInput>(reports: readonly T[], ma
       return true
     })
     .slice(0, max)
+}
+
+export interface FixFirstGroup<T> {
+  /** The best report of the group (opened by its row). */
+  lead: T
+  /** Every open report with this title, the lead included. */
+  members: T[]
+  /** Distinct apps among the members (1 outside All apps). */
+  apps: number
+}
+
+/**
+ * Fix-first rows with one row per title: "Known security hole in next 16.4.2"
+ * from three apps was three identical rows (fresh-eyes sweep 2026-11-18); it
+ * is one row that says "3 apps".
+ */
+export function fixFirstGroups<T extends FixFirstInput & { title?: string | null; summary?: string | null; project_id?: string | null }>(
+  reports: readonly T[],
+  max = 5,
+): FixFirstGroup<T>[] {
+  const byTitle = new Map<string, FixFirstGroup<T>>()
+  const out: FixFirstGroup<T>[] = []
+  for (const r of fixFirstOrder(reports, reports.length)) {
+    const key = (r.title ?? r.summary ?? '').trim().replace(/\s+/g, ' ').toLowerCase()
+    const existing = key ? byTitle.get(key) : undefined
+    if (existing) {
+      existing.members.push(r)
+      continue
+    }
+    const group: FixFirstGroup<T> = { lead: r, members: [r], apps: 1 }
+    if (key) byTitle.set(key, group)
+    out.push(group)
+  }
+  for (const g of out) g.apps = new Set(g.members.map((m) => m.project_id ?? '')).size
+  return out.slice(0, max)
 }
 
 /**

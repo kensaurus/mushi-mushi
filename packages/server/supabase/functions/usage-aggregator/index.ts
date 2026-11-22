@@ -4,7 +4,10 @@
 // For every metered `usage_events.event_name` we know about, this:
 //   1. Reads unsynced rows grouped by (project_id, day_utc) via
 //      `billing_usage_unsynced_summary(event_name)`.
-//   2. Looks up each project's Stripe customer.
+//   2. Looks up the Stripe customer of each project's team. A plan belongs
+//      to the organization, so every app in a team meters to the team's one
+//      customer and Stripe's graduated overage tier (included units at $0)
+//      applies to the team's total, not to each app.
 //   3. POSTs ONE Stripe Meter Event per (event, project, completed UTC
 //      day) — the `identifier` is `mushi:<event>:<project_id>:<day>` so
 //      retries are idempotent across this cron and Stripe's own dedup.
@@ -107,17 +110,41 @@ const handler = async (req: Request): Promise<Response> => {
       // backlog of 500 rows after a cron skip meant 500 round-trips before
       // a single Stripe call landed. Bulk-fetch once and index in-memory.
       const uniqueProjectIds = [...new Set(rows.map(r => r.project_id))]
-      const { data: customers, error: custBatchErr } = await db
-        .from('billing_customers')
-        .select('project_id, stripe_customer_id')
-        .in('project_id', uniqueProjectIds)
+      const { data: projectOrgs, error: projErr } = await db
+        .from('projects')
+        .select('id, organization_id')
+        .in('id', uniqueProjectIds)
+      if (projErr) {
+        ulog.error('projects_batch_failed', { event: me.internal, error: projErr.message })
+        continue
+      }
+      const orgByProject = new Map<string, string>()
+      for (const p of (projectOrgs ?? []) as Array<{ id: string; organization_id: string | null }>) {
+        if (p.organization_id) orgByProject.set(p.id, p.organization_id)
+      }
+      const uniqueOrgIds = [...new Set(orgByProject.values())]
+      const { data: customers, error: custBatchErr } = uniqueOrgIds.length > 0
+        ? await db
+            .from('billing_customers')
+            .select('organization_id, stripe_customer_id, updated_at')
+            .in('organization_id', uniqueOrgIds)
+            .order('updated_at', { ascending: false })
+        : { data: [], error: null }
       if (custBatchErr) {
         ulog.error('billing_customers_batch_failed', { event: me.internal, error: custBatchErr.message })
         continue
       }
+      // Newest row per team wins (one per team once the unique index lands).
+      const customerByOrg = new Map<string, string>()
+      for (const c of (customers ?? []) as Array<{ organization_id: string; stripe_customer_id: string | null }>) {
+        if (c.stripe_customer_id && !customerByOrg.has(c.organization_id)) {
+          customerByOrg.set(c.organization_id, c.stripe_customer_id)
+        }
+      }
       const customerByProject = new Map<string, string>()
-      for (const c of customers ?? []) {
-        if (c.stripe_customer_id) customerByProject.set(c.project_id, c.stripe_customer_id)
+      for (const [pid, orgId] of orgByProject) {
+        const customerId = customerByOrg.get(orgId)
+        if (customerId) customerByProject.set(pid, customerId)
       }
 
       for (const row of rows) {

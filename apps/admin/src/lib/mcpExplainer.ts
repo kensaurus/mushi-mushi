@@ -36,7 +36,7 @@ export const MCP_SCOPE_DEFINITIONS: McpScopeDefinition[] = [
 ]
 
 export const MCP_EXPLAINER_SUMMARY =
-  'MCP (Model Context Protocol) lets Cursor, Claude Code, or other agents call Mushi tools directly — triage bugs, fetch fix context, and dispatch fixes without leaving the IDE. You need an mcp:read or mcp:write API key and a .cursor/mcp.json snippet.'
+  'MCP (Model Context Protocol) lets Cursor, Claude Code, or other agents call Mushi Mushi tools directly — triage bugs, fetch fix context, and dispatch fixes without leaving the IDE. You need an mcp:read or mcp:write API key and a .cursor/mcp.json snippet.'
 
 export const MCP_SETUP_STEPS = [
   'Open Connect, pick your editor and click Connect. It mints the key (choose write access if the agent should dispatch fixes).',

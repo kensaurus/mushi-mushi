@@ -4,13 +4,13 @@
     "name": "Mushi Mushi"
   },
   "metadata": {
-    "description": "Bug translation for vibe coders: plain-English diagnosis and a paste-ready fix in Cursor."
+    "description": "One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code. Plain-English diagnosis and a ready fix, in Cursor."
   },
   "plugins": [
     {
       "name": "mushi-mushi",
       "source": "packages/cursor-plugin",
-      "description": "Bug translation for vibe coders: plain-English diagnosis and a paste-ready fix in your AI coding agent."
+      "description": "One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code. Plain-English diagnosis and a ready fix, in your AI coding agent."
     }
   ]
 }

@@ -315,6 +315,71 @@ export function logDbFailure(
   return transient
 }
 
+/**
+ * A query that failed on a platform outage (isTransientDbConnectionError: a
+ * Cloudflare/Supabase gateway page, a pooler reset, PGRST002), thrown by code
+ * that cannot answer for itself. `withSentry` and `sentryHonoErrorHandler`
+ * log it as a warn and answer 503 instead of reporting it. They check the
+ * type, not the text, so an unrelated throw that quotes HTML still reports.
+ * The message keeps only the page title (dbDiagnosticMessage): the raw 5 KB
+ * Cloudflare page reached Sentry as the exception text from merge-queue and
+ * sentry-seer-poll during the 2026-10-31 04:11 UTC "521: Web server is down"
+ * window (Sentry 7821462678, 7821508537).
+ */
+export class TransientDbError extends Error {
+  readonly transient = true as const
+  readonly dbCode: string | null
+
+  constructor(what: string, err: { message?: string; code?: string | null }) {
+    super(`${what}: ${dbDiagnosticMessage(err.message) || err.code || 'transient failure'}`)
+    this.name = 'TransientDbError'
+    this.dbCode = err.code ?? null
+  }
+}
+
+/**
+ * The error to throw for a failed query: TransientDbError on an outage, else
+ * a plain Error named by `what` whose text never carries a gateway page. A
+ * statement timeout (57014) is a slow query and stays a plain Error.
+ */
+export function dbReadFailure(
+  what: string,
+  err: { message?: string; code?: string | null; details?: string | null; hint?: string | null },
+): Error {
+  if (isTransientDbConnectionError(err)) return new TransientDbError(what, err)
+  return new Error(`${what}: ${dbFailureMessage(err)}`)
+}
+
+/**
+ * True for an error thrown because of an outage, not a bug: a TransientDbError,
+ * or a ProjectAccessReadError flagged transient (project-access.ts, which
+ * imports this module, so it is matched by name).
+ */
+export function isTransientDbFailure(err: unknown): boolean {
+  if (err instanceof TransientDbError) return true
+  return (
+    err instanceof Error &&
+    err.name === 'ProjectAccessReadError' &&
+    (err as { transient?: unknown }).transient === true
+  )
+}
+
+/**
+ * Run an idempotent read, and run it once more after `delayMs` when the
+ * first attempt failed on an outage. The gateway pages seen so far lasted
+ * from seconds (520) to an hour (521 during a restart), so one retry clears
+ * the short blips and a second would only hold the worker. Never use it for
+ * a write that is not idempotent.
+ */
+export async function retryTransientRead<
+  T extends { error: { message?: string; code?: string | null } | null },
+>(run: () => PromiseLike<T>, delayMs = 750): Promise<T> {
+  const first = await run()
+  if (!first.error || !isTransientDbConnectionError(first.error)) return first
+  await new Promise((resolve) => setTimeout(resolve, delayMs))
+  return await run()
+}
+
 /** Generic, non-leaking message for 5xx / DB failures shown to clients. */
 export const SAFE_INTERNAL_MESSAGE =
   'Something went wrong on our side. The failure was logged — retry in a moment, or report this with the error code.'

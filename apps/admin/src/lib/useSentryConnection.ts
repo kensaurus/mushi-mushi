@@ -97,6 +97,7 @@ type ReadState = { data: unknown; error: string | null }
  * the "connect Sentry" tab on that paint. A failed read counts as settled
  * with no verdict, so the banner falls back to the saved DSN and does not
  * claim all-clear. Deliveries are skipped when Sentry is not configured.
+ * @internal Exported for tests.
  */
 export function sentryQuerySettled(input: {
   enabled: boolean

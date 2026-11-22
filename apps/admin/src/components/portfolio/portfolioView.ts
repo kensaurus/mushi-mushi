@@ -8,9 +8,11 @@
  */
 
 import type { BadgeTone } from '../ui'
-import type { FindingGroup, PortfolioCard, PortfolioCardProblem, PortfolioRadarColumn, PortfolioReadPart, SdkSkewEntry } from '../../lib/portfolioTypes'
+import type { FindingGroup, PortfolioCard, PortfolioCardProblem, PortfolioFindingsResponse, PortfolioRadarColumn, PortfolioReadPart, SdkSkewEntry } from '../../lib/portfolioTypes'
 import type { RecipeElementKey } from '../../lib/recipeTypes'
 import type { DetectorState } from '../../lib/radarTypes'
+import { isPublicDemo } from '../../lib/publicDemo'
+import { fixOnceRows, groupAcrossApps, groupHoles, groupSdkSkew, sortProblemRows, type FixOnceRow } from '../../lib/groupAppFindings'
 
 const COULD_NOT_READ = 'Could not read'
 
@@ -39,10 +41,10 @@ export function radarLabel(r: PortfolioRadarColumn, unreadable: readonly Portfol
 /** @internal Exported for unit tests only; cards render it through cardStatusChips. */
 export function sdkLabel(entries: readonly SdkSkewEntry[], unreadable: readonly PortfolioReadPart[] = []): { text: string; tone: BadgeTone; hint: string } {
   if (unreadable.includes('sdk')) {
-    return { text: 'SDK: could not read', tone: 'dangerSubtle', hint: 'The Mushi SDK versions could not be read. Refresh in a minute.' }
+    return { text: 'SDK: could not read', tone: 'dangerSubtle', hint: 'The Mushi Mushi SDK versions could not be read. Refresh in a minute.' }
   }
   if (entries.length === 0 || entries.every((e) => e.status === 'unknown')) {
-    return { text: 'SDK unknown', tone: 'neutral', hint: entries[0]?.reason ?? 'No Mushi SDK has reported from this project yet.' }
+    return { text: 'SDK unknown', tone: 'neutral', hint: entries[0]?.reason ?? 'No Mushi Mushi SDK has reported from this project yet.' }
   }
   const behind = entries.filter((e) => e.status === 'behind')
   if (behind.length > 0) {
@@ -63,6 +65,7 @@ function firstSentence(text: string): string {
  * The heading of a "Fix once" row: the rule's catalog title, else the first
  * sentence of the finding's own message (plain English from the rule), never
  * the raw rule id. The id stays available for a tooltip.
+ * @internal Exported for tests.
  */
 export function findingGroupTitle(g: Pick<FindingGroup, 'ruleId' | 'title' | 'sampleMessage' | 'gateLabel'>): string {
   if (g.title) return g.title
@@ -117,6 +120,31 @@ const STATE_META: Record<DetectorState, { label: string; tone: BadgeTone }> = {
 
 export function radarStateMeta(state: string): { label: string; tone: BadgeTone } {
   return STATE_META[state as DetectorState] ?? STATE_META.unknown
+}
+
+const SERIOUS_SEVERITY = new Set(['critical', 'error', 'high'])
+
+/**
+ * The badge on a risk check, from its worst finding's severity: the rejected key read amber
+ * "Found" here and red ERROR on Full-stack audit (2026-11-18). A serious finding is red "Error",
+ * the rest amber "Warning"; other states keep their state badge.
+ */
+export function radarBadge(d: { state: string; findings: ReadonlyArray<{ severity: string }> }): { label: string; tone: BadgeTone } {
+  if (d.state !== 'finding') return radarStateMeta(d.state)
+  return d.findings.some((f) => SERIOUS_SEVERITY.has(f.severity.toLowerCase()))
+    ? { label: 'Error', tone: 'dangerSubtle' }
+    : { label: 'Warning', tone: 'warnSubtle' }
+}
+
+/**
+ * The worst risk check, for the App blueprint's Overall (round 3, 2026-11-19: Overall read amber
+ * "Needs attention" while a risk check right below it said red "Error"). Same words and tone as
+ * each check's own badge; null when no check found anything.
+ */
+export function radarOverall(detectors: ReadonlyArray<{ state: string; findings: ReadonlyArray<{ severity: string }> }>): { tone: 'danger' | 'warn'; label: string } | null {
+  const found = detectors.filter((d) => d.state === 'finding')
+  if (found.length === 0) return null
+  return found.some((d) => radarBadge(d).tone === 'dangerSubtle') ? { tone: 'danger', label: 'Error' } : { tone: 'warn', label: 'Warning' }
 }
 
 const RADAR_STATE_ORDER: Record<string, number> = { finding: 0, error: 1 }
@@ -198,7 +226,8 @@ export function cardStatusChips(card: PortfolioCard): CardStatusChip[] {
  * card as an "Automated checks" problem whose only open gate is the setup
  * check. That is a chore, never an app's top problem.
  */
-const SETUP_ONLY_REASON = /^\d+ problems? to fix: Mushi setup checks? \(\d+\)\./
+// The server's sentence. It may say the product's full name once it is renamed there too.
+const SETUP_ONLY_REASON = /^\d+ problems? to fix: (?:Mushi )?Mushi setup checks? \(\d+\)\./
 
 function isMushiSetupChore(p: Pick<PortfolioCardProblem, 'element' | 'reason'>): boolean {
   return p.element === 'gates' && SETUP_ONLY_REASON.test(p.reason)
@@ -288,7 +317,7 @@ export function appUrgency(card: PortfolioCard): AppUrgency {
       level: 'behind',
       chip: { text: 'SDK update', tone: 'infoSubtle' },
       short: `SDK ${behind.version} → ${behind.latest}`,
-      next: { text: `Update the Mushi SDK from ${behind.version} to ${behind.latest}`, to: '/connect', more: others(0) },
+      next: { text: `Update the Mushi Mushi SDK from ${behind.version} to ${behind.latest}`, to: '/connect', more: others(0) },
     }
   }
   const stale = appProblems[0]
@@ -296,9 +325,9 @@ export function appUrgency(card: PortfolioCard): AppUrgency {
     const first = stale ?? chores[0]
     return {
       level: 'chores',
-      chip: { text: stale ? 'Re-run checks' : 'Mushi setup', tone: 'neutral' },
-      short: stale ? 'checks to re-run' : 'Mushi setup to finish',
-      next: { text: stale ? `${stale.label}: ${stale.reason}` : `Mushi setup: ${plural(chores.length, 'small fix', 'small fixes')} on the App blueprint page`, to: stale ? pageFor(first) : '/recipe', more: others(1) },
+      chip: { text: stale ? 'Re-run checks' : 'Mushi Mushi setup', tone: 'neutral' },
+      short: stale ? 'checks to re-run' : 'Mushi Mushi setup to finish',
+      next: { text: stale ? `${stale.label}: ${stale.reason}` : `Mushi Mushi setup: ${plural(chores.length, 'small fix', 'small fixes')} on the App blueprint page`, to: stale ? pageFor(first) : '/recipe', more: others(1) },
     }
   }
   if (!card.radar.checkedAt) {
@@ -307,35 +336,134 @@ export function appUrgency(card: PortfolioCard): AppUrgency {
   return { level: 'clear', chip: { text: 'All clear', tone: 'okSubtle' }, short: 'all clear', next: null }
 }
 
+/** The app's own problems: its needsLook list without Mushi Mushi's setup chores. */
+export function appProblems(card: Pick<PortfolioCard, 'needsLook'>): PortfolioCardProblem[] {
+  return (card.needsLook ?? []).filter((p) => !isMushiSetupChore(p))
+}
+
+/** The Worst-first order's first key: 0 broken, 1 bugs, 2 a part to fix, 3 SDK behind, 4 chores, 5 clear. */
+export function urgencyRank(card: PortfolioCard): number {
+  return URGENCY_RANK[appUrgency(card).level]
+}
+
 /** Does this app need its owner? Broken, bugs waiting, or a part to fix. Chores and SDK updates do not. */
 export function needsALook(card: PortfolioCard): boolean {
   return URGENCY_RANK[appUrgency(card).level] <= URGENCY_RANK.fix
 }
 
-/** Most urgent first, then the most open bugs, then by name. */
-export function sortPortfolioCards(cards: readonly PortfolioCard[]): PortfolioCard[] {
+/**
+ * The team's own apps, and the public demo apart (it powers the docs try-it
+ * page, has no repo or real users on purpose, and is never an app that needs
+ * you). The page shows it as one muted line, outside the cards and counts.
+ */
+export function splitPublicDemo(cards: readonly PortfolioCard[]): { apps: PortfolioCard[]; demo: PortfolioCard[] } {
+  const apps: PortfolioCard[] = []
+  const demo: PortfolioCard[] = []
+  for (const c of cards) (isPublicDemo(c) ? demo : apps).push(c)
+  return { apps, demo }
+}
+
+export type PortfolioSort = 'worst' | 'name'
+
+/**
+ * Worst first (the default): broken, then the most open bugs, then a part to
+ * fix, then chores; ties by name. Or by name (the Apps page toggle, owner's
+ * walkthrough 2026-11-17: "which app is worst" needed one look).
+ */
+export function sortPortfolioCards(cards: readonly PortfolioCard[], by: PortfolioSort = 'worst'): PortfolioCard[] {
+  if (by === 'name') return [...cards].sort((a, b) => a.name.localeCompare(b.name))
   const rank = new Map(cards.map((c) => [c, URGENCY_RANK[appUrgency(c).level]]))
   return [...cards].sort(
     (a, b) => (rank.get(a) ?? 5) - (rank.get(b) ?? 5) || b.openReports - a.openReports || a.name.localeCompare(b.name),
   )
 }
 
-/** The page's one status sentence: how many apps need you, and which one first. */
-export function portfolioStatusSentence(sorted: readonly PortfolioCard[]): { sentence: string; tone: 'ok' | 'warn' | 'danger' | 'neutral'; first: PortfolioCard | null } {
-  if (sorted.length === 0) return { sentence: 'No apps yet.', tone: 'neutral', first: null }
-  const needing = sorted.filter(needsALook)
-  if (needing.length === 0) {
-    const chores = sorted.filter((c) => appUrgency(c).level !== 'clear').length
-    return {
-      sentence: chores > 0 ? `No app needs you right now. ${plural(chores, 'app has', 'apps have')} small chores, like an SDK update.` : sorted.length === 1 ? `${sorted[0].name} is clear.` : `All ${sorted.length} apps are clear.`,
-      tone: 'ok',
-      first: null,
+/**
+ * Fix once rows open in exactly the same apps, with the same severity and the same one action,
+ * as ONE row ("A connected key stopped working · AI key rejected", 9 apps): two rows with the
+ * same nine dots and the same "Fix key" said the same thing twice (2026-11-18 sweep). Order is
+ * kept (the first row of a merge holds its place); the fix prompts and explanations are joined.
+ * @internal Exported for tests.
+ */
+export function mergeSameAppRows(rows: readonly FixOnceRow[]): FixOnceRow[] {
+  const out: FixOnceRow[] = []
+  const at = new Map<string, number>()
+  for (const r of rows) {
+    const key = `${r.severity}|${r.action}|${[...r.projectIds].sort().join(',')}`
+    const i = at.get(key)
+    if (i === undefined) {
+      at.set(key, out.length)
+      out.push({ ...r, projectIds: [...r.projectIds] })
+      continue
+    }
+    const m = out[i]!
+    out[i] = {
+      ...m,
+      ruleId: `${m.ruleId}+${r.ruleId}`,
+      title: `${m.title} · ${r.title}`,
+      fullTitle: `${m.fullTitle}\n${r.fullTitle}`,
+      explanation: `${m.explanation} ${r.explanation}`,
+      fix: `${m.fix}\n\n${r.fix}`,
     }
   }
-  const first = needing[0]
-  const u = appUrgency(first)
-  const tone = u.level === 'broken' ? 'danger' : 'warn'
-  if (sorted.length === 1) return { sentence: `${first.name} needs you: ${u.short}.`, tone, first }
-  const count = needing.length === sorted.length ? `All ${sorted.length} apps need you` : `${needing.length} of ${sorted.length} apps need you`
-  return { sentence: `${count}. Start with ${first.name}: ${u.short}.`, tone, first }
+  return out
+}
+
+/**
+ * The Apps tab's ONE problem list (2026-11-18 round 2: "Fix once", "Across your apps",
+ * "Mushi Mushi SDK versions" and "Missing setups" were four cards holding one list). Every
+ * problem shared by apps is a row: a severity mark, a short title, a dot per app and one
+ * action. Worst first across all of them. The "Fix once" metric in the page's status strip is
+ * this list's length, so the two never disagree (it counted the server's groups, 9, beside 8
+ * rows once two rows with the same apps and action had merged).
+ */
+export function appProblemList(data: PortfolioFindingsResponse, nameOf: (projectId: string) => string): FixOnceRow[] {
+  const fixOnce = mergeSameAppRows(fixOnceRows(data.groups, findingGroupTitle))
+  const across = groupAcrossApps(data.crossProject, nameOf).map(
+    (g): FixOnceRow => ({
+      ruleId: `across:${g.key}`,
+      severity: g.severity,
+      title: g.title,
+      fullTitle: g.detail,
+      action: g.fix ? g.action : '',
+      projectIds: g.projectIds,
+      gateLabel: null,
+      explanation: g.detail,
+      fix: g.fix ?? '',
+    }),
+  )
+  const sdk = groupSdkSkew(data.sdkSkew).map((g): FixOnceRow => {
+    const behind = g.status === 'behind'
+    const pkg = g.pkg ?? 'Mushi Mushi SDK'
+    const title = behind ? `${pkg} behind${g.latest ? ` → ${g.latest}` : ''}` : `${pkg}: ${g.title}`
+    return {
+      ruleId: `sdk:${g.key}`,
+      // Behind is a warning (amber); a version it could not read is a note, never a failure.
+      severity: behind ? 'warn' : 'info',
+      title,
+      fullTitle: title,
+      action: behind ? 'Upgrade' : '',
+      projectIds: g.apps.map((a) => a.projectId),
+      gateLabel: null,
+      explanation: behind ? `These apps run an older ${pkg}. Open Connect to create an upgrade PR.` : g.apps[0]?.reason ?? g.title,
+      fix: '',
+      to: behind ? '/connect' : undefined,
+      appTitles: Object.fromEntries(g.apps.map((a) => [a.projectId, a.version ? `${nameOf(a.projectId)} · on ${a.version}` : `${nameOf(a.projectId)} · ${a.reason}`.trim()])),
+    }
+  })
+  const holes = groupHoles(data.holes).map(
+    (h): FixOnceRow => ({
+      ruleId: `hole:${h.integration}`,
+      severity: 'info',
+      title: h.title,
+      fullTitle: h.detail,
+      action: 'Connect',
+      projectIds: h.projectIds,
+      gateLabel: null,
+      explanation: h.detail,
+      fix: '',
+      to: '/integrations',
+    }),
+  )
+  return sortProblemRows([...fixOnce, ...across, ...sdk, ...holes])
 }

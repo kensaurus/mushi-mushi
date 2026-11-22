@@ -337,6 +337,13 @@ verify_jwt = false
 [functions.webhooks-linear-agent]
 verify_jwt = false
 
+# webhooks-cloudwatch receives Amazon SNS deliveries (CloudWatch alarm state
+# changes, subscription handshakes) from AWS — no Supabase JWT. Auth inside
+# via the SNS message signature: bound TopicArn, cert URL pinned to
+# sns.<region>.amazonaws.com, SignatureVersion 1/2 (ADR 0061).
+[functions.webhooks-cloudwatch]
+verify_jwt = false
+
 # telegram-webhook receives Telegram Bot API updates (voice notes, /start
 # bindings, inline-keyboard confirmations) from Telegram's servers — no
 # Supabase JWT. Auth inside via the X-Telegram-Bot-Api-Secret-Token header

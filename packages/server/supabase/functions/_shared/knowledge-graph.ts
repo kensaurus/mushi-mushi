@@ -48,13 +48,21 @@ export async function findOrCreateNode(
   label: string,
   metadata?: Record<string, unknown>,
 ): Promise<string> {
-  const { data: existing } = await db
-    .from('graph_nodes')
-    .select('id')
-    .eq('project_id', projectId)
-    .eq('node_type', nodeType)
-    .eq('label', label)
-    .single()
+  // The oldest row wins. `.single()` returned nothing once two rows existed,
+  // so every later call added another copy (98 extra rows on prod,
+  // 2026-11-13); migration 20261113090100 merged them and added a unique
+  // index for the knowledge-graph types.
+  const lookup = () =>
+    db
+      .from('graph_nodes')
+      .select('id')
+      .eq('project_id', projectId)
+      .eq('node_type', nodeType)
+      .eq('label', label)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+  const { data: existing } = await lookup()
 
   if (existing) {
     // Best-effort AGE mirror — covers the case where the project just
@@ -69,7 +77,14 @@ export async function findOrCreateNode(
     .select('id')
     .single()
 
-  if (error) throw new Error(`Failed to create graph node: ${error.message}`)
+  if (error) {
+    // Lost a race to a concurrent insert of the same node: use that one.
+    if (error.code === '23505') {
+      const { data: winner } = await lookup()
+      if (winner) return winner.id as string
+    }
+    throw new Error(`Failed to create graph node: ${error.message}`)
+  }
   const nodeId = created!.id as string
   void mirrorNodeToAge(db, { projectId, nodeId, nodeType, label })
   return nodeId

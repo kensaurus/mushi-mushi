@@ -98,4 +98,53 @@ describe('GitHubConnectCard', () => {
     await flush()
     expect(api.apiFetch.mock.calls.filter(([p]) => String(p).endsWith('/github/repos')).length).toBe(before + 1)
   })
+
+  // Owner, 2026-11-17 (kensaur.us): the repo was linked but the App could not
+  // reach it; the card still said "Connected", and relinking meant "Change
+  // repository", then picking the same repo and pressing Keep.
+  describe('a linked repo the GitHub App cannot reach', () => {
+    const access = { state: 'repo_no_access' as const, repo: 'kensaurus/kensaur.us' }
+    const linked = 'https://github.com/kensaurus/kensaur.us'
+
+    async function mountLinked() {
+      act(() => {
+        root.render(
+          createElement(MemoryRouter, null, createElement(GitHubConnectCard, { projectId: PROJECT, returnTo: 'integrations', currentRepoUrl: linked, access })),
+        )
+      })
+      await flush()
+    }
+
+    it('says so in amber with a shape, and offers one "Finish connecting" button', async () => {
+      await mountLinked()
+      const badge = document.body.querySelector('[data-testid="github-access-missing"]')
+      expect(badge?.textContent).toContain('Repo linked · app access missing')
+      expect(badge?.textContent).toContain('⚠')
+      expect(document.body.textContent).not.toContain('Connected: kensaurus/kensaur.us')
+      expect(document.body.textContent).toContain("Mushi Mushi can't read this repo yet: give the Mushi Mushi GitHub App access to kensaurus/kensaur.us.")
+      expect(button(/Change repository/)).toBeUndefined()
+      act(() => button(/^Finish connecting$/)!.click())
+      await flush()
+      expect(assign).toHaveBeenCalledWith('https://github.com/login/oauth/authorize?x=1')
+      expect(sessionStorage.getItem(`mushi:github-finish:${PROJECT}`)).toBe('1')
+    })
+
+    it('back from GitHub, links the same repo again on its own', async () => {
+      api.apiFetch.mockImplementation(async (path: string) => {
+        if (path.endsWith('/github/repos')) return { ok: true, data: { ...LIST, currentRepoUrl: linked } }
+        if (path.endsWith('/github/repo')) {
+          return { ok: true, data: { repoUrl: linked, fullName: 'kensaurus/kensaur.us', defaultBranch: 'main', private: true } }
+        }
+        return { ok: true, data: [] }
+      })
+      sessionStorage.setItem(`mushi:github-grant:${PROJECT}`, 'grant-1')
+      sessionStorage.setItem(`mushi:github-finish:${PROJECT}`, '1')
+      await mountLinked()
+      const saves = api.apiFetch.mock.calls.filter(([p]) => String(p).endsWith('/github/repo'))
+      expect(saves).toHaveLength(1)
+      expect(JSON.parse(String((saves[0]![1] as { body: string }).body))).toMatchObject({ fullName: 'kensaurus/kensaur.us' })
+      expect(document.body.textContent).toContain('Connected kensaurus/kensaur.us')
+      expect(sessionStorage.getItem(`mushi:github-finish:${PROJECT}`)).toBeNull()
+    })
+  })
 })

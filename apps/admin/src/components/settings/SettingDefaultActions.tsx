@@ -9,6 +9,9 @@
 
 import { Btn } from '../ui'
 
+/** A reset reads as a link, not a chip: a disabled "Default (0.85)" chip looked broken (fresh-eyes 2026-11-18). */
+export const RESET_LINK = '!border-transparent !bg-transparent !px-1 underline underline-offset-2 hover:!shadow-none'
+
 export function SettingDefaultActions<T extends string | number>({
   current,
   defaultValue,
@@ -29,26 +32,25 @@ export function SettingDefaultActions<T extends string | number>({
   const showRecommended = recommended !== undefined && recommended !== defaultValue
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <Btn
-        size="sm"
-        variant="ghost"
-        onClick={() => onApply(defaultValue)}
-        disabled={current === defaultValue}
-        data-testid={`reset-${id}`}
-      >
-        {current === defaultValue ? `Default (${format(defaultValue)})` : `Reset to default (${format(defaultValue)})`}
-      </Btn>
-      {showRecommended && (
-        <Btn
-          size="sm"
-          variant="ghost"
-          onClick={() => onApply(recommended)}
-          disabled={current === recommended}
-          data-testid={`recommend-${id}`}
-        >
-          {current === recommended ? `Using recommended (${format(recommended)})` : `Use recommended (${format(recommended)})`}
+      {current === defaultValue ? (
+        <span className="text-2xs text-fg-muted" data-testid={`reset-${id}`}>
+          Default ({format(defaultValue)})
+        </span>
+      ) : (
+        <Btn size="sm" variant="ghost" className={RESET_LINK} onClick={() => onApply(defaultValue)} data-testid={`reset-${id}`}>
+          Reset to {format(defaultValue)}
         </Btn>
       )}
+      {showRecommended &&
+        (current === recommended ? (
+          <span className="text-2xs text-fg-muted" data-testid={`recommend-${id}`}>
+            Using recommended ({format(recommended)})
+          </span>
+        ) : (
+          <Btn size="sm" variant="ghost" className={RESET_LINK} onClick={() => onApply(recommended)} data-testid={`recommend-${id}`}>
+            Use recommended ({format(recommended)})
+          </Btn>
+        ))}
     </div>
   )
 }

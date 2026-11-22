@@ -1,11 +1,10 @@
 /**
- * Billing overview tab — project cards and connectivity diagnostics.
+ * Billing overview tab — project cards (SDK check-in lives on Connect → SDK health).
  */
 
 import { Link } from 'react-router-dom'
 import { Btn, EmptyState } from '../ui'
 import { ContainedBlock } from '../report-detail/ReportSurface'
-import { SdkConnectivityEmptyState } from '../SdkHealthSummary'
 import { ProjectBillingCard } from './ProjectBillingCard'
 import type { BillingProject, PlanCatalog } from './types'
 import type { useSetupStatus } from '../../lib/useSetupStatus'
@@ -21,6 +20,11 @@ export interface BillingOverviewPanelProps {
   onReload: () => void
   activeProject: BillingProject | null
   setup: ReturnType<typeof useSetupStatus>
+  /** The team meters are on the page: cards skip their quota meter. */
+  quotaInStrip?: boolean
+  /** The Seats meter's limit (members stats), for each card's entitlements. */
+  seatLimit?: number | null
+  seatLimitKnown?: boolean
 }
 
 export function BillingOverviewPanel({
@@ -34,6 +38,9 @@ export function BillingOverviewPanel({
   onReload,
   activeProject,
   setup,
+  quotaInStrip = false,
+  seatLimit = null,
+  seatLimitKnown = false,
 }: BillingOverviewPanelProps) {
   return (
     <>
@@ -60,27 +67,18 @@ export function BillingOverviewPanel({
               }
               onManage={() => onManage(p.project_id)}
               onReload={onReload}
+              quotaInStrip={quotaInStrip}
+              seatLimit={seatLimit}
+              seatLimitKnown={seatLimitKnown}
             />
           ))}
         </div>
       )}
 
-      {activeProject &&
-        (activeProject.usage?.reports ?? 0) === 0 &&
-        setup.activeProject?.project_id === activeProject.project_id && (
-          <SdkConnectivityEmptyState
-            projectId={activeProject.project_id}
-            projectName={activeProject.project_name}
-            lastReportAt={null}
-            diagnostic={setup.getStep('sdk_installed')?.diagnostic ?? null}
-            adminHost={setup.data?.admin_endpoint_host ?? null}
-            headline="Why this period reads 0"
-            onTestReportSent={() => {
-              setup.reload()
-              onReload()
-            }}
-          />
-        )}
+      {/* The SDK connectivity panel ("App has not checked in recently ·
+          Stale", amber, while it said "Normal for low-traffic apps") is not
+          a billing fact: Connect → SDK health shows check-in state, and the
+          app card links there when the app sent no reports (review 2026-11-18). */}
 
       {activeProject && !setup.getStep('sentry_connected')?.complete && (
         <ContainedBlock tone="muted" className="flex items-start gap-3">

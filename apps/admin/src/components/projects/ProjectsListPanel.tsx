@@ -1,16 +1,18 @@
 /**
- * Your-projects tab body for Projects hub — folder rail + detail panel.
+ * "Your apps" tab body for Manage apps — folder rail + detail panel.
+ * 2026-11-18 round 2: one card (the rail + panel box), not a Section card around it; flat
+ * strips inside the panel instead of boxes in boxes; labelled toolbar; no slug pill repeating
+ * the name; rows that would be empty are not drawn; the install guide is collapsed for an app
+ * whose SDK is up to date; nothing can push the page sideways at 390.
  */
 
 import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  Section,
   Card,
   Btn,
   EmptyState,
   Badge,
-  Tooltip,
 } from '../ui'
 import {
   InlineProof,
@@ -28,11 +30,11 @@ import { ConfigHelp } from '../ConfigHelp'
 import { SdkVersionBadge } from '../SdkVersionBadge'
 import { SdkUpgradeCTA } from '../SdkUpgradeCTA'
 import { VerifySetupPanel } from '../VerifySetupPanel'
-import { CodeInline } from '../CodePanel'
 import { ProjectFavicon } from '../ProjectFavicon'
 import { sdkOriginFromApiKeys } from '../../lib/resolveProjectDomain'
 import { bottleneckDeepLink, bottleneckHumanHeadline } from '../../lib/pdcaBottleneck'
-import { CHIP_TONE } from '../../lib/chipTone'
+import { plainIndexError } from '../../lib/githubAccess'
+import { repoFullName } from '../../lib/githubConnect'
 import { pluralize } from '../../lib/format'
 import { useToast } from '../../lib/toast'
 import { HeroPlugIntegration } from '../illustrations/HeroIllustrations'
@@ -69,9 +71,12 @@ import {
   INDEX_HEALTH_CHIP_TONE,
   indexCoverageText,
   lastIndexSweepAt,
+  trendLabel,
+  installGuideOpenByDefault,
   type Project,
   type ScopePresetId,
 } from './project-models'
+import { OpsKeyRow } from '../ops/OpsKeyRow'
 
 export interface ProjectsListPanelProps {
   projects: Project[]
@@ -134,36 +139,37 @@ export function ProjectsListPanel({
   onReload,
 }: ProjectsListPanelProps) {
   return (
-  <Section title="Your projects">
+  <section aria-label="Your apps" className="flex min-w-0 max-w-full flex-col gap-3 overflow-x-clip" data-testid="projects-list">
     {activeProjectId && (
       <MigrationsInProgressCard
         projectId={activeProjectId}
-        title="Migrations in this project"
+        title="Migrations in this app"
       />
     )}
 
     {projects.length === 0 ? (
       <EmptyState
         icon={<HeroPlugIntegration />}
-        title="No projects yet"
-        description="Switch to the New project tab to create your first project — you'll get an API key for the SDK or REST endpoint."
+        title="No apps yet"
+        description="Open the New app tab to add your first app — you'll get an API key for the SDK or REST endpoint."
         action={
           <Btn size="sm" onClick={() => onGoToCreateTab()}>
-            New project
+            New app
           </Btn>
         }
       />
     ) : (
-      <div className="flex min-h-0 flex-col lg:flex-row lg:items-start lg:rounded-md lg:border lg:border-edge-subtle">
+      // The one card on this tab. `min-w-0` + clip: the phone rail scrolls inside itself, never the page.
+      <div className="flex min-h-0 min-w-0 max-w-full flex-col overflow-x-clip rounded-md border border-edge-subtle bg-surface-raised lg:flex-row lg:items-start">
         <ProjectFolderTabRail
           projects={projects}
           activeId={selectedProject?.id ?? null}
           onSelect={onSelectProject}
         />
         <div
-          className="min-w-0 flex-1 lg:border-l lg:border-edge-subtle lg:bg-surface-raised"
+          className="min-w-0 max-w-full flex-1 border-t border-edge-subtle lg:border-t-0 lg:border-l"
           role="tabpanel"
-          aria-label={selectedProject ? `Details for ${selectedProject.name}` : 'Project details'}
+          aria-label={selectedProject ? `Details for ${selectedProject.name}` : 'App details'}
         >
           {selectedProject && (() => {
       const project = selectedProject
@@ -171,7 +177,9 @@ export function ProjectsListPanel({
       const revealed = revealedKeys[project.id]
       return (
         <Card key={project.id} className="overflow-hidden rounded-none border-0 p-0 shadow-none lg:min-h-full">
-          <div className="flex flex-col gap-2 border-b border-edge-subtle bg-surface-raised px-3 py-2.5 sm:flex-row sm:items-start sm:justify-between">
+          {/* The name on its own row, the actions under it: beside the toolbar it wrapped mid-word
+              ("kensaur / .us") at 1440 (round 3). */}
+          <div className="flex flex-col gap-2 border-b border-edge-subtle bg-surface-raised px-3 py-2.5">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
                 {renamingId === project.id ? (
@@ -241,7 +249,9 @@ export function ProjectsListPanel({
                       repo_url={project.primary_repo?.repo_url ?? null}
                       size={16}
                     />
-                    <h3 className="truncate text-base font-semibold text-fg">{project.name}</h3>
+                    <h3 className="min-w-0 text-base font-semibold wrap-break-word text-fg" title={`Slug: ${project.slug}`}>
+                      {project.name}
+                    </h3>
                   </div>
                 )}
                 <span className="inline-flex items-center gap-1">
@@ -252,9 +262,6 @@ export function ProjectsListPanel({
                   </span>
                   <ConfigHelp helpId="projects.active_project" />
                 </span>
-                <SignalChip tone="neutral" className="font-mono text-2xs">
-                  {project.slug}
-                </SignalChip>
                 {project.pdca_bottleneck && project.pdca_bottleneck_label && (
                   <Link
                     to={bottleneckDeepLink(
@@ -274,7 +281,7 @@ export function ProjectsListPanel({
                 )}
               </div>
             </div>
-            <div className="flex shrink-0 flex-wrap items-center gap-1 sm:justify-end">
+            <div className="flex flex-wrap items-center gap-1">
               {canDeleteProject(project) && renamingId !== project.id && (
                 <Btn
                   variant="ghost"
@@ -282,55 +289,39 @@ export function ProjectsListPanel({
                         onClick={() => onStartRename(project)}
                   disabled={isBusy || renamingProject}
                   aria-label={`Rename ${project.name}`}
-                  title={`Rename ${project.name}. Doesn't change the project slug or any URLs.`}
-                  className="px-2"
+                  title={`Rename ${project.name}. Doesn't change the slug or any URLs.`}
+                  leadingIcon={<IconPencil />}
                 >
-                  <IconPencil />
+                  Rename
                 </Btn>
               )}
-              <Tooltip content="Reports">
-                <Link
-                  to={`/reports?project=${project.id}`}
-                  className={LINK_CHIP_CLASS}
-                  aria-label={`Reports for ${project.name}`}
-                >
-                  <IconReports />
-                </Link>
-              </Tooltip>
-              <Tooltip content="Integrations">
-                <Link
-                  to={`/integrations/config?project=${project.id}`}
-                  className={LINK_CHIP_CLASS}
-                  aria-label={`Integrations for ${project.name}`}
-                >
-                  <IconIntegrations />
-                </Link>
-              </Tooltip>
-              <Tooltip content="Settings">
-                <Link
-                  to={`/settings?project=${project.id}`}
-                  className={LINK_CHIP_CLASS}
-                  aria-label={`Settings for ${project.name}`}
-                >
-                  <IconSettings />
-                </Link>
-              </Tooltip>
-              <Tooltip content="Send test report (ingest only — does not mark SDK installed)">
-                <Btn
-                  variant="ghost"
-                  size="sm"
-                        onClick={() => onSendTestReport(project.id, project.name)}
-                  disabled={isBusy}
-                  aria-label={`Send test report for ${project.name}`}
-                  className="px-2"
-                >
-                  <IconSend />
-                </Btn>
-              </Tooltip>
+              <Link to={`/reports?project=${project.id}`} className={LINK_CHIP_CLASS} aria-label={`Reports for ${project.name}`}>
+                <IconReports />
+                Reports
+              </Link>
+              <Link to={`/integrations/config?project=${project.id}`} className={LINK_CHIP_CLASS} aria-label={`Integrations for ${project.name}`}>
+                <IconIntegrations />
+                Integrations
+              </Link>
+              <Link to={`/settings?project=${project.id}`} className={LINK_CHIP_CLASS} aria-label={`Settings for ${project.name}`}>
+                <IconSettings />
+                Settings
+              </Link>
+              <Btn
+                variant="ghost"
+                size="sm"
+                onClick={() => onSendTestReport(project.id, project.name)}
+                disabled={isBusy}
+                aria-label={`Send test report for ${project.name}`}
+                title="Send a test report (ingest only — does not mark the SDK installed)"
+                leadingIcon={<IconSend />}
+              >
+                Test report
+              </Btn>
               {canManageProject(project) && (
               <div id={`mint-key-${project.id}`} className="flex scroll-mt-chrome items-center gap-1" data-testid={`mint-key-${project.id}`}>
                 <label htmlFor={`key-scope-${project.id}`} className="sr-only">
-                  API key scope for {project.name}
+                  Key type to make for {project.name}
                 </label>
                 <ConfigHelp helpId="projects.api_key_scope" />
                 <select
@@ -353,20 +344,19 @@ export function ProjectsListPanel({
                     </option>
                   ))}
                 </select>
-                <Tooltip content="Generate API key">
-                  <Btn
-                    variant="ghost"
-                    size="sm"
-                          onClick={() => onGenerateKey(project.id)}
-                    disabled={isBusy}
-                    loading={isBusy}
-                    data-testid={`generate-key-${project.id}`}
-                    aria-label={`Generate API key for ${project.name}`}
-                    className="px-2"
-                  >
-                    <IconKey />
-                  </Btn>
-                </Tooltip>
+                <Btn
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onGenerateKey(project.id)}
+                  disabled={isBusy}
+                  loading={isBusy}
+                  data-testid={`generate-key-${project.id}`}
+                  aria-label={`Generate API key for ${project.name}`}
+                  leadingIcon={<IconKey />}
+                  className="whitespace-nowrap"
+                >
+                  Make key
+                </Btn>
               </div>
               )}
               {/* Destructive last in tab order on purpose. Gated to
@@ -385,16 +375,17 @@ export function ProjectsListPanel({
                   aria-label={`Delete ${project.name}`}
                   // Inline danger tone — only flips on hover so the
                   // row's neutral chrome stays calm at rest.
-                  className="px-2 text-fg-secondary hover:text-danger hover:bg-danger-muted/15 hover:border-danger/30"
+                  className="text-fg-secondary hover:text-danger hover:bg-danger-muted/15 hover:border-danger/30"
                   title={`Delete ${project.name} and every report, key, and integration tied to it. You'll get an Undo window.`}
+                  leadingIcon={<IconTrash />}
                 >
-                  <IconTrash />
+                  Delete
                 </Btn>
               )}
             </div>
           </div>
 
-          <div className="space-y-3 px-3 py-3">
+          <div className="space-y-3 px-3 pb-3">
             <ProjectMetricsRail project={project} />
             <ProjectContextRail project={project} />
             {project.pdca_bottleneck && project.pdca_bottleneck_label && (
@@ -461,6 +452,9 @@ export function ProjectsListPanel({
               />
             </div>
           )}
+
+          {/* The app server's key for the Ops hub (/ops): payments, releases and alerts. */}
+          {canManageProject(project) && <OpsKeyRow projectId={project.id} projectName={project.name} />}
 
           {project.api_keys.length > 0 && (() => {
             // Hide keys that are mid-revoke (in their undo window) so
@@ -541,7 +535,7 @@ export function ProjectsListPanel({
           <details
             className="mt-3 border-t border-edge-subtle px-3 pt-3 group"
             data-testid={`sdk-configurator-${project.id}`}
-            open={sdkOpenOverride[project.id] ?? true}
+            open={sdkOpenOverride[project.id] ?? installGuideOpenByDefault(project)}
             onToggle={(e) => {
               const nextOpen = (e.currentTarget as HTMLDetailsElement).open
               onSdkOpenOverrideChange(project.id, nextOpen)
@@ -604,51 +598,33 @@ export function ProjectsListPanel({
         </div>
       </div>
     )}
-  </Section>
+  </section>
   )
 }
 
 type MetricTone = 'reports' | 'keys' | 'members' | 'activity' | 'created' | 'sdk'
 
-const METRIC_TONE: Record<
-  MetricTone,
-  { icon: string; value: string }
-> = {
-  reports: {
-    icon: CHIP_TONE.infoSubtle,
-    value: 'text-info',
-  },
-  keys: {
-    icon: CHIP_TONE.warnSubtle,
-    value: 'text-warn',
-  },
-  members: {
-    icon: CHIP_TONE.brand,
-    value: 'text-brand',
-  },
-  activity: {
-    icon: CHIP_TONE.okSubtle,
-    value: 'text-ok',
-  },
-  created: {
-    icon: 'bg-surface-overlay text-fg-muted',
-    value: 'text-fg',
-  },
-  sdk: {
-    icon: CHIP_TONE.accentSubtle,
-    value: 'text-fg',
-  },
+// Plain figures (2026-11-18 round 2): an amber key count or a green "8h ago" read as a warning
+// and a pass. Colour is for state; these are counts and times.
+const NEUTRAL_METRIC = { icon: 'bg-surface-overlay text-fg-muted', value: 'text-fg' }
+const METRIC_TONE: Record<MetricTone, { icon: string; value: string }> = {
+  reports: NEUTRAL_METRIC,
+  keys: NEUTRAL_METRIC,
+  members: NEUTRAL_METRIC,
+  activity: NEUTRAL_METRIC,
+  created: NEUTRAL_METRIC,
+  sdk: NEUTRAL_METRIC,
 }
 
-/** Compact KPI strip — one row, color-accent values, dividers between tiles. */
+/** Compact KPI strip — one row of plain figures, dividers between tiles. */
 function ProjectMetricsRail({ project }: { project: Project }) {
   const hasSdk = project.sdk_status && project.sdk_status !== 'unknown'
 
   return (
-    <div className="overflow-hidden rounded-md border border-edge-subtle bg-surface-raised">
+    <div className="-mx-3 overflow-hidden border-b border-edge-subtle">
       <div
         className={`grid grid-cols-2 gap-px bg-edge-subtle sm:grid-cols-3 ${
-          hasSdk ? 'lg:grid-cols-6' : 'lg:grid-cols-5'
+          hasSdk ? 'lg:grid-cols-5' : 'lg:grid-cols-4'
         }`}
       >
         <MetricTile
@@ -657,13 +633,7 @@ function ProjectMetricsRail({ project }: { project: Project }) {
           label="Reports"
           value={project.report_count.toLocaleString()}
         />
-        <MetricTile
-          tone="keys"
-          icon={<IconKey className="h-3.5 w-3.5" />}
-          label="Keys"
-          value={String(project.active_key_count)}
-          hint="Active API keys"
-        />
+        {/* No Keys tile: the keys are listed once, under "Keys (N)" below (round 3). */}
         <MetricTile
           tone="members"
           icon={<IconUser className="h-3.5 w-3.5" />}
@@ -770,6 +740,8 @@ function ProjectContextRail({ project }: { project: Project }) {
   const sev = project.severity_breakdown_30d
   const sevTotal = sev?.total ?? 0
   const planTier = (project.plan_tier ?? '').trim()
+  // "free" shows no badge, so on its own it must not draw an empty Integrations row (2026-11-18 round 2).
+  const paidTier = planTier && planTier.toLowerCase() !== 'free' ? planTier : ''
   const region = (project.data_residency_region ?? '').trim()
   const indexedFiles = project.indexed_file_count ?? 0
   const extraRepos = (project.repos?.length ?? 0) - (repo ? 1 : 0)
@@ -786,7 +758,7 @@ function ProjectContextRail({ project }: { project: Project }) {
     !!repo ||
     indexedFiles > 0 ||
     sevTotal > 0 ||
-    planTier.length > 0 ||
+    paidTier.length > 0 ||
     region.length > 0 ||
     showTrend ||
     sentryConnected
@@ -798,7 +770,7 @@ function ProjectContextRail({ project }: { project: Project }) {
     const lastIso = lastIndexSweepAt(repo)
     const attemptIso = repo.last_index_attempt_at
     if (health === 'failed') {
-      const trimmed = (repo.last_index_error ?? '').slice(0, 220)
+      const trimmed = repo.last_index_error ? plainIndexError(repo.last_index_error, repoFullName(repo.repo_url)).text.slice(0, 220) : ''
       return `Last index attempt failed${attemptIso ? ` (${relativeTime(attemptIso)})` : ''}.${
         trimmed ? `\n\n${trimmed}` : ''
       }`
@@ -813,7 +785,7 @@ function ProjectContextRail({ project }: { project: Project }) {
       }
       if (repo.index_coverage_state === 'stalled') {
         return `Indexed ${of ?? 'part of the repo'}; the last sweep (${relativeTime(lastIso)}) added no file.${
-          repo.last_index_error ? `\n\n${repo.last_index_error.slice(0, 220)}` : ''
+          repo.last_index_error ? `\n\n${plainIndexError(repo.last_index_error, repoFullName(repo.repo_url)).text.slice(0, 220)}` : ''
         }`
       }
       return `Indexed ${of ?? 'part of the repo'} so far (${relativeTime(lastIso)}); the hourly sweep adds more.`
@@ -822,7 +794,7 @@ function ProjectContextRail({ project }: { project: Project }) {
   })()
 
   return (
-    <div className="overflow-hidden rounded-md border border-edge-subtle bg-surface-raised text-xs">
+    <div className="-mx-3 overflow-hidden border-b border-edge-subtle text-xs">
       {repo && repoLabel && (
         <ContextDetailRow label="Repository" icon={<IconGit className="h-4 w-4" />}>
           <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
@@ -907,13 +879,9 @@ function ProjectContextRail({ project }: { project: Project }) {
 
       {showTrend && trend && (
         <ContextDetailRow label="7-day trend" icon={<IconGauge className="h-4 w-4" />}>
-          <span title={`${trend.last7d} reports last 7d vs ${trend.prev7d} prior week`}>
-            <SignalChip
-              tone={trend.direction === 'up' ? 'warn' : 'ok'}
-              className="font-mono tabular-nums"
-            >
-              {trend.direction === 'up' ? '↑' : '↓'} {Math.abs(trend.delta)}
-            </SignalChip>
+          {/* A count moving is not a failure or a pass: neutral, and labelled. */}
+          <span className="font-mono tabular-nums text-fg" title={`${trend.last7d} reports in the last 7 days vs ${trend.prev7d} the week before`}>
+            {trendLabel(trend)}
           </span>
         </ContextDetailRow>
       )}
@@ -941,16 +909,23 @@ function ProjectContextRail({ project }: { project: Project }) {
                 <SignalChip tone="neutral">Low {sev.trivial}</SignalChip>
               </span>
             )}
+            {/* Reports whose severity is none of the four buckets: counted, so the row is never empty. */}
+            {(sev.other ?? 0) > 0 && (
+              <span title={`${sev.other} reports (30d) with no standard severity yet`}>
+                <SignalChip tone="neutral">Unrated {sev.other}</SignalChip>
+              </span>
+            )}
+            <span className="text-2xs text-fg-muted">{sevTotal} reports</span>
           </div>
         </ContextDetailRow>
       )}
 
-      {(planTier || region || sentryConnected) && (
+      {(paidTier || region || sentryConnected) && (
         <ContextDetailRow label="Integrations" icon={<IconIntegrations className="h-4 w-4" />}>
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            {planTier && planTier !== 'free' && (
-              <Badge className={`capitalize ${CHIP_TONE.brand}`}>
-                {planTier}
+            {paidTier && (
+              <Badge className="border border-edge-subtle bg-surface-overlay capitalize text-fg-secondary">
+                {paidTier}
               </Badge>
             )}
             {region && (
@@ -960,7 +935,7 @@ function ProjectContextRail({ project }: { project: Project }) {
             )}
             {sentryConnected && (
               <Badge
-                className={`inline-flex items-center gap-1 ${CHIP_TONE.accentSubtle}`}
+                className="inline-flex items-center gap-1 border border-edge-subtle bg-surface-overlay text-fg-secondary"
                 title={
                   sentryReports > 0
                     ? `${sentryReports} report${sentryReports === 1 ? '' : 's'} with Sentry trace in the last 30 days`
@@ -1028,9 +1003,10 @@ function ProjectIdCopy({ projectId }: { projectId: string }) {
       data-testid={`project-id-chip-${projectId}`}
       aria-label={`Copy project ID: ${projectId}`}
     >
-      <CodeInline className="min-w-0 max-w-full cursor-pointer break-all group-hover:border-edge">
+      {/* Neutral, not the black ink pill: that read as a button (round 3). */}
+      <code className="min-w-0 max-w-full cursor-pointer rounded-sm border border-edge-subtle bg-surface-root px-1.5 py-0.5 font-mono text-2xs break-all text-fg group-hover:border-edge">
         <span className="tabular-nums">{projectId}</span>
-      </CodeInline>
+      </code>
       <span className="shrink-0 opacity-50 group-hover:opacity-100 transition-opacity" aria-hidden="true">
         {copied
           ? <IconCheck className="h-2.5 w-2.5 text-ok" />

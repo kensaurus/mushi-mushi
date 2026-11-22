@@ -128,6 +128,12 @@ export function groupFindingsByCheck(payload: GateFindingsPayload, now: number =
   return groups.sort((a, b) => weight(a) - weight(b) || (STATUS_RANK[a.status] ?? 4) - (STATUS_RANK[b.status] ?? 4) || b.open - a.open)
 }
 
+/** One check's group from the newest run per gate, or null when it never ran. */
+export function checkGroupFor(payload: GateFindingsPayload | null | undefined, gate: string, now: number = Date.now()): CheckGroup | null {
+  if (!payload) return null
+  return groupFindingsByCheck(payload, now).find((g) => g.gate === gate) ?? null
+}
+
 type SpendCapField ='monthly_llm_budget_usd' | 'autofix_max_spend_usd' | 'autofix_max_dispatches_per_day'
 
 export type SpendCapValues = Partial<Record<SpendCapField, number>>
@@ -192,7 +198,7 @@ export function describeSpendCaps(values: SpendCapValues): string[] {
     lines.push(`Monthly AI budget: $${values.monthly_llm_budget_usd}. Every AI call for this app (triage, fixes, chat) stops once this month's spend reaches it, until the 1st.`)
   }
   if (values.autofix_max_spend_usd != null) {
-    lines.push(`Auto-fix spend limit: $${values.autofix_max_spend_usd} per 30 days for fixes Mushi starts on its own.`)
+    lines.push(`Auto-fix spend limit: $${values.autofix_max_spend_usd} per 30 days for fixes Mushi Mushi starts on its own.`)
   }
   if (values.autofix_max_dispatches_per_day != null) {
     lines.push(`Automatic fixes per day: ${values.autofix_max_dispatches_per_day}.`)

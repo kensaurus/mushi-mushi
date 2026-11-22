@@ -54,7 +54,7 @@ function JobResult({ job, onDone }: { job: RecipeChangeJobView; onDone: () => vo
           </p>
         </Callout>
       ) : alreadyOpen ? (
-        <Callout tone="warn" label="A Mushi draft PR for this is already open">
+        <Callout tone="warn" label="A Mushi Mushi draft PR for this is already open">
           <p className="text-xs text-fg-secondary">
             Finish or close <PrLink url={job.prUrl} number={job.prNumber}>that draft PR</PrLink> first, then preview again. No new
             PR was opened.

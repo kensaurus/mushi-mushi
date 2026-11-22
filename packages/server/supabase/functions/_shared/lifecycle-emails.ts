@@ -19,8 +19,15 @@
  *
  * Voice: docs/marketing/VOICE.md, sober register. Plain text first; the HTML
  * is the same words with links. No mascot in subject lines, no pixels.
+ *
+ * Layout: the KENSAURUS email kit (`renderMail`, yen-yen ADR 0100), vendored
+ * at ./kensaurus-spine/mail.ts, as kind `marketing`: the signed one-click
+ * unsubscribe URL becomes the visible opt-out link and the RFC 8058 header
+ * pair, the legal sender footer is fixed, and a "More from KENSAURUS" row
+ * links the other apps. The only images are those apps' own kensaur.us PNG
+ * icons; nothing is a tracking pixel.
  */
-import { renderEmailHtml, type EmailBlock, type EmailDoc } from './email-layout.ts'
+import { renderMail, type MailBlock } from './kensaurus-spine/mail.ts'
 
 export const LIFECYCLE_EMAIL_KEYS = ['day0_welcome', 'day2_nudge', 'day7_stalled', 'day7_activated'] as const
 export type LifecycleEmailKey = (typeof LIFECYCLE_EMAIL_KEYS)[number]
@@ -125,9 +132,9 @@ export interface LifecycleEmailContent {
 
 const CURSOR_SETUP = 'npx mushi-mushi setup --ide cursor'
 const SNIPPET = [
-  'npm install @mushi-mushi/web',
+  'npm install mushi-mushi',
   '',
-  "import { Mushi } from '@mushi-mushi/web'",
+  "import { Mushi } from 'mushi-mushi'",
   "Mushi.init({ projectId: '<your project id>', apiKey: '<your api key>' })",
 ].join('\n')
 
@@ -136,34 +143,22 @@ type Block =
   | { link: string; label?: string }
   | { pre: string }
 
-function blocksToText(blocks: Block[]): string {
-  return blocks
-    .map((b) => {
-      if ('p' in b) return b.p
-      if ('link' in b) return `  ${b.link}`
-      return b.pre
-        .split('\n')
-        .map((l) => (l ? `  ${l}` : ''))
-        .join('\n')
-    })
-    .join('\n\n')
-}
-
-/** The branded layout (email-layout.ts): the first link is the button, the rest stay links. */
-function blocksToHtml(subject: string, blocks: Block[], footer: EmailDoc['footer']): string {
+/**
+ * The kit's blocks: the first link is the button, any later one a line of
+ * text with its URL. A command or snippet (`pre`) is the kit's monospace
+ * code block, line breaks kept.
+ */
+function blocksToMail(blocks: Block[]): MailBlock[] {
   let buttoned = false
-  const out: EmailBlock[] = blocks.map((b) => {
-    if ('p' in b) return { kind: 'p', text: b.p }
-    if ('pre' in b) return { kind: 'pre', text: b.pre }
-    const label = b.label ?? b.link
+  return blocks.map((b, i): MailBlock => {
+    if ('p' in b) return { type: 'paragraph', text: b.p }
+    if ('pre' in b) return { type: 'code', mono: true, value: b.pre, id: `snippet-${i + 1}` }
     if (!buttoned) {
       buttoned = true
-      return { kind: 'button', label, url: b.link }
+      return { type: 'button', label: b.label ?? b.link, url: b.link }
     }
-    return { kind: 'link', label, url: b.link }
+    return { type: 'paragraph', text: `${b.label ?? b.link}: ${b.link}` }
   })
-  const first = blocks.find((b): b is { p: string } => 'p' in b && b.p !== 'Hi,')
-  return renderEmailHtml({ preheader: first ? first.p : subject, heading: subject, blocks: out, footer })
 }
 
 export function buildLifecycleEmail(input: LifecycleEmailInput): LifecycleEmailContent {
@@ -246,28 +241,33 @@ export function buildLifecycleEmail(input: LifecycleEmailInput): LifecycleEmailC
       break
   }
 
-  const footer: Block[] = unsub
-    ? [
-        {
-          p: `You get these few setup emails because you created a Mushi Mushi account${input.signedUpOn ? ` on ${input.signedUpOn}` : ''}. Unsubscribe with one click:`,
-        },
-        { link: unsub, label: 'Unsubscribe' },
-      ]
-    : [{ p: 'This is a one-time account email about your new Mushi project.' }]
-
-  const all = [...blocks, ...footer]
-  const htmlFooter: EmailDoc['footer'] = unsub
-    ? [
-        `You get these few setup emails because you created a Mushi Mushi account${input.signedUpOn ? ` on ${input.signedUpOn}` : ''}.`,
-        { label: 'Unsubscribe with one click', url: unsub },
-      ]
-    : ['This is a one-time account email about your new Mushi project.']
-  const headers: Record<string, string> = unsub
-    ? {
-        'List-Unsubscribe': `<${unsub}>`,
-        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-      }
-    : {}
-
-  return { subject, text: blocksToText(all), html: blocksToHtml(subject, blocks, htmlFooter), headers }
+  if (!unsub) throw new Error(`buildLifecycleEmail: ${input.key} requires unsubscribeUrl`)
+  const first = blocks.find((b): b is { p: string } => 'p' in b && b.p !== 'Hi,')
+  const mail = renderMail({
+    app: 'mushi-mushi',
+    lang: 'en',
+    kind: 'marketing',
+    campaign: `lifecycle-${input.key}`,
+    subject,
+    preheader: first ? first.p : subject,
+    unsubscribeUrl: unsub,
+    blocks: [
+      { type: 'heading', text: subject },
+      ...blocksToMail(blocks),
+      { type: 'divider' },
+      {
+        type: 'note',
+        text: `You get these few setup emails because you created a Mushi Mushi account${input.signedUpOn ? ` on ${input.signedUpOn}` : ''}.`,
+      },
+    ],
+  })
+  // RFC 8058 one-click only: the signed https endpoint and List-Unsubscribe-Post.
+  // No mailto: nobody processes unsubscribe-by-mail requests (lead, 2026-11-20).
+  // _shared/email.ts passes these to Resend as headers.
+  return {
+    subject: mail.subject,
+    text: mail.text,
+    html: mail.html,
+    headers: { 'List-Unsubscribe': `<${unsub}>`, 'List-Unsubscribe-Post': mail.headers['List-Unsubscribe-Post'] },
+  }
 }

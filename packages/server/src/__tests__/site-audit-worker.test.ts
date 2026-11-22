@@ -28,29 +28,34 @@ beforeAll(async () => {
 const P = '1000000c-0000-4000-8000-000000000000'
 const A = '2000000c-0000-4000-8000-000000000000'
 const BASE = 'https://tsumagoi.kensaur.us'
+/** What monitor-url.ts appends to every audit page load; Firecrawl echoes it back in sourceURL. */
+const AUDIT_TAG = 'mushi_monitor=audit&utm_source=mushi-monitor&utm_medium=audit'
 
 const PAGES = [
   {
-    metadata: { sourceURL: `${BASE}/th/events`, statusCode: 200, title: 'イベント｜群馬・嬬恋 標高1,444mの牧場で過ごす夜', description: 'กิจกรรมที่ฟาร์ม', language: 'th' },
+    metadata: { sourceURL: `${BASE}/th/events?${AUDIT_TAG}`, statusCode: 200, title: 'イベント｜群馬・嬬恋 標高1,444mの牧場で過ごす夜', description: 'กิจกรรมที่ฟาร์ม', language: 'th' },
     html: '<img src="/a.jpg" alt="Camp">',
     markdown: '# กิจกรรม\n\n[泊まる](https://x) | [旅のプラン](https://y)',
-    links: [`${BASE}/events/pizza`, 'https://firecrawl.dev/privacy'],
+    // A "#top" skip link resolves against the marked page URL (location.href keeps mushi_monitor).
+    links: [`${BASE}/events/pizza`, 'https://firecrawl.dev/privacy', `${BASE}/th/events?mushi_monitor=audit#top`],
   },
-  { metadata: { sourceURL: `${BASE}/th/events/pizza`, statusCode: 200, title: 'คืนพิซซ่า ที่ฟาร์ม Tsumagoi', description: 'คืนพิซซ่า', language: 'th' }, html: '', markdown: 'คืนพิซซ่า', links: [] },
+  { metadata: { sourceURL: `${BASE}/th/events/pizza?${AUDIT_TAG}`, statusCode: 200, title: 'คืนพิซซ่า ที่ฟาร์ม Tsumagoi', description: 'คืนพิซซ่า', language: 'th' }, html: '', markdown: 'คืนพิซซ่า', links: [] },
 ]
 
 function fakeFetch(statuses: Record<string, number>, batchStatus = { v: 'completed' }) {
   const calls: string[] = []
+  const bodies: Record<string, Record<string, unknown>> = {}
   const f = (async (input: string, init: RequestInit = {}) => {
     const url = String(input)
     calls.push(`${init.method ?? 'GET'} ${url}`)
+    if (typeof init.body === 'string') bodies[url] = JSON.parse(init.body)
     const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
     if (url.endsWith('/v2/map')) return json({ links: [`${BASE}/th/events`, `${BASE}/th/events/pizza`, `${BASE}/sitemap.xml`, 'https://other.example/x'] })
     if (url.endsWith('/v2/batch/scrape')) return json({ id: 'batch-1' })
     if (url.includes('/v2/batch/scrape/batch-1')) return json(batchStatus.v === 'completed' ? { status: 'completed', creditsUsed: 2, data: PAGES } : { status: batchStatus.v })
     return new Response('', { status: statuses[url] ?? 200 })
   }) as unknown as typeof fetch
-  return { f, calls }
+  return { f, calls, bodies }
 }
 
 function seed(over: Partial<Row> = {}): FakeDb {
@@ -70,13 +75,18 @@ const T0 = new Date('2026-10-23T03:29:00Z')
 describe('runSiteAudits', () => {
   it('starts a batch of the pages under the base URL, then files one report per failing rule', async () => {
     const db = seed()
-    const { f, calls } = fakeFetch({ 'https://firecrawl.dev/privacy': 404 })
+    const { f, calls, bodies } = fakeFetch({ 'https://firecrawl.dev/privacy': 404 })
     const deps = { now: () => T0, fetch: f, resolveKey: async () => 'fc-test' }
 
     const first = await w.runSiteAudits(db as never, deps)
     expect(first).toEqual([{ auditId: A, outcome: 'started a batch of 3 pages' }])
     const start = calls.find((c) => c.startsWith('POST') && c.endsWith('/v2/batch/scrape'))
     expect(start).toBeTruthy()
+    // Every page load is marked as Mushi's audit traffic; the map input (URL discovery) is not.
+    const batch = bodies['https://api.firecrawl.dev/v2/batch/scrape']
+    expect(batch.urls).toEqual([BASE, `${BASE}/th/events`, `${BASE}/th/events/pizza`].map((u) => `${u}?${AUDIT_TAG}`))
+    expect((batch.headers as Record<string, string>)['User-Agent']).toMatch(/MushiSiteWatch\/1\.0/)
+    expect(bodies['https://api.firecrawl.dev/v2/map'].url).toBe(BASE)
     expect(db.table('site_audits')[0]).toMatchObject({ batch_id: 'batch-1', claimed_until: null })
 
     const later = { ...deps, now: () => new Date(T0.getTime() + 3_600_000) }
@@ -90,6 +100,9 @@ describe('runSiteAudits', () => {
       'locale_text_leak',
     ])
     expect(reports.every((r) => r.source === 'site_audit' && r.status === 'new')).toBe(true)
+    // The marker Firecrawl echoes back (page URLs, same-page links) never reaches a link check or a report.
+    expect(calls.filter((c) => c.includes('mushi_monitor'))).toEqual([])
+    expect(JSON.stringify(reports)).not.toContain('mushi_monitor')
     const audit = db.table('site_audits')[0]
     expect(audit).toMatchObject({ batch_id: null, last_error: null })
     expect(audit.next_run_at).toBe(new Date(T0.getTime() + 3_600_000 + 7 * 86_400_000).toISOString())

@@ -17,8 +17,9 @@ import {
 } from '../report-detail/ReportSurface'
 import { ReportCodeText } from './ReportCodeText'
 import type { ReportBreadcrumb, ReportSentryContext, ReportSentryLink } from '../report-detail/types'
+import { StatusPill } from '../signal/StatusMark'
+import { reportRunStatus } from './reportRunStatus'
 import {
-  STATUS,
   SEVERITY,
   CATEGORY_BADGE,
   CATEGORY_LABELS,
@@ -134,9 +135,7 @@ export function ReportPreviewDrawer({ previewId, onClose, onSeen }: Props) {
           <>
             <div className="rounded-md border border-edge-subtle bg-surface-raised/35 p-3">
               <div className="flex flex-wrap items-center gap-2">
-                <Badge className={STATUS[report.status] ?? 'text-fg-muted border border-edge'}>
-                  {statusLabel(report.status)}
-                </Badge>
+                <StatusPill status={reportRunStatus(report.status)} label={statusLabel(report.status)} />
                 {report.severity && (
                   <Badge className={SEVERITY[report.severity] ?? ''}>{severityLabel(report.severity)}</Badge>
                 )}
@@ -152,7 +151,7 @@ export function ReportPreviewDrawer({ previewId, onClose, onSeen }: Props) {
                 const isConfident = Boolean(summaryText) && (conf == null || conf >= LOW_CONFIDENCE)
                 return (
                   <>
-                    <p className="mt-2 text-3xs font-medium uppercase tracking-wider text-fg-faint">
+                    <p className="mt-2 text-3xs font-semibold text-fg-secondary">
                       {isConfident ? "Here's why it broke" : 'Not sure yet — check these first'}
                     </p>
                     <h2 className="mt-0.5 text-base font-semibold leading-snug text-balance text-fg">
@@ -175,7 +174,7 @@ export function ReportPreviewDrawer({ previewId, onClose, onSeen }: Props) {
                 )}
               </div>
               <div className="mt-2 flex items-center justify-between gap-2 rounded-sm border border-edge-subtle/60 bg-surface-overlay/25 px-2 py-1.5">
-                <span className="text-3xs font-medium uppercase tracking-wider text-fg-faint">Confidence</span>
+                <span className="text-3xs font-semibold text-fg-secondary">Confidence</span>
                 <ConfidenceMeter confidence={report.confidence} />
               </div>
             </div>

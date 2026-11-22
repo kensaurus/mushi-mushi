@@ -1,8 +1,7 @@
 /**
  * Landing "Who it's for" strip: the three groups from /who-its-for, one pain
  * each, linking to their section. Added on the owner's instruction of
- * 2026-10-29 (ADR 0052 amendment); the hero's install box stays the one
- * primary action.
+ * 2026-10-29 (ADR 0052 amendment); the hero keeps its two actions (ADR 0056).
  */
 import Link from 'next/link'
 
@@ -24,6 +23,13 @@ const GROUPS = [
   },
 ] as const
 
+/** Persona pages for the situations a non-technical visitor names first (audit 2026-11-11). */
+const SITUATIONS = [
+  { label: 'built with Lovable or Bolt', href: '/use-cases/no-code-founder' },
+  { label: 'apps for clients', href: '/use-cases/agency-client-apps' },
+  { label: 'a phone app', href: '/use-cases/mobile-app' },
+] as const
+
 export function LandingAudience() {
   return (
     <section className="landing-pricing not-prose" aria-labelledby="landing-audience-heading">
@@ -41,6 +47,17 @@ export function LandingAudience() {
           </li>
         ))}
       </ul>
+      <p className="landing-section-lead">
+        Your situation:{' '}
+        {SITUATIONS.map((s, i) => (
+          <span key={s.href}>
+            {i > 0 ? ' · ' : null}
+            <Link href={s.href} className="text-mushi-vermillion hover:underline">
+              {s.label}
+            </Link>
+          </span>
+        ))}
+      </p>
     </section>
   )
 }

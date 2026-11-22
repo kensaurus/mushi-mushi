@@ -166,7 +166,7 @@ export function ProjectReposCard({ projectId }: Props) {
   return (
     <Card className="p-3 space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-fg-muted flex items-center gap-1.5">
+        <h3 className="text-xs font-semibold text-fg-secondary flex items-center gap-1.5">
           <IconGit />
           Linked repos ({repos.length})
         </h3>
@@ -285,7 +285,7 @@ export function ProjectReposCard({ projectId }: Props) {
       {removeTarget ? (
         <ConfirmDialog
           title="Remove this repo?"
-          body={`Mushi stops sending fixes to ${removeTarget.repo_url} and drops its index settings here. Pull requests already opened on it stay on GitHub.${removeTarget.is_primary ? ' It is the primary repo, so mark another one as primary afterwards.' : ''}`}
+          body={`Mushi Mushi stops sending fixes to ${removeTarget.repo_url} and drops its index settings here. Pull requests already opened on it stay on GitHub.${removeTarget.is_primary ? ' It is the primary repo, so mark another one as primary afterwards.' : ''}`}
           confirmLabel="Remove repo"
           tone="danger"
           loading={removing}

@@ -400,6 +400,27 @@ export async function routeGithubShipEvent(
   if (projectIds.length === 0) {
     return { status: 202, body: { ok: true, ignored: 'no_project_for_repo', repoFullName: repo }, projectIds }
   }
+  if (event === 'deployment_status') {
+    // A production deploy is a deploy whether or not the project opted in to
+    // auto-release: record it, so merged fixes reach Deployed and the
+    // report's deploy_live can place the commit (BL-179). Before scheduling,
+    // so a failed write is redelivered without a second release.
+    const environment = (payload.deployment_status?.environment ?? payload.deployment?.environment ?? '').trim()
+    const { error: obsErr } = await db.from('deploy_observations').insert(projectIds.map((pid) => ({
+      project_id: pid,
+      target_id: (environment || 'production').slice(0, 80),
+      environment: environment ? environment.slice(0, 60) : null,
+      observed_version: trigger.version,
+      observed_commit: trigger.commit ?? null,
+      source: 'github_deployment',
+      ok: true,
+      error: null,
+    })))
+    if (obsErr) {
+      arLog.error('deploy observation insert failed', { repo, err: obsErr.message })
+      return { status: 500, body: { ok: false, error: 'deploy observation not stored; redeliver' }, projectIds: [] }
+    }
+  }
   for (const pid of projectIds) void schedule(db, pid, trigger)
   return { status: 202, body: { ok: true, autoRelease: { queued: projectIds.length, version: trigger.version } }, projectIds }
 }

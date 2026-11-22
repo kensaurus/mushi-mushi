@@ -1,8 +1,17 @@
-# Mushi-chan mascot kit 🐛
+# Mascots: Mushi-chan and Field Kenji 🐛
 
-The four canonical expressions of Mushi-chan, generated as a consistent
-character set and used across the README, the admin console first-run tour,
-and Bluesky / X posts.
+Mushi Mushi has two characters with two jobs.
+
+| Character | Who | Job | Where |
+| --- | --- | --- | --- |
+| **Mushi-chan** | A small red ladybug | The product mascot and the brand's narrator | README, social posts, launch art, changelog voice |
+| **Field Kenji** | A young, clean-shaven bug naturalist in a field-guide style (pen line and watercolour), with Mushi-chan on his shoulder | The guide inside a flow: he says what is happening and what to do next. His face is also the app icon and, with Mushi-chan under his magnifier, the brand mark | The console, the docs quickstarts, the landing hero, the Bounties pages; the mark in the console and Bounties sidebars, the docs navbar, the favicon and the app icons |
+
+Kenji is the human guide beside Mushi-chan. She stays the mark; he explains.
+
+## Mushi-chan
+
+The four canonical expressions, generated as a consistent character set.
 
 | File | When to use |
 | --- | --- |
@@ -11,15 +20,15 @@ and Bluesky / X posts.
 | [`mushi-sleeping.png`](./mushi-sleeping.png) | "All systems quiet" / "no bugs in the last 24h" / late-night posts. Pairs with the *All Clear* admin banner. |
 | [`mushi-waving.png`](./mushi-waving.png) | Welcome moments — first-run tour, onboarding success screen, `npx mushi-mushi` finished, launch-day tweet. |
 
-## Character notes
+### Character notes
 
 - **Species:** stylised ladybug (`mushi` = bug in Japanese; the red-and-black palette is on-brand).
 - **Vibe:** kawaii but competent. Yuru-kyara energy, not sticker-pack energy.
 - **Palette:** red shell `#d94545`, cream-pink belly `#fce6dd`, black eyes, deep-burgundy soft outline. The shell colour matches the `severity=high` accent in the admin console (`tw-red-500`).
 - **Always:** centred, transparent background, soft drop-shadow underneath, looking at the viewer (except `mushi-sleeping.png`).
-- **Never:** holding tools, "fixing" anything literal, sad/angry. Mushi catches bugs *empathetically* — she's the friendly observer, not the exterminator.
+- **Never:** holding tools, "fixing" anything literal, sad/angry. Mushi catches bugs *empathetically* — she's the friendly observer, not the exterminator. This holds in Kenji's art too: she rides on his shoulder, cheers on his notebook, or sleeps on his knee; the magnifying glass and the laptop are always his.
 
-## Regeneration
+### Regeneration
 
 These were generated via the agent loop on **2026-04-23** with explicit
 character-consistency anchors. To regenerate (e.g. for a new pose) keep:
@@ -29,3 +38,136 @@ character-consistency anchors. To regenerate (e.g. for a new pose) keep:
 - A 1024×1024 transparent canvas request.
 
 The 1200×630 GitHub social preview lives in [`../social-preview/og-card.png`](../social-preview/og-card.png) (rendered by `scripts/gen-og-card.mjs`; it uses the 虫 stamp, not Mushi-chan).
+
+## Field Kenji
+
+Kenji is the same character as in the other KENSAURUS apps (top-knot bun,
+rectangular dark glasses, a calm half-smile, head a little large for his
+body), drawn here as a bug naturalist: white turtleneck, khaki field vest,
+brass magnifying glass, field notebook, vermillion `#E03C2C` as the one strong
+accent. Each app draws him in its own art style; this is Mushi Mushi's.
+
+### Poses
+
+| Pose | Journey state | Console | Docs | Bounties |
+| --- | --- | --- | --- | --- |
+| `wave` | Welcome, first open | Sign-in; Set up overview before any app exists | Quickstart | Join |
+| `point` | A setup step or a tip | First run "Name your project"; Set up tabs; first diagnosis before sending | | Empty leaderboard |
+| `magnify` | Diagnosing, loading; the job itself | First diagnosis while sending, queued and classifying; Set up "Test it" tab | Landing hero (desktop only) | |
+| `found` | Diagnosis ready, success | First diagnosis ready; setup complete; editor connected | | |
+| `think` | Waiting, nothing found | Offline, quota used, slow diagnosis; 404; editor on an old address; Set up "Fix a problem" tab | 404 | |
+| `allclear` | Empty because nothing is wrong (Mushi-chan asleep on his knee) | Home "Needs you", only when every read answered and the app has real reports | | |
+| `oops` | Something failed | Crash screen; test report or diagnosis failed | | |
+| `laptop` | Connect an editor, install | Connect page; Set up "Install" tab | MCP quickstart | |
+
+Files: `apps/admin/src/assets/mascot/`, `apps/docs/assets/mascot/`,
+`apps/testers/app/assets/mascot/`. Each app ships only the poses it uses, as
+a 600 px WebP plus a 300 px `-sm` WebP (transparent, square, feet on one
+baseline), imported so the URL is hashed. Assets live inside each app, never
+on a CDN: error and empty states must render offline.
+
+### Component
+
+- Console: `Mascot` in `apps/admin/src/components/mascot/Mascot.tsx`. Props:
+  `pose`, `line`, `size` (`sm` 64 / `md` 96 / `lg` 144 px), `surface`
+  (`console` adds a paper spot behind him so the watercolour reads on the dark
+  theme; `paper` for the editorial 404 and crash screens), `layout`.
+- Docs: `<Mascot pose line />`, registered in `apps/docs/mdx-components.tsx`.
+- Bounties: `apps/testers/app/components/Mascot.tsx`.
+
+The figure is decorative (empty `alt`, hidden from assistive tech). The line is
+real text, with a small "Kenji" name above it and a vermillion margin rule.
+If the image fails to load, the figure is dropped and the line stays.
+
+Motion is CSS only: a short entrance, then a 2 px sway for three slow cycles,
+then rest. Under `prefers-reduced-motion` he is a still image.
+
+### Voice
+
+Every console line lives in `apps/admin/src/lib/fieldGuide.ts`, keyed by
+journey state; `fieldGuide.test.ts` checks each one.
+
+- First person, one line, **90 characters at most** (fits a phone).
+- A calm, curious naturalist. Plain over precise: what happened, what to do next.
+- Never blames the developer. A failure on our side is "on us".
+- Never cutesy, no exclamation marks, no hype (the VOICE.md banned list applies).
+- Only mentions buttons that are on that screen.
+- Writes "Mushi Mushi", never a bare "Mushi".
+
+### Placement rules
+
+- **At most one Kenji per screen.** Each route has one owner. This counts
+  the posed figure, the guide. The mark in the chrome (sidebar, navbar) is
+  the brand, like the favicon, and does not count.
+- **Never in a customer's app.** Not in the SDK widget (`packages/web`,
+  `packages/core`, `packages/react-native`) and not in the "powered by"
+  footer (`_shared/brand-footer.ts`). Customers' apps are not our canvas.
+- **Never fake a state.** "All clear" needs every read to have answered and an
+  app that has received real reports; a new, empty app is unchecked, not clear.
+- Not on inline panel errors (`PageLoadError`): a page can show several, and
+  that would put several Kenjis on one screen.
+- Idle motion rests after three cycles; reduced motion shows a still frame.
+
+### Where the art came from
+
+Generated 2026-11-13 for the KENSAURUS mascot family: one fal
+`nano-banana-2.1` edit call per pose (2K, square), with the approved
+Mushi Mushi style sheet and `mushi-happy.png` as references, then background
+removal with `fal-ai/birefnet/v2`, trimmed and padded to a common baseline.
+The pipeline, prompts and spend log live in the glot.it repo
+(`scripts/kensaurus-mascot/`). Like Mushi-chan, the art is all rights reserved
+(see [`docs/legal/TRADEMARK.md`](../legal/TRADEMARK.md)).
+
+### Icon
+
+Since 2026-11-14 the console and docs icons are mark B: Field Kenji's face in
+a paper specimen disc on the vermillion field, with Mushi-chan inside a brass
+magnifier lens over his chin, so the icon shows the job (owner: every icon
+shows the feature or function). From 2026-11-13 to 11-14 it was the face
+alone, with Mushi-chan on the rim of his glasses, where she was a red speck
+below 48 px. Before that it was the 虫 hanko stamp, which said nothing about
+who the guide is.
+
+- Master: `docs/mascot/field-kenji-mark-icon.png` (1024², opaque), composed on
+  `docs/mascot/field-kenji-icon.png` (the face, from the same pipeline as the
+  poses) with the lens described under the chrome mark below. At 16 px
+  Mushi-chan is a red dot in a brass ring; from 32 px she reads as a ladybug.
+- Console (`apps/admin/public`): `favicon.svg` is a 64 px render inside an SVG
+  with explicit `width` and `height`, which `src/lib/favicon.ts` needs to draw
+  the badge. `icons/icon-192.png` and `icons/icon-512.png` are the PWA icons;
+  `icons/icon-maskable-512.png` holds the art at 80% on the vermillion field,
+  so the lens stays inside the maskable safe circle (only the handle's tip can
+  be cropped).
+- Docs (`apps/docs/public`): the same `favicon.svg`, plus `apple-touch-icon.png`,
+  `icon-192.png` and `icon-512.png`.
+- Social card: `scripts/gen-og-card.mjs` still uses the face icon as the brand stamp and
+  the wave pose beside the headline. GitHub's social preview is uploaded by
+  hand from `docs/social-preview/og-card.png`.
+- The brand mark in the chrome (since 2026-11-14) shows the job as well as
+  the guide (owner: every icon shows the feature or function). At 20–24 px
+  the icon's Mushi-chan is a red speck, so the mark is composed:
+  `kenji-mark.webp`, 128 px, transparent, in `apps/admin/src/assets/brand/`
+  and `apps/docs/assets/brand/`.
+  - Kenji's face: the icon cut to its paper disc (radius 500 of 1024, keeping
+    a thin vermillion ring), at 84% of the canvas, top left.
+  - A brass magnifier lens (ring `#b8862b`, handle `#5c3c24` to the bottom
+    right corner) over his chin, at 47% of the canvas, with a cream lens.
+  - Mushi-chan inside the lens, drawn flat (shell `#d94545`, black head,
+    centre line and four spots) so she reads as a ladybug at 10 px.
+  - Never put a border-radius on it: that clips the handle.
+- The mark sits before the wordmark in the console and Bounties sidebars
+  (alone in the icon rail and in the console's phone header) and before
+  "Mushi Mushi" in the docs navbar (hidden at 480 px and below, where the row
+  is full). The console and Bounties brands and the docs logo all link to the
+  landing page; decorative (`alt=""`), the link carries the name. The hero
+  eyebrow keeps its vermillion dot: two marks and a figure on one screen was
+  one Kenji too many (owner, 2026-11-14).
+- The landing hero's right half, at 1024 px and up (`LandingHeroVisual.tsx`),
+  shows the poster of the real-bug walkthrough (`bug-to-fix`), which plays on
+  click, with the `magnify` pose (magnifier in hand, Mushi-chan on his
+  shoulder) at its lower-right corner, peering in. Everything is a `<picture>`
+  source, so phones download nothing. The figure is decorative and not
+  clickable. The slot (`HERO_GUIDES`) holds one figure or a pair side by
+  side, for a second character.
+- The SDK widget, the npm packages, `packages/brand` and the testers app keep
+  their marks. The placement rules above apply to the icon too.

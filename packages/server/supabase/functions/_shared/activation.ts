@@ -44,10 +44,19 @@ export interface ActivationReportRow {
 /** The report fields that decide eligibility before any diagnosis exists. */
 export type ActivationCandidateRow = Pick<ActivationReportRow, 'id' | 'source' | 'custom_metadata' | 'url'>
 
+/**
+ * Page URLs a tool sends, never a person using an app: `mushi init` sends its
+ * test report from `cli://wizard`. CLIs before 0.36 sent it with no
+ * `custom_metadata.source`, and on 2026-11-10 it counted as an outside
+ * activation and started the day-7 lifecycle email.
+ */
+const TOOL_URL_RE = /^cli:\/\//i
+
 /** An end-user report from a deployed app: it can activate once it is diagnosed. */
 export function isActivationCandidate(row: ActivationCandidateRow): boolean {
   if (!END_USER_REPORT_SOURCES.has(row.source ?? 'widget')) return false
   if (isNotFirstReportSource(row.custom_metadata)) return false
+  if (typeof row.url === 'string' && TOOL_URL_RE.test(row.url)) return false
   return !isLocalDevUrl(row.url)
 }
 

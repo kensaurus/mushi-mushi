@@ -6,7 +6,7 @@ description: Fix dispatch in Mushi Mushi. A coding agent drafts the change, a dr
 # Fix drafts & PRs
 
 When you click **Dispatch fix** in the admin console, Mushi Mushi has a coding
-agent (Mushi's own fix-worker, Cursor, or GitHub's agent) open a draft pull
+agent (Mushi Mushi's own fix-worker, Cursor, or GitHub's agent) open a draft pull
 request on your repo, with a rationale and CI status you can review before
 merge.
 
@@ -66,7 +66,7 @@ We support three agent shapes:
   via `@cursor/sdk` in the Node orchestrator. The agent runs in Cursor's managed cloud
   environment, opens a draft PR via `autoCreatePR: true`, and returns the PR URL and agent
   artifacts. It does **not** use an E2B/Modal sandbox; Cursor provides its own runtime. On
-  Mushi Cloud the `fix-worker` edge function dispatches Cursor and GitHub cloud agents
+  Mushi Mushi Cloud the `fix-worker` edge function dispatches Cursor and GitHub cloud agents
   directly through their APIs (`_shared/agent-adapters.ts`).
 
 `McpFixAgent` calls one MCP tool on your agent server (`mushi.generate_fix` by
@@ -79,8 +79,8 @@ own tool suite inside the managed cloud environment.
 
 ## Credential scoping
 
-The Mushi GitHub App only reaches the repositories you install it on. For each
-GitHub call Mushi mints a short-lived installation token (GitHub expires it
+The Mushi Mushi GitHub App only reaches the repositories you install it on. For each
+GitHub call Mushi Mushi mints a short-lived installation token (GitHub expires it
 after an hour); without the App it uses a token you stored for the project or
 organization. The token is not narrowed to one repository or revoked when the
 PR opens.
@@ -88,7 +88,7 @@ PR opens.
 The PR stays a **draft**. `agent-pr-review` reviews it with Claude Opus on your
 own Anthropic key and marks it ready (so your CI runs) when the verdict is merge
 on that exact commit. When no review is possible (no Anthropic key, or the
-review is turned off), a draft Mushi's own fix-worker opened falls back to its
+review is turned off), a draft Mushi Mushi's own fix-worker opened falls back to its
 model's own self-check instead. See [Agent PR review](/concepts/agent-pr-review).
 
 ## Spec traceability — `inventoryAction` end-to-end

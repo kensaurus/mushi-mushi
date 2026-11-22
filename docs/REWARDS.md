@@ -66,7 +66,7 @@ double-award.
 ┌─────────────────────────────────────────────────────────────────────┐
 │                          Your app (client)                           │
 │  ┌────────────────────────────────────────────────────────────────┐  │
-│  │  @mushi-mushi/react  ·  @mushi-mushi/react-native  ·  web SDK │  │
+│  │  mushi-mushi/react  ·  @mushi-mushi/react-native  ·  web SDK  │  │
 │  │                                                                │  │
 │  │  identify({ userId, name, email })                            │  │
 │  │  mushi.track("report_submit")        ← custom activity        │  │
@@ -124,7 +124,7 @@ double-award.
 ┌───────────────────────────────────────────────────────────────────────┐
 │              Your app (server / webhook handler)                       │
 │                                                                        │
-│  POST /api/mushi/reward-webhook  (@mushi-mushi/node receiver)          │
+│  POST /api/mushi/reward-webhook  (mushi-mushi/node receiver)           │
 │    { event: "reward.tier_changed",                                     │
 │      end_user_id, external_user_id: "user_123",                       │
 │      tier_after: { slug: "champion", display_name: "Champion" },      │
@@ -279,7 +279,7 @@ Raised when a user or admin challenges a points decision.
 
 ```bash
 # Web / React
-npm install @mushi-mushi/react
+npm install mushi-mushi
 
 # React Native
 npm install @mushi-mushi/react-native
@@ -291,7 +291,7 @@ Call `identify()` as soon as your auth state is confirmed. This creates or updat
 
 ```typescript
 // React
-import { useMushi } from '@mushi-mushi/react'
+import { useMushi } from 'mushi-mushi/react'
 
 function App() {
   const mushi = useMushi()
@@ -324,7 +324,7 @@ The `action` string must match a `reward_rules.action` exactly, or the event is 
 ### 4. Show the rewards widget
 
 ```tsx
-import { RewardsWidget } from '@mushi-mushi/react'
+import { RewardsWidget } from 'mushi-mushi/react'
 
 // Inline progress card — shows tier, points, and next-tier callout
 <RewardsWidget variant="card" />
@@ -673,14 +673,14 @@ The envelope is **flat** (it is not nested under `user` / `tier`):
 `host_credit_payload` is your opaque "grant this" instruction, defined per tier
 in the console.
 
-### Receiving the webhook — `@mushi-mushi/node` (recommended)
+### Receiving the webhook — `mushi-mushi/node` (recommended)
 
 The server SDK ships a framework-agnostic receiver that timing-safely verifies
 the `X-Mushi-Signature` header and routes events to typed callbacks. This is the
 Mushi → host-repo trigger for "grant a role / grant a Stripe membership".
 
 ```ts
-import { createMushiRewardsHandler } from '@mushi-mushi/node'
+import { createMushiRewardsHandler } from 'mushi-mushi/node'
 
 const handler = createMushiRewardsHandler({
   secret: process.env.MUSHI_REWARD_WEBHOOK_SECRET!, // the minted mushi_whk_… value

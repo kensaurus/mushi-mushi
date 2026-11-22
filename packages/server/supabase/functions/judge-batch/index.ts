@@ -9,7 +9,7 @@ import { recordPromptResult, checkPromotionEligibility, promoteCandidate, getPro
 import { startCronRun } from '../_shared/telemetry.ts'
 import { recordLlmUsage } from '../_shared/llm-usage.ts'
 import { withSentry } from '../_shared/sentry.ts'
-import { resolveLlmKey } from '../_shared/byok.ts'
+import { withAnthropicOrOpenAi } from '../_shared/llm-failover.ts'
 import { dispatchPluginEventDetached } from '../_shared/plugins.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { mapWithConcurrency } from '../_shared/concurrency.ts'
@@ -19,29 +19,6 @@ import { claudeGenerateObject } from '../_shared/claude-messages.ts'
 import { resolveClaudeModel } from '../_shared/claude-request.ts'
 import { safeErrorResponse } from '../_shared/safe-error.ts'
 import { JUDGE_ELIGIBLE_STATUSES, judgeEmptyResult, onlyJudgeable } from '../_shared/judge-eligibility.ts'
-import { platformAnthropicKey } from '../_shared/ai-provider.ts'
-
-/**
- * OpenRouter / Together / Fireworks expect `vendor/model` slugs. Operators
- * commonly type bare names (`gpt-4.1`, `claude-opus-4-6`) inherited from the
- * direct-API config. This helper prefixes the most common families so the
- * call doesn't 400 with "model not found" the first time someone enables a
- * gateway. If the model already contains a `/`, we leave it alone.
- */
-function normalizeGatewayModel(model: string): string {
-  if (!model || model.includes('/')) return model
-  const m = model.toLowerCase()
-  if (m.startsWith('gpt') || m.startsWith('o1') || m.startsWith('o3') || m.startsWith('o4')) {
-    return `openai/${model}`
-  }
-  if (m.startsWith('claude')) return `anthropic/${model}`
-  if (m.startsWith('gemini')) return `google/${model}`
-  if (m.startsWith('llama')) return `meta-llama/${model}`
-  if (m.startsWith('mistral') || m.startsWith('mixtral')) return `mistralai/${model}`
-  if (m.startsWith('qwen')) return `qwen/${model}`
-  if (m.startsWith('deepseek')) return `deepseek/${model}`
-  return model
-}
 
 // OpenAI's "strict" structured-outputs mode rejects optional fields — every
 // property must appear in `required` and use `nullable` instead of `optional`.
@@ -245,24 +222,9 @@ ${JSON.stringify(report.reproduction_steps ?? []).slice(0, 500)}
 
 Score each dimension 0-1. Be critical of vague components, miscalibrated severity, and non-actionable repro steps.`
 
-          let evaluation: z.infer<typeof judgeSchema> | undefined
-          let usage: { promptTokens?: number; completionTokens?: number } | undefined
-          let usedJudgeModel = modelId
-          let judgeFallbackUsed = false
-
-          // C9: per-project BYOK resolution.
-          const anthropicResolved = await resolveLlmKey(db!, project.id, 'anthropic')
-          // The platform key too follows the organization's AI provider (ADR 0039 amendment).
-          const claudeEnvKey = await platformAnthropicKey(db!, project.id)
-          // V5.3 §2.7 + §2.18: BYOK-only deployments commonly run on a single
-          // OpenAI-compatible gateway (OpenRouter, Together, …) instead of a
-          // direct Anthropic key. If we have no Anthropic key at all, skip the
-          // primary path entirely — calling the Anthropic API without a
-          // key throws a noisy 401 that pollutes the judge log and wastes a
-          // round-trip on every report.
-          const tryAnthropic = !!(anthropicResolved?.key ?? claudeEnvKey)
-          let primaryErr: unknown = tryAnthropic ? null : new Error('No Anthropic key — skipping primary path')
-
+          // The app's own Claude key first, then its OpenAI key (judge_fallback_provider
+          // 'none' turns that leg off), then the platform keys through the
+          // judge-batch route (provider and model from kenji, CONTRACT 2026-11-21).
           const judgeUsageCtx = {
             functionName: 'judge-batch',
             stage: 'judge',
@@ -272,24 +234,29 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
             promptVersion: judgePromptSelection.promptVersion ?? null,
             langfuseTraceId: trace.id,
           }
-
-          if (tryAnthropic) {
-            const anthropicStart = Date.now()
-            const anthropicUsage = {
-              ...judgeUsageCtx,
-              model: modelId,
-              keySource: anthropicResolved?.source ?? 'env',
-              startedAt: anthropicStart,
-            } as const
-            try {
-              // Sentry MUSHI-MUSHI-SERVER-9 (2026-04-23/24): AI SDK v4 sends
-              // `temperature` and forces `tool_choice` for JSON; Opus 4.7+ and
-              // Sonnet 5.5 reject both. `claudeGenerateObject` uses native
-              // structured outputs, sends no thinking config, and keeps
-              // `temperature: 0` only on models that still accept it.
-              const result = await claudeGenerateObject({
-                apiKey: (anthropicResolved?.key ?? claudeEnvKey)!,
-                model: modelId,
+          const record = <R,>(model: string, keySource: 'byok' | 'env', call: () => Promise<R>) => {
+            const ctx = { ...judgeUsageCtx, model, keySource, startedAt: Date.now() } as const
+            return call().then(
+              (result) => {
+                void recordLlmUsage(db, ctx, { result: result as never })
+                return result
+              },
+              (err: unknown) => {
+                void recordLlmUsage(db, ctx, { error: err })
+                throw err
+              },
+            )
+          }
+          const routed = await withAnthropicOrOpenAi(
+            db!,
+            project.id,
+            (key) => {
+              const model = key.model ?? modelId
+              // Sentry MUSHI-MUSHI-SERVER-9: `claudeGenerateObject` uses native
+              // structured outputs and no sampling knobs, which Sonnet 5.5 requires.
+              return record(model, key.source, () => claudeGenerateObject({
+                apiKey: key.key,
+                model,
                 schema: judgeSchema,
                 effort: JUDGE_EFFORT,
                 messages: [
@@ -302,82 +269,33 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
                   },
                   { role: 'user', content: USER_PROMPT },
                 ],
+              })).then((r) => ({ object: r.object, usage: r.usage, model }))
+            },
+            (key) => {
+              if (key.source === 'byok' && fallbackProvider !== 'openai') {
+                return Promise.reject(new Error('This project turned the OpenAI fallback judge off'))
+              }
+              // openAiProvider prefixes the id only for OpenRouter
+              // (MUSHI-MUSHI-SERVER-3N: OpenAI rejects `openai/gpt-5.4`).
+              const model = key.model ?? fallbackModelId
+              const openai = openAiProvider({
+                apiKey: key.key,
+                ...(key.baseUrl ? { baseURL: key.baseUrl } : {}),
               })
-              evaluation = result.object
-              usage = result.usage
-              void recordLlmUsage(db, anthropicUsage, { result })
-            } catch (err) {
-              void recordLlmUsage(db, anthropicUsage, { error: err })
-              // Preserve diagnostic fidelity on the first failure — the
-              // Anthropic SDK puts the HTTP status on `status` (AI SDK used
-              // `statusCode`), which a plain message log would hide. Without this log the audit
-              // (LLM-1) couldn't distinguish "529 overloaded" (ok, retry)
-              // from "invalid_request_error" (config bug) or "401 auth"
-              // (missing BYOK key) — all 3 appeared as "100% fallback".
-              const e = err as { status?: number; statusCode?: number; responseBody?: string; message?: string }
-              rootLog.child('judge').warn('Primary judge call failed — falling through to fallback', {
-                reportId: report.id,
-                model: modelId,
-                statusCode: e.status ?? e.statusCode ?? null,
-                detail: (e.responseBody ?? e.message ?? String(err)).slice(0, 200),
-              })
-              primaryErr = err
-            }
-          }
+              return record(model, key.source, () => generateObject({
+                model: openai(model),
+                schema: judgeSchema,
+                system: SYSTEM_PROMPT,
+                prompt: USER_PROMPT,
+              })).then((r) => ({ object: r.object, usage: r.usage, model }))
+            },
+            { feature: 'judge-batch', tier: 'standard' },
+          )
+          const evaluation: z.infer<typeof judgeSchema> = routed.result.object
+          const usage: { promptTokens?: number; completionTokens?: number } | undefined = routed.result.usage
+          const usedJudgeModel = routed.result.model
+          const judgeFallbackUsed = routed.fallbackUsed
 
-          if (primaryErr) {
-            // M2 (V5.3 §2.7): OpenAI fallback when Anthropic is degraded
-            // (529 overloaded, 5xx) OR the deployment is BYOK-only on
-            // OpenRouter / Together / Fireworks. Same Zod schema; we never
-            // fail the whole batch just because the primary provider is down.
-            const openaiResolved = await resolveLlmKey(db!, project.id, 'openai')
-            const openaiKey = openaiResolved?.key ?? Deno.env.get('OPENAI_API_KEY')
-            if (fallbackProvider !== 'openai' || !openaiKey) {
-              throw primaryErr
-            }
-            // OpenRouter (and most OpenAI-compatible gateways) require a
-            // `vendor/model` slug. If the operator wrote `gpt-4.1` we map it
-            // to `openai/gpt-4.1`; `claude-opus-4-6` -> `anthropic/claude-…`.
-            // Only applied when a baseURL is set (i.e., not direct OpenAI).
-            const isGateway = !!openaiResolved?.baseUrl
-            const normalizedModel = isGateway
-              ? normalizeGatewayModel(fallbackModelId)
-              : fallbackModelId
-            rootLog.child('judge').info('Using OpenAI fallback judge', {
-              reportId: report.id,
-              gateway: isGateway ? openaiResolved!.baseUrl : null,
-              model: normalizedModel,
-              skippedPrimary: !tryAnthropic,
-            })
-            const openai = openAiProvider({
-              apiKey: openaiKey,
-              ...(openaiResolved?.baseUrl ? { baseURL: openaiResolved.baseUrl } : {}),
-            })
-            const openaiUsage = {
-              ...judgeUsageCtx,
-              model: normalizedModel,
-              keySource: openaiResolved?.key ? openaiResolved.source : 'env',
-              startedAt: Date.now(),
-              fallbackUsed: tryAnthropic,
-              fallbackReason: tryAnthropic ? 'anthropic_failed' : 'no_anthropic_key',
-            } as const
-            const result = await generateObject({
-              model: openai(normalizedModel),
-              schema: judgeSchema,
-              system: SYSTEM_PROMPT,
-              prompt: USER_PROMPT,
-            }).catch((err: unknown) => {
-              void recordLlmUsage(db, openaiUsage, { error: err })
-              throw err
-            })
-            void recordLlmUsage(db, openaiUsage, { result })
-            evaluation = result.object
-            usage = result.usage
-            usedJudgeModel = normalizedModel
-            judgeFallbackUsed = tryAnthropic // only "fallback" if primary actually attempted
-          }
-
-          if (!evaluation) throw new Error('Judge produced no evaluation (both primary and fallback failed or were skipped)')
 
           const compositeScore = (
             evaluation.accuracy * weights.accuracy +

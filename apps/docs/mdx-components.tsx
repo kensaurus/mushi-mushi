@@ -25,7 +25,10 @@ import { LoopComparison } from './components/LoopComparison'
 import { PricingEstimator } from './components/PricingEstimator'
 import { OpenMetrics } from './components/OpenMetrics'
 import { InThirtySeconds, YouWillSee } from './components/OnboardingBoxes'
+import { Walkthrough } from './components/Walkthrough'
+import { HowItWorksFlow } from './components/HowItWorksFlow'
 import { FrameworkPicker } from './components/FrameworkPicker'
+import { Mascot } from './components/Mascot'
 import {
   CinematicEditorialHero,
   DiagnosisScrollStage,
@@ -62,6 +65,8 @@ export const useMDXComponents = (components?: Record<string, unknown>) => ({
   FineTunePipeline,
   MultiRepoFlowDiagram,
   DocScreenshot,
+  Walkthrough,
+  HowItWorksFlow,
   AdminDocHero,
   DocsMediaShowcase,
   OssTrustStrip,
@@ -75,6 +80,7 @@ export const useMDXComponents = (components?: Record<string, unknown>) => ({
   InThirtySeconds,
   YouWillSee,
   FrameworkPicker,
+  Mascot,
   CinematicEditorialHero,
   DiagnosisScrollStage,
   ScrollReveal,

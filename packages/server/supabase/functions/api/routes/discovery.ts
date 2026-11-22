@@ -51,6 +51,7 @@ import {
 } from '../helpers.ts';
 import { buildMcpServerCard, MCP_SERVER_CARD_HEADERS } from '../../_shared/mcp-server-card.ts';
 import { DEPLOY_INFO } from '../../_shared/deploy-info.ts';
+import { instanceMode } from '../../_shared/instance-mode.ts';
 
 export function registerPreRegionDiscoveryRoutes(app: Hono<{ Variables: Variables }>): void {
   // Pure liveness ping — intentionally NEVER touches the DB or checks
@@ -65,10 +66,13 @@ export function registerPreRegionDiscoveryRoutes(app: Hono<{ Variables: Variable
   // changed. `region` is the data-routing label (currentRegion); the Supabase
   // runtime's own SB_REGION says where the function actually runs.
   // /v1/health is the path API clients guess first.
+  // `mode` (hosted | self-hosted, _shared/instance-mode.ts) feeds the console
+  // sidebar's build stamp, so the console reports what the server says it is.
   const health = () => ({
     status: 'ok',
     version: DEPLOY_INFO.sha,
     deployed_at: DEPLOY_INFO.deployedAt,
+    mode: instanceMode(),
     region: currentRegion(),
     hosting_region: Deno.env.get('SB_REGION') ?? null,
   });

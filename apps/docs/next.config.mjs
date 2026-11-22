@@ -38,7 +38,7 @@ export default withNextra({
   trailingSlash: false,
   // R3F / three need transpile for the static export + webpack client islands.
   transpilePackages: ['three', '@react-three/fiber'],
-  // Inlined into client bundles (DocScreenshot, AdminDocHero GIFs).
+  // Inlined into client bundles (DocScreenshot, DocVideo, AdminDocHero clips).
   env: {
     NEXT_PUBLIC_MUSHI_BASE_PATH: basePath,
     NEXT_PUBLIC_MUSHI_ROOT_ALIAS: rootAlias,

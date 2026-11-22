@@ -1,23 +1,48 @@
-# Vue 3 quickstart
+# Bug report widget for Vue 3
 
 Source: https://kensaur.us/mushi-mushi/docs/quickstart/vue
 
 ---
-title: Vue 3 quickstart
-description: Add Mushi Mushi bug reporting to a Vue 3 app. Install @mushi-mushi/vue and register MushiPlugin with your project ID and public API key in main.ts.
+title: Bug report widget for Vue 3
+description: "Free, open-source bug report widget for Vue 3: install mushi-mushi and register MushiPlugin with your project ID and public API key in main.ts."
 ---
 
-# Vue 3 quickstart
+# Bug report widget for Vue 3
 
-Same steps as the [React quickstart](/quickstart/react); only the install and the boot call differ.
+This page adds a report button to a Vue 3 app. When something breaks,
+your users tap it and write one sentence. You get the likely cause in plain
+English, with a fix your AI editor can apply.
+
+The fastest way is `npx mushi-mushi` in your app's folder: it gets your keys,
+installs the package and prints the code below for you to paste. The steps
+match the [React quickstart](/quickstart/react); only the install and the
+start-up call differ.
+
+## Get your project ID and API key
+
+The SDK needs two values from a Mushi Mushi project.
+
+- **Fastest:** run `npx mushi-mushi` in your app's folder. It signs you in
+  through the browser, creates or picks a project, installs the SDK and writes
+  both values to `.env.local`.
+- **By hand:** [create a free account](https://kensaur.us/mushi-mushi/admin/signup?src=quickstart-vue)
+  (no card) and create a project. The panel that opens shows the **project ID**
+  and an **API key** that starts with `mushi_`. Copy the key now: it is shown
+  once. You can mint another under **Set up → Test it → Generate API key**.
+- **Self-hosting?** Your own console gives you the same two values. See
+  [Self-hosting](/self-hosting).
+
+Put them in `.env.local` as `VITE_MUSHI_PROJECT_ID` and `VITE_MUSHI_API_KEY`.
+
+## Install and register the plugin
 
 ```bash
-pnpm add @mushi-mushi/vue
+pnpm add mushi-mushi
 ```
 
 ```ts filename="src/main.ts"
 import { createApp } from 'vue'
-import { MushiPlugin } from '@mushi-mushi/vue'
+import { MushiPlugin } from 'mushi-mushi/vue'
 import App from './App.vue'
 
 createApp(App)
@@ -28,4 +53,9 @@ createApp(App)
   .mount('#app')
 ```
 
-API detail: [`@mushi-mushi/vue`](/sdks/vue). Widget behavior: [`@mushi-mushi/web`](/sdks/web).
+**You'll see:** a small report button in the corner of your app. Tap it, send one sentence, and the report shows in the [console](https://kensaur.us/mushi-mushi/admin) within seconds.
+
+Starting a new Vue app? `npx mushi-mushi --template vue my-app` makes one with
+Mushi Mushi already in it ([how](/sdks/launcher#start-a-new-app-with-mushi-mushi-in-it)).
+
+API detail: [`mushi-mushi/vue`](/sdks/vue). Widget behavior: [`mushi-mushi`](/sdks/web).

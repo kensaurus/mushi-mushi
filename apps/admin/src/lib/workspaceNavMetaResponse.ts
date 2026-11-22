@@ -13,6 +13,8 @@ interface NavMetaCounts {
   /** Critical/high reports still waiting on a decision (inbox/stats). */
   urgentOpenReports: number | null
   untriagedBacklog: number | null
+  /** ADR 0063: untriaged reports Mushi's own checks filed (code audit, site audit…), not in untriagedBacklog. */
+  untriagedAutomated?: number | null
   notificationsUnread: number | null
   queueFailed: number | null
   flaggedDevices: number | null

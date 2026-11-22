@@ -1,5 +1,17 @@
 # @mushi-mushi/inventory-auth-runner
 
+## 0.1.8
+
+### Patch Changes
+
+- f318574: npm descriptions and READMEs now say who each package is for. To add Mushi Mushi to an app, install `mushi-mushi`; the integration and tooling packages say when you need them, and the SDK READMEs show the matching `mushi-mushi/<framework>` import. No code changes.
+
+## 0.1.7
+
+### Patch Changes
+
+- 184d4ea: The README and the npm description now use the full product name, Mushi Mushi, everywhere instead of a shortened "Mushi". In `@mushi-mushi/mcp`, `search_mushi_docs` and `get_mushi_doc` also return the updated docs pages and the corrected auto-fix-loop blog post.
+
 ## 0.1.6
 
 ### Patch Changes

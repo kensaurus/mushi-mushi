@@ -2,7 +2,7 @@
 
 'use client'
 
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { CONNECT_SKILLS } from '@/lib/public-copy'
 import { MUSHI_CANONICAL_URLS } from '@mushi-mushi/brand'
 import {
@@ -27,6 +27,8 @@ import {
 const MCP_TOOL_COUNT = TOOL_CATALOG.length + TDD_TOOL_CATALOG.length + CODEBASE_TOOL_CATALOG.length
 
 const CONSOLE_CONNECT_URL = 'https://kensaur.us/mushi-mushi/admin/connect'
+/** Signup for demo visitors with no account; `src` is read by the console's signup attribution. */
+const SIGNUP_URL = 'https://kensaur.us/mushi-mushi/admin/signup?src=connect-demo'
 const PLACEHOLDER_KEY = '<your-mushi-api-key>'
 const PLACEHOLDER_ENDPOINT = 'https://YOUR-PROJECT.supabase.co/functions/v1/api'
 const PLACEHOLDER_MCP_HTTP = 'https://YOUR-PROJECT.supabase.co/functions/v1/mcp'
@@ -125,20 +127,25 @@ function McpLane({ client, input, isDemo }: { client: McpClientDef; input: McpBu
       {isDemo ? (
         <div className="mushi-connect-callout">
           <strong>Live demo — no signup.</strong> Installs <strong>read-only</strong> access to a
-          seeded Mushi project so you can try the tools right now.{' '}
+          seeded Mushi Mushi project so you can try the tools right now.{' '}
           <a href={CONSOLE_CONNECT_URL} className="font-medium underline [@media(hover:hover)]:hover:opacity-80">
             Connect your own project →
+          </a>{' '}
+          No account yet?{' '}
+          <a href={SIGNUP_URL} className="font-medium underline [@media(hover:hover)]:hover:opacity-80">
+            Create a free one
           </a>
+          .
         </div>
       ) : oauth ? (
         <div className="mushi-connect-callout">
-          <strong>No keys to paste.</strong> This installs only the Mushi URL. The first time{' '}
-          {client.label} uses it, your browser opens the Mushi sign-in; approve all your apps or pick
+          <strong>No keys to paste.</strong> This installs only the Mushi Mushi URL. The first time{' '}
+          {client.label} uses it, your browser opens the Mushi Mushi sign-in; approve all your apps or pick
           some, and a revocable key is made for you. Revoke it any time under Editor agents in the console.
         </div>
       ) : (
         <div className="mushi-connect-callout">
-          <strong>{client.label} needs a key.</strong> It runs Mushi as a local process, which has no
+          <strong>{client.label} needs a key.</strong> It runs Mushi Mushi as a local process, which has no
           browser sign-in. Replace{' '}
           <code className="rounded bg-[var(--mushi-paper)] px-1 font-mono text-xs">{PLACEHOLDER_KEY}</code>{' '}
           with your real key, or{' '}
@@ -166,7 +173,7 @@ function McpLane({ client, input, isDemo }: { client: McpClientDef; input: McpBu
             {isDemo
               ? 'Installs the read-only demo — no signup. Connect your own project to use your data and write tools.'
               : oauth
-                ? 'Installs the hosted Mushi URL. Sign-in runs in your browser the first time the editor calls it.'
+                ? 'Installs the hosted Mushi Mushi URL. Sign-in runs in your browser the first time the editor calls it.'
                 : 'This deeplink uses a placeholder key. Sign in to inject your real key automatically.'}
           </p>
           <details className="group">
@@ -212,7 +219,7 @@ function CliLane({ client }: { client: McpClientDef }) {
   return (
     <div className="space-y-5">
       <p className="text-sm text-[var(--mushi-ink-muted)]">
-        Install the Mushi CLI once, log in, and wire any supported IDE in seconds.
+        Install the Mushi Mushi CLI once, log in, and wire any supported IDE in seconds.
       </p>
       <ol className="space-y-4">
         {[
@@ -245,9 +252,9 @@ function SkillsLane({ client }: { client: McpClientDef }) {
   // zero-typing path is a prompt the agent executes, not a command the human
   // runs.
   const agentPrompt =
-    'Install the Mushi skills from github.com/kensaurus/mushi-mushi ' +
+    'Install the Mushi Mushi skills from github.com/kensaurus/mushi-mushi ' +
     '(`npx skills add kensaurus/mushi-mushi`), then run the mushi-setup skill to wire the ' +
-    'Mushi SDK and MCP server into this app and send a test report to verify the connection.'
+    'Mushi Mushi SDK and MCP server into this app and send a test report to verify the connection.'
 
   return (
     <div className="space-y-4">
@@ -269,11 +276,14 @@ function SkillsLane({ client }: { client: McpClientDef }) {
         </p>
         <CopyBlock label="" text={skillsCmd} />
         <p className="text-xs text-[var(--mushi-ink-muted)]">
-          Adds <code className="font-mono text-xs">mushi-setup</code>,{' '}
-          <code className="font-mono text-xs">mushi-debug</code>,{' '}
-          <code className="font-mono text-xs">mushi-health</code>,{' '}
-          <code className="font-mono text-xs">mushi-integration</code> and{' '}
-          <code className="font-mono text-xs">mushi-mushi</code>.
+          Adds{' '}
+          {CONNECT_SKILLS.skillNames.map((name, i, all) => (
+            <Fragment key={name}>
+              {i > 0 && (i === all.length - 1 ? ' and ' : ', ')}
+              <code className="font-mono text-xs">{name}</code>
+            </Fragment>
+          ))}
+          .
         </p>
       </div>
       <div className="rounded-md border border-[var(--mushi-rule)] bg-[var(--mushi-paper-wash)] p-4">
@@ -316,8 +326,19 @@ export default function ConnectPage() {
       <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6 sm:py-16">
         <header className="mb-8">
           <h1 className="text-3xl font-bold tracking-tight text-[var(--mushi-ink)] sm:text-4xl">
-            Connect your editor
+            Connect your AI code editor
           </h1>
+          <p className="mt-2 text-sm text-[var(--mushi-ink-muted)]">
+            For Cursor, Claude Code, VS Code and other editors.{' '}
+            <strong className="font-medium text-[var(--mushi-ink)]">Using Lovable or Bolt? You don’t need this page.</strong>{' '}
+            <a
+              href="https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt"
+              className="underline decoration-[var(--mushi-rule)] underline-offset-2 hover:text-[var(--mushi-ink)]"
+            >
+              Add Mushi Mushi with one prompt instead
+            </a>
+            .
+          </p>
           <p className="mt-2 text-base text-[var(--mushi-ink-muted)]">
             {DEMO_INPUT
               ? 'Pick a client below. Demo needs no signup; sign in when you want your own project.'
@@ -369,18 +390,6 @@ export default function ConnectPage() {
           renderLane={renderLane}
           renderClientIcon={(id) => renderConnectClientIcon(id, 16)}
         />
-
-        <p className="mt-10 text-center text-xs text-[var(--mushi-ink-muted)]">
-          Also on{' '}
-          <a
-            href="https://smithery.ai/servers/kensaurus/mushi-mushi"
-            className="underline decoration-[var(--mushi-rule)] underline-offset-2 hover:text-[var(--mushi-ink)]"
-            rel="noopener noreferrer"
-          >
-            Smithery
-          </a>
-          {' '}for one-click MCP install.
-        </p>
       </div>
     </div>
   )

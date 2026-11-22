@@ -17,7 +17,7 @@ const src = readFileSync(join(__dirname, 'IntegrationsPage.tsx'), 'utf8')
 describe('Integrations positioning', () => {
   it('does not ask for all three, and says GitHub is the one that matters', () => {
     expect(src).not.toContain('Connect all three')
-    expect(src).toContain('GitHub is the one Mushi needs')
+    expect(src).toContain('GitHub is the one Mushi Mushi needs')
   })
 
   // The page led with Sentry and Langfuse; a solo builder needs GitHub, an
@@ -28,7 +28,7 @@ describe('Integrations positioning', () => {
     expect([...order].sort((x, y) => x - y)).toEqual(order)
     expect(src).toContain("d.group === 'required' && d.kind === 'github'")
     expect(src).toContain("d.group === 'required' && d.kind !== 'github'")
-    expect(src).toContain('Mushi works without a monitoring tool')
+    expect(src).toContain('Mushi Mushi works without a monitoring tool')
     expect(src).not.toContain('Your code and errors')
   })
 
@@ -45,5 +45,19 @@ describe('Integrations positioning', () => {
         if (def.kind === 'sentry') expect(line, def.kind).not.toMatch(/report queue|classifier prompt|deduped|triaged/)
       }
     }
+  })
+
+  // Owner 2026-11-18: GitHub showed three times and Slack twice down the
+  // page. The tile grid is the page now; each tool's settings have one home,
+  // a drawer the tile opens, and old card links open that drawer.
+  it('gives every tool one home, opened from its tile', () => {
+    for (const card of ['<GitHubConnectCard', '<CodebaseIndexCard', '<SlackIntegrationCard', '<DiscordIntegrationCard', '<TeamsIntegrationCard', '<LinearIntegrationCard', '<RoutingProviderCard', '<PlatformIntegrationCard']) {
+      expect(src.split(card).length - 1, card).toBe(1)
+    }
+    expect(src).toContain('<ConnectionGrid')
+    expect(src).toContain('<Drawer')
+    expect(src).toContain('integrationToolForHash(location.hash)')
+    expect(src).toContain('onConnect={connectTool}')
+    expect(src).not.toContain('Set it up below')
   })
 })

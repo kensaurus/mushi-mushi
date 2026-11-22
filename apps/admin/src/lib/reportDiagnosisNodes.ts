@@ -8,7 +8,7 @@ import { reportDiagnosisView } from './reportDiagnosis'
 import { humanizeFixError } from './humanizeFixError'
 import { CLOSE_REASONS } from './closeReasons'
 import { verdictFromError } from './pdcaAct'
-import { DIAGNOSIS_ANCHORS, NEEDS_LOOK_BELOW, headline, type DiagnosisNode } from './reportDiagnosisModel'
+import { DIAGNOSIS_ANCHORS, NEEDS_LOOK_BELOW, STAGE1_ONLY_DETAIL, headline, type DiagnosisNode } from './reportDiagnosisModel'
 import type { ReportDetail, ReportFixAttempt } from '../components/report-detail/types'
 
 function text(value: unknown): string | null {
@@ -51,9 +51,11 @@ const SOURCE_LABEL: Record<string, { title: string; detail: string }> = {
   site_watch: { title: 'Found by the live-site watch', detail: 'no user reported it' },
   site_audit: { title: 'Found by the site audit', detail: 'no user reported it' },
   sentry: { title: 'Imported from Sentry', detail: 'production error' },
+  cloudwatch: { title: 'From an AWS CloudWatch alarm', detail: 'no user reported it' },
   store_review: { title: 'From an app store review', detail: 'low-star review' },
   voice: { title: 'Filed by voice', detail: 'transcribed request' },
   ux_loop: { title: 'Found by a UX run', detail: 'screen check' },
+  ux_scorecard: { title: 'Found by the UX scorecard', detail: 'root cause across pages' },
   code_audit: { title: 'Found by a code audit', detail: 'no user reported it' },
   security_advisory: { title: 'From a security advisory', detail: 'a dependency is vulnerable' },
   library_modernizer: { title: 'Found by the library check', detail: 'outdated dependency' },
@@ -197,15 +199,21 @@ export function signalNodes(report: ReportDetail): DiagnosisNode[] {
   const nodes: DiagnosisNode[] = []
   const s1 = isObject(report.stage1_classification) ? report.stage1_classification : null
   if (s1) {
-    const symptom = text(s1.symptom) ?? text(s1.actual) ?? text(report.summary) ?? 'Symptom not stated'
+    const stated = text(s1.symptom) ?? text(s1.actual)
+    const symptom = stated ?? text(report.summary) ?? 'Symptom not stated'
     const confidence = num(s1.confidence)
     const expected = text(s1.expected)
     const actual = text(s1.actual)
     nodes.push({
       id: 'symptom',
       lane: 'signal',
-      title: `Symptom: ${headline(symptom, 90)}`,
-      detail: [text(s1.category) ?? report.category, text(s1.severity) ?? report.severity, modelName(report.stage1_model) ?? 'fast filter'].filter(Boolean).join(' · '),
+      // With no symptom of its own the node would print the report summary,
+      // which the page already shows at the top (sweep 2026-11-18). Its full
+      // text stays in the panel's "why".
+      title: stated || !text(report.summary) ? `Symptom: ${headline(symptom, 90)}` : 'Symptom: as in the summary',
+      // Category, severity and model are in the classification card; the node
+      // repeated them (round-3 sweep 2026-11-19). Say only who read it.
+      detail: 'first check',
       state: confidence != null && confidence < NEEDS_LOOK_BELOW ? 'weak' : 'ok',
       confidence,
       needsLook: confidence != null && confidence < NEEDS_LOOK_BELOW,
@@ -229,8 +237,8 @@ export function signalNodes(report: ReportDetail): DiagnosisNode[] {
       confidence: null,
       needsLook: false,
       why: n === 0
-        ? 'Mushi looked for look-alike reports and found none, so the diagnosis rests on this report alone.'
-        : `Mushi found ${plural(n, 'earlier report', 'earlier reports')} with the same shape and used them as context.`,
+        ? 'Mushi Mushi looked for look-alike reports and found none, so the diagnosis rests on this report alone.'
+        : `Mushi Mushi found ${plural(n, 'earlier report', 'earlier reports')} with the same shape and used them as context.`,
       source: 'stage2_analysis.mcp_tool_calls',
     })
   }
@@ -312,9 +320,12 @@ export function diagnosisNodes(report: ReportDetail): DiagnosisNode[] {
     return [{ ...base, title: 'Diagnosis failed', detail: 'deep diagnosis did not finish', state: 'failed', needsLook: true, why: view.message }]
   }
   if (view.kind === 'stage1_only') {
-    return [{ ...base, title: 'Quick summary only; no full diagnosis', detail: 'first check only', state: 'ok', needsLook: false, why: 'The first check was sure what kind of bug this is, so the full diagnosis (why it broke and how to fix it) did not run. The fix prompt still gives your agent everything Mushi Mushi knows.' }]
+    // The report's confidence is the first check's certainty about the
+    // category (the Symptom node shows it); there is no diagnosis to be sure
+    // of, so no % here: "no full diagnosis 97%" read as a 97% diagnosis.
+    return [{ ...base, confidence: null, title: 'Quick summary only; no full diagnosis', detail: STAGE1_ONLY_DETAIL, state: 'ok', needsLook: false, why: 'Only the category was decided, so there is no root cause to show here. The fix prompt still gives your agent everything Mushi Mushi knows.' }]
   }
-  return [{ ...base, title: 'Diagnosis in progress', detail: 'usually under a minute', state: 'pending', needsLook: false, why: 'Mushi is still reading this report.' }]
+  return [{ ...base, title: 'Diagnosis in progress', detail: 'usually under a minute', state: 'pending', needsLook: false, why: 'Mushi Mushi is still reading this report.' }]
 }
 
 export function checkNodes(report: ReportDetail): DiagnosisNode[] {
@@ -339,8 +350,8 @@ export function checkNodes(report: ReportDetail): DiagnosisNode[] {
       id: 'judge',
       lane: 'check',
       title: 'Not graded yet',
-      detail: 'judge runs on a sample',
-      state: 'pending',
+      detail: 'judge grades a sample',
+      state: 'unchecked',
       confidence: null,
       needsLook: false,
       why: 'A second model grades a sample of triaged reports (category, severity, component, repro). This one has not been graded yet.',
@@ -399,7 +410,7 @@ export function fixNodes(report: ReportDetail, diagnosisReady: boolean): Diagnos
   const needsPerson = verdict === 'needs_human'
   if (status === 'verified') next = { title: 'Verified in production', detail: 'loop closed', why: 'The fix shipped and the bug did not come back.', state: 'done' }
   else if (status === 'dismissed') next = { title: closedLabel ? `Closed: ${closedLabel}` : 'Closed', detail: 'decision', why: 'Someone closed this report, so nothing runs on it. Reopen it from the triage bar if it comes back.', state: 'done' }
-  else if (status === 'fixed' || latest?.state === 'done') next = { title: 'Check it in production', detail: 'next step', why: 'The fix merged. Watch for the bug to come back; Mushi reopens the report if it does.', state: 'open' }
+  else if (status === 'fixed' || latest?.state === 'done') next = { title: 'Check it in production', detail: 'next step', why: 'The fix merged. Watch for the bug to come back; Mushi Mushi reopens the report if it does.', state: 'open' }
   else if (latest?.state === 'ok') next = { title: 'Review and merge the pull request', detail: 'next step', why: 'Read the diff and the CI result, then merge from the Fixes page or GitHub.', state: 'open' }
   else if (latest?.state === 'failed' && needsPerson) next = { title: 'A person decides this one', detail: 'next step', why: 'The agent said this needs a decision, not a code change. Decide it yourself, or close it as "Not a code bug" in the triage bar; a retry would stop the same way.', state: 'open' }
   else if (latest?.state === 'failed' && verdict === 'already_fixed') next = { title: 'Check it is fixed, then close it', detail: 'next step', why: 'The agent found the bug already fixed in the code. If your app agrees, close the report as fixed; if not, send it again with what you still see.', state: 'open' }

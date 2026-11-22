@@ -39,7 +39,7 @@ vi.mock('../../lib/usePageData', () => ({
   }),
 }))
 
-import { ProposalReviewModal } from './ProposalReviewModal'
+import { ProposalReviewModal, proposedPages } from './ProposalReviewModal'
 
 let container: HTMLDivElement
 let root: Root
@@ -83,6 +83,18 @@ function render(onDiscarded = vi.fn()) {
 }
 
 const buttons = (label: string) => [...document.body.querySelectorAll('button')].filter((b) => b.textContent === label)
+
+describe('proposedPages', () => {
+  it('reads the actions of a live-crawl draft as page actions', () => {
+    const [page] = proposedPages([{ id: 'home', path: '/', actions: [{ id: 'start-signup', label: 'Start' }, { id: 'pricing' }] }])
+    expect(page!.elements).toEqual([{ id: 'start-signup', action: 'Start' }, { id: 'pricing', action: 'pricing' }])
+  })
+
+  it('keeps the elements of a passive draft as they are', () => {
+    const elements = [{ id: 'save', type: 'button', action: 'Save' }]
+    expect(proposedPages([{ id: 'a', path: '/a', elements }])[0]!.elements).toBe(elements)
+  })
+})
 
 describe('ProposalReviewModal', () => {
   it('asks before discarding and only posts after confirm', async () => {

@@ -1,6 +1,6 @@
 # @mushi-mushi/verify
 
-> **Your AI wrote it. Mushi Mushi tells you why it broke.**
+> **Your AI built it. Mushi Mushi makes it better.**
 
 Internal package, not published to npm. It checks a fix before anyone trusts
 it: it replays the bug report's steps in a Playwright browser against the fix's
@@ -66,4 +66,4 @@ The [verify-fix workflow](../../.github/workflows/verify-fix.yml) runs this auto
 
 ## License
 
-[AGPLv3](../server/LICENSE), copyleft. Part of the open-core server (self-host and fork freely; modified SaaS publishes changes or takes a [commercial license](../../COMMERCIAL-LICENSE.md)).
+[AGPLv3](../server/LICENSE), copyleft. Part of the open-core server (self-host and fork freely; modified SaaS publishes changes or takes a [commercial license](../../docs/legal/COMMERCIAL-LICENSE.md)).

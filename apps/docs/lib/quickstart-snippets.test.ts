@@ -166,7 +166,13 @@ const options: ts.CompilerOptions = {
   esModuleInterop: true,
   experimentalDecorators: true,
   types: [],
-  paths: { '@mushi-mushi/*': [join(PACKAGES, '*', 'src', 'index.ts').replace(/\\/g, '/')] },
+  // `mushi-mushi` re-exports each scoped package (ADR 0060): the root is the
+  // web SDK, `mushi-mushi/<name>` is @mushi-mushi/<name>. Map both to source.
+  paths: {
+    '@mushi-mushi/*': [join(PACKAGES, '*', 'src', 'index.ts').replace(/\\/g, '/')],
+    'mushi-mushi': [join(PACKAGES, 'web', 'src', 'index.ts').replace(/\\/g, '/')],
+    'mushi-mushi/*': [join(PACKAGES, '*', 'src', 'index.ts').replace(/\\/g, '/')],
+  },
 }
 
 /** One program for every page; returns the formatted errors per page. */

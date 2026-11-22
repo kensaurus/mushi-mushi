@@ -139,7 +139,7 @@ function putBody(): unknown {
 }
 
 describe('VerifiedMergeCard', () => {
-  it('is off by default, says when Mushi merges, and saves only the toggle', async () => {
+  it('is off by default, says when Mushi Mushi merges, and saves only the toggle', async () => {
     state.apiFetch.mockResolvedValue({ ok: true, data: { ...SETTINGS, verified_auto_merge: true } })
     await render()
     expect(state.paths).toContain('/v1/admin/projects/p1/verify-settings')
@@ -227,7 +227,7 @@ describe('VerifiedMergeCard', () => {
     await type('#source-files', '4')
     await click(button('Save changes'))
     expect(host.textContent).toContain('Must be 20 or fewer')
-    expect(host.textContent).toContain('Mushi did not save: fix the fields marked above.')
+    expect(host.textContent).toContain('Mushi Mushi did not save: fix the fields marked above.')
   })
 
   it('copies the workflow, falls back to a selected text box, and opens a PR', async () => {

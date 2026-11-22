@@ -1,8 +1,8 @@
 /**
  * FILE: apps/admin/src/components/inventory/SiteWatchCard.tsx
- * PURPOSE: "Watch your live site" (ADR 0024). Turns a daily Firecrawl crawl
- *          of the app's live site on or off. A page that errors, 404s from
- *          the app's own links, fails to load or turns blank becomes a bug
+ * PURPOSE: "Watch your live site" (ADR 0024; a marked page list, not a
+ *          crawl, ADR 0059). Turns a daily Firecrawl check of the app's live
+ *          pages on or off. A page that errors, 404s, fails to load or turns blank becomes a bug
  *          report before a user finds it. Billed to the project's Firecrawl
  *          key; lists the pages that are broken right now.
  */
@@ -16,7 +16,10 @@ import { apiFetch } from '../../lib/supabase'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { useToast } from '../../lib/toast'
 import { usePageData } from '../../lib/usePageData'
+import { useReadTimedOut } from '../../lib/ciReadTimeout'
+import { CiNotChecked } from '../ci/CiNotChecked'
 import { relativeTime } from '../../lib/setupGuideSteps'
+import { SITE_WATCH_ANCHOR } from '../../lib/homeConnectHref'
 
 interface SiteWatch {
   id: string
@@ -56,7 +59,9 @@ function creditRange(pages: number): string {
 }
 
 /** The chip for the watch's state. */
-function stateChip(watch: SiteWatch | null, loading: boolean): { label: string; tone: 'ok' | 'info' | 'warn' | 'danger' | 'neutral' } {
+function stateChip(watch: SiteWatch | null, loading: boolean, unread = false): { label: string; tone: 'ok' | 'info' | 'warn' | 'danger' | 'neutral' } {
+  // A read that failed or never answered is "not checked", never an endless "loading" (round 3).
+  if (unread) return { label: 'not checked', tone: 'neutral' }
   if (loading) return { label: 'loading', tone: 'neutral' }
   if (!watch) return { label: 'off', tone: 'info' }
   if (watch.status === 'error') return { label: 'needs attention', tone: 'danger' }
@@ -87,6 +92,9 @@ export function SiteWatchCard({ projectId }: { projectId: string }) {
 
   const data = state.data
   const watch = data?.watch ?? null
+  const waiting = state.loading && !data && !state.error
+  const wait = useReadTimedOut(waiting)
+  const unread = !data && (!!state.error || wait.timedOut)
   const pages = Number(pagesText)
   const pagesValid = Number.isInteger(pages) && pages >= 1 && pages <= 100
 
@@ -137,7 +145,7 @@ export function SiteWatchCard({ projectId }: { projectId: string }) {
       toast.error('The watch was not turned off', res.error?.message ?? 'Retry in a moment.')
       return
     }
-    toast.success('Watch turned off', 'Firecrawl no longer crawls this site. Existing reports stay.')
+    toast.success('Watch turned off', 'Firecrawl no longer checks this site. Existing reports stay.')
     state.reload()
   }
 
@@ -148,18 +156,30 @@ export function SiteWatchCard({ projectId }: { projectId: string }) {
   const openCount = data?.openPages.length ?? 0
 
   return (
-    <Card className="p-4 space-y-3" data-testid="mushi-site-watch-card">
+    <Card id={SITE_WATCH_ANCHOR} className="scroll-mt-chrome p-4 space-y-3" data-testid="mushi-site-watch-card">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-semibold text-fg">Watch your live site</span>
-            <SignalChip tone={stateChip(watch, state.loading && !data).tone} className="text-3xs uppercase tracking-wider">
-              {stateChip(watch, state.loading && !data).label}
+            <SignalChip tone={stateChip(watch, waiting, unread).tone} className="text-3xs font-semibold">
+              {stateChip(watch, waiting, unread).label}
             </SignalChip>
           </div>
+          {unread && (
+            <div className="mt-1.5">
+              <CiNotChecked
+                what="Site watch"
+                testId="site-watch-not-checked"
+                onRetry={() => {
+                  wait.restart()
+                  state.reload()
+                }}
+              />
+            </div>
+          )}
           <p className="text-2xs text-fg-muted mt-0.5">
-            Firecrawl checks your live pages once a day. A page that errors, 404s from your own links, fails to load or
-            turns blank becomes a bug report before a user finds it.
+            Firecrawl checks your live pages once a day. A page that errors, 404s, fails to load or turns blank becomes a
+            bug report before a user finds it.
           </p>
         </div>
         {data && (data.firecrawlReady || watch) && !editing && (
@@ -252,7 +272,7 @@ export function SiteWatchCard({ projectId }: { projectId: string }) {
             />
           </div>
           <p className="text-2xs text-fg-muted">
-            Firecrawl follows your site's own links from this address. About {creditRange(pagesValid ? pages : 25)} credits a month on
+            Firecrawl loads the pages your site lists under this address, up to this many. About {creditRange(pagesValid ? pages : 25)} credits a month on
             your Firecrawl key: one per page each day, plus one per changed page it checks for breakage.
           </p>
           <div className="flex items-center gap-2">
@@ -291,7 +311,7 @@ export function SiteWatchCard({ projectId }: { projectId: string }) {
       {confirmOff && (
         <ConfirmDialog
           title="Turn off the live-site watch?"
-          body="Firecrawl stops crawling this site, and Mushi stops filing broken pages. Reports already filed stay. You can turn it on again any time."
+          body="Firecrawl stops checking this site, and Mushi Mushi stops filing broken pages. Reports already filed stay. You can turn it on again any time."
           confirmLabel="Turn off"
           cancelLabel="Keep watching"
           tone="danger"

@@ -15,7 +15,11 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const SRC = join(ROOT, 'docs/screenshots')
 const DEST = join(ROOT, 'apps/docs/public/screenshots')
 
-const ALLOWED = /\.(png|jpe?g|webp|gif)$/i
+// No .gif: the docs play demo clips as MP4/WebM (scripts/marketing/demo-video.mjs).
+// The few GIFs left in docs/screenshots/ are for GitHub-rendered markdown
+// (docs/SCREENSHOTS.md), which can't play a repo-relative <video>. Keeping them
+// out of public/ keeps them off S3 and CloudFront.
+const ALLOWED = /\.(png|jpe?g|webp|mp4|webm)$/i
 
 async function main() {
   if (!existsSync(SRC)) {

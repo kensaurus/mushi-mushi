@@ -60,7 +60,7 @@ export async function recheckFixVerification(fixId: string): Promise<Verificatio
         ok: false,
         rateLimited: true,
         error:
-          'Mushi already re-checked this fix 6 times in the last hour. It checks again on its own every 10 minutes.',
+          'Mushi Mushi already re-checked this fix 6 times in the last hour. It checks again on its own every 10 minutes.',
       }
     }
     return {

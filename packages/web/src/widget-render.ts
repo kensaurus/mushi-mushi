@@ -79,6 +79,8 @@ export interface WidgetRenderCtx {
   screenshotAttached: boolean;
   screenshotPreview: string | null;
   previewOpen: boolean;
+  /** Send captured the screenshot just now; ask the reporter to check it and Send again. */
+  screenshotReview: boolean;
   screenshotHint: string | null;
   screenshotAvailable: boolean;
   elementAvailable: boolean;
@@ -242,7 +244,7 @@ export function renderOutdatedBanner(ctx: WidgetRenderCtx): string {
   return `<div class="mushi-outdated" role="status"><strong>Mushi SDK ${esc(current)}</strong> ${latest ? `latest is ${esc(latest)}.` : 'needs attention.'}${message ? ` <span>${esc(message)}</span>` : ''}</div>`;
 }
 
-/** "Bug reports by Mushi" mark (see MushiWidgetConfig.brandFooter); new-tab link, click wired via data-action. */
+/** "Bug reports by Mushi Mushi" mark (see MushiWidgetConfig.brandFooter); new-tab link, click wired via data-action. */
 export function renderBrandFooter(ctx: WidgetRenderCtx): string {
   if (ctx.config.brandFooter !== true) return '';
   return `<div class="mushi-brand-footer"><a class="mushi-brand-link" href="${esc(buildBrandFooterHref(ctx.brandRef))}" target="_blank" rel="noopener noreferrer" data-action="brand-footer">${esc(ctx.locale.flows.poweredBy)}<span aria-hidden="true"> ↗</span></a></div>`;
@@ -323,6 +325,9 @@ function reportView(ctx: WidgetRenderCtx): ViewRegions {
   const reason = ctx.screenshotError && ctx.screenshotErrorReason
     ? `<p class="mushi-note mushi-error-inline" role="status" data-role="screenshot-reason">${esc(s3.screenshotErrors[ctx.screenshotErrorReason])}${ctx.callbacks.onScreenshotShareTabRequest ? ` ${btn('screenshot-share-tab', esc(s3.screenshotShareTab), 'mushi-link-btn')}` : ''}</p>`
     : '';
+  const review = ctx.screenshotReview && ctx.screenshotAttached && ctx.screenshotPreview
+    ? `<p class="mushi-note mushi-screenshot-review" role="status" data-role="screenshot-review">${esc(s3.screenshotReview)}</p>`
+    : '';
   const notSent = ctx.submitNotSent
     ? `<p class="mushi-note mushi-error-inline" data-role="not-sent">${esc(ctx.submitNotSent === 'throttled' ? s3.notSentThrottled : s3.notSentBlocked)}</p>`
     : '';
@@ -335,7 +340,7 @@ function reportView(ctx: WidgetRenderCtx): ViewRegions {
   return {
     header: renderHeader(ctx, ctx.config.expandedTitle || p.title),
     lead: `<textarea class="mushi-textarea" data-role="description" rows="3" maxlength="${DESCRIPTION_MAX_LENGTH}" placeholder="${esc(feature ? s3.featurePlaceholder : s3.descriptionPlaceholder)}" aria-label="${esc(p.title)}" aria-describedby="mushi-hint"></textarea>`,
-    body: `${ctx.config.betaMode?.enabled ? renderBetaStrip(ctx) : ''}<div class="mushi-chips"><div class="mushi-chip-group" role="radiogroup" aria-label="${esc(p.title)}">${chips}</div>${more}</div>${intentRow}<div class="mushi-attachments">${shot}${element}</div>${reason}${notSent}<p class="mushi-note">🔒 ${esc(p.privacy)}</p>${who ? `<p class="mushi-note">👤 ${esc(who)}</p>` : ''}${ctx.draftLength > DESCRIPTION_MAX_LENGTH - 400 ? `<p class="mushi-note" aria-live="polite">${ctx.draftLength}/${DESCRIPTION_MAX_LENGTH}</p>` : ''}${ctx.launcherDismissible ? `<p class="mushi-note">${btn('hide-launcher', esc(t.widget.hideLauncher ?? HIDE_LAUNCHER_FALLBACK), 'mushi-link-btn')}</p>` : ''}`,
+    body: `${ctx.config.betaMode?.enabled ? renderBetaStrip(ctx) : ''}<div class="mushi-chips"><div class="mushi-chip-group" role="radiogroup" aria-label="${esc(p.title)}">${chips}</div>${more}</div>${intentRow}${review}<div class="mushi-attachments">${shot}${element}</div>${reason}${notSent}<p class="mushi-note">🔒 ${esc(p.privacy)}</p>${who ? `<p class="mushi-note">👤 ${esc(who)}</p>` : ''}${ctx.draftLength > DESCRIPTION_MAX_LENGTH - 400 ? `<p class="mushi-note" aria-live="polite">${ctx.draftLength}/${DESCRIPTION_MAX_LENGTH}</p>` : ''}${ctx.launcherDismissible ? `<p class="mushi-note">${btn('hide-launcher', esc(t.widget.hideLauncher ?? HIDE_LAUNCHER_FALLBACK), 'mushi-link-btn')}</p>` : ''}`,
     footer: `<span class="mushi-footer-hint" id="mushi-hint" data-role="hint">${hint}</span><button type="button" class="mushi-submit" data-action="submit" aria-disabled="${!ctx.canSend || ctx.submitting}"${ctx.submitting ? ' aria-busy="true"' : ''}>${esc(ctx.submitting ? t.widget.submitting : p.send)}</button>`,
   };
 }

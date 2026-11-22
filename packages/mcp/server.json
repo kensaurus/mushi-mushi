@@ -2,8 +2,8 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.kensaurus/mushi-mushi",
   "title": "Mushi Mushi",
-  "description": "The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.",
-  "version": "0.30.2",
+  "description": "One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code.",
+  "version": "0.31.8",
   "icons": [
     {
       "src": "https://raw.githubusercontent.com/kensaurus/mushi-mushi/master/packages/brand/src/logo-mark-512.png",
@@ -21,7 +21,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@mushi-mushi/mcp",
-      "version": "0.30.2",
+      "version": "0.31.8",
       "transport": {
         "type": "stdio"
       },
@@ -46,7 +46,7 @@
         },
         {
           "name": "MUSHI_FEATURES",
-          "description": "Comma-separated feature groups to expose (triage,fixes,inventory,setup,docs). Defaults to the lean catalog; use 'all' for the full tool set.",
+          "description": "Tool set to expose. Recommended: vibe (12 tools: triage, plain-English diagnosis, fix context, setup, docs). Add fixes (vibe,fixes) to dispatch fixes to cloud agents; all lists every tool. Unset keeps the earlier groups (triage,fixes,inventory,setup,docs).",
           "isRequired": false,
           "isSecret": false
         }

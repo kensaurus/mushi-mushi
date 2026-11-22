@@ -9,9 +9,16 @@ description: Install Mushi Mushi with npx mushi-mushi, connect Cursor or Claude 
 
 # Quickstart
 
+  **Built with Lovable or Bolt? No terminal needed.** Skip this page and use
+  [Mushi Mushi in Lovable or Bolt](/quickstart/lovable-bolt): you paste one
+  prompt, and it takes about five minutes. Building a phone app with Expo,
+  React Native or Capacitor? Go to [your phone app](/quickstart/mobile).
+
 - One command, `npx mushi-mushi`, adds a report button to your app.
 - When a user reports a bug, Mushi Mushi writes a plain-English diagnosis.
 - Your AI editor reads it and writes the fix.
+
+Want the whole loop first? [How it works, on video](/how-it-works).
 
 ### Install
 
@@ -24,12 +31,56 @@ npx mushi-mushi
 
 **You'll see:** a report button in your app, and a new project in the [console](https://kensaur.us/mushi-mushi/admin).
 
+Prefer your AI editor to run it? Paste this into Cursor or Claude Code:
+
+```text
+Add Mushi Mushi to this app. In the project folder, first run
+`npx mushi-mushi --dry-run` and tell me what it will change. Then run
+`npx mushi-mushi --yes`. It prints a sign-in link: show it to me and wait while
+I approve it in my browser. It sends a test report at the end. If it prints
+code and names a file, add the code there. Then run `npx mushi-mushi doctor`
+and tell me which file you changed and what doctor says.
+```
+
+No SDK fits your stack? File reports with [one curl](/quickstart/http-api).
+
 ### Send your first report
 
 Tap the report button in your app and write one sentence. Or say yes when the
 wizard offers to send a test report.
 
 **You'll see:** the report in the console with a title, severity and likely cause, in about 10 seconds.
+
+A test report is one made-up sentence, so its diagnosis has little to say. The
+console's **Send test report** button goes one step further and shows a
+pre-written sample diagnosis, so you can see the shape of one. For a real
+diagnosis of your own code, see
+[Already have Sentry issues?](#already-have-sentry-issues-bring-them-in) below.
+
+### Add your keys where your site is hosted
+
+The wizard writes your settings to `.env.local`. That file stays on your
+computer: it never reaches Vercel, Netlify or any other host, so without this
+step the report button does not appear on your live site.
+
+Add the same two settings where your site is built, then redeploy:
+
+| Your app | Setting names |
+| --- | --- |
+| Next.js | `NEXT_PUBLIC_MUSHI_PROJECT_ID` and `NEXT_PUBLIC_MUSHI_API_KEY` |
+| Vite (React, Vue, Svelte, Angular, Capacitor) | `VITE_MUSHI_PROJECT_ID` and `VITE_MUSHI_API_KEY` |
+| Nuxt | `NUXT_PUBLIC_MUSHI_PROJECT_ID` and `NUXT_PUBLIC_MUSHI_API_KEY` |
+| Astro | `PUBLIC_MUSHI_PROJECT_ID` and `PUBLIC_MUSHI_API_KEY` |
+| Create React App | `REACT_APP_MUSHI_PROJECT_ID` and `REACT_APP_MUSHI_API_KEY` |
+
+- **Vercel:** Project → Settings → Environment Variables (Production), then redeploy.
+- **Netlify:** Project configuration → Environment variables, then redeploy.
+
+Copy the values from `.env.local`. These settings are read when the site is
+built, so a change only shows after the next deploy. The wizard prints the
+exact names for your app when it finishes.
+
+**You'll see:** the report button on your live site after the redeploy.
 
 ### Get your first fix
 
@@ -39,27 +90,66 @@ Connect your AI editor. One click on the [Connect page](https://kensaur.us/mushi
 npx mushi-mushi setup --ide cursor
 ```
 
-Then ask your editor: *"Get the latest Mushi report and fix it."*
+Then ask your editor: *"Get the latest Mushi Mushi report and fix it."*
 
 **You'll see:** a fix brief in your editor: the cause, the files to change and how to check it. You review the change before it ships.
+
+## Rather let your AI editor do it?
+
+Paste this into Cursor, Claude Code or any AI editor that can run commands:
+
+```text
+Add Mushi Mushi to this app. In the project folder, run `npx mushi-mushi --yes`.
+It prints a sign-in link: show it to me and wait while I approve it in my
+browser. Then add the code it prints to the file it names, and tell me which
+file you changed.
+```
+
+**You'll see:** a browser page to approve, then your editor names the file it changed. Open your app and look for the report button.
+
+Starting from nothing? `npx mushi-mushi --template vue my-app` (or `svelte`,
+`node`) makes a small starter app with Mushi Mushi already in it. See
+[start a new app](/sdks/launcher#start-a-new-app-with-mushi-mushi-in-it).
+
+## Already have Sentry issues? Bring them in
+
+The fastest way to a real diagnosis of your own code is a bug you already
+know about.
+
+```bash
+# Import your newest unresolved Sentry issues as reports (up to 10 at a time)
+npx mushi-mushi sentry import --limit 5
+
+# Or write one up yourself
+npx mushi-mushi reports file --title "Checkout button does nothing on mobile"   --description "Tapping Pay on iPhone Safari does nothing. No error is shown."
+```
+
+- `sentry import` needs Sentry connected first: in the console, open
+  **Integrations → Sentry** and add your organization slug, project slug and
+  an auth token that can read events and projects.
+- Both commands need a key that can write (`mcp:write`). If the CLI says your
+  key cannot, run `npx mushi-mushi login --upgrade-scope`.
+- **Connect GitHub for a diagnosis that knows your code.** Without it, Mushi
+  Mushi still explains the bug from the error and the report, but it cannot
+  name your files. Connect your repository on the console's **Connect** page.
 
 ## Pick your framework
 
 The wizard detects your framework for you. Pick yours to see what it installs
 and the one line it adds to your code.
 
-- **No terminal (Lovable, Bolt):** [Mushi in Lovable or Bolt](/quickstart/lovable-bolt), one script tag pasted through your prompt.
+- **No terminal (Lovable, Bolt):** [Mushi Mushi in Lovable or Bolt](/quickstart/lovable-bolt), one script tag pasted through your prompt.
 - **Mobile previews:** [iOS](/quickstart/ios) · [Android](/quickstart/android) · [Flutter](/quickstart/flutter), installed from the GitHub repo.
 - **Go deeper:** [Incident loop](/quickstart/incident-loop) · [MCP server](/quickstart/mcp) · [CLI console loop](/quickstart/cli-console-loop)
 
 What you need first
 
 - An app you are building, for the web or for phones.
-- A Mushi account. The free plan is enough, and the wizard signs you in through your browser.
+- A Mushi Mushi account. The free plan is enough, and the wizard signs you in through your browser.
 - Optional: an AI code editor such as Cursor or Claude Code.
 
 `npx` runs a tool from npm (the public library of JavaScript packages) without
-installing it for good. Here it runs the Mushi setup wizard.
+installing it for good. Here it runs the Mushi Mushi setup wizard.
 
 ## Where to start
 
@@ -70,7 +160,7 @@ Setting it up yourself? See [Project ID & API keys](/concepts/credentials) for t
   The SDK needs only two settings: your project ID and API key, named with the
   prefix your framework expects (see
   [`examples/sdk.env.example`](https://github.com/kensaurus/mushi-mushi/blob/master/examples/sdk.env.example)).
-  The repo's root `.env.example` is only for **running the Mushi server
+  The repo's root `.env.example` is only for **running the Mushi Mushi server
   yourself**. You do not need Supabase or an AI (LLM) key to use the SDK.
 
 ## Troubleshooting

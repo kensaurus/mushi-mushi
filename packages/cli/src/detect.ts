@@ -32,7 +32,10 @@ export type FrameworkId =
 export interface Framework {
   id: FrameworkId
   label: string
+  /** What the wizard installs: `mushi-mushi`, or the scoped native package (React Native, Capacitor). */
   packageName: string
+  /** Where the snippet imports from, e.g. `mushi-mushi/react`. */
+  importPath: string
   needsWebPackage: boolean
   snippet: () => string
 }
@@ -75,11 +78,12 @@ export const FRAMEWORKS: Record<FrameworkId, Framework> = {
   next: {
     id: 'next',
     label: 'Next.js',
-    packageName: '@mushi-mushi/react',
+    packageName: 'mushi-mushi',
+    importPath: 'mushi-mushi/react',
     needsWebPackage: false,
     snippet: () => `// app/providers.tsx (or pages/_app.tsx for /pages router)
 'use client'
-import { MushiProvider } from '@mushi-mushi/react'
+import { MushiProvider } from 'mushi-mushi/react'
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -95,10 +99,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
   react: {
     id: 'react',
     label: 'React',
-    packageName: '@mushi-mushi/react',
+    packageName: 'mushi-mushi',
+    importPath: 'mushi-mushi/react',
     needsWebPackage: false,
     snippet: () => `// src/main.tsx
-import { MushiProvider } from '@mushi-mushi/react'
+import { MushiProvider } from 'mushi-mushi/react'
 
 createRoot(document.getElementById('root')!).render(
   <MushiProvider config={{
@@ -112,11 +117,12 @@ createRoot(document.getElementById('root')!).render(
   cra: {
     id: 'cra',
     label: 'Create React App',
-    packageName: '@mushi-mushi/react',
+    packageName: 'mushi-mushi',
+    importPath: 'mushi-mushi/react',
     needsWebPackage: false,
     // CRA inlines only REACT_APP_*-prefixed vars into process.env at build time.
     snippet: () => `// src/index.tsx
-import { MushiProvider } from '@mushi-mushi/react'
+import { MushiProvider } from 'mushi-mushi/react'
 
 root.render(
   <MushiProvider config={{
@@ -130,12 +136,13 @@ root.render(
   remix: {
     id: 'remix',
     label: 'Remix',
-    packageName: '@mushi-mushi/react',
+    packageName: 'mushi-mushi',
+    importPath: 'mushi-mushi/react',
     needsWebPackage: false,
     // Remix doesn't inline client env. Expose public values at runtime via the
     // root loader + window.ENV (works on both the classic compiler and Vite).
     snippet: () => `// app/root.tsx
-import { MushiProvider } from '@mushi-mushi/react'
+import { MushiProvider } from 'mushi-mushi/react'
 import { useLoaderData } from '@remix-run/react'
 
 export async function loader() {
@@ -162,14 +169,15 @@ export default function App() {
   astro: {
     id: 'astro',
     label: 'Astro',
-    packageName: '@mushi-mushi/web',
+    packageName: 'mushi-mushi',
+    importPath: 'mushi-mushi',
     needsWebPackage: false,
     // Astro exposes only PUBLIC_*-prefixed vars to client code (Vite-based).
     snippet: () => `---
 // src/layouts/Layout.astro (add this <script> once, e.g. in your base layout)
 ---
 <script>
-  import { Mushi } from '@mushi-mushi/web'
+  import { Mushi } from 'mushi-mushi'
   Mushi.init({
     projectId: import.meta.env.PUBLIC_MUSHI_PROJECT_ID,
     apiKey: import.meta.env.PUBLIC_MUSHI_API_KEY,
@@ -179,12 +187,13 @@ export default function App() {
   solid: {
     id: 'solid',
     label: 'Solid',
-    packageName: '@mushi-mushi/web',
+    packageName: 'mushi-mushi',
+    importPath: 'mushi-mushi',
     needsWebPackage: false,
     // Solid / SolidStart are Vite-based → VITE_*-prefixed client env.
     snippet: () => `// src/index.tsx (or src/app.tsx for SolidStart)
 import { onMount } from 'solid-js'
-import { Mushi } from '@mushi-mushi/web'
+import { Mushi } from 'mushi-mushi'
 
 onMount(() => {
   Mushi.init({
@@ -196,10 +205,11 @@ onMount(() => {
   vue: {
     id: 'vue',
     label: 'Vue 3',
-    packageName: '@mushi-mushi/vue',
+    packageName: 'mushi-mushi',
+    importPath: 'mushi-mushi/vue',
     needsWebPackage: false,
     snippet: () => `// src/main.ts
-import { MushiPlugin } from '@mushi-mushi/vue'
+import { MushiPlugin } from 'mushi-mushi/vue'
 
 app.use(MushiPlugin, {
   projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
@@ -209,10 +219,11 @@ app.use(MushiPlugin, {
   nuxt: {
     id: 'nuxt',
     label: 'Nuxt',
-    packageName: '@mushi-mushi/vue',
+    packageName: 'mushi-mushi',
+    importPath: 'mushi-mushi/vue',
     needsWebPackage: false,
     snippet: () => `// plugins/mushi.client.ts
-import { MushiPlugin } from '@mushi-mushi/vue'
+import { MushiPlugin } from 'mushi-mushi/vue'
 
 export default defineNuxtPlugin((nuxtApp) => {
   nuxtApp.vueApp.use(MushiPlugin, {
@@ -224,10 +235,11 @@ export default defineNuxtPlugin((nuxtApp) => {
   svelte: {
     id: 'svelte',
     label: 'Svelte',
-    packageName: '@mushi-mushi/svelte',
+    packageName: 'mushi-mushi',
+    importPath: 'mushi-mushi/svelte',
     needsWebPackage: false,
     snippet: () => `// src/main.ts
-import { initMushi } from '@mushi-mushi/svelte'
+import { initMushi } from 'mushi-mushi/svelte'
 
 initMushi({
   projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
@@ -237,14 +249,15 @@ initMushi({
   sveltekit: {
     id: 'sveltekit',
     label: 'SvelteKit',
-    packageName: '@mushi-mushi/svelte',
+    packageName: 'mushi-mushi',
+    importPath: 'mushi-mushi/svelte',
     needsWebPackage: false,
     snippet: () => `// src/routes/+layout.svelte
 <script>
   import { onMount } from 'svelte'
 
   onMount(async () => {
-    const { initMushi } = await import('@mushi-mushi/svelte')
+    const { initMushi } = await import('mushi-mushi/svelte')
     initMushi({
       projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
       apiKey: import.meta.env.VITE_MUSHI_API_KEY,
@@ -255,10 +268,11 @@ initMushi({
   angular: {
     id: 'angular',
     label: 'Angular',
-    packageName: '@mushi-mushi/angular',
+    packageName: 'mushi-mushi',
+    importPath: 'mushi-mushi/angular',
     needsWebPackage: false,
     snippet: () => `// src/main.ts
-import { provideMushi } from '@mushi-mushi/angular'
+import { provideMushi } from 'mushi-mushi/angular'
 
 bootstrapApplication(AppComponent, {
   providers: [
@@ -273,6 +287,7 @@ bootstrapApplication(AppComponent, {
     id: 'expo',
     label: 'Expo',
     packageName: '@mushi-mushi/react-native',
+    importPath: '@mushi-mushi/react-native',
     needsWebPackage: false,
     snippet: () => `// App.tsx
 import { MushiProvider } from '@mushi-mushi/react-native'
@@ -292,6 +307,7 @@ export default function App() {
     id: 'react-native',
     label: 'React Native',
     packageName: '@mushi-mushi/react-native',
+    importPath: '@mushi-mushi/react-native',
     needsWebPackage: false,
     snippet: () => `// App.tsx
 import { MushiProvider } from '@mushi-mushi/react-native'
@@ -311,6 +327,7 @@ export default function App() {
     id: 'capacitor',
     label: 'Capacitor (Ionic)',
     packageName: '@mushi-mushi/capacitor',
+    importPath: '@mushi-mushi/capacitor',
     needsWebPackage: false,
     /* The Capacitor plugin's public API is `Mushi.configure(...)`, not
      * `Mushi.init(...)` — see packages/capacitor/src/definitions.ts. We
@@ -329,11 +346,12 @@ await Mushi.configure({
   express: {
     id: 'express',
     label: 'Express',
-    packageName: '@mushi-mushi/node',
+    packageName: 'mushi-mushi',
+    importPath: 'mushi-mushi/node',
     needsWebPackage: false,
     snippet: () => `// src/instrument.ts — load with: node --import ./dist/instrument.js
-import { MushiNodeClient, attachUnhandledHook } from '@mushi-mushi/node'
-import { mushiExpressErrorHandler } from '@mushi-mushi/node/express'
+import { MushiNodeClient, attachUnhandledHook } from 'mushi-mushi/node'
+import { mushiExpressErrorHandler } from 'mushi-mushi/node/express'
 import type { Express } from 'express'
 
 export const mushi = new MushiNodeClient({
@@ -350,11 +368,12 @@ export function attachMushi(app: Express) {
   fastify: {
     id: 'fastify',
     label: 'Fastify',
-    packageName: '@mushi-mushi/node',
+    packageName: 'mushi-mushi',
+    importPath: 'mushi-mushi/node',
     needsWebPackage: false,
     snippet: () => `// src/instrument.ts — load with: node --import ./dist/instrument.js
-import { MushiNodeClient, attachUnhandledHook } from '@mushi-mushi/node'
-import { mushiFastifyPlugin } from '@mushi-mushi/node/fastify'
+import { MushiNodeClient, attachUnhandledHook } from 'mushi-mushi/node'
+import { mushiFastifyPlugin } from 'mushi-mushi/node/fastify'
 import Fastify from 'fastify'
 
 export const mushi = new MushiNodeClient({
@@ -370,11 +389,12 @@ mushiFastifyPlugin(app, { client: mushi })`,
   hono: {
     id: 'hono',
     label: 'Hono',
-    packageName: '@mushi-mushi/node',
+    packageName: 'mushi-mushi',
+    importPath: 'mushi-mushi/node',
     needsWebPackage: false,
     snippet: () => `// src/instrument.ts — load with: node --import ./dist/instrument.js
-import { MushiNodeClient, attachUnhandledHook } from '@mushi-mushi/node'
-import { mushiHonoErrorHandler } from '@mushi-mushi/node/hono'
+import { MushiNodeClient, attachUnhandledHook } from 'mushi-mushi/node'
+import { mushiHonoErrorHandler } from 'mushi-mushi/node/hono'
 import { Hono } from 'hono'
 
 export const mushi = new MushiNodeClient({
@@ -394,16 +414,41 @@ app.onError(
   vanilla: {
     id: 'vanilla',
     label: 'Vanilla JS / unknown',
-    packageName: '@mushi-mushi/web',
+    packageName: 'mushi-mushi',
+    importPath: 'mushi-mushi',
     needsWebPackage: false,
     snippet: () => `// Anywhere in your client bundle
-import { Mushi } from '@mushi-mushi/web'
+import { Mushi } from 'mushi-mushi'
 
 Mushi.init({
   projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
   apiKey: import.meta.env.VITE_MUSHI_API_KEY,
 })`,
   },
+}
+
+/** The umbrella npm name. `npm install mushi-mushi`, then import from `mushi-mushi/<framework>`. */
+const UMBRELLA_PACKAGE = 'mushi-mushi'
+
+/**
+ * True for a dependency name that is a Mushi Mushi package: the `mushi-mushi`
+ * umbrella or any scoped `@mushi-mushi/*` package (older installs keep working).
+ */
+export function isMushiSdkPackage(name: string): boolean {
+  return name === UMBRELLA_PACKAGE || name.startsWith('@mushi-mushi/')
+}
+
+/**
+ * True for `mushi-mushi` pinned below 1.0. Before ADR 0060 that package was
+ * only the `npx mushi-mushi` setup command; the SDK ships in it from 1.x. A
+ * project that keeps `mushi-mushi@^0.8` to run the wizard has no SDK from it,
+ * and moving it to 1.x would add the whole SDK, so neither `mushi upgrade` nor
+ * `mushi doctor` treats it as one. Mirrors the server's isUmbrellaLauncherOnly.
+ */
+export function isLauncherOnly(name: string, spec: string | undefined): boolean {
+  if (name !== UMBRELLA_PACKAGE || !spec) return false
+  const m = /^[\^~>=<\sv]*(\d+)\./.exec(spec)
+  return m ? Number(m[1]) === 0 : false
 }
 
 export function readPackageJson(cwd: string): PackageJson | null {

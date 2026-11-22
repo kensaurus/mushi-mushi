@@ -731,7 +731,7 @@ export function registerProjectCodebaseRoutes(app: Hono<{ Variables: Variables }
         .select('id', { count: 'exact', head: true })
         .eq('project_id', pid)
         .is('tombstoned_at', null)
-        .not('embedding', 'is', null),
+        .not('embedding_768', 'is', null),
       db
         .from('project_codebase_files')
         .select('file_path, language')

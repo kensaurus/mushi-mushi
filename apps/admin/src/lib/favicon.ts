@@ -34,19 +34,20 @@ const FAVICON_SIZE = 32
 /** Size of the badge pip in canvas pixels. */
 const DOT_RADIUS = 6
 /**
- * Badge colours, tuned for the vermillion 朱印 hanko favicon.
+ * Badge colours, tuned for the vermillion favicon field (Field Kenji's
+ * specimen disc on vermillion since 2026-11-13; the 朱印 hanko before it).
  *
  * The previous palette was Tailwind red-500 with a near-black ring — that
- * works on any *neutral* favicon, but the new mark is itself vermillion,
- * so a red-on-red badge would vanish into the stamp. Inverting it (paper
+ * works on any *neutral* favicon, but the pip sits on the vermillion field,
+ * so a red-on-red badge would vanish into it. Inverting it (paper
  * cream pip + sumi ink ring) gives maximum contrast on vermillion *and*
  * keeps the on-brand "stamp + paper notification pip" visual metaphor.
  *
  * If the favicon is ever recoloured back to a neutral surface, swap these
- * back to a warning red — there's nothing in the API that needs to change.
+ * token names back to a warning red — there's nothing in the API that
+ * needs to change. Read at paint time: a top-level read runs before
+ * index.css and would freeze the stand-in.
  */
-const DOT_COLOR = readVizToken('viz-lang-javascript')
-const DOT_RING_COLOR = readVizToken('viz-terminal-bg')
 const BASE_SRC = '/favicon.svg'
 
 let baseImage: HTMLImageElement | null = null
@@ -57,9 +58,10 @@ let lastRenderedCount: number | null = null
 /**
  * Load `/favicon.svg` as an `HTMLImageElement` that's actually rasterizable.
  *
- * The SVG in `public/favicon.svg` carries only a `viewBox` — no explicit
- * `width` / `height`. Chromium's `Image` element refuses to decode a
- * viewBox-only SVG (EncodingError), so we fetch the text, inject
+ * `public/favicon.svg` ships `width` / `height` (a raster of Field Kenji
+ * inside an SVG), but older marks carried only a `viewBox`, and Chromium's
+ * `Image` element refuses to decode a viewBox-only SVG (EncodingError), so
+ * we fetch the text, inject
  * `width="32" height="32"` if missing, and load from a blob URL. That
  * produces a dimensioned image the canvas can `drawImage()` cleanly.
  */
@@ -149,13 +151,15 @@ async function updateFaviconBadge(count: number): Promise<void> {
     // tiny canvas resolution.
     const cx = FAVICON_SIZE - DOT_RADIUS - 1
     const cy = DOT_RADIUS + 1
+    const dotColor = readVizToken('viz-lang-javascript')
+    const dotRingColor = readVizToken('viz-terminal-bg')
     ctx.beginPath()
     ctx.arc(cx, cy, DOT_RADIUS + 1, 0, Math.PI * 2)
-    ctx.fillStyle = DOT_RING_COLOR
+    ctx.fillStyle = dotRingColor
     ctx.fill()
     ctx.beginPath()
     ctx.arc(cx, cy, DOT_RADIUS, 0, Math.PI * 2)
-    ctx.fillStyle = DOT_COLOR
+    ctx.fillStyle = dotColor
     ctx.fill()
 
     link.type = 'image/png'

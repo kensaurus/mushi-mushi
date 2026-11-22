@@ -38,6 +38,18 @@ diagnostics. Append the row to [`scorecard.md`](./scorecard.md).
 | 0 | **Activated external projects this week** | `/growth` in the console (operator) or the SQL in `plan-gtm.md` → Workstream C §8 |
 | 0b | Signups → project → SDK installed → activated, by `signup_source` | same endpoint, `by_source` |
 
+> **Definitions changed with migration `20261114090000`** (from the day it is
+> applied; the PR is dated 2026-11-14):
+> - **Visits** (console label "Page views") are now cookieless page views from
+>   `landing_page_views_daily`, without referrer spam, instead of distinct
+>   consented visitors. Expect a jump from 0–1 to tens a week. That is the new
+>   unit, not growth. The old measure stays as `visits_consented`. Our own
+>   qa-story crawls may still be in the count until the egress fix lands.
+> - **Activated** now means a real end-user report from a deployed app (the
+>   ingest rule in `_shared/activation.ts`). The setup wizard's `cli://wizard`
+>   report and localhost dev tests no longer count. Every activation counted
+>   before 2026-11-14 was one of those, so the real all-time count is 0.
+
 Then the original five (still useful as diagnostics):
 
 | # | Number | Source | How to check |

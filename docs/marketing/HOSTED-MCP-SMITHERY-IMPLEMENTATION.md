@@ -1,5 +1,12 @@
 # Hosted MCP on kensaur.us — Smithery implementation guide
 
+> **Obsolete (2026-11-13).** Smithery shut down its accounts, API, CLI and proxy on
+> 2026-10-31 (https://www.smithery.ai/future), and our listing page returns "Not found".
+> The `/hosted-mcp/smithery-backlink` page, the Smithery link in the server card and
+> `scripts/smithery-verification-check.mjs` were removed on 2026-11-13. The OAuth
+> scan stubs below are still in the code. Kept for history; see
+> `GTM-DISTRIBUTION.md` § Smithery.
+
 > **Audience:** Maintainers shipping or debugging the Streamable HTTP MCP proxy at
 > `https://kensaur.us/mushi-mushi/hosted-mcp/` and the Smithery registry listing
 > [`kensaurus/mushi-mushi`](https://smithery.ai/servers/kensaurus/mushi-mushi).

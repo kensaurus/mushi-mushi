@@ -7,6 +7,7 @@
  *          packages/server/supabase/functions/_shared/report-list-filters.ts.
  */
 
+import { REPORT_SOURCE_FILTER_OPTIONS } from './reportSourceKind'
 import { ORIGIN_FILTER_OPTIONS } from './reportOrigin'
 
 /** Stats shape from GET /v1/admin/stats that the quick-filter chips read. */
@@ -44,15 +45,49 @@ export const STATUS_CHIPS: ReadonlyArray<{
   { value: '', label: 'All', tone: 'default' },
   // Everything still waiting on a decision — what the dashboard's Bug queue
   // previews and its "View backlog" link opens.
-  { value: 'open', label: 'Open', tone: 'warn' },
-  { value: 'new', label: 'New', tone: 'warn' },
-  { value: 'classified', label: 'Classified', tone: 'brand' },
+  // Counts are not warnings: amber "Open"/"New" and a violet "Classified"
+  // (violet = selection) misstated plain buckets (R2 sweep 2026-11-18).
+  { value: 'open', label: 'Open', tone: 'default' },
+  { value: 'new', label: 'New', tone: 'default' },
+  { value: 'classified', label: 'Classified', tone: 'default' },
   { value: 'fixing', label: 'Fixing', tone: 'info' },
   { value: 'fixed', label: 'Fixed', tone: 'ok' },
   { value: 'verified', label: 'Verified', tone: 'ok' },
   { value: 'reopened', label: 'Reopened', tone: 'warn' },
   { value: 'dismissed', label: 'Dismissed', tone: 'default' },
 ]
+
+/**
+ * Whether a status chip is worth showing. "Verified 0" / "Reopened 0" were
+ * chips for empty buckets on every visit (R2 sweep 2026-11-18). All and Open
+ * always show (Open is the default list), and so does the active chip, so a
+ * filter in use can always be turned off. Before the counts load, show all.
+ */
+export function statusChipShown(value: string, active: boolean, stats: ReportStatusStats | null): boolean {
+  if (value === '' || value === 'open' || active || !stats) return true
+  return statusChipCount(value, stats) > 0
+}
+
+/**
+ * The list opens on Open (still waiting on a decision): fixed and dismissed
+ * bugs mixed in with the open ones by default (R2 sweep 2026-11-18). The URL
+ * carries `status=all` for every bug; no `status` param is the default.
+ * Internally '' still means "every status".
+ */
+export const DEFAULT_REPORT_STATUS = 'open'
+
+export function resolveStatusParam(raw: string | null): string {
+  if (raw === null || raw === '') return DEFAULT_REPORT_STATUS
+  if (raw === 'all') return ''
+  return raw
+}
+
+/** The URL value for a status filter: the default is no param, every status is `all`. */
+export function statusParamValue(status: string): string | null {
+  if (status === DEFAULT_REPORT_STATUS) return null
+  if (status === '') return 'all'
+  return status
+}
 
 /**
  * Severity quick chips — the list's only severity filter. Values are stored
@@ -108,6 +143,8 @@ export const SDK_FILTER_OPTIONS: ReadonlyArray<{ value: string; label: string }>
 ]
 
 const SDK_FILTER_ALIASES: Record<string, string> = {
+  // The one-package install (`mushi-mushi`) still reports as the web SDK.
+  'mushi-mushi': '@mushi-mushi/web',
   '@mushi-mushi/react': '@mushi-mushi/web',
   '@mushi-mushi/vue': '@mushi-mushi/web',
   '@mushi-mushi/svelte': '@mushi-mushi/web',
@@ -121,11 +158,12 @@ const SDK_FILTER_ALIASES: Record<string, string> = {
  * the web SDK) or values that never existed; an unknown one is dropped
  * rather than sent, so a stale link still opens a list instead of an error.
  */
-export function sanitizeListFilters(raw: { platform: string; sdkPackage: string; days: string; origin?: string }): {
+export function sanitizeListFilters(raw: { platform: string; sdkPackage: string; days: string; origin?: string; source?: string }): {
   platform: string
   sdkPackage: string
   days: string
   origin: string
+  source: string
 } {
   const platform = PLATFORM_FILTER_OPTIONS.some((o) => o.value === raw.platform) ? raw.platform : ''
   const sdk = SDK_FILTER_ALIASES[raw.sdkPackage] ?? raw.sdkPackage
@@ -133,7 +171,8 @@ export function sanitizeListFilters(raw: { platform: string; sdkPackage: string;
   const n = Number(raw.days)
   const days = raw.days && Number.isInteger(n) && n >= 1 && n <= 90 ? String(n) : ''
   const origin = ORIGIN_FILTER_OPTIONS.some((o) => o.value === raw.origin) ? raw.origin! : ''
-  return { platform, sdkPackage, days, origin }
+  const source = REPORT_SOURCE_FILTER_OPTIONS.some((o) => o.value === raw.source) ? raw.source! : ''
+  return { platform, sdkPackage, days, origin, source }
 }
 
 export function optionLabel(options: ReadonlyArray<{ value: string; label: string }>, value: string): string {

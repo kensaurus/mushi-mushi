@@ -1,9 +1,10 @@
 /**
- * Static MCP server card for directory scanners (Smithery, SEP-1649).
+ * Static MCP server card for directory scanners (SEP-1649).
  * Served at `/.well-known/mcp/server-card.json` when live tool scan is blocked by auth.
  *
- * Smithery quality score weights: tool descriptions, inputSchema depth, server metadata,
- * repository/homepage/license links.
+ * Directory scanners score tool descriptions, inputSchema depth, server metadata and
+ * repository/homepage/license links. `links` carries no Smithery URL: Smithery shut
+ * down its accounts and proxy on 2026-10-31 and our listing page is gone.
  *
  * Everything tool-shaped comes from mcp-discovery-tools.json, generated from the
  * canonical stdio catalog and the zod schemas it registers
@@ -17,7 +18,6 @@
 import { PUBLIC_CORS_HEADERS } from './cors.ts'
 import discoveryRaw from './mcp-discovery-tools.json' with { type: 'json' }
 
-const SMITHERY_SERVER_URL = 'https://smithery.ai/servers/kensaurus/mushi-mushi'
 const PRODUCT_HOMEPAGE = 'https://kensaur.us/mushi-mushi/docs/connect'
 const REPOSITORY = 'https://github.com/kensaurus/mushi-mushi'
 const MCP_QUICKSTART = 'https://kensaur.us/mushi-mushi/docs/quickstart/mcp'
@@ -93,7 +93,7 @@ export function buildMcpServerCard(oauth?: ServerCardOAuth): Record<string, unkn
       name: 'Mushi Mushi',
       version: mcpPackageVersion(),
       description:
-        'Your AI shipped it. Mushi Mushi tells you why it broke — plain diagnosis and a paste-ready fix prompt in Cursor. No second LLM key.',
+        'Your AI built it. Mushi Mushi makes it better: plain-English bug diagnosis, user-journey fixes and code clean-ups, as paste-ready prompts in your editor. No second LLM key.',
       homepage: PRODUCT_HOMEPAGE,
       repository: REPOSITORY,
       license: 'MIT',
@@ -130,7 +130,6 @@ export function buildMcpServerCard(oauth?: ServerCardOAuth): Record<string, unkn
     links: {
       connect: PRODUCT_HOMEPAGE,
       docs: MCP_QUICKSTART,
-      smithery: SMITHERY_SERVER_URL,
       repository: REPOSITORY,
     },
   }

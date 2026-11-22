@@ -7,6 +7,8 @@ import { useMemo } from 'react'
 import { SegmentedControl } from '../ui'
 import type { RewardsTabId } from './types'
 import { REWARDS_TABS } from './rewardsTabs'
+import { useEdgeFade } from '../../lib/useEdgeFade'
+import { useMediaQuery } from '../../lib/useMediaQuery'
 
 interface Props {
   active: RewardsTabId
@@ -21,10 +23,30 @@ export function RewardsTabNav({ active, onChange, hideTabs = false }: Props) {
     [],
   )
 
+  // A right-edge fade while tabs sit past the edge (2026-11-18: at 390 Quests,
+  // Retention and Settings were off-screen with no hint).
+  const fade = useEdgeFade<HTMLDivElement>(hideTabs)
+  // Phone: the nine tabs wrap onto two rows instead of a scroll strip with a grey
+  // scrollbar and tabs cut at both edges (2026-11-19: "Setti", "ladder").
+  const wide = useMediaQuery('(min-width: 640px)', true)
+
   if (hideTabs) return null
 
+  if (!wide) {
+    return (
+      <SegmentedControl<RewardsTabId>
+        ariaLabel="Rewards sections"
+        value={active}
+        options={options}
+        onChange={onChange}
+        size="sm"
+        wrap
+      />
+    )
+  }
+
   return (
-    <div className="-mx-1 min-w-0 overflow-x-auto pb-1 scroll-smooth [scrollbar-width:thin]">
+    <div ref={fade.ref} className={`-mx-1 min-w-0 overflow-x-auto pb-1 scroll-smooth [scrollbar-width:thin] ${fade.className}`} data-more={fade.more ? 'true' : undefined}>
       <SegmentedControl<RewardsTabId>
         ariaLabel="Rewards sections"
         value={active}

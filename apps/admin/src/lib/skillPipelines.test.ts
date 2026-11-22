@@ -11,6 +11,8 @@ import {
   parseReportIdInput,
   pipelineCancelBody,
   resolveSkillsTab,
+  skillSourcesEmptyLine,
+  skillsIdle,
 } from './skillPipelines'
 
 const ID = '0f7f2b1a-1111-4222-8333-444455556666'
@@ -75,5 +77,27 @@ describe('nextCheckinStep (QA 105)', () => {
     ]
     expect(nextCheckinStep(steps)?.skill_slug).toBe('b')
     expect(nextCheckinStep([{ step_index: 0, status: 'passed' }])).toBeNull()
+  })
+})
+
+describe('skillSourcesEmptyLine (round-2 review 2026-11-18)', () => {
+  it('counts the shared catalog from data instead of a hard-coded "70+"', () => {
+    const line = skillSourcesEmptyLine(173)
+    expect(line).toContain('173 skills are shared')
+    expect(line).not.toContain('70+')
+    expect(skillSourcesEmptyLine(1)).toContain('1 skill is shared')
+  })
+
+  it('points at the starter repo when the catalog is empty', () => {
+    expect(skillSourcesEmptyLine(0)).toContain('kensaurus/skills')
+  })
+})
+
+describe('skillsIdle', () => {
+  it('is idle only with nothing running, waiting or failed', () => {
+    expect(skillsIdle({ activeRuns: 0, awaitingCheckin: 0, failedRuns: 0 })).toBe(true)
+    expect(skillsIdle({ activeRuns: 1, awaitingCheckin: 0, failedRuns: 0 })).toBe(false)
+    expect(skillsIdle({ activeRuns: 0, awaitingCheckin: 1, failedRuns: 0 })).toBe(false)
+    expect(skillsIdle({ activeRuns: 0, awaitingCheckin: 0, failedRuns: 1 })).toBe(false)
   })
 })

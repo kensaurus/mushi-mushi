@@ -1,6 +1,6 @@
 import { compressScreenshotDataUrl } from './capture/compress-screenshot';
 import type { WidgetSubmitOutcome } from './widget-helpers';
-import { shouldShowSdkFreshness } from './widget-helpers';
+import { isNotSentOutcome, shouldShowSdkFreshness } from './widget-helpers';
 import {
   type MushiConfig,
   type MushiInitConfig,
@@ -43,6 +43,8 @@ import {
   markPageUnloading,
   flushLastOutboundOnUnload,
 } from '@mushi-mushi/core';
+// Its own entry: the core bundle has a size limit, and apps without a provider skip it.
+import { collectDiagnostics, type MushiDiagnosticsProvider } from '@mushi-mushi/core/diagnostics';
 
 import { MushiWidget } from './widget';
 import { deviceHasReports, markDeviceHasReports, recordToastShown, toastAllowed } from './reporter-inbox';
@@ -204,7 +206,10 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   // bots, consent), so under consent:'required' nothing is sent until
   // setConsent('granted'), whichever tracker initialises first.
   let unsubPageViewHistory: (() => void) | null = null;
-  if (bootstrapConfig.trackSessions !== false) {
+  let sessionTrackingStarted = false;
+  function startSessionTracking() {
+    if (sessionTrackingStarted) return;
+    sessionTrackingStarted = true;
     initSessionTracker({
       client: apiClient,
       sdkVersion: MUSHI_SDK_VERSION,
@@ -228,6 +233,37 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       // History API unavailable (sandboxed iframe) — heartbeats still flow.
     }
   }
+  // `trackSessions: 'on-demand'` (Journey optimizer, ADR 0058): nothing is
+  // sent unless this tab opted in (?mushi_journeys=1) or the console's
+  // recording window, read from the runtime config below, samples this device.
+  // The deciding code is its own chunk, loaded only in that mode, so apps on
+  // the default pay no bytes for it (core bundle budget, 2026-11-13).
+  const trackSessionsMode = bootstrapConfig.trackSessions;
+  const journeyRecording = trackSessionsMode === 'on-demand' ? import('./journey-recording') : null;
+  const journeyTabOptIn = journeyRecording?.then((m) => m.readTabOptIn(bootstrapConfig.projectId));
+  function maybeStartSessionTracking(recording?: MushiRuntimeSdkConfig['journeys'] | null) {
+    if (sessionTrackingStarted || trackSessionsMode === false) return;
+    if (!journeyRecording) {
+      startSessionTracking();
+      return;
+    }
+    void Promise.all([journeyRecording, journeyTabOptIn])
+      .then(([m, tabOptIn]) => {
+        if (sessionTrackingStarted) return;
+        const record = m.journeyRecordingDecision({
+          mode: trackSessionsMode,
+          tabOptIn: tabOptIn === true,
+          window: recording,
+          draw: recording ? m.deviceDraw(bootstrapConfig.projectId) : 1,
+          now: Date.now(),
+        });
+        if (record) startSessionTracking();
+      })
+      .catch(() => {
+        // The chunk failed to load: on-demand stays off, which is its default.
+      });
+  }
+  maybeStartSessionTracking(null);
 
   const preFilter = createPreFilter(bootstrapConfig.preFilter);
   const offlineQueue = createOfflineQueue(bootstrapConfig.offline);
@@ -416,7 +452,20 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     widget.setAllowScreenshotRemove(activeConfig.privacy?.allowUserRemoveScreenshot !== false);
 
     if (activeConfig.capture?.elementSelector !== false) {
-      elementSelector ??= createElementSelector();
+      // The element's text follows the screenshot's privacy rules: none from
+      // inside a redacted, masked or blocked area, the rest PII-scrubbed.
+      elementSelector ??= createElementSelector(
+        () => {
+          const p = activeConfig.privacy;
+          return [
+            ALWAYS_REDACT_SELECTORS,
+            ...(p?.redactSelectors ?? ['[data-mushi-redact]']),
+            ...(p?.maskSelectors ?? []),
+            ...(p?.blockSelectors ?? []),
+          ].join(',');
+        },
+        (text) => piiScrubber.scrub(text),
+      );
     } else {
       elementSelector?.deactivate();
       elementSelector = null;
@@ -536,6 +585,8 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   }
 
   let pendingScreenshot: string | null = null;
+  /** The reporter removed the screenshot: nothing captures a new one for this report. */
+  let screenshotDeclined = false;
   let pendingElement: { tagName: string; id?: string; className?: string; xpath?: string } | null = null;
   let pendingProactiveTrigger: string | null = null;
   let runtimeConfigLoaded = false;
@@ -549,6 +600,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   // calls identify() on every focus / visibilitychange / auth re-check.
   let lastIdentifySig: string | null = null;
   const customMetadata: Record<string, unknown> = {};
+  let diagnosticsProvider: MushiDiagnosticsProvider | null = null;
   // Sticky tags applied to every subsequent report. Cleared by
   // `clearTag()` (single key) or `clearTag()` with no args (all keys).
   // We coerce to scalar values at insert time so the wire format is
@@ -784,16 +836,56 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     }
   }
 
-  async function autoCaptureScreenshot(when: 'open' | 'submit'): Promise<void> {
+  /** Whether this report should get a screenshot the reporter did not ask for. */
+  function automaticScreenshotWanted(): boolean {
     const mode = activeConfig.capture?.screenshot;
     const hasCapture = !!screenshotCap || !!activeConfig.capture?.screenshotProvider;
-    if (!hasCapture || mode === 'off' || pendingScreenshot) return;
-    if (when === 'open' && mode !== 'auto') return;
-    if (when === 'submit' && mode !== 'on-report' && mode !== 'auto') return;
-    log.debug('Auto-capturing screenshot', { when, mode });
-    pendingScreenshot = await takeScreenshotWithoutChrome();
-    widget.setScreenshotAttached(pendingScreenshot !== null);
-    widget.setScreenshotPreview(pendingScreenshot);
+    return hasCapture && (mode === 'auto' || mode === 'on-report') && !pendingScreenshot && !screenshotDeclined;
+  }
+
+  /** The `auto` capture started when the panel opened, while it runs. */
+  let openCaptureRun: Promise<void> | null = null;
+  /** Bumped on every open and close, so a late capture never lands in another report. */
+  let panelSession = 0;
+
+  function captureOnOpen(): void {
+    if (activeConfig.capture?.screenshot !== 'auto' || !automaticScreenshotWanted()) return;
+    log.debug('Auto-capturing screenshot on open');
+    const session = panelSession;
+    const run = (async () => {
+      const shot = await takeScreenshotWithoutChrome().catch(() => null);
+      // The reporter may have closed the panel, or removed or taken one, meanwhile.
+      if (session !== panelSession || pendingScreenshot || screenshotDeclined || !shot) return;
+      pendingScreenshot = shot;
+      widget.setScreenshotAttached(true);
+      widget.setScreenshotPreview(shot);
+    })();
+    openCaptureRun = run;
+    void run.finally(() => {
+      if (openCaptureRun === run) openCaptureRun = null;
+    });
+  }
+
+  /**
+   * Send was pressed. `on-report` (and `auto` when the open capture failed)
+   * takes the screenshot now, and answers true so the widget shows it and
+   * waits for a second Send: an automatic screenshot is never sent unseen,
+   * and one the reporter removed is never taken again for this report.
+   */
+  async function screenshotBeforeSubmit(): Promise<boolean> {
+    if (openCaptureRun) {
+      await openCaptureRun;
+      // It landed while Send was being pressed: the reporter hasn't seen it.
+      if (pendingScreenshot) return true;
+    }
+    if (!automaticScreenshotWanted()) return false;
+    log.debug('Capturing screenshot for review before send', { mode: activeConfig.capture?.screenshot });
+    const shot = await takeScreenshotWithoutChrome().catch(() => null);
+    if (!shot) return false;
+    pendingScreenshot = shot;
+    widget.setScreenshotAttached(true);
+    widget.setScreenshotPreview(shot);
+    return true;
   }
 
   // Brand-mark ref: SHA-256 prefix of the project id, never the id itself.
@@ -807,16 +899,23 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       // Only a submit from a proactive prompt resets the dismissal streak; a
       // report the user opened themselves says nothing about the prompts.
       if (pendingProactiveTrigger) proactiveManager?.recordSubmission();
-      await autoCaptureScreenshot('submit');
+      // No capture here: onBeforeSubmit already took (and showed) any
+      // automatic screenshot, and a removed one must stay removed.
       // Surface the server-confirmed id back to the widget so the success
       // step renders a real receipt. A report stopped on the device comes
       // back as `blocked` / `throttled`: the widget keeps the text and says
       // it was not sent, never "sent" or "queued".
-      return submitReport(category, description, intent, userCategory);
+      const outcome = await submitReport(category, description, intent, userCategory);
+      // The next report starts fresh; a report kept on screen keeps the choice.
+      if (!isNotSentOutcome(outcome)) screenshotDeclined = false;
+      return outcome;
     },
+    onBeforeSubmit: () => screenshotBeforeSubmit(),
     onOpen: () => {
       log.debug('Widget opened');
-      void autoCaptureScreenshot('open');
+      panelSession++;
+      screenshotDeclined = false;
+      captureOnOpen();
       // Idempotent safety-net: the buffer already records continuously from
       // syncCaptureModules; this only matters if a host disabled then re-enabled
       // capture between init and open.
@@ -844,7 +943,9 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
         proactiveManager?.recordDismissal();
         emit('proactive:dismissed', { type: pendingProactiveTrigger });
       }
+      panelSession++;
       pendingScreenshot = null;
+      screenshotDeclined = false;
       pendingElement = null;
       pendingProactiveTrigger = null;
       emit('widget:closed');
@@ -926,6 +1027,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     onScreenshotRemove: () => {
       log.debug('Screenshot attachment removed');
       pendingScreenshot = null;
+      screenshotDeclined = true;
       widget.setScreenshotAttached(false);
     },
     onScreenshotAnnotateRequest: async (container: HTMLElement) => {
@@ -1272,10 +1374,16 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     // console-managed trigger/banner is correct on the very first render
     // instead of flashing the bootstrap default then snapping.
     if (cached) applyRuntimeConfig(cached);
-    apiClient.getSdkConfig().then((result) => {
+    // On demand, the recording window must reflect a stop right away, so this
+    // one read skips the HTTP cache; every other app keeps the cached read.
+    apiClient.getSdkConfig(trackSessionsMode === 'on-demand' ? { fresh: true } : undefined).then((result) => {
       if (result.ok && result.data) {
         cacheRuntimeConfig(config.projectId, result.data);
         applyRuntimeConfig(result.data);
+        // On-demand recording follows the fresh config only: the cached copy
+        // applied above can still hold a window the owner has since stopped
+        // (found in the live test, 2026-11-13). A failed fetch records nothing.
+        if (result.data.enabled !== false) maybeStartSessionTracking(result.data.journeys ?? null);
       } else if (result.error) {
         log.debug('Runtime SDK config unavailable', result.error);
       }
@@ -1430,6 +1538,8 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     }
 
     const capturedEnvironment = captureEnvironment();
+    // Read now, when the reporter presses Send (setDiagnosticsProvider).
+    const hostDiagnostics = await collectDiagnostics(diagnosticsProvider);
 
     const report: MushiReport = {
       id: newUuid(),
@@ -1450,6 +1560,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
         : {}),
       metadata: {
         ...customMetadata,
+        ...(hostDiagnostics ?? {}),
         ...(userInfo ? { user: userInfo } : {}),
         ...(sentryCtx?.release ? { sentryRelease: sentryCtx.release } : {}),
       },
@@ -1694,6 +1805,10 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       customMetadata[key] = value;
     },
 
+    setDiagnosticsProvider(provider) {
+      diagnosticsProvider = provider;
+    },
+
     setScreen(screen) {
       timelineCap.setScreen(screen);
     },
@@ -1736,6 +1851,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
 
     updateConfig(runtimeConfig) {
       applyRuntimeConfig(runtimeConfig);
+      if (runtimeConfig.enabled !== false) maybeStartSessionTracking(runtimeConfig.journeys ?? null);
     },
 
     diagnose() {
@@ -2476,6 +2592,7 @@ function createNoopInstance(): MushiSDKInstance {
     on: () => () => {},
     setUser: () => {},
     setMetadata: () => {},
+    setDiagnosticsProvider: () => {},
     setScreen: () => {},
     isOpen: () => false,
     open: () => {},

@@ -63,6 +63,34 @@ export function ProofClient() {
         )}
         {board && board !== 'loading' && <Board board={board} />}
 
+        {/* The honest read of these numbers. It moved here from the landing
+            page (owner, 2026-11-14), which links to this page. */}
+        <section className="space-y-3" id="what-it-means">
+          <h2 className="text-xl font-semibold text-mushi-ink">What the numbers say so far</h2>
+          <p className="text-sm text-mushi-ink-muted">A snapshot of my own 9 apps for the 60 days to 2026-11-11.</p>
+          <p className="text-base text-mushi-ink-muted">
+            Most people who hit a bug won&apos;t report it: they just leave. So reporting takes one tap for the people
+            who do speak up, and Mushi Mushi also looks for bugs itself.
+          </p>
+          <p className="text-base text-mushi-ink-muted">
+            People sent 34 bug reports, and some of those were my own testing. My own checks (code audits, Sentry, the
+            site watch, the first-time user test) found 2,031. So about 98% of the bugs came from checks, code reviews,
+            error alerts and my own notes, not from people&apos;s reports.
+          </p>
+          <p className="text-base text-mushi-ink-muted">
+            Of the 523 fixes merged in those 60 days, two started from a person&apos;s report. The rest started from
+            those checks, error alerts and my own notes. The button still matters: a report tells you what a real
+            person was trying to do when it broke.
+          </p>
+          <p className="text-base text-mushi-ink-muted">
+            It is early, and I&apos;m still its main user. If something confuses you,{' '}
+            <a href={`${REPO_URL}/issues`} className="font-medium text-mushi-vermillion hover:underline">
+              open an issue
+            </a>{' '}
+            and I&apos;ll read it. — Kenji
+          </p>
+        </section>
+
         <section className="space-y-3">
           <h2 className="text-lg font-semibold text-mushi-ink">Check it yourself</h2>
           <ul className="space-y-2 text-sm text-mushi-ink-muted">

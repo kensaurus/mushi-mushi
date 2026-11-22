@@ -46,6 +46,7 @@ import {
   type SelfServeChangePlan,
 } from '../../_shared/billing-rules.ts';
 import { assertTargetProjectAccess, dbError, ownedProjectIds, requireProjectAdmin } from '../shared.ts';
+import { orgCustomer, organizationIdForProject } from '../../_shared/org-billing.ts';
 
 const clog = log.child('billing-change-plan');
 
@@ -54,7 +55,7 @@ type Ctx = Context<{ Variables: Variables }>;
 const REFUSAL_COPY: Record<PlanChangeRefusal, { status: 400 | 404 | 409; message: string }> = {
   NO_SUBSCRIPTION: {
     status: 404,
-    message: 'This project has no paid plan to change. Pick a plan to start one.',
+    message: 'This team has no paid plan to change. Pick a plan to start one.',
   },
   SUBSCRIPTION_NOT_CHANGEABLE: {
     status: 409,
@@ -115,21 +116,31 @@ async function resolveChange(c: Ctx): Promise<Resolved | Response> {
     return c.json({ ok: false, error: { code: 'STRIPE_NOT_CONFIGURED', message: 'Payments are not set up on this Mushi server yet.' } }, 503);
   }
 
+  // The plan is the team's: change the organization's subscription, from
+  // whichever app in the team the owner is looking at.
+  let organizationId: string | null;
+  try {
+    organizationId = await organizationIdForProject(db, body.project_id);
+  } catch (err) {
+    return dbError(c, { message: err instanceof Error ? err.message : String(err) });
+  }
+  if (!organizationId) {
+    const r = REFUSAL_COPY.NO_SUBSCRIPTION;
+    return c.json({ ok: false, error: { code: 'NO_SUBSCRIPTION', message: r.message } }, r.status);
+  }
   const { data: subRow, error: subErr } = await db
     .from('billing_subscriptions')
     .select('stripe_subscription_id, status, plan_id, organization_id')
-    .eq('project_id', body.project_id)
+    .eq('organization_id', organizationId)
     .in('status', ['active', 'trialing', 'past_due', 'unpaid', 'incomplete', 'paused'])
     .order('current_period_end', { ascending: false })
     .limit(1)
     .maybeSingle();
   if (subErr) return dbError(c, subErr);
-  const { data: customerRow, error: custErr } = await db
-    .from('billing_customers')
-    .select('stripe_customer_id')
-    .eq('project_id', body.project_id)
-    .maybeSingle();
-  if (custErr) return dbError(c, custErr);
+  const customerRow = await orgCustomer(db, organizationId).catch((err: unknown) =>
+    err instanceof Error ? err : new Error(String(err)),
+  );
+  if (customerRow instanceof Error) return dbError(c, { message: customerRow.message });
 
   const refuseEarly = !subRow?.stripe_subscription_id || !customerRow?.stripe_customer_id;
   if (refuseEarly) {

@@ -51,12 +51,12 @@ The same digest is the MCP tool `get_repo_digest`, on the default tool set.
 
 ### Diagram
 
-An AI drawing of the main parts of your app and how they connect. Mushi reads the repo on GitHub at the latest commit and asks the AI for the parts, their folders or files, and the links between them. Then Mushi checks every path against the real repo: a path that does not exist is removed and the part is marked, so a made-up file never becomes a link.
+An AI drawing of the main parts of your app and how they connect. Mushi Mushi reads the repo on GitHub at the latest commit and asks the AI for the parts, their folders or files, and the links between them. Then Mushi Mushi checks every path against the real repo: a path that does not exist is removed and the part is marked, so a made-up file never becomes a link.
 
 - **Draw diagram** costs one AI call. Diagrams are stored per commit and never redrawn on their own, not even on a push: that would spend an AI call on commits that change nothing, and a public page must only show what you previewed. **Update to latest commit** draws only when there is a new commit; **Redraw** asks the AI again.
 - Click a part to read what it does and open its folder or file on GitHub at that commit.
 - Badges on each part count its open bug reports and its code findings from the last 30 days. Click the part to list them: reports open their detail page, findings open the file and line on GitHub. A report lands on a part through its stack trace or the files its fixes changed; reports and findings in files no part covers are counted under the diagram.
-- **Public page** (optional, owner or admin): share the diagram at `kensaur.us/mushi-mushi/r/<owner>/<repo>`. The preview shows exactly what becomes public: part names, descriptions and paths, never file contents. A private repo needs you to tick a consent box first. The page shows the commit it was drawn from, keeps showing that drawing until you publish again, and **Unpublish** removes it. Visitors can report a wrong or unwanted diagram privately: the report goes to Mushi's own inbox, never to a public issue. Once live, the card gives you a README badge to copy and a Markdown copy of the page for AI agents. Search engines index the page.
+- **Public page** (optional, owner or admin): share the diagram at `kensaur.us/mushi-mushi/r/<owner>/<repo>`. The preview shows exactly what becomes public: part names, descriptions and paths, never file contents. A private repo needs you to tick a consent box first. The page shows the commit it was drawn from, keeps showing that drawing until you publish again, and **Unpublish** removes it. Visitors can report a wrong or unwanted diagram privately: the report goes to Mushi Mushi's own inbox, never to a public issue. Once live, the card gives you a README badge to copy and a Markdown copy of the page for AI agents. Search engines index the page.
 - **From your editor:** the MCP tool `get_repo_diagram` returns the latest diagram; pass `overlay: true` to also get the open reports and findings on each part. It reads the stored drawing and never draws a new one.
 - **With an API key:** the preview, publish and unpublish routes take a key with `mcp:read` (preview) or `mcp:write` (publish, unpublish) as well as the console session. A key can publish a public repo's diagram. A private repo's diagram can only be published from the console, because the consent box is a person reading the preview.
 
@@ -135,7 +135,7 @@ Clicking any node (in any view) opens a detail panel with:
 | Node type | `code_file` or `code_symbol` |
 | Preview | Content with line numbers, starting from `line_start` |
 | View in graph | Switches to the Graph tab with this file selected |
-| Bug reports | Opens `/reports?component=<stem>` to see Mushi reports filed against this file |
+| Bug reports | Opens `/reports?component=<stem>` to see Mushi Mushi reports filed against this file |
 
 ---
 
@@ -165,7 +165,7 @@ Switch between **Files** (one node per file) and **Symbols** (one node per expor
 
 ### Turn on indexing for the connected repo
 
-On [Integrations](/admin/integrations) (`/integrations/config`), the **Codebase indexing** card turns indexing on for the app's GitHub repo and starts a sweep at once. With the Mushi GitHub App installed, each `push` re-indexes the changed files.
+On [Integrations](/admin/integrations) (`/integrations/config`), the **Codebase indexing** card turns indexing on for the app's GitHub repo and starts a sweep at once. With the Mushi Mushi GitHub App installed, each `push` re-indexes the changed files.
 
 ### Or upload a local folder
 

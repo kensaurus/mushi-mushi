@@ -1,6 +1,8 @@
 # @mushi-mushi/wasm-classifier
 
-> **Your AI wrote it. Mushi Mushi tells you why it broke.**
+> **Your AI built it. Mushi Mushi makes it better.**
+
+**Optional add-on for the browser SDK; most apps don't need it.** To add Mushi Mushi to an app, install [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi). Add this next to it only if junk reports cost you LLM calls.
 
 An optional junk filter for [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) bug reports, for web apps that get a lot of "hi" and "asdf". It runs in the browser and stops empty or nonsense reports before they are sent, so they never reach the server or an LLM. Most apps do not need it: the web SDK already runs its own pattern filter first.
 
@@ -13,7 +15,7 @@ npm install @mushi-mushi/wasm-classifier
 ```
 
 ```ts
-import { Mushi } from '@mushi-mushi/web';
+import { Mushi } from 'mushi-mushi';
 import { createHeuristicClassifier } from '@mushi-mushi/wasm-classifier';
 
 Mushi.init({
@@ -118,4 +120,4 @@ MIT.
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 77 edge functions · 546 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 78 edge functions · 583 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

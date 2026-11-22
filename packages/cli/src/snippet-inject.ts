@@ -11,7 +11,8 @@
  *      wizards break apps.
  *
  *   2. `findSdkImport` — source-level verifier used by `mushi doctor`:
- *      detects whether any source file actually imports `@mushi-mushi/*`,
+ *      detects whether any source file actually imports `mushi-mushi` or
+ *      `@mushi-mushi/*`,
  *      so "installed the package but never added the snippet" stops looking
  *      identical to a fully wired app.
  */
@@ -64,8 +65,11 @@ const SOURCE_DIRS = ['src', 'app', 'pages', 'lib', 'components']
 const SOURCE_EXTS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.vue', '.svelte'])
 const MAX_FILES_SCANNED = 2_000
 
+/** An import of the `mushi-mushi` umbrella (any subpath) or a scoped `@mushi-mushi/*` SDK. */
+const SDK_IMPORT = /@mushi-mushi\/|['"]mushi-mushi(?:\/[\w-]+)*['"]|MushiProvider/
+
 /**
- * Best-effort scan for a `@mushi-mushi/*` import in the app's source.
+ * Best-effort scan for a `mushi-mushi` or `@mushi-mushi/*` import in the app's source.
  * Returns the first file that references the SDK, or null. Bounded (2k
  * files, common source dirs only) so doctor stays fast on monorepos.
  */
@@ -90,7 +94,7 @@ export async function findSdkImport(cwd: string): Promise<{ file: string } | nul
         scanned += 1
         try {
           const content = await readFile(join(dir, entry.name), 'utf8')
-          if (content.includes('@mushi-mushi/') || content.includes('MushiProvider')) {
+          if (SDK_IMPORT.test(content)) {
             return { file: join(dir, entry.name) }
           }
         } catch {
@@ -109,7 +113,7 @@ export async function findSdkImport(cwd: string): Promise<{ file: string } | nul
   for (const name of ['main.ts', 'main.js', 'index.js', 'index.ts', 'index.html']) {
     try {
       const content = await readFile(join(cwd, name), 'utf8')
-      if (content.includes('@mushi-mushi/') || content.includes('MushiProvider') || content.includes('mushi-mushi')) {
+      if (SDK_IMPORT.test(content) || content.includes('mushi-mushi')) {
         return { file: join(cwd, name) }
       }
     } catch {

@@ -65,8 +65,11 @@ const REVIEWED = new Map<string, 'keyed' | 'stored' | 'sentinel'>([
   ['site-audit/index.ts reporter_token_hash', 'sentinel'], // 'site-audit' (ADR 0040: no reporter behind an audit report)
   ['_shared/store-review-intake.ts reporter_token_hash', 'sentinel'], // 'store-review'; the reviewer's identity is never stored
   ['_shared/site-watch.ts reporter_token_hash', 'sentinel'], // 'site-watch'; a crawl, no person reported it
+  ['_shared/edge-canary.ts reporter_token_hash', 'sentinel'], // 'site-watch' (ADR 0061): an edge canary request, no person reported it
+  ['_shared/cloudwatch-ingest.ts reporter_token_hash', 'sentinel'], // 'cloudwatch-webhook' (ADR 0061): an AWS alarm, no person reported it
   ['_shared/ux-runs.ts reporter_token_hash', 'sentinel'], // 'ux-loop' (UX_LOOP_REPORTER): a screen the mushi-ux loop flagged
   ['_shared/fresh-eyes.ts reporter_token_hash', 'sentinel'], // 'fresh-eyes' (ADR 0053): a first-time-visitor run found it, no person reported it
+  ['_shared/ux-scorecard-io.ts reporter_token_hash', 'sentinel'], // 'ux-scorecard' (ADR 0067): a root cause the UX scorecard found, no person reported it
   ['library-modernizer/index.ts reporter_token_hash', 'sentinel'], // 'cron:library-modernizer'
   ['_shared/vuln-watch-db.ts reporter_token_hash', 'sentinel'], // 'cron:vuln-watch' (ADR 0038)
   ['skill-runs/index.ts reporter_token_hash', 'sentinel'], // 'cron:skill-runs' (ADR 0042: a skill-run round has no reporter)
@@ -139,6 +142,11 @@ function scan(): Set<string> {
     const rel = relative(FUNCTIONS, file).replace(/\\/g, '/')
     // reporter-token.ts defines the keying; it writes nothing.
     if (rel === '_shared/reporter-token.ts') continue
+    // The vendored KENSAURUS spine (yen-yen ADR 0014 / 0100, hash-locked by
+    // check:spine) writes no database row. Its events client builds an
+    // `anon_id` envelope that it POSTs to the cross-app ingest, and the edge
+    // functions import only its mail kit (mail.ts) from it.
+    if (rel.startsWith('_shared/kensaurus-spine/')) continue
     // No comment stripping: a regex for /* … */ mangles these files (it ate
     // three quarters of sessions.ts), and prose about a column does not sit
     // inside a write call's parentheses anyway. The dotted-assignment scan

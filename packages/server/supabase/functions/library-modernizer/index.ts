@@ -33,9 +33,9 @@ import { z } from 'npm:zod@3'
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { log as rootLog } from '../_shared/logger.ts'
 import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts'
-import { resolveLlmKey } from '../_shared/byok.ts'
+import { LlmFailoverError, withAnthropicOrOpenAi } from '../_shared/llm-failover.ts'
 import { firecrawlScrapeChangelog } from '../_shared/firecrawl.ts'
-import { MODERNIZER_EFFORT, MODERNIZER_MODEL, THINKING_HEADROOM_TOKENS } from '../_shared/models.ts'
+import { MODERNIZER_EFFORT, MODERNIZER_FALLBACK, MODERNIZER_MODEL, THINKING_HEADROOM_TOKENS } from '../_shared/models.ts'
 import { claudeGenerateObject } from '../_shared/claude-messages.ts'
 import { withLlmUsage } from '../_shared/llm-usage.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
@@ -284,9 +284,6 @@ async function processRepo(
   if (candidates.length === 0) return { scanned: allDeps.length, created: 0, skipped: null }
   const deps = candidates.map((c) => ({ name: c.name, version: c.installed }))
 
-  const anthropic = await resolveLlmKey(db, row.project_id, 'anthropic')
-  if (!anthropic) return { scanned: deps.length, created: 0, skipped: 'no_llm_key' }
-
   // Best-effort scrape changelog for first 3 deps with a likely upstream URL.
   // The model gets either real release-notes or a single-line "no changelog".
   const releaseNotes: Array<{ name: string; notes: string }> = []
@@ -315,25 +312,52 @@ async function processRepo(
 
   let plan: z.infer<typeof findingSchema>
   try {
-    // claudeGenerateObject validates the reply against findingSchema.
-    const result = await withLlmUsage(db, {
+    const usageFor = (model: string, keySource: 'byok' | 'env') => ({
       functionName: 'library-modernizer',
       stage: 'dependency-audit',
       projectId: row.project_id,
-      model: MODERNIZER_MODEL,
-      keySource: anthropic.source,
-    }, () => claudeGenerateObject({
-      apiKey: anthropic.key,
-      model: MODERNIZER_MODEL,
-      effort: MODERNIZER_EFFORT,
-      schema: findingSchema,
-      system: `You are a senior dependency auditor. Each dependency below is behind npm's latest stable release; the installed range and the latest version are facts from the npm registry, do not change them. Use the optional release-notes excerpts to set severity. Mark deprecated/yanked packages as 'deprecated'; otherwise 'major' (breaking) vs 'minor'. Do not judge security: known vulnerabilities are checked separately from advisory data. Return at most 8 findings — only flag genuinely actionable ones.`,
-      prompt: `Manifest: ${manifestPath} (${manifestKind})\n\nDependencies (installed range → npm latest stable):\n${candidates.map((c) => `- ${c.name}: ${c.installed} → ${c.latest}`).join('\n')}\n\nRelease-notes excerpts (best-effort web scrape, may be empty):\n${releaseNotes.map((n) => `### ${n.name}\n${n.notes}`).join('\n\n') || '(no excerpts available — base your judgement on the version strings only)'}`,
-      // Up to 8 findings of ~400 chars, plus room for adaptive thinking.
-      maxTokens: 2_000 + THINKING_HEADROOM_TOKENS,
-    }))
-    plan = result.object
+      model,
+      keySource,
+    })
+    const auditSystem = `You are a senior dependency auditor. Each dependency below is behind npm's latest stable release; the installed range and the latest version are facts from the npm registry, do not change them. Use the optional release-notes excerpts to set severity. Mark deprecated/yanked packages as 'deprecated'; otherwise 'major' (breaking) vs 'minor'. Do not judge security: known vulnerabilities are checked separately from advisory data. Return at most 8 findings — only flag genuinely actionable ones.`
+    const auditPrompt = `Manifest: ${manifestPath} (${manifestKind})\n\nDependencies (installed range → npm latest stable):\n${candidates.map((c) => `- ${c.name}: ${c.installed} → ${c.latest}`).join('\n')}\n\nRelease-notes excerpts (best-effort web scrape, may be empty):\n${releaseNotes.map((n) => `### ${n.name}\n${n.notes}`).join('\n\n') || '(no excerpts available — base your judgement on the version strings only)'}`
+    // The app's own keys first, then the platform keys through the
+    // library-modernizer route (provider and model from kenji).
+    const routed = await withAnthropicOrOpenAi(
+      db,
+      row.project_id,
+      // claudeGenerateObject validates the reply against findingSchema.
+      (key) => withLlmUsage(db, usageFor(key.model ?? MODERNIZER_MODEL, key.source), () => claudeGenerateObject({
+        apiKey: key.key,
+        model: key.model ?? MODERNIZER_MODEL,
+        effort: MODERNIZER_EFFORT,
+        schema: findingSchema,
+        system: auditSystem,
+        prompt: auditPrompt,
+        // Up to 8 findings of ~400 chars, plus room for adaptive thinking.
+        maxTokens: 2_000 + THINKING_HEADROOM_TOKENS,
+      })).then((r) => r.object as z.infer<typeof findingSchema>),
+      async (key) => {
+        const [{ openAiProvider }, { generateObject }] = await Promise.all([
+          import('../_shared/openai-compat.ts'),
+          import('../_shared/ai-sdk.ts'),
+        ])
+        const openai = openAiProvider({ apiKey: key.key, ...(key.baseUrl ? { baseURL: key.baseUrl } : {}) })
+        return withLlmUsage(db, usageFor(key.model ?? MODERNIZER_FALLBACK, key.source), () => generateObject({
+          model: openai(key.model ?? MODERNIZER_FALLBACK, { structuredOutputs: false }),
+          schema: findingSchema,
+          system: auditSystem,
+          prompt: auditPrompt,
+          maxTokens: 2_000,
+        })).then((r) => r.object as z.infer<typeof findingSchema>)
+      },
+      { feature: 'library-modernizer', tier: 'standard' },
+    )
+    plan = routed.result
   } catch (err) {
+    if (err instanceof LlmFailoverError && err.code === 'NO_KEYS_CONFIGURED') {
+      return { scanned: deps.length, created: 0, skipped: 'no_llm_key' }
+    }
     log.warn('LLM call failed for modernizer', { repo: row.repo_url, error: String(err).slice(0, 200) })
     return { scanned: deps.length, created: 0, skipped: 'llm_failed' }
   }

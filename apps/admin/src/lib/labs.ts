@@ -30,7 +30,7 @@ export interface LabFeature {
 }
 
 export const LAB_FEATURES: readonly LabFeature[] = [
-  { id: 'to-do', label: 'To-do list', description: 'One card per decision waiting on you, across bugs, fixes and setup.', paths: ['/inbox'], group: 'bugs' },
+  { id: 'to-do', label: 'To-do', description: 'One card per decision waiting on you, across bugs, fixes and setup.', paths: ['/inbox'], group: 'bugs' },
   { id: 'bug-clusters', label: 'Bug clusters', description: 'Bugs grouped by shared cause, so one fix can close several reports.', paths: ['/graph'], group: 'bugs' },
   { id: 'voice-reports', label: 'Voice reports', description: 'File a bug or a fix request by talking, from your phone or the console.', paths: ['/voice'], group: 'bugs' },
   { id: 'spam-abuse', label: 'Spam & abuse', description: 'Devices and tokens that flood the queue or game tester rewards.', paths: ['/anti-gaming'], group: 'bugs' },
@@ -45,11 +45,12 @@ export const LAB_FEATURES: readonly LabFeature[] = [
   { id: 'experiments', label: 'Experiments', description: 'A/B experiments on your app with winner detection.', paths: ['/experiments'], group: 'checks' },
   { id: 'research', label: 'Research', description: 'Web research attached to a report, through your Firecrawl key.', paths: ['/research'], group: 'checks' },
   { id: 'releases', label: 'Releases', description: 'Draft and publish release notes from merged fixes.', paths: ['/releases'], group: 'team' },
+  { id: 'ops', label: 'Ops', description: "Payments, releases and alerts from every app in one feed, and your team's own Slack bot.", paths: ['/ops'], group: 'team' },
   { id: 'reporter-updates', label: 'Reporter updates', description: 'Messages your bug reporters see in the widget.', paths: ['/notifications'], group: 'team' },
-  { id: 'plugins', label: 'Plugins', description: 'Send Mushi events to PagerDuty, Linear, Zapier or your own endpoint.', paths: ['/marketplace'], group: 'automation' },
+  { id: 'plugins', label: 'Plugins', description: 'Send Mushi Mushi events to PagerDuty, Linear, Zapier or your own endpoint.', paths: ['/marketplace'], group: 'automation' },
   { id: 'processing-jobs', label: 'Processing jobs', description: 'The triage and fix job queue, with retries and dead letters.', paths: ['/queue'], group: 'automation' },
   { id: 'tester-rewards', label: 'Tester rewards', description: 'Points, tiers and payouts for people who report bugs.', paths: ['/rewards'], group: 'team' },
-  { id: 'sql-query', label: 'SQL query', description: 'Ask your Mushi data a question in plain words or SQL.', paths: ['/query'], group: 'team' },
+  { id: 'sql-query', label: 'SQL query', description: 'Ask your Mushi Mushi data a question in plain words or SQL.', paths: ['/query'], group: 'team' },
 ] as const
 
 export const LAB_GROUP_LABEL: Record<LabFeature['group'], string> = {

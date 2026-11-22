@@ -22,6 +22,7 @@ import type { RecipeElementDetail, RecipeElementSummary } from '../../lib/recipe
 import { RecipeStateChip } from './RecipeStateChip'
 import { RecipeLinkList } from './RecipeLinks'
 import { RecipeDetailValue } from './RecipeDetailValue'
+import { recipeReasonText } from './recipeState'
 import { describeLastChecked, ELEMENT_CHECKED_BY, elementStateMeta } from './recipeState'
 import { hasChangeTab, RecipeChangeTab } from './RecipeChangeTab'
 import { detailWithoutView, pickElementView, RecipeElementView } from './RecipeElementViews'
@@ -47,7 +48,7 @@ export function RecipeSidePanel({ projectId, element, onClose }: RecipeSidePanel
     return (
       <Card className="p-3 self-start">
         <p className="text-xs text-fg-muted">
-          Pick a card to see what Mushi knows about it, what needs fixing, and how.
+          Pick a card to see what Mushi Mushi knows about it, what needs fixing, and how.
         </p>
       </Card>
     )
@@ -78,7 +79,7 @@ export function RecipeSidePanel({ projectId, element, onClose }: RecipeSidePanel
         </Btn>
       </div>
 
-      <p className="text-xs text-fg-secondary">{element.reason}</p>
+      <p className="text-xs text-fg-secondary">{recipeReasonText(element.reason)}</p>
       <p className="text-2xs text-fg-faint">How it is checked: {ELEMENT_CHECKED_BY[element.key]}</p>
 
       <SegmentedControl<PanelTab>
@@ -144,7 +145,7 @@ function DriftTab({ element, stateLabel }: { element: RecipeElementSummary; stat
     <div className="space-y-3">
       {notJudged ? (
         <p className="text-xs text-fg-secondary">
-          This is <span className="font-medium">{stateLabel.toLowerCase()}</span>, so Mushi cannot say yet whether anything needs fixing.{' '}
+          This is <span className="font-medium">{stateLabel.toLowerCase()}</span>, so Mushi Mushi cannot say yet whether anything needs fixing.{' '}
           {n > 0 ? `${n.toLocaleString()} problem${n === 1 ? '' : 's'} from an earlier check ${n === 1 ? 'is' : 'are'} still open.` : ''}
         </p>
       ) : (

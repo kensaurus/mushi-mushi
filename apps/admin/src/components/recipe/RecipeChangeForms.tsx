@@ -110,7 +110,7 @@ export function GatesForm({ files, locked, previewing, onPreview, onEdit }: Chan
     <div className="flex flex-col gap-3">
       <p className="text-xs text-fg-secondary">
         Budgets fail the <span className="font-mono">code_health</span> gate when a metric goes over its number. Cadence says how often a
-        gate must run before Mushi calls it stale.
+        gate must run before Mushi Mushi calls it stale.
       </p>
       <fieldset className="flex flex-col gap-1.5" disabled={off}>
         <legend className="text-xs font-medium text-fg-secondary">Budgets</legend>
@@ -195,7 +195,7 @@ export function EnvForm({ files, locked, previewing, onPreview, onEdit }: Change
   return (
     <div className="flex flex-col gap-3">
       <p className="text-xs text-fg-secondary">
-        Declare the env <span className="font-medium">names</span> your builds need and where each must be set. Mushi checks names only;
+        Declare the env <span className="font-medium">names</span> your builds need and where each must be set. Mushi Mushi checks names only;
         values stay in GitHub and your host, never here.
       </p>
       <fieldset className="flex flex-col gap-2" disabled={off}>

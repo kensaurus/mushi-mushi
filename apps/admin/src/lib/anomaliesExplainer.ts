@@ -25,7 +25,7 @@ export const ANOMALY_METHOD_DEFINITIONS: AnomalyMethodDefinition[] = [
   {
     id: 'ingest',
     label: 'Your metrics',
-    plain: 'Your app or CI sends values (error rate, latency…) to POST /v1/ingest/metrics. Mushi needs some values before it can spot a spike.',
+    plain: 'Your app or CI sends values (error rate, latency…) to POST /v1/ingest/metrics. Mushi Mushi needs some values before it can spot a spike.',
     bestFor: 'Wire SDK or server heartbeat before expecting open anomalies.',
   },
 ]

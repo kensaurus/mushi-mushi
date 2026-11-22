@@ -14,7 +14,7 @@ export const SKILL_MODE_DEFINITIONS: SkillModeDefinition[] = [
   {
     id: 'handoff',
     label: 'Handoff mode',
-    plain: 'Mushi composes a run packet — skill instructions + report context — for your local Cursor agent.',
+    plain: 'Mushi Mushi composes a run packet — skill instructions + report context — for your local Cursor agent.',
     bestFor: 'When you want to review each step yourself in the IDE.',
     requires: 'mcp:read or mcp:write key; no Cursor Cloud API key needed.',
   },

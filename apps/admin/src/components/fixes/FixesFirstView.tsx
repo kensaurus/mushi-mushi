@@ -14,12 +14,16 @@
  *               the header's main button.
  */
 
+import { AGENT_OUT_OF_USAGE_BUCKET } from '../../lib/agentOutOfUsage'
 import { Link } from 'react-router-dom'
-import { Badge, Btn, Section } from '../ui'
+import { Btn, Section } from '../ui'
+import { BarCell } from '../signal/BarCell'
+import { StatusPill } from '../signal/StatusMark'
+import { VitalText } from '../signal/VitalText'
 import { IconAlertTriangle, IconCheck, IconReleases } from '../icons'
 import { ReleaseStations, ReleaseTrainLine } from '../release/ReleaseStations'
 import { stationsFromStages, trainNow } from '../../lib/releaseStations'
-import { COUNT_HINTS, isReadyToMerge, pipelineApprovedGreen } from '../../lib/countDefinitions'
+import { isReadyToMerge, pipelineApprovedGreen } from '../../lib/countDefinitions'
 import { failureCause, fixCauseLabel, fixReportLabel, needsAttention } from '../../lib/fixReportTruth'
 import { pluralize } from '../../lib/format'
 import type { PipelineData } from '../../lib/pipeline'
@@ -29,9 +33,37 @@ import type { FixAttempt } from './types'
 const RETRY_REPEATS = new Set(['needs_human', 'already_fixed', 'not_actionable', 'wrong_repo'])
 
 /** Where a cause is fixed when it is a setting, not a retry. */
-function causeFix(cause: string): { label: string; to: string } | null {
+function causeFix(cause: string, agentsOut: boolean): { label: string; to: string } | null {
+  // Out of credits now: the remedy is on Spend credits (another agent, or the
+  // date they come back). Once they are back, these retry like any failure.
+  if (cause === AGENT_OUT_OF_USAGE_BUCKET && agentsOut) return { label: 'See what to do', to: '/credits#agent-credits' }
   if (cause.endsWith('_key_rejected')) return { label: 'Fix the key', to: cause.startsWith('github') ? '/integrations/config#platform-card-github' : '/settings?tab=byok' }
   return null
+}
+
+/**
+ * What to do about a cause a retry will not clear: each in its own words, linked to where
+ * it is done. "A retry would stop the same way: the agent says this is not a code change"
+ * used to sit under "Needs your decision" and "Code is in another repo" too, and "None of
+ * these can be retried right now" gave no next step (owner's fresh-user review, 2026-11-16).
+ */
+function nextStep(cause: string, pipelineHref: string): { text: string; link: { label: string; to: string } | null } | null {
+  switch (cause) {
+    case 'needs_human':
+      return { text: 'The agent says a person must decide. Open each to fix it yourself or dismiss it.', link: null }
+    case 'already_fixed':
+      return { text: 'The agent says the code already does this. Check, then close the ones that are fixed.', link: { label: 'Check and close', to: pipelineHref } }
+    case 'not_actionable':
+      return { text: 'Nothing in the report points to code. Add detail to the report, or dismiss it.', link: null }
+    case 'wrong_repo':
+      return { text: 'The code lives in another repo. Connect that repo to its app, or dismiss these.', link: { label: 'Connect a repo', to: '/connect' } }
+    case 'pr_closed_unmerged':
+      return { text: 'Someone closed the pull request without merging. Reopen it on GitHub, or start a new fix from the report.', link: null }
+    case 'ci_failed':
+      return { text: 'Their own CI is red. CI repair sends an agent to fix the failing check.', link: { label: 'Send to CI repair', to: pipelineHref } }
+    default:
+      return null
+  }
 }
 
 interface StoppedReason {
@@ -41,13 +73,13 @@ interface StoppedReason {
   fixes: FixAttempt[]
   /** Of those, the ones a retry can clear now. */
   retryable: FixAttempt[]
-  /** Why there is no Retry, when there is none. */
+  /** Why there is no Retry, and what to do instead, when there is none. */
   noRetry: string | null
   fix: { label: string; to: string } | null
 }
 
 /** Stopped reports grouped by why, biggest first. */
-function stoppedReasons(fixes: FixAttempt[]): StoppedReason[] {
+function stoppedReasons(fixes: FixAttempt[], agentsOut: boolean, pipelineHref: string): StoppedReason[] {
   const byCause = new Map<string, FixAttempt[]>()
   for (const f of fixes) {
     if (!needsAttention(f)) continue
@@ -56,17 +88,21 @@ function stoppedReasons(fixes: FixAttempt[]): StoppedReason[] {
   }
   return [...byCause.entries()]
     .map(([cause, list]) => {
-      const fix = causeFix(cause)
+      const keyFix = causeFix(cause, agentsOut)
       const repeats = RETRY_REPEATS.has(cause)
-      const retryable = repeats || fix ? [] : list.filter((f) => f.retryable === true)
-      const noRetry = repeats
-        ? 'A retry would stop the same way: the agent says this is not a code change.'
-        : fix
-          ? 'A retry fails the same way until the key works.'
-          : retryable.length === 0
-            ? 'None of these can be retried right now.'
-            : null
-      return { cause, label: fixCauseLabel(cause), fixes: list, retryable, noRetry, fix }
+      const retryable = repeats || keyFix ? [] : list.filter((f) => f.retryable === true)
+      const step = retryable.length === 0 ? nextStep(cause, pipelineHref) : null
+      const noRetry =
+        cause === AGENT_OUT_OF_USAGE_BUCKET && agentsOut
+          ? "A retry goes to the same account, which is out of credits. Fix them with Claude Code on your own computer, or wait until the credits come back."
+          : keyFix
+            ? 'A retry fails the same way until the key works.'
+            : step
+              ? step.text
+              : retryable.length === 0
+                ? 'No retry is offered for these. Show them to see each one’s reason.'
+                : null
+      return { cause, label: fixCauseLabel(cause), fixes: list, retryable, noRetry, fix: keyFix ?? step?.link ?? null }
     })
     .sort((a, b) => b.fixes.length - a.fixes.length)
 }
@@ -102,24 +138,27 @@ interface Props {
   onShowCause: (cause: string) => void
   /** Open the retry confirm for these reports. */
   onRetry: (fixes: FixAttempt[], label: string) => void
+  /** The fix agents are out of credits now (lib/agentCredits.ts): no Retry for the refused runs. */
+  agentsOut?: boolean
 }
 
-export function FixesFirstView({ fixes, pipeline, projectId, stoppedTotal, busy, onQueue, onShowCause, onRetry }: Props) {
+export function FixesFirstView({ fixes, pipeline, projectId, stoppedTotal, busy, onQueue, onShowCause, onRetry, agentsOut = false }: Props) {
   const ready = readyFixes(fixes, pipeline)
   const queued = queuedFixIds(pipeline)
   const toQueue = ready.filter((f) => !queued.has(f.id))
-  const reasons = stoppedReasons(fixes)
+  const pipelineHref = projectId ? `/pipeline?project=${encodeURIComponent(projectId)}` : '/pipeline'
+  const reasons = stoppedReasons(fixes, agentsOut, pipelineHref)
   const listed = reasons.reduce((n, r) => n + r.fixes.length, 0)
   // The reasons come from the attempts loaded below (the newest 200), so they
   // can cover fewer reports than the status line's "Stopped 48" (it read 47).
   const stopped = Math.max(listed, stoppedTotal ?? 0)
-  const pipelineHref = projectId ? `/pipeline?project=${encodeURIComponent(projectId)}` : '/pipeline'
+  const maxStopped = Math.max(1, ...reasons.map((r) => r.fixes.length))
 
   return (
     <div className="space-y-3" data-testid="fixes-first-view">
       {pipeline && (
         <Section title="Release train" id="fixes-release" icon={<IconReleases />} action={<Link to={pipelineHref} className="text-xs text-link">Pipeline →</Link>}>
-          <div className="space-y-3">
+          <div className="space-y-2">
             <ReleaseStations stations={stationsFromStages(pipeline.stages)} href={pipelineHref} testId="fixes-release-stations" />
             <p className="text-xs text-fg-secondary">
               <ReleaseTrainLine train={trainNow(pipeline.trains)} href={pipelineHref} />
@@ -140,7 +179,7 @@ export function FixesFirstView({ fixes, pipeline, projectId, stoppedTotal, busy,
           ) : undefined
         }
       >
-        <p className="mb-2 text-2xs text-fg-muted">{COUNT_HINTS.readyToMerge} Merge when ready updates each branch, waits for CI and merges one PR per repo at a time.</p>
+        {/* The definition is the ⓘ on the Ready to merge number above; no paragraph restating it (fresh-eyes 2026-11-18). */}
         {ready.length === 0 ? (
           <p className="text-xs text-fg-muted" data-testid="fixes-ready-empty">
             None right now. A fix lands here once Opus says merge about its latest commit and its CI passes.
@@ -149,16 +188,18 @@ export function FixesFirstView({ fixes, pipeline, projectId, stoppedTotal, busy,
           <ul className="divide-y divide-edge-subtle" data-testid="fixes-ready-list">
             {ready.map((f) => (
               <li key={f.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2" data-testid={`fixes-ready-${f.id}`}>
-                <Link to={`/reports/${f.report_id}`} className="min-w-0 flex-1 basis-48 wrap-break-word text-xs font-medium text-fg hover:underline">
-                  {fixReportLabel(f)}
+                <Link to={`/reports/${f.report_id}`} title={f.report_title ?? undefined} className="min-w-0 flex-1 basis-48 wrap-break-word text-xs font-medium text-fg hover:underline">
+                  <VitalText text={fixReportLabel(f)} />
                 </Link>
                 <a href={f.pr_url} target="_blank" rel="noreferrer" className="font-mono text-2xs text-fg-secondary hover:underline">
                   #{f.pr_number ?? '?'}
                 </a>
-                <Badge tone="ok">Opus: merge</Badge>
-                <Badge tone="ok">CI passed</Badge>
+                <StatusPill status="passed" label="Opus: merge" />
+                <StatusPill status="passed" label="CI passed" />
                 {queued.has(f.id) ? (
-                  <span className="text-2xs text-fg-muted" data-testid={`fixes-ready-${f.id}-queued`}>In the merge queue</span>
+                  <span data-testid={`fixes-ready-${f.id}-queued`}>
+                    <StatusPill status="waiting" label="In the merge queue" />
+                  </span>
                 ) : (
                   <Btn size="sm" variant="ghost" disabled={busy} onClick={() => onQueue([f])} data-testid={`fixes-ready-${f.id}-queue`}>
                     Merge when ready
@@ -172,14 +213,13 @@ export function FixesFirstView({ fixes, pipeline, projectId, stoppedTotal, busy,
 
       {reasons.length > 0 && (
         <Section title={`Stopped: ${stopped} ${pluralize(stopped, 'report')}`} id="fixes-stopped" icon={<IconAlertTriangle />}>
-          <p className="mb-2 text-2xs text-fg-muted">
-            {COUNT_HINTS.stopped}
-            {stopped > listed ? ` The reasons below cover the ${listed} in the newest attempts loaded on this page.` : ''}
-          </p>
+          {/* The definition is the ⓘ on the Stopped number; only the coverage caveat stays. */}
+          {stopped > listed && <p className="mb-2 text-2xs text-fg-muted">Reasons for the newest {listed}.</p>}
           <ul className="divide-y divide-edge-subtle" data-testid="fixes-stopped-reasons">
             {reasons.map((r) => (
               <li key={r.cause} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2" data-testid={`fixes-stopped-${r.cause}`}>
-                <span className="w-8 shrink-0 text-right font-mono text-sm font-semibold tabular-nums text-danger-foreground">{r.fixes.length}</span>
+                {/* How many stopped on this reason, as a bar against the biggest reason. */}
+                <BarCell value={r.fixes.length} max={maxStopped} tone="danger" text={r.fixes.length} widthClass="w-12" className="shrink-0" />
                 <button
                   type="button"
                   onClick={() => onShowCause(r.cause)}
@@ -199,13 +239,14 @@ export function FixesFirstView({ fixes, pipeline, projectId, stoppedTotal, busy,
                   >
                     Retry {r.retryable.length}
                   </Btn>
-                ) : r.fix ? (
-                  <Link to={r.fix.to} className="text-2xs font-medium text-brand hover:underline" title={r.noRetry ?? undefined}>
-                    {r.fix.label} →
-                  </Link>
                 ) : (
-                  <span className="basis-full pl-11 text-2xs text-fg-muted sm:basis-auto sm:pl-0" data-testid={`fixes-stopped-${r.cause}-no-retry`}>
+                  <span className="basis-full pl-24 text-2xs text-fg-muted sm:basis-auto sm:pl-0" data-testid={`fixes-stopped-${r.cause}-no-retry`}>
                     {r.noRetry}
+                    {r.fix && (
+                      <Link to={r.fix.to} className="ml-1.5 font-medium text-brand hover:underline">
+                        {r.fix.label} →
+                      </Link>
+                    )}
                   </span>
                 )}
               </li>

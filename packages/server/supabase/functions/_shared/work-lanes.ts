@@ -130,13 +130,25 @@ export function laneConfigFromRow(row: {
  * What the console may change on a lane: the seven verbs, plus `review_model`
  * (an audit lane's optional veto model, ADR 0050). `review_model` is not a
  * heartbeat verb: it travels in the audit claim, so a daemon that predates it
- * never sees an unknown key.
+ * never sees an unknown key. `min_severity` (the drain floor) is server-only
+ * the same way: the claim route applies it.
  */
-export type LaneSettings = Partial<LaneConfig> & { review_model?: string | null }
+export type LaneSettings = Partial<LaneConfig> & { review_model?: string | null; min_severity?: MinSeverity | null }
+
+/**
+ * A lane's drain floor (work_lanes.min_severity): the lowest severity it
+ * claims from the ranked list. Server-only like review_model, so an older
+ * daemon never sees it. null = every severity.
+ */
+export const MIN_SEVERITIES = ['critical', 'high', 'medium'] as const
+export type MinSeverity = (typeof MIN_SEVERITIES)[number]
+
+/** Server-only lane settings: the console may set them, the heartbeat never carries them. */
+const SERVER_ONLY_SETTINGS = ['review_model', 'min_severity'] as const
 
 export function parseLaneSettings(raw: unknown): Parsed<LaneSettings> {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { ok: false, message: 'Lane settings must be an object.' }
-  const { review_model: reviewModel, ...rest } = raw as Record<string, unknown>
+  const { review_model: reviewModel, min_severity: minSeverity, ...rest } = raw as Record<string, unknown>
   const out: LaneSettings = {}
   if (reviewModel !== undefined) {
     if (reviewModel !== null && (typeof reviewModel !== 'string' || !MODEL_RE.test(reviewModel))) {
@@ -144,8 +156,14 @@ export function parseLaneSettings(raw: unknown): Parsed<LaneSettings> {
     }
     out.review_model = reviewModel as string | null
   }
+  if (minSeverity !== undefined) {
+    if (minSeverity !== null && (typeof minSeverity !== 'string' || !(MIN_SEVERITIES as readonly string[]).includes(minSeverity))) {
+      return { ok: false, message: `min_severity must be one of ${MIN_SEVERITIES.join(', ')}, or null for every severity.` }
+    }
+    out.min_severity = minSeverity as MinSeverity | null
+  }
   if (Object.keys(rest).length === 0) {
-    return reviewModel === undefined ? { ok: false, message: `Send at least one of ${[...LANE_VERBS, 'review_model'].join(', ')}.` } : { ok: true, value: out }
+    return Object.keys(out).length === 0 ? { ok: false, message: `Send at least one of ${[...LANE_VERBS, ...SERVER_ONLY_SETTINGS].join(', ')}.` } : { ok: true, value: out }
   }
   const verbs = parseLaneVerbs(rest, { partial: true })
   if (!verbs.ok) return verbs
@@ -240,6 +258,8 @@ const STATUS_NUMBERS = ['runs', 'prs', 'pushes', 'timeouts', 'errors', 'idle', '
 const STATUS_WORDS: Record<string, readonly string[]> = {
   state: HOST_STATES,
   cursor: ['signed_in', 'signed_out', 'unknown', 'missing'],
+  // The coding agent the lanes run (mushi work --agent): the console names its account.
+  agent: ['cursor', 'claude'],
 }
 
 /**
@@ -334,6 +354,33 @@ export function rankWorkCandidates<T extends WorkCandidate>(rows: readonly T[]):
       (SEVERITY_WEIGHT[(b.severity ?? '').toLowerCase()] ?? 0) - (SEVERITY_WEIGHT[(a.severity ?? '').toLowerCase()] ?? 0) ||
       b.created_at.localeCompare(a.created_at),
   )
+}
+
+/** At or above the lane's drain floor. No floor takes everything; an unknown severity only passes no floor. */
+export function meetsSeverityFloor(severity: string | null, floor: MinSeverity | null | undefined): boolean {
+  if (!floor) return true
+  return (SEVERITY_WEIGHT[(severity ?? '').toLowerCase()] ?? 0) >= SEVERITY_WEIGHT[floor]!
+}
+
+/**
+ * One claim per duplicate group (reports.report_group_id). Drop a ranked
+ * candidate whose group is busy (another member is being fixed: an active
+ * claim, a live run or an open PR), and keep only the first, worst-ranked
+ * member of each remaining group, so two lanes, or one lane twice, never fix
+ * the same bug in parallel. `rows` arrive ranked; reports in no group pass.
+ */
+export function onePerGroup<T extends { id: string; report_group_id?: string | null }>(rows: readonly T[], busyGroups: ReadonlySet<string>): T[] {
+  const seen = new Set<string>()
+  const out: T[] = []
+  for (const r of rows) {
+    const g = r.report_group_id
+    if (g) {
+      if (busyGroups.has(g) || seen.has(g)) continue
+      seen.add(g)
+    }
+    out.push(r)
+  }
+  return out
 }
 
 export interface AttemptLite {
@@ -490,9 +537,12 @@ export async function claimFirstFree<T extends { id: string }>(
  * How a run ended. `pushed` and `refused` are conflict runs (ADR 0049: a merge
  * commit pushed, or the worker's own checks refused the agent's result);
  * `filed` is an audit run that filed at least one reproduced finding (ADR 0050);
- * `ran` is a first-time user test that finished and synced (ADR 0053 amendment).
+ * `ran` is a first-time user test that finished and synced (ADR 0053 amendment);
+ * `gone` is a fix run that found the report already fixed on the base branch
+ * without an agent run, or with the fix named on it (work-recheck.ts in the
+ * CLI): the server closes the report.
  */
-export const CLAIM_OUTCOMES = ['pr_opened', 'no_change', 'verdict', 'timeout', 'skipped', 'stopped', 'failed', 'pushed', 'refused', 'filed', 'ran'] as const
+export const CLAIM_OUTCOMES = ['pr_opened', 'no_change', 'verdict', 'timeout', 'skipped', 'stopped', 'failed', 'pushed', 'refused', 'filed', 'ran', 'gone'] as const
 export type ClaimOutcome = (typeof CLAIM_OUTCOMES)[number]
 export const FAILURE_KINDS = ['infra', 'code'] as const
 export type FailureKind = (typeof FAILURE_KINDS)[number]
@@ -524,6 +574,7 @@ export function parseClaimDone(raw: unknown): Parsed<ClaimDone> {
   if (b.outcome === 'pr_opened' && !prUrl) return { ok: false, message: 'A pr_opened outcome needs prUrl (https://github.com/<owner>/<repo>/pull/<n>).' }
   const headAfter = typeof b.headAfter === 'string' && /^[0-9a-f]{40}$/.test(b.headAfter) ? b.headAfter : null
   if (b.outcome === 'pushed' && !headAfter) return { ok: false, message: 'A pushed outcome needs headAfter, the 40-hex sha of the merge commit.' }
+  if (b.outcome === 'gone' && (typeof b.detail !== 'string' || !b.detail.trim())) return { ok: false, message: 'A gone outcome needs detail: how the worker knows the report is already fixed.' }
   const detail = typeof b.detail === 'string' ? b.detail.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').slice(0, 1000) : null
   return { ok: true, value: { outcome: b.outcome as ClaimOutcome, failureKind: failureKind as FailureKind | null, fixId, prUrl, detail, headAfter } }
 }

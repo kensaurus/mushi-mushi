@@ -10,28 +10,28 @@ description: The terms for Mushi Mushi Cloud, the admin console, the SDKs and th
 # Terms of Service
 
   **Draft, not yet reviewed by a lawyer.** This is a complete plain-English
-  draft. The governing-law and venue clause (section 14) has not been confirmed
-  yet. Questions: kensaurus@gmail.com.
+  draft. Operator details and governing law are set; a lawyer's review is
+  pending. Questions: kensaurus@gmail.com.
 
-**Effective date:** 2026-10-28 · **Version:** 2 (version 1, 2026-09-21, described the Indie and Pro plans; version 2 describes Free, Builder, Studio and Enterprise, each limited by apps watched and diagnoses a month, and lengthens Free history from 7 to 14 days)
+**Effective date:** 2026-11-19 · **Version:** 4 (version 1, 2026-09-21, described the Indie and Pro plans; version 2, 2026-10-28, described Free, Builder, Studio and Enterprise, each limited by apps watched and diagnoses a month, and lengthened Free history from 7 to 14 days; version 3, 2026-11-11, set the governing law and court in section 14 and added the operator's address and responsible person in section 17; version 4 raises Free in section 7 to three apps, 300 diagnoses a month and 30 days of history, with no diagnosis cap for a project that uses its own AI key). For accounts that existed before 2026-11-11, the section 14 change takes effect on 2026-12-11, 30 days after notice, as section 16 promises; everything else in version 3 takes effect on 2026-11-11.
 
 These terms are between you and **Kensaurus 合同会社** (Japan,
-"Mushi", "we") and cover **Mushi Cloud** at `kensaur.us/mushi-mushi`,
+"Mushi Mushi", "we") and cover **Mushi Mushi Cloud** at `kensaur.us/mushi-mushi`,
 the **admin console**, the **hosted MCP server**, the **docs site**, and the
-**Mushi Bounties** tester marketplace (together, the "Service"). The
+**Mushi Mushi Bounties** tester marketplace (together, the "Service"). The
 open-source software is licensed separately (section 3).
 
 ## 1. Acceptance
 
 You accept these terms by creating an account, sending a report through the
-SDK to Mushi Cloud, connecting an editor to the hosted MCP server, or joining
+SDK to Mushi Mushi Cloud, connecting an editor to the hosted MCP server, or joining
 Bounties. If you accept on behalf of a company, you confirm you can bind it.
 If you do not agree, do not use the Service — the [self-hosted
 server](/self-hosting) is available under its open-source license instead.
 
 ## 2. The Service
 
-Mushi collects bug reports from the apps you build, turns each into a
+Mushi Mushi collects bug reports from the apps you build, turns each into a
 plain-English **diagnosis** (one finished root cause), and can hand your editor
 or a coding agent a fix. A diagnosis is the unit we meter and bill; filtered
 noise and duplicates collapsed into one row do not count. We may change,
@@ -47,9 +47,9 @@ deliberate:
 | --- | --- | --- |
 | **SDKs** (`@mushi-mushi/web`, `react`, `react-native`, `node`, `cli`, `mcp`, and the rest) | [MIT](https://github.com/kensaurus/mushi-mushi/blob/master/LICENSE) | Embed in proprietary apps with no copyleft obligation |
 | **Server** (`@mushi-mushi/server`, `agents`, `verify`) | [AGPLv3](https://github.com/kensaurus/mushi-mushi/blob/master/packages/server/LICENSE) | Self-host free. If you offer a *modified* server as a network service, publish your changes |
-| **Enterprise edition** and hosting Mushi for third parties | [Commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/COMMERCIAL-LICENSE.md) | A separate agreement that replaces AGPL terms for that use |
+| **Enterprise edition** and hosting Mushi Mushi for third parties | [Commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/docs/legal/COMMERCIAL-LICENSE.md) | A separate agreement that replaces AGPL terms for that use |
 
-Using Mushi Cloud does not grant you a license to the Service's hosted
+Using Mushi Mushi Cloud does not grant you a license to the Service's hosted
 configuration, brand, or content beyond what these terms allow.
 
 ## 4. Accounts
@@ -72,18 +72,18 @@ You agree **not** to:
 - use the Service to build a competing hosted bug-diagnosis product by
   bulk-extracting diagnoses, prompts, or fix output;
 - probe, scan, or load-test the Service outside the rules in
-  [SECURITY.md](https://github.com/kensaurus/mushi-mushi/blob/master/SECURITY.md#safe-harbor);
+  [.github/SECURITY.md](https://github.com/kensaurus/mushi-mushi/blob/master/.github/SECURITY.md#safe-harbor);
 - upload malware, credentials that are not yours, or content that is illegal
   where you or we are;
 - game usage limits, bounties, or the anti-abuse controls;
-- resell or sublicense access to Mushi Cloud.
+- resell or sublicense access to Mushi Mushi Cloud.
 
 **Duty to inform your users.** The SDK can capture screenshots, console and
 network log excerpts, the page URL, and, if you enable it, a voice recording
 that is transcribed. **You** are the controller of that data and you must
 tell your users, in your own privacy notice, that a bug report may include
 these things, and obtain any consent your law requires before enabling voice
-intake or passing end-user identifiers. Mushi acts as your processor under the
+intake or passing end-user identifiers. Mushi Mushi acts as your processor under the
 terms in the [Privacy Policy](/legal/privacy#4-data-where-mushi-is-the-processor).
 
 ## 6. Your data and the license you give us
@@ -102,10 +102,11 @@ users, or your app.
 
 ## 7. Free tier
 
-The **Free** plan includes **one app and 100 diagnoses per month**, one seat, and
-14-day report retention. At 100, the pipeline **stops** for the rest of the
+The **Free** plan includes **three apps and 300 diagnoses per month**, one seat,
+and 30-day report retention. At 300, the pipeline **stops** for the rest of the
 calendar month: reports are still accepted and stored, but no new diagnoses
-run until the counter resets or you upgrade. We do not silently bill overage
+run until the counter resets or you upgrade. A project that uses its own
+Anthropic or OpenAI key is not stopped. We do not silently bill overage
 on Free. We may change Free limits with 30 days' notice on the pricing page.
 
 ## 8. Paid plans and billing
@@ -114,14 +115,17 @@ on Free. We may change Free limits with 30 days' notice on the pricing page.
   through **Stripe**; we never see your full card number.
 - Plans bill **monthly** or **annually** in advance, in US dollars, plus any
   tax we must collect.
-- **Overage** on Builder and Studio is metered per diagnosis at the rate shown on
-  the pricing page and capped by a **spend cap** ($50 on Builder, $200 on Studio).
+- **Overage** on monthly Builder and Studio plans is metered per diagnosis at the rate shown on
+  the pricing page and capped by a **spend cap** ($50 on Builder, $200 on Studio
+  by default, set per subscribed app). Annual plans have no overage.
   When the cap is reached the pipeline stops, like Free, until the next period
   or until you raise the cap in **Billing**. You get email alerts at 50 %,
   80 %, and 100 % of your included diagnoses.
-- **Upgrades** take effect immediately and are prorated. **Downgrades** and
-  cancellations take effect at the end of the current period; you keep the
-  higher plan until then.
+- **Plan changes** made with **Change plan** (Builder ↔ Studio, monthly ↔
+  annual), upgrades and downgrades alike, take effect immediately and are
+  prorated: unused time is credited and the new plan is charged for the rest
+  of the period. **Cancellations** take effect at the end of the current
+  period; you keep the plan until then.
 - **No refunds** for partial months or years except where the law requires
   one. If we terminate your paid plan under section 12 for a reason that is
   not your breach, we refund the unused portion.
@@ -151,9 +155,9 @@ agree that:
 - **Fix output is yours** to the extent we can grant it, with no attribution
   required. The same output may be produced for other users because models are
   not exclusive.
-- **Mushi's marks** — the names "Mushi", "Mushi Mushi", "Mushi Bounties", the
+- **Mushi Mushi's marks** — the names "Mushi Mushi" and "Mushi Mushi Bounties", the
   logo, and the 虫々 mark — are ours. Open-source use of the code does not
-  include the marks; the "Bug reports by Mushi" widget mark may be shown only
+  include the marks; the "Bug reports by Mushi Mushi" widget mark may be shown only
   as the SDK renders it.
 - Feedback you send us may be used without obligation to you.
 
@@ -201,12 +205,14 @@ without proper notice.
 
 ## 14. Governing law and disputes
 
-**Not yet confirmed.** The governing law and the court that hears disputes
-will be stated here before these terms take effect. Until then, disputes go
-to good-faith discussion by email (kensaurus@gmail.com). Consumers keep any
-right the law gives them to bring claims in their home courts.
+These terms are governed by the **laws of Japan**. The **Tokyo District
+Court (東京地方裁判所)** has exclusive jurisdiction as the court of first
+instance for any dispute arising from or relating to these terms or the
+Service. Before going to court, please raise the dispute with us by email
+(kensaurus@gmail.com) so we can try to settle it in good faith. Consumers keep
+any right the law gives them to bring claims in their home courts.
 
-## 15. Mushi Bounties tester program
+## 15. Mushi Mushi Bounties tester program [#15-mushi-bounties-tester-program]
 
 If you join Bounties as a tester, this section also applies:
 
@@ -216,18 +222,18 @@ If you join Bounties as a tester, this section also applies:
   reports. Developer decisions on acceptance are final; use the feedback to
   improve your next report.
 - **Redemption.** 1,000 points redeem for US$10 in gift cards (delivered by
-  Tremendous) or US$13 in Mushi Pro credit. Redemption thresholds and
+  Tremendous) or US$13 in Mushi Mushi plan credit. Redemption thresholds and
   catalogue are shown in your wallet.
 - **KYC.** Once your gift-card redemptions reach **US$400 in a calendar
   year**, further redemptions are held until you complete a
   tax-identification form (W-9 or W-8BEN). Gift-card redemptions are capped
-  at **US$599 per calendar year**. Pro credit is not subject to this gate.
+  at **US$599 per calendar year**. Plan credit is not subject to this gate.
 - **Sanctions.** Bounties is not available in jurisdictions under US OFAC
   sanctions. We may cancel redemptions we cannot lawfully pay.
 - **Testing rules.** Test only apps listed on the marketplace, stay within
   the app's stated scope, never access other users' data, and report
   security findings privately through the app's channel or
-  [SECURITY.md](https://github.com/kensaurus/mushi-mushi/blob/master/SECURITY.md).
+  [.github/SECURITY.md](https://github.com/kensaurus/mushi-mushi/blob/master/.github/SECURITY.md).
 
 Full mechanics are on [How it works](https://kensaur.us/mushi-mushi/testers/how-it-works/).
 
@@ -241,8 +247,14 @@ your account before that date and we refund any prepaid, unused annual period.
 
 ## 17. Contact
 
-**Kensaurus 合同会社** · Japan · [kensaurus@gmail.com](mailto:kensaurus@gmail.com) ·
-subject `[mushi-legal]`
+- **Operator:** Kensaurus 合同会社 (registered name: kensaurus合同会社)
+- **Address:** 〒150-0043　東京都渋谷区道玄坂1丁目10番8号　渋谷道玄坂東急ビル2F-C, Japan
+- **Responsible person (運営統括責任者):** 櫻元 賢次
+- **Email:** [kensaurus@gmail.com](mailto:kensaurus@gmail.com), subject `[mushi-legal]`
 
-Related: [Privacy Policy](/legal/privacy) · [Pricing](/pricing) ·
-[Security summary](/security) · [Commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/COMMERCIAL-LICENSE.md)
+The disclosure Japan's Act on Specified Commercial Transactions requires
+(prices, renewal, cancellation, refunds) is on the
+[特定商取引法に基づく表記](/legal/tokushoho) page.
+
+Related: [Privacy Policy](/legal/privacy) · [特定商取引法に基づく表記](/legal/tokushoho) · [Pricing](/pricing) ·
+[Security summary](/security) · [Commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/docs/legal/COMMERCIAL-LICENSE.md)

@@ -9,10 +9,8 @@ import { describe, it } from 'node:test'
 import {
   CSP_MAX_CHARS,
   DOCS_ERROR_KEY,
-  DOCS_PATH_PATTERN,
   POLICY_NAME,
   REMOVED_HEADERS,
-  attachPolicyToDocsBehavior,
   buildResponseHeadersPolicyConfig,
   desiredWebsiteConfig,
   loadDocsSecurityHeaders,
@@ -107,36 +105,5 @@ describe('bucket website ErrorDocument', () => {
   it('refuses a bucket that is not serving a website', () => {
     assert.throws(() => desiredWebsiteConfig({}))
     assert.throws(() => desiredWebsiteConfig({ RedirectAllRequestsTo: { HostName: 'x' } }))
-  })
-})
-
-describe('attaching the policy to the docs behavior', () => {
-  const dist = () => ({
-    CacheBehaviors: {
-      Items: [{ PathPattern: '/mushi-mushi/*' }, { PathPattern: DOCS_PATH_PATTERN }],
-    },
-  })
-
-  it('attaches to the docs behavior only', () => {
-    const config = dist()
-    assert.equal(attachPolicyToDocsBehavior(config, 'pol-1'), true)
-    assert.equal(config.CacheBehaviors.Items[1].ResponseHeadersPolicyId, 'pol-1')
-    assert.equal(config.CacheBehaviors.Items[0].ResponseHeadersPolicyId, undefined)
-  })
-
-  it('is a no-op when already attached', () => {
-    const config = dist()
-    config.CacheBehaviors.Items[1].ResponseHeadersPolicyId = 'pol-1'
-    assert.equal(attachPolicyToDocsBehavior(config, 'pol-1'), false)
-  })
-
-  it('will not replace a different policy', () => {
-    const config = dist()
-    config.CacheBehaviors.Items[1].ResponseHeadersPolicyId = 'someone-elses'
-    assert.throws(() => attachPolicyToDocsBehavior(config, 'pol-1'), /already uses/)
-  })
-
-  it('fails loudly when the docs behavior is missing', () => {
-    assert.throws(() => attachPolicyToDocsBehavior({ CacheBehaviors: { Items: [] } }, 'pol-1'))
   })
 })

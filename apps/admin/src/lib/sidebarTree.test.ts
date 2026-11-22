@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { LAB_FEATURES } from './labs'
-import { CORE_NAV_PATHS, NAV_REGISTRY } from './navRegistry'
+import { BUILDER_CORE_NAV_PATHS, CORE_NAV_PATHS, NAV_REGISTRY, OPERATOR_ROUTES } from './navRegistry'
 import { NAV_CHILDREN, activeParent, isNavPathActive, morePages } from './sidebarTree'
 
 const EVERYONE = { isOperator: true, isSuperAdmin: true }
@@ -63,6 +63,25 @@ describe('More pages', () => {
 
   it('leaves operator and super-admin pages out for a normal user', () => {
     expect(morePaths(USER).has('/users')).toBe(false)
+    // The operator cockpit (audit 2026-11-11, ADR 0052).
+    for (const p of ['/queue', '/query', '/skills', '/judge', '/prompt-lab', '/ci', '/health']) expect(morePaths(USER).has(p), p).toBe(false)
+    expect(morePaths(EVERYONE).has('/queue')).toBe(true)
+  })
+
+  it('gives a builder every page they may open: short core, the rest under More pages', () => {
+    const more = morePaths(USER)
+    const children = new Set(Object.values(NAV_CHILDREN).flat())
+    const missing = NAV_REGISTRY.filter((e) => e.inSidebar !== false && !e.operatorOnly && !e.superAdmin)
+      .map((e) => e.path)
+      .filter((p) => !BUILDER_CORE_NAV_PATHS.includes(p) && !children.has(p) && !more.has(p) && !FOOTER_NAV_PATHS.includes(p))
+    expect(missing).toEqual([])
+    // The core pages moved down are under More pages, Pipeline stays core (ADR 0027).
+    for (const p of ['/team', '/checks', '/portfolio', '/integrations/config']) expect(more.has(p), p).toBe(true)
+    expect(BUILDER_CORE_NAV_PATHS).toContain('/pipeline')
+  })
+
+  it('guards only pages that are operator-only in the registry', () => {
+    for (const p of OPERATOR_ROUTES) expect(NAV_REGISTRY.find((e) => e.path === p)?.operatorOnly, p).toBe(true)
   })
 
   it('drops a Lab once it is kept in the sidebar', () => {

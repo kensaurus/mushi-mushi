@@ -45,7 +45,7 @@ export function TesterPointsEconomyStrip({ className = '' }: { className?: strin
   return (
     <div className={`grid grid-cols-1 gap-3 sm:grid-cols-3 ${className}`}>
       <div className={`${TESTER_PANEL} p-4 text-center`}>
-        <p className="text-2xs font-medium uppercase tracking-wide text-fg-muted">Gift cards</p>
+        <p className="text-2xs font-semibold text-fg-secondary">Gift cards</p>
         <p className="mt-1 text-2xl font-bold tabular-nums text-fg">1,000</p>
         <p className="text-xs text-fg-muted">pts → $10</p>
         <div className="mt-3 flex justify-center">
@@ -53,7 +53,7 @@ export function TesterPointsEconomyStrip({ className = '' }: { className?: strin
         </div>
       </div>
       <div className={`${TESTER_PANEL} border-brand/30 bg-brand-subtle/40 p-4 text-center`}>
-        <p className="text-2xs font-medium uppercase tracking-wide text-brand">Mushi Pro</p>
+        <p className="text-2xs font-semibold text-brand">Mushi Mushi Pro</p>
         <p className="mt-1 text-2xl font-bold tabular-nums text-fg">1,000</p>
         <p className="text-xs text-fg-muted">pts → $13 credit</p>
         <div className="mt-3 flex justify-center">
@@ -62,7 +62,7 @@ export function TesterPointsEconomyStrip({ className = '' }: { className?: strin
         <p className="mt-1 text-2xs font-medium text-brand">1.3× bonus</p>
       </div>
       <div className={`${TESTER_PANEL} p-4 text-center`}>
-        <p className="text-2xs font-medium uppercase tracking-wide text-fg-muted">Typical bug</p>
+        <p className="text-2xs font-semibold text-fg-secondary">Typical bug</p>
         <p className="mt-1 text-2xl font-bold tabular-nums text-fg">500–2,500</p>
         <p className="text-xs text-fg-muted">pts per acceptance</p>
         <div className="mt-3 flex justify-center gap-1">

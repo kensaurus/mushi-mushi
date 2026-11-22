@@ -1,25 +1,44 @@
-# Mushi health
+# Mushi Mushi health
 
 Source: https://kensaur.us/mushi-mushi/docs/admin/health
 
 ---
-title: Mushi health
-description: The Mushi health page shows whether Mushi Mushi itself works (AI calls, background jobs, provider connections), so you catch a degraded integration early.
+title: Mushi Mushi health
+description: The Mushi Mushi health page shows whether Mushi Mushi itself works (AI calls, background jobs, provider connections), so you catch a degraded integration early.
+robots:
+  index: false
+  follow: true
 ---
 
-# Mushi health
+# Mushi Mushi health [#mushi-health]
 
 **Route:** `/health` (the sidebar called it "App health" until October 2026)
 
 This page is about Mushi Mushi itself, not your app: the AI calls behind your diagnoses
-and fixes, Mushi's background jobs, and live provider connectivity. Use it to catch
+and fixes, Mushi Mushi's background jobs, and live provider connectivity. Use it to catch
 degradation before it surfaces as a user-facing bug. Your own app's uptime and
 errors are on **Home**.
 
-The page has four views, picked at the top: **Mushi’s AI & jobs** (described below),
+The page has four views, picked at the top: **Mushi Mushi’s AI & jobs** (described below),
 **[Code size](/admin/code-health)**, **[Schema changes](/admin/drift)** and
-**[Unusual spikes](/admin/anomalies)**. Inside **Mushi’s AI & jobs**, the tabs are
+**[Unusual spikes](/admin/anomalies)**. Inside **Mushi Mushi’s AI & jobs**, the tabs are
 **Overview**, **AI calls**, **Scheduled jobs** and **Recent traces**.
+
+**First on the page:** one line with the worst problem and its button, in this order:
+
+| The line says | Button |
+|---|---|
+| "1 scheduled job failed on its last run: Triage grading." | **Run now** (or **Open jobs** for several jobs, or one the console can't run) |
+| "9% of AI calls failed in the last 24h, usually a provider outage or an expired key." | **See failed calls** |
+| "1 scheduled job is overdue: Weekly summary." | **Run now** / **Open jobs** |
+| "2% of AI calls failed …" or "… switched to the backup model …" | **See failed calls** / **See AI calls** |
+
+When nothing is wrong the line points at **Home** for your app's own health. **Run now**
+runs Triage grading or Weekly summary straight away (it spends AI budget; admins only);
+Data clean-up only runs on its schedule. The three numbers beside it are pictures: **AI
+calls** as one bar split into answered, answered by the backup model and failed;
+**Failed calls** against the 5% line; **Background jobs on time** with one status mark per
+job.
 
 ---
 
@@ -79,6 +98,20 @@ The **Scheduled jobs** tab has a card for each background job: `judge-batch`,
 Click **Trigger now** on `judge-batch` or `intelligence-report` to run it immediately.
 It spends AI budget, and only admins can use it. `data-retention` has no manual trigger.
 
+### Stuck reports
+
+Above the job cards, **Stuck reports** counts this app's reports stuck before triage
+(new or held for over 5 minutes, under 3 tries), failed triage jobs with tries left,
+and jobs that have waited for the worker for over 15 minutes. **Run recovery now**
+does what the 5-minute `pipeline-recovery` job does, for this app only: it sends the
+stuck reports to triage again, retries the failed jobs, and closes jobs whose report
+was already triaged. The result shows on the same line ("Re-sent 3 stuck reports to
+triage, retried 1 failed job."). It spends AI budget, so only owners and admins can
+run it. The same line shows on the **Overview** tab while something is stuck.
+
+A run by hand does not count as a run of the scheduled job, so a scheduled job that
+is not running still shows as late.
+
 ---
 
 ## Recent LLM calls log
@@ -98,6 +131,17 @@ On the **Overview** tab, the summary reads **Critical probes failing**, **Degrad
 probes** or **All systems nominal**, from the count of red and amber signals on the page.
 When something needs you (error rate, a fallback spike, a failed or late job, or no AI
 calls at all in the window), a recommended next step appears with a link.
+
+---
+
+## Server doctor (operators only)
+
+Super-admins also see the **Server doctor** card: the same checks as
+`npx mushi-mushi selfhost doctor`. Problems come first, each with the app it belongs to,
+a one-line fix and a button where the console can fix it (**Re-index** for a stalled code
+index, **Fix** for a missing AI key). Optional extras that are not set up (Langfuse,
+Sentry, an AI key) and passing checks fold into "N optional" and "N checks OK". Server
+secrets are named as set or missing, never shown.
 
 ---
 

@@ -97,6 +97,12 @@ function IconAnyClient(p: IconProps) {
   ))
 }
 
+function IconLovable(p: IconProps) {
+  return wrap(p, (
+    <path d="M8 13.5 C4 10.5 2.5 8.5 2.5 6.3 A2.8 2.8 0 0 1 8 5 A2.8 2.8 0 0 1 13.5 6.3 C13.5 8.5 12 10.5 8 13.5 Z" />
+  ))
+}
+
 const ICONS: Record<McpClientId, (p: IconProps) => ReactNode> = {
   cursor: IconCursor,
   vscode: IconVSCode,
@@ -107,6 +113,7 @@ const ICONS: Record<McpClientId, (p: IconProps) => ReactNode> = {
   'claude-desktop': IconClaude,
   zed: IconZed,
   any: IconAnyClient,
+  lovable: IconLovable,
 }
 
 export interface ConnectClientIconProps extends IconProps {

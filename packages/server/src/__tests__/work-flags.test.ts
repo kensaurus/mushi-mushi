@@ -17,7 +17,7 @@
 import { describe, expect, it } from 'vitest'
 import { cleanStatus, parseHeartbeat, type LaneConfig } from '../../supabase/functions/_shared/work-lanes.ts'
 import { cleanLogLine } from '../../supabase/functions/_shared/work-telemetry.ts'
-import { deriveWorkerFlags, durationText, flagsForProject, flagSummary, type FlagClaim, type FlagHost, type FlagLane, type FlagInput } from '../../supabase/functions/_shared/work-flags.ts'
+import { deriveWorkerFlags, durationText, hookFailureSummary, flagsForProject, flagSummary, type FlagClaim, type FlagHost, type FlagLane, type FlagInput } from '../../supabase/functions/_shared/work-flags.ts'
 
 const NOW = new Date('2026-10-28T12:00:00Z')
 const P1 = '1000000a-0000-4000-8000-000000000000'
@@ -61,7 +61,7 @@ describe('the heartbeat keeps what the console needs (it dropped it before)', ()
         cpus: 16,
         stateSec: 3 * HOUR,
         waitWhy: '4 agents running, the host\'s cap is 4',
-        checks: { cursor: { result: 'timed_out', ageSec: 600, detail: 'timed out after 90 s', account: 's***@g***.com' }, gh: { result: 'signed_in', ageSec: 60, detail: 'signed in' }, bogus: 1 },
+        checks: { cursor: { result: 'timed_out', ageSec: 600, detail: 'timed out after 90 s', account: 'w***@e***.com' }, gh: { result: 'signed_in', ageSec: 60, detail: 'signed in' }, bogus: 1 },
         slots: [{ lane: 'glot', runId: C(1), kind: 'fix', ageSec: 4 * HOUR, stage: 'commit', stageSec: 4 * HOUR }, { lane: '../etc', runId: 'x', kind: 'fix', ageSec: 1 }],
       },
       lanes: [
@@ -98,12 +98,12 @@ describe('the heartbeat keeps what the console needs (it dropped it before)', ()
     if (!parsed.ok) return
     const s = parsed.value.status
     expect(s).toMatchObject({ state: 'slot-wait', load1: 37.2, cpus: 16, stateSec: 3 * HOUR, waitWhy: "4 agents running, the host's cap is 4" })
-    expect(s.checks).toEqual({ cursor: { result: 'timed_out', ageSec: 600, detail: 'timed out after 90 s', account: 's***@g***.com' }, gh: { result: 'signed_in', ageSec: 60, detail: 'signed in' } })
+    expect(s.checks).toEqual({ cursor: { result: 'timed_out', ageSec: 600, detail: 'timed out after 90 s', account: 'w***@e***.com' }, gh: { result: 'signed_in', ageSec: 60, detail: 'signed in' } })
     expect(s.slots).toEqual([{ lane: 'glot', runId: C(1), kind: 'fix', ageSec: 4 * HOUR, stage: 'commit', stageSec: 4 * HOUR }])
     expect(parsed.value.lanes[0]!.status.runs).toBe(4)
     const run = (parsed.value.lanes[0]!.status.inflight as Array<{ log: string[] }>)[0]!
     expect(run).toMatchObject({ runId: C(1), stage: 'commit', stageSec: 4 * HOUR, model: 'grok-4.7-xhigh-fast' })
-    expect(run.log).toEqual(['push to https://github.com/o/r.git', 'as s***@g***.com in …/2000000a'])
+    expect(run.log).toEqual(['push to https://github.com/o/r.git', 'as w***@e***.com in …/2000000a'])
   })
 
   it('refuses an unmasked account and caps every list', () => {
@@ -147,7 +147,7 @@ describe('deriveWorkerFlags: the 2026-10-28 incident', () => {
     maxAgents: 4,
     load1: 37,
     cpus: 16,
-    checks: { cursor: { result: 'timed_out', ageSec: 900, detail: 'timed out after 90 s', account: 's***@g***.com' }, gh: { result: 'signed_in', ageSec: 60, detail: '' } },
+    checks: { cursor: { result: 'timed_out', ageSec: 900, detail: 'timed out after 90 s', account: 'w***@e***.com' }, gh: { result: 'signed_in', ageSec: 60, detail: '' } },
     slots: spaces.map((x) => ({ lane: `lane-${x.n}`, runId: C(x.n), kind: 'fix', ageSec: x.age, stage: x.stage, stageSec: x.stageSec })),
   })
   const flags = deriveWorkerFlags(
@@ -244,7 +244,7 @@ describe('deriveWorkerFlags: each other failure', () => {
             state: 'mem-wait',
             stateSec: 20 * 60,
             waitWhy: '2 GB free, under the 5 GB floor',
-            checks: { gh: { result: 'signed_out', ageSec: 30, detail: 'gh auth login' }, cursor: { result: 'other_account', ageSec: 60, detail: 'Logged in as o***@e***.com', account: 's***@g***.com' }, notReady: [{ lane: 'lane-1', problem: 'Its folder on this machine is not a git clone' }] },
+            checks: { gh: { result: 'signed_out', ageSec: 30, detail: 'gh auth login' }, cursor: { result: 'other_account', ageSec: 60, detail: 'Logged in as o***@e***.com', account: 'w***@e***.com' }, notReady: [{ lane: 'lane-1', problem: 'Its folder on this machine is not a git clone' }] },
           }),
         ],
         lanes: [lane(1, {})],
@@ -253,7 +253,7 @@ describe('deriveWorkerFlags: each other failure', () => {
     const by = Object.fromEntries(flags.map((f) => [f.kind, f]))
     expect(by.gh_signed_out).toMatchObject({ severity: 'danger', title: 'gh is not signed in on alienware' })
     expect(by.account_check).toMatchObject({ severity: 'danger', title: 'Cursor on alienware is signed in as another account' })
-    expect(by.account_check!.cause).toContain('they must run as s***@g***.com')
+    expect(by.account_check!.cause).toContain('they must run as w***@e***.com')
     expect(by.machine_not_ready).toMatchObject({ severity: 'danger', laneName: 'lane-1' })
     expect(by.machine_waiting!.cause).toMatch(/^2 GB free, under the 5 GB floor\./)
   })
@@ -271,8 +271,19 @@ describe('deriveWorkerFlags: each other failure', () => {
       }),
     )
     const f = flags.find((x) => x.kind === 'hook_failures')!
-    expect(f.title).toBe("lane-1: 2 runs failed in the repo's git hooks in 24 h")
+    expect(f.title).toBe("lane-1: 2 runs failed in the repo's git hooks in 24 h (commit checks, pre-push checks)")
     expect(f.actions.map((a) => a.kind)).toEqual(['pause_lane', 'open_report'])
+  })
+
+  it('names the failing hook steps, most frequent first, and says when a check crashed', () => {
+    expect(
+      hookFailureSummary([
+        'failed (code): git commit failed: hook steps failed: eslint, typecheck-changed. eslint: Segmentation fault | exit status 139',
+        'failed (code): git commit failed: hook steps failed: typecheck-changed. typecheck-changed: ...',
+        'failed (code): git push failed: pre-push checks',
+      ]),
+    ).toEqual({ steps: ['typecheck-changed', 'eslint', 'pre-push checks'], crashed: true })
+    expect(hookFailureSummary(['git commit failed: hook steps failed: readme-counts. readme-counts: - line 864'])).toEqual({ steps: ['readme-counts'], crashed: false })
   })
 
   it('a local mushi work run no worker claims (lane-v4 on 2026-10-28)', () => {
@@ -334,5 +345,13 @@ describe('durationText', () => {
     expect(durationText(4 * HOUR + 20 * 60)).toBe('4 h 20 min')
     expect(durationText(30 * HOUR)).toBe('30 h')
     expect(durationText(4 * 86_400)).toBe('4 d')
+  })
+})
+
+describe('the agent a worker runs (2026-11-20)', () => {
+  it('keeps the agent word so the console names a Claude Code account, and drops unknown agents', () => {
+    expect(cleanStatus({ state: 'working', agent: 'claude' })).toMatchObject({ agent: 'claude' })
+    expect(cleanStatus({ state: 'working', agent: 'cursor' })).toMatchObject({ agent: 'cursor' })
+    expect(cleanStatus({ state: 'working', agent: 'rm -rf /' })).not.toHaveProperty('agent')
   })
 })

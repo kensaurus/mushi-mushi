@@ -86,7 +86,7 @@ const req = (over: Partial<PlacementRequestRow>): PlacementRequestRow => ({
 describe('CiPlacementSection', () => {
   it('asks for one app under All apps', async () => {
     await render('all')
-    expect(host.textContent).toContain('Pick one app')
+    expect(host.textContent).toContain('Where CI runs is set per app. Pick one')
   })
 
   it('shows the agreement, greys out GitHub-hosted on a private repo with the reason, and hides standby labels', async () => {
@@ -96,7 +96,9 @@ describe('CiPlacementSection', () => {
     const card = q('ci-placement-repo-kensaurus/yen-yen')
     expect(card.textContent).toContain('Now: GitHub-hosted (ubuntu-24.04): no variable set')
     expect(radio('GitHub-hosted', card).disabled).toBe(true)
-    expect(card.textContent).toContain('Your CI agreement says no paid GitHub-hosted minutes on private repos (CI-AGREEMENT.md, 2026-10-22).')
+    expect(card.textContent).toContain('Off: your CI agreement above rules out paid GitHub-hosted minutes on private repos.')
+    // The agreement's source is said once, in its own box, not again under the choice (round 3).
+    expect(card.textContent).not.toContain('CI-AGREEMENT.md')
     expect(card.textContent).toContain('kensaurus-local')
     expect(card.textContent).not.toContain('kensaurus-local-yen-yen-1')
   })
@@ -141,7 +143,7 @@ describe('CiPlacementSection', () => {
       ['/v1/admin/ci/placement/requests/r9/execute', null],
     ])
     expect(state.reload).toHaveBeenCalled()
-    expect(card.textContent).toContain('Set LINUX_RUNNER to “kensaurus-local” on kensaurus/yen-yen. Mushi watches the next jobs.')
+    expect(card.textContent).toContain('Set LINUX_RUNNER to “kensaurus-local” on kensaurus/yen-yen. Mushi Mushi watches the next jobs.')
   })
 
   it('Apply now that GitHub refuses for the App permission says where to approve it, and keeps the request', async () => {
@@ -227,7 +229,7 @@ describe('CiPlacementSection', () => {
     await render()
     const link = Array.from(host.querySelectorAll('a')).find((a) => a.textContent?.includes('Import from your CI agreement'))!
     expect(link.getAttribute('href')).toBe('/settings?tab=ci-policy')
-    expect(host.textContent).toContain('Mushi has no GitHub access for this app’s repositories')
+    expect(host.textContent).toContain('Mushi Mushi has no GitHub access for this app’s repositories')
     expect(radio('GitHub-hosted', q('ci-placement-repo-kensaurus/yen-yen')).disabled).toBe(false)
   })
 

@@ -66,7 +66,7 @@ export function CiPolicyCard({ projectId }: { projectId: string | null }) {
     const res = await apiFetch<CiPolicyResponse>('/v1/admin/ci/policy', { method: 'PUT', body: JSON.stringify({ organizationId: data.organizationId, ...body }) })
     setSaving(false)
     if (!res.ok || !res.data) {
-      setSaveError(res.error?.message ?? 'Mushi did not save the CI policy. Try again in a moment.')
+      setSaveError(res.error?.message ?? 'Mushi Mushi did not save the CI policy. Try again in a moment.')
       return
     }
     setSaved(res.data)
@@ -81,7 +81,7 @@ export function CiPolicyCard({ projectId }: { projectId: string | null }) {
       <SettingsList
         title="CI policy"
         id={SETTINGS_SECTION_IDS.ciPolicy}
-        description="Your CI agreement, as Mushi enforces it when someone asks to change where CI runs. Mushi never fills this in for you: copy it from your agreement."
+        description="Your CI agreement, as Mushi Mushi enforces it when someone asks to change where CI runs. Mushi Mushi never fills this in for you: copy it from your agreement."
       >
         {!data.writable && (
           <p className="py-2 text-sm text-fg-muted" data-testid="ci-policy-not-writable">
@@ -100,7 +100,7 @@ export function CiPolicyCard({ projectId }: { projectId: string | null }) {
         <SettingsRow
           icon={<IconShield size={16} />}
           title="No paid GitHub-hosted minutes on private repos"
-          purpose="When on, Mushi refuses any change that would send a private repo's jobs to GitHub-hosted runners, at the request and again when it runs. Only an owner can turn it off."
+          purpose="When on, Mushi Mushi refuses any change that would send a private repo's jobs to GitHub-hosted runners, at the request and again when it runs. Only an owner can turn it off."
           action={
             <Toggle
               ariaLabel="No paid GitHub-hosted minutes on private repos"
@@ -126,7 +126,7 @@ export function CiPolicyCard({ projectId }: { projectId: string | null }) {
         <SettingsRow
           icon={<IconLock size={16} />}
           title="External controllers"
-          purpose="Another tool that decides where some repos' CI runs (a dispatcher that flips labels). Mushi shows those repos read-only and never competes with it."
+          purpose="Another tool that decides where some repos' CI runs (a dispatcher that flips labels). Mushi Mushi shows those repos read-only and never competes with it."
         >
           <div className="max-w-xl">
             <Textarea
@@ -141,7 +141,7 @@ export function CiPolicyCard({ projectId }: { projectId: string | null }) {
           </div>
         </SettingsRow>
 
-        <SettingsRow icon={<IconServer size={16} />} title="Standby runners" purpose="Runners or labels that are only a fallback. Mushi never sends jobs to them. Use * for any characters.">
+        <SettingsRow icon={<IconServer size={16} />} title="Standby runners" purpose="Runners or labels that are only a fallback. Mushi Mushi never sends jobs to them. Use * for any characters.">
           <div className="max-w-xl">
             <Textarea
               label="One runner name or label per line"

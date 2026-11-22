@@ -152,7 +152,7 @@ describe('failureHeadline', () => {
 
   it('recognises the Cursor envVars + agentId rejection', () => {
     const h = failureHeadline(fix({ error: 'Cursor API 400 validation_error: envVars cannot be combined with a client-supplied agentId' }))!
-    expect(h.title).toBe('Mushi sent Cursor a field it no longer accepts.')
+    expect(h.title).toBe('Mushi Mushi sent Cursor a field it no longer accepts.')
   })
 
   it('returns null without an error', () => {

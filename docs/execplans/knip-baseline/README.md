@@ -7,8 +7,30 @@ was deleted; every remaining finding is the A2 register or debt to pay down.
 
 | Mode | Command | Error-level issues | CI threshold |
 |---|---|---:|---|
-| production | `pnpm exec knip --production --reporter json` | **45** | `--max-issues 45` |
-| default | `pnpm exec knip --reporter json` | **31** | `--max-issues 31 --treat-config-hints-as-errors` |
+| production | `pnpm exec knip --production --reporter json` | **40** | `--max-issues 40` |
+| default | `pnpm exec knip --reporter json` | **29** | `--max-issues 29 --treat-config-hints-as-errors` |
+
+> **Re-measured 2026-11-13: 40 production / 29 default** (ceiling 43 → 40; 39 fails).
+> packages/server now excludes `src/__tests__/**` from production mode (`!src/__tests__/**!`):
+> test stubs and fixtures are not production code. That dropped four unused-file false
+> positives, three already counted (`__stubs__/fake-query-recorder.ts`, `__stubs__/fake-supabase.ts`,
+> `fixtures/glot-fix-attempts.ts`) and the new `fixtures/sns-test-cert.ts`. Default mode is unchanged.
+
+> **Re-measured 2026-11-11 (housekeeping pass): 43 production / 29 default**
+> (ceilings 45 → 43 and 31 → 29; 42 and 28 fail). This pass deleted the unimported
+> `packages/agents/src/drift-agent.ts` copy and the `react-dom` / `@types/react-dom`
+> devDependencies marketing-ui no longer uses. Since the 2026-10-23 measurement,
+> master had also dropped `TabbedSubNav.tsx` and `pageHelpPrefs.ts` from the
+> unused-file list and the unused `yaml` devDependency in packages/server, and added
+> unused exports owned by other lanes: `sentryQuerySettled`
+> (`apps/admin/src/lib/useSentryConnection.ts`, production) and `apiFor` /
+> `preflight` (`packages/cli/src/commands/work.ts`, default).
+> knip never sees unused exports from a private package's entry, so the
+> unmounted marketing-ui landing canvas (`Hero`, `MushiCanvas`, `ClosingCta`,
+> `SwitchingFromStrip`, `PersonaTrack`, `PrivacyPosture` and `canvas/*`, about
+> 2,600 lines) was found by an import-graph walk from the names apps import,
+> not by this count. Measured on a clean install of the branch, after
+> `pnpm typecheck` built every workspace dependency.
 
 > **Re-measured 2026-10-23: 45 production / 31 default** (44 and 30 fail).
 > `apps/admin` production exports fell 6 → 3. `bottleneckChipLabel` had no caller
@@ -122,7 +144,7 @@ was deleted; every remaining finding is the A2 register or debt to pay down.
 
 `--max-issues` counts only issue types whose rule is `error`. The eight
 "referenced optional peerDependencies" are reported at `warn` (see
-`knip.json` → `rules`) because optional peers that are referenced are the
+`package.json#knip` → `rules`) because optional peers that are referenced are the
 intended design of the plugin and react-native packages; they are visible in
 the report but never count. Configuration hints are zero in both modes and
 are enforced with `--treat-config-hints-as-errors` on the default run.
@@ -221,7 +243,7 @@ Warn-level (not counted): optionalPeerDependencies 8.
    (`packages/core/src/index.ts`, `apps/admin/src/components/ui.tsx`) are entry
    files and never counted; the rest are candidates for the A3 exports pass.
 
-## knip.json decisions
+## Knip config decisions (`package.json#knip`)
 
 - `compilers.mdx: true` enables the built-in MDX import extractor (knip only
   auto-enables it when `@mdx-js/*` is a direct dependency; here Nextra brings

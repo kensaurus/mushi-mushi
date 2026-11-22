@@ -8,7 +8,7 @@
 
 The end user of a vibe-coder's app can file a bug in under 20 s on one screen, see it in "Your reports" with a status they understand, hear back when the developer replies or the fix ships, and answer back. Web and RN present the same structure and vocabulary. The widget looks like part of the host app, not like a neon Mushi product.
 
-Positioning check (the VISION.md / AGENTS.md drift test): telling a reporter "fixed in v1.4, does it work for you?" produces a verification signal. That signal closes the fix loop without the developer leaving the editor — replies and statuses come from the console, Slack or MCP. None of it needs a monitoring stack.
+Positioning check (the docs/VISION.md / AGENTS.md drift test): telling a reporter "fixed in v1.4, does it work for you?" produces a verification signal. That signal closes the fix loop without the developer leaving the editor — replies and statuses come from the console, Slack or MCP. None of it needs a monitoring stack.
 
 ## Success criteria
 
