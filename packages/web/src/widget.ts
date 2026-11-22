@@ -15,7 +15,7 @@ import type * as Views from './widget-views';
 import { getWidgetStyles } from './styles';
 import { contrastingInk, safeCssColor } from './build-widget-theme';
 import { readPageFaviconHref, MUSHI_COPY, MUSHI_GEOMETRY, MUSHI_TIER_COLORS } from '@mushi-mushi/core';
-import { FEATURE_REQUEST_INTENT, REPORTER_READ_DEADLINE_MS, bindFaviconFallbacks, isNotSentOutcome, isSubmitShortcut, loadAssistantSession, saveAssistantSession, clearAssistantSession, readLauncherDismissed, withDeadline, writeLauncherDismissed } from './widget-helpers';
+import { FEATURE_REQUEST_INTENT, REPORTER_READ_DEADLINE_MS, bindFaviconFallbacks, isNotSentOutcome, isSubmitShortcut, loadAssistantSession, saveAssistantSession, clearAssistantSession, readLauncherDismissed, routeMatches, withDeadline, writeLauncherDismissed } from './widget-helpers';
 import type {
   AssistantTurn,
   PendingReply,
@@ -87,6 +87,8 @@ export class MushiWidget {
   // ─── Persistent DOM (built once; regions are patched, never rebuilt) ───
   private readonly styleEl: HTMLStyleElement;
   private styleKey = '';
+  /** Theme fixes the widget made, for `diagnose()`. */
+  private themeWarnings: string[] = [];
   private readonly panel: HTMLDivElement;
   private readonly scroller: HTMLDivElement;
   private readonly regionEls = {} as Record<Region, HTMLElement>;
@@ -854,6 +856,7 @@ export class MushiWidget {
     widgetHostBounds: { width: number; height: number } | null;
     widgetSuppressed: boolean;
     bannerRendered: boolean;
+    warnings: string[];
   } {
     const s = this.host.style;
     const widgetHostPointerSafe =
@@ -870,7 +873,7 @@ export class MushiWidget {
       !this.isSuppressedByHost() &&
       !this.isRouteHidden() &&
       this.triggerVisible;
-    return { widgetHostPointerSafe, widgetHostBounds, widgetSuppressed, bannerRendered };
+    return { widgetHostPointerSafe, widgetHostBounds, widgetSuppressed, bannerRendered, warnings: [...this.themeWarnings] };
   }
 
   private syncAttachedLaunchers(): void {
@@ -1237,7 +1240,7 @@ export class MushiWidget {
 
   private isRouteHidden(): boolean {
     if (!this.config.hideOnRoutes.length || typeof location === 'undefined') return false;
-    return this.config.hideOnRoutes.some((route) => location.pathname.includes(route));
+    return this.config.hideOnRoutes.some((route) => routeMatches(location.pathname, route));
   }
 
   private getTheme(): 'light' | 'dark' {
@@ -1267,37 +1270,50 @@ export class MushiWidget {
     return 'light';
   }
 
-  /** Parse any CSS colour the browser understands into [r, g, b] (null when it can't). */
+  /** Any CSS colour → [r, g, b] (null if unparseable); oklch/lab read back via color-mix. */
   private probeRgb(color: string): [number, number, number] | null {
     const s = this.host.style;
     const prev = s.color;
-    s.color = color;
-    const m = (this.host.isConnected ? getComputedStyle(this.host).color : s.color).match(/(\d+(?:\.\d+)?)[ ,]+(\d+(?:\.\d+)?)[ ,]+(\d+(?:\.\d+)?)/);
+    let rgb: [number, number, number] | null = null;
+    for (const c of [color, `color-mix(in srgb,${color},${color})`]) {
+      s.color = '';
+      s.color = c;
+      // Empty = rejected (computed would be the inherited colour).
+      const m = s.color && (this.host.isConnected ? getComputedStyle(this.host).color : s.color)
+        .match(/(rgba?\(|srgb )([\d.]+)[ ,]+([\d.]+)[ ,]+([\d.]+)/);
+      if (m) {
+        const k = m[1] === 'srgb ' ? 255 : 1;
+        rgb = [+m[2] * k, +m[3] * k, +m[4] * k];
+        break;
+      }
+    }
     s.color = prev;
-    return m ? [+m[1], +m[2], +m[3]] : null;
+    return rgb;
+  }
+
+  /** A host `--mushi-*` colour (inherited from :root too), or ''. */
+  private hostColorVar(name: string): string {
+    return safeCssColor(this.hostCssVar(name));
   }
 
   /**
-   * Accent resolution (Plan 018 §1.4, first match wins): `widget.accent` →
-   * the host's `--mushi-accent` on :root → `accent-color` of <html> →
-   * `<meta name="theme-color">` → the foreground ink (''). Page-sourced values
-   * must parse as a colour and keep 3:1 against the panel background, or the
-   * Send button could vanish into a page-coloured accent.
+   * Accent (Plan 018 §1.4, first wins): host `--mushi-accent` → `widget.accent`
+   * → <html> `accent-color` → theme-color meta (these two need 3:1 on the
+   * panel) → ink. The accent is never changed; text on it under 3:1 becomes
+   * black/white (`lockFg` beats `--mushi-accent-fg`) with a warning.
    */
-  private resolveAccent(dark: boolean): { accent: string; accentFg: string } {
-    const config = safeCssColor(this.config.accent ?? '');
+  private resolveAccent(dark: boolean): { accent: string; accentFg: string; lockFg?: boolean } {
+    this.themeWarnings = [];
+    let accent = this.hostColorVar('--mushi-accent') || safeCssColor(this.config.accent ?? '');
     const candidates: string[] = [];
-    if (!config && typeof document !== 'undefined') {
+    if (!accent && typeof document !== 'undefined') {
       try {
-        const rootStyle = getComputedStyle(document.documentElement);
-        candidates.push(rootStyle.getPropertyValue('--mushi-accent').trim());
-        const ac = rootStyle.getPropertyValue('accent-color').trim();
+        const ac = getComputedStyle(document.documentElement).getPropertyValue('accent-color').trim();
         if (ac && ac !== 'auto') candidates.push(ac);
       } catch { /* detached / no layout */ }
       candidates.push(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')?.trim() ?? '');
     }
     const bg: [number, number, number] = dark ? [18, 18, 18] : [255, 255, 255];
-    let accent = config;
     for (const c of candidates) {
       if (accent) break;
       const safe = safeCssColor(c);
@@ -1306,17 +1322,24 @@ export class MushiWidget {
     }
     if (!accent) return { accent: '', accentFg: '' };
     const rgb = this.probeRgb(accent);
-    return { accent, accentFg: safeCssColor(this.config.accentText ?? '') || (rgb ? contrastingInk(rgb).ink : '') };
+    const wanted = this.hostColorVar('--mushi-accent-fg') || safeCssColor(this.config.accentText ?? '');
+    const auto = rgb ? contrastingInk(rgb).ink : '';
+    const fgRgb = rgb && wanted ? this.probeRgb(wanted) : null;
+    const ratio = fgRgb ? contrastingInk(rgb!, fgRgb).ratio : 3;
+    if (ratio >= 3) return { accent, accentFg: wanted || auto };
+    this.themeWarnings.push(`Accent text ${wanted} is ${ratio.toFixed(1)}:1 on ${accent} (under 3:1); using ${auto}.`);
+    return { accent, accentFg: auto, lockFg: true };
   }
 
   /** Style + banner + trigger. Each rebuilds only when its inputs changed. */
   private syncChrome(): void {
     const theme = this.getTheme();
-    const { accent, accentFg } = this.resolveAccent(theme === 'dark');
-    const styleKey = `${theme}|${accent}|${accentFg}`;
+    const { accent, accentFg, lockFg } = this.resolveAccent(theme === 'dark');
+    const styleKey = `${theme}|${accent}|${accentFg}|${lockFg}`;
     if (styleKey !== this.styleKey) {
       this.styleKey = styleKey;
-      this.styleEl.textContent = getWidgetStyles(theme, accent, accentFg);
+      this.styleEl.textContent = getWidgetStyles(theme, accent, accentFg, lockFg);
+      this.themeWarnings.forEach((w) => this.callbacks.onWarning?.(w));
     }
     this.syncBanner();
     this.syncTrigger();

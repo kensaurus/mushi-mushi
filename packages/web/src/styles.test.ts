@@ -65,6 +65,35 @@ describe('getWidgetStyles', () => {
     expect(contrastingInk([250, 220, 120]).ink).toBe('black');
   });
 
+  it('keeps the 13 public theming tokens (a rename breaks every host stylesheet)', () => {
+    // The public contract is what `:host` reads; the docs Theming page lists
+    // exactly these. Change this list only together with that page and a changeset.
+    for (const theme of ['light', 'dark'] as const) {
+      const host = getWidgetStyles(theme).match(/:host \{[^}]*\}/)?.[0] ?? '';
+      const read = [...new Set(host.match(/var\(--mushi-[a-z-]+/g))].map((v) => v.slice(4)).sort();
+      expect(read).toEqual([
+        '--mushi-accent',
+        '--mushi-accent-fg',
+        '--mushi-bg',
+        '--mushi-border',
+        '--mushi-error',
+        '--mushi-fg',
+        '--mushi-font',
+        '--mushi-font-size',
+        '--mushi-muted',
+        '--mushi-radius',
+        '--mushi-shadow',
+        '--mushi-success',
+        '--mushi-surface',
+      ]);
+    }
+  });
+
+  it('locks the accent text only when asked (unreadable host text)', () => {
+    expect(getWidgetStyles('light', '#ffeb3b', 'black', true)).toContain('--_accent-fg: black;');
+    expect(getWidgetStyles('light', '#ffeb3b', 'black')).toContain('--_accent-fg: var(--mushi-accent-fg, black);');
+  });
+
   it('matches stable CSS snapshot markers', () => {
     const css = getWidgetStyles('light');
     expect(css).toMatchSnapshot();

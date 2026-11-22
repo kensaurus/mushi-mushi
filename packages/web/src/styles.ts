@@ -33,8 +33,9 @@ import {
 /**
  * @param accent    Resolved panel accent (any CSS colour; unsafe values are dropped). '' = the ink.
  * @param accentText Text colour on the accent; '' = auto (white on a custom accent, paper on ink).
+ * @param lockFg    Use `accentText` even over a host `--mushi-accent-fg` (set when that one is unreadable).
  */
-export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText = ''): string {
+export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText = '', lockFg = false): string {
   // The brand palette still colours the `brand` / `neon` banner variants.
   const v = getWidgetThemeVars(theme);
   const panelAccent = safeCssColor(accent);
@@ -84,7 +85,7 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
       --_surface: var(--mushi-surface, color-mix(in oklab, var(--_bg) 94%, var(--_fg)));
       --_border: var(--mushi-border, color-mix(in oklab, var(--_fg) 16%, transparent));
       --_accent: var(--mushi-accent, ${panelAccent || 'var(--_fg)'});
-      --_accent-fg: var(--mushi-accent-fg, ${panelAccent ? panelAccentFg || 'white' : 'var(--_bg)'});
+      --_accent-fg: ${lockFg && panelAccentFg ? panelAccentFg : `var(--mushi-accent-fg, ${panelAccent ? panelAccentFg || 'white' : 'var(--_bg)'})`};
       --_ok: var(--mushi-success, ${ok});
       --_err: var(--mushi-error, ${danger});
       --_radius: var(--mushi-radius, 12px);

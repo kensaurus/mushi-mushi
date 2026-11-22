@@ -10,6 +10,7 @@ export default {
   svelte: 'mushi-mushi/svelte',
   angular: 'mushi-mushi/angular',
   node: 'mushi-mushi/node',
+  theming: 'Theming the widget',
   presets: 'SDK presets',
   assistant: 'In-SDK Ask assistant',
   analytics: 'Product analytics (track)',
