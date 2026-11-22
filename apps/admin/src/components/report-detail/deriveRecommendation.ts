@@ -7,6 +7,7 @@ import { KNOWN_ISSUES_SEARCH_HREF } from '../../lib/settingsTabs'
 import { NO_CODE_LOCATION_REASON } from '../../lib/reportCodeLocation'
 import { verdictFromError } from '../../lib/pdcaAct'
 import { isAgentOutOfUsageError } from '../../lib/agentOutOfUsage'
+import type { DispatchSetupSteps } from '../../lib/dispatchSetupSteps'
 
 /** The opt-in's name as the fix worker quotes it in a skip reason. */
 const WEB_SEARCH_SETTING_NAME = 'Search the web for known fixes'
@@ -31,7 +32,7 @@ interface RecommendationAction {
 export interface Recommendation {
   title: string
   description: string
-  cta?: { label: string; onClick?: () => void; href?: string; disabled?: boolean }
+  cta?: { label: string; onClick?: () => void; href?: string; disabled?: boolean; title?: string }
   tone: 'urgent' | 'info' | 'success' | 'neutral'
   /** Compact key/value chips shown under the title — used to surface "started
    *  3m ago", "agent: Sonnet 4.6", "files: 2 (+1 more)" without forcing the
@@ -48,6 +49,12 @@ export interface Recommendation {
    * alone: "Dispatch anyway" and the reason appeared twice (sweep 2026-11-18).
    */
   repeatsTriageBar?: boolean
+  /**
+   * Set when a dispatch control here is disabled only because the dispatch
+   * setup is not finished: the card shows the steps left as links under its
+   * button (DispatchSetupLine) instead of a "Cannot dispatch" chip.
+   */
+  setupSteps?: DispatchSetupSteps
 }
 
 /**
@@ -151,7 +158,7 @@ export function deriveRecommendation(
   commentCount: number,
   onRequestDispatch: () => void,
   nowMs: number = Date.now(),
-  block: { blocked: boolean; reason: string | null } = { blocked: false, reason: null },
+  block: { blocked: boolean; reason: string | null; setup?: DispatchSetupSteps | null } = { blocked: false, reason: null },
   hasCodeLocation = true,
   onClose?: (patch: ReportClosePatch) => void,
 ): Recommendation {
@@ -160,13 +167,18 @@ export function deriveRecommendation(
   const isDispatch = (onClick: (() => void) | undefined) => onClick === onRequestDispatch
   const touchesDispatch = isDispatch(rec.cta?.onClick) || (rec.actions ?? []).some((a) => isDispatch(a.onClick))
   if (!touchesDispatch) return rec
+  const title = block.reason ?? undefined
+  const ctaIsDispatch = Boolean(rec.cta && isDispatch(rec.cta.onClick))
+  // Setup steps show as links under the disabled button; the chip said the same in one long string.
+  const setupSteps = ctaIsDispatch && block.setup ? block.setup : undefined
   return {
     ...rec,
-    cta: rec.cta && isDispatch(rec.cta.onClick) ? { ...rec.cta, disabled: true } : rec.cta,
+    cta: rec.cta && ctaIsDispatch ? { ...rec.cta, disabled: true, title } : rec.cta,
     actions: rec.actions?.map((a) => (isDispatch(a.onClick) ? { ...a, disabled: true } : a)),
-    meta: block.reason
+    meta: !setupSteps && block.reason
       ? [...(rec.meta ?? []), { label: 'Cannot dispatch', value: block.reason, tone: 'warn' as const }]
       : rec.meta,
+    ...(setupSteps ? { setupSteps } : {}),
   }
 }
 

@@ -24,6 +24,7 @@ import {
 } from '../../_shared/integration-health-rollup.ts';
 import { DashboardChartReadError, loadDashboardCharts } from '../../_shared/dashboard-chart-rollup.ts';
 import { isSdkKey } from '../../_shared/setup-signals.ts';
+import { SETUP_REQUIRED_TOTAL, requiredSetupProgress } from '../../_shared/setup-steps.ts';
 import { inboxBannerLabel } from '../../_shared/inbox-banner.ts';
 
 /** Activity-feed line for one fix attempt, read against its report's current state. */
@@ -247,7 +248,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       projectCount: 0,
       setupDone: false,
       requiredComplete: 0,
-      requiredTotal: 4,
+      requiredTotal: SETUP_REQUIRED_TOTAL,
       openActions: 0,
       clearStages: 0,
       totalSurfaces: 5,
@@ -538,9 +539,8 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
     const clearStages = 5 - openActions;
     const top = openFlags[0] ?? null;
 
-    const requiredComplete =
-      1 + (reads.hasKey ? 1 : 0) + (reads.hasSdk ? 1 : 0) + (reads.reportCount > 0 ? 1 : 0);
-    const setupDone = requiredComplete >= 4;
+    // The one step list (_shared/setup-steps.ts), the count /v1/admin/setup shows.
+    const { requiredComplete, requiredTotal, setupDone } = requiredSetupProgress(reads);
     const { lastActivityAt, lastActivityKind } = latestActivity(reads.lastReport, reads.lastFix);
 
     let topPriority: 'no_project' | 'setup' | 'actions' | 'clear' = 'clear';
@@ -549,7 +549,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
 
     if (!setupDone) {
       topPriority = 'setup';
-      topPriorityLabel = `${requiredComplete} of ${4} setup steps done — finish SDK + first report before the inbox fills up.`;
+      topPriorityLabel = `${requiredComplete} of ${requiredTotal} setup steps done — finish SDK + first report before the inbox fills up.`;
       nextStepTo = scoped('/onboarding?tab=steps');
     } else if (openActions > 0 && top) {
       topPriority = 'actions';
@@ -572,7 +572,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
         projectCount: projectIds.length,
         setupDone,
         requiredComplete,
-        requiredTotal: 4,
+        requiredTotal,
         openActions,
         clearStages,
         totalSurfaces: 5,
@@ -615,7 +615,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
       hasData: false,
       setupDone: false,
       requiredComplete: 0,
-      requiredTotal: 4,
+      requiredTotal: SETUP_REQUIRED_TOTAL,
       openBacklog: 0,
       reports14d: 0,
       fixesInProgress: 0,
@@ -773,12 +773,8 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
     const openPrs = fixTruth.prOpen;
     const failedFixesPreview = failedFixPreviews(reads.fixTruths, { projectId: activeProject.id, limit: 3 });
 
-    const requiredComplete =
-      1 +
-      (reads.hasKey ? 1 : 0) +
-      (hasSdk ? 1 : 0) +
-      (reportCount > 0 ? 1 : 0);
-    const setupDone = requiredComplete >= 4;
+    // The one step list (_shared/setup-steps.ts), the count /v1/admin/setup shows.
+    const { requiredComplete, requiredTotal, setupDone } = requiredSetupProgress(reads);
 
     let focusStage: string | null = null;
     let focusLabel: string | null = null;
@@ -851,7 +847,7 @@ export function registerDashboardRoutes(app: Hono<{ Variables: Variables }>): vo
         hasData: reports14d > 0 || reads.lastFix != null,
         setupDone,
         requiredComplete,
-        requiredTotal: 4,
+        requiredTotal,
         openBacklog,
         reports14d,
         fixesInProgress,

@@ -57,14 +57,14 @@ function Where() {
   return createElement('output', { 'data-testid': 'where' }, `${loc.pathname}${loc.hash}`)
 }
 
-function render(state: PreflightState) {
+function render(state: PreflightState, required?: boolean) {
   act(() =>
     root.render(
       createElement(
         MemoryRouter,
         { initialEntries: ['/reports/r1'] },
         createElement(Routes, null,
-          createElement(Route, { path: '/reports/r1', element: createElement(DispatchPreflightBanner, { preflight: state, projectId: PROJECT }) }),
+          createElement(Route, { path: '/reports/r1', element: createElement(DispatchPreflightBanner, { preflight: state, projectId: PROJECT, required }) }),
           createElement(Route, { path: '*', element: createElement(Where) }),
         ),
       ),
@@ -119,5 +119,24 @@ describe('DispatchPreflightBanner', () => {
     await flush()
     expect(api.apiFetch).not.toHaveBeenCalled()
     expect(host.querySelector('[data-testid="where"]')!.textContent).toBe('/integrations/config#platform-card-github')
+  })
+})
+
+// A new user saw "Optional: …" in a closed card while both Dispatch fix buttons were disabled (feedback 2026-11-22).
+describe('DispatchPreflightBanner when dispatch waits on it', () => {
+  const checks = [check('github', false), check('codebase', true), check('agent', true), check('autofix', false)]
+
+  it('drops "Optional" and starts open', () => {
+    render(preflight(checks), true)
+    const details = host.querySelector('[data-testid="dispatch-preflight"]') as HTMLDetailsElement
+    expect(details.open).toBe(true)
+    expect(details.querySelector('summary')?.textContent).toBe('Let Mushi Mushi dispatch the fix for you (2 steps left)')
+  })
+
+  it('stays an optional, closed card otherwise', () => {
+    render(preflight(checks))
+    const details = host.querySelector('[data-testid="dispatch-preflight"]') as HTMLDetailsElement
+    expect(details.open).toBe(false)
+    expect(details.querySelector('summary')?.textContent).toBe('Optional: let Mushi Mushi dispatch the fix for you (2 steps left)')
   })
 })

@@ -2,15 +2,18 @@
 
 Before Mushi Mushi can automatically fix a bug, **four conditions** must be met
 for the project.  The admin console surfaces these as the **Dispatch Preflight**
-— a banner on report detail pages and a checklist inside the Queue fix popover.
+— a card on report detail pages and a checklist inside the Queue fix popover.
+While any is missing, the report page's **Dispatch fix** buttons are disabled
+and a line under each names the steps left, each a link, with a count:
+"To dispatch a fix: Connect GitHub · Index your code · Turn on Autofix (1 of 4 done)".
 
 ---
 
 ## The four checks
 
-> **Wire format:** the canonical REST shape uses `{ key, ready, label, hint, fixHref }`.
-> The MCP `diagnose_setup` tool (`mode=dispatch`) renames fields for agent
-> ergonomics (`key → check`, `ready → passed`, `fixHref → fixPath`).
+> **Wire format:** each check is `{ key, ready, label, hint, fixHref }`, from
+> `GET /v1/admin/projects/:id/preflight`. The MCP `diagnose_setup` tool
+> (`mode=dispatch`) returns the same checks under `dispatch.checks`.
 > Throughout this guide we refer to checks by their `key`.
 
 ### 1. GitHub connected (`key: 'github'`)
@@ -58,14 +61,24 @@ distribution sparkline so you can confirm the right files were picked up.
 
 ---
 
-### 3. Anthropic key set (`key: 'anthropic'`)
+### 3. Fix agent ready (`key: 'agent'`)
 
-An Anthropic API key must be stored in Supabase Vault (BYOK — Bring Your Own
-Key).  The fix agent calls Claude to generate patches.
+The agent that writes the fix must be able to run. Its label names that agent:
 
-**How to fix:** Go to **Settings → API Keys → Anthropic** and paste your key.
-The panel tests connectivity before saving; a `✓ Connection OK` chip confirms
-the key works.
+- **Mushi Mushi's own writer** (the default): an Anthropic or OpenAI key
+  ("AI key for writing fixes"). A team that runs its AI on OpenAI needs the
+  OpenAI key.
+- **Cursor**: an active Cursor key with credits left ("Cursor key for the fix
+  agent", or "Cursor is out of credits").
+- **GitHub's coding agent**: the GitHub connection from check 1.
+- **A fix agent on your own computer**: it cannot run from the console; run it
+  there, or copy the fix prompt into your editor.
+
+**How to fix:** follow the check's link. AI keys live under **Settings → AI
+keys**; Cursor keys under **Credits**. The key panel tests a key before saving.
+
+Servers older than 2026-11-11 report this check as `key: 'anthropic'`
+("Anthropic key set").
 
 ---
 
@@ -75,7 +88,9 @@ The autofix toggle must be switched ON for the project.  This is an explicit
 per-project opt-in so you can run Mushi Mushi in report-only mode (no agentic
 changes) for sensitive projects.
 
-**How to fix:** Go to **Integrations** and toggle **Enable autofix**.
+**How to fix:** Press **Turn on** in the report page's Dispatch Preflight card
+(once GitHub is connected), or go to **Integrations** and toggle **Enable
+autofix**.
 
 ---
 
@@ -83,8 +98,10 @@ changes) for sensitive projects.
 
 ### Admin console
 
-The **Dispatch Preflight** banner appears automatically on any report detail
-page where autofix is the suggested next action.
+The **Dispatch Preflight** card appears on any report detail page that could
+still get a fix while a check is missing. It is collapsed and marked optional,
+except when it is what keeps the page's Dispatch fix buttons disabled: then it
+starts open.
 
 ### CLI
 
@@ -103,20 +120,23 @@ AI agents (Claude, Cursor) can call the `diagnose_setup` tool:
 diagnose_setup({ mode: "dispatch", projectId: "proj_..." })
 ```
 
-Returns (MCP-flavoured shape — `check`/`passed`/`fixPath` rather than the
-REST `key`/`ready`/`fixHref`):
+Returns:
 
 ```json
 {
+  "mode": "dispatch",
   "ready": false,
-  "repoUrl": null,
-  "checks": [
-    { "check": "github",    "label": "GitHub repo connected",        "passed": false, "hint": "Paste your GitHub repo URL…", "fixPath": "/integrations" },
-    { "check": "codebase",  "label": "Codebase indexed for RAG",     "passed": false, "hint": "Enable codebase indexing…",   "fixPath": "/integrations" },
-    { "check": "anthropic", "label": "Anthropic key configured",     "passed": true,  "hint": "BYOK key present in Vault",   "fixPath": "/settings?tab=byok" },
-    { "check": "autofix",   "label": "Autofix enabled for this project", "passed": false, "hint": "Flip the Autofix switch", "fixPath": "/integrations" }
-  ],
-  "summary": "Project proj_... cannot dispatch yet — GitHub repo connected, Codebase indexed for RAG, Autofix enabled for this project."
+  "summary": "Dispatch blocked — GitHub repo connected, Codebase indexed, Autofix enabled.",
+  "nextAction": "Connect a GitHub repository so the fix worker can open pull requests.",
+  "dispatch": {
+    "repoUrl": null,
+    "checks": [
+      { "key": "github",   "ready": false, "label": "GitHub repo connected",    "hint": "Connect a GitHub repository…", "fixHref": "/integrations/config#platform-card-github" },
+      { "key": "codebase", "ready": false, "label": "Codebase indexed",         "hint": "Enable codebase indexing…",    "fixHref": "/integrations/config#integrations-codebase" },
+      { "key": "agent",    "ready": true,  "label": "AI key for writing fixes (Anthropic)", "hint": "Fixes are written with Claude first…", "fixHref": "/settings?tab=byok" },
+      { "key": "autofix",  "ready": false, "label": "Autofix enabled",          "hint": "Turn on Autofix…",             "fixHref": "/integrations/config#integrations-codebase" }
+    ]
+  }
 }
 ```
 
@@ -134,7 +154,7 @@ Accepts both `Authorization: Bearer <jwt>` (browser session) and
 
 ## Dry-run dispatch
 
-Before burning an Anthropic credit, you can simulate the full pipeline:
+Before spending AI credits, you can simulate the full pipeline:
 
 ```
 POST /v1/admin/projects/:id/fixes/dry-run

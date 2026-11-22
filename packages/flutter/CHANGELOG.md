@@ -4,6 +4,7 @@
 
 - The report sheet shows the screenshot it attaches, with a Remove button.
   Only a screenshot still shown is sent; one that can't be shown is dropped.
+  Thanks to [PeepSo](https://peepso.com) for flagging this.
 
 ## 0.3.0
 
