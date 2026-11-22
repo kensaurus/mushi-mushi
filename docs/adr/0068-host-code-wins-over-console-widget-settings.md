@@ -64,7 +64,15 @@ then the SDK default.**
   code's value wins." (`renderSnippet(…, { lockInCode })` in
   `apps/admin/src/lib/sdkSnippets.ts`). Mobile and server snippets keep their
   options, because those SDKs do not read the console's runtime config.
-- The React Native SDK has its own merge and is not changed here.
+- The React Native SDK follows the same rule (amendment 2026-11-22): it reads
+  `GET /v1/sdk/config` once at start (`runtimeConfig: false` opts out) and
+  applies only the console's colour (`widget.accent` + `accentText`) and a
+  bottom corner, and only where the app's config leaves them unset
+  (`packages/react-native/src/runtime-widget.ts`). It does not apply the
+  `native` block: the server always sends its defaults there (trigger `both`,
+  minimum description 20), which would switch on shake-to-report and raise
+  the minimum on apps that never asked for it. Before this, React Native read
+  no console settings at all.
 
 ## Alternatives rejected
 
