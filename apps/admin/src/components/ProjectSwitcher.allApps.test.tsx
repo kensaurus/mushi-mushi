@@ -47,7 +47,7 @@ vi.mock('./ProjectSnapshotMeta', () => ({ ProjectSnapshotMeta: () => null }))
 
 import { ProjectSwitcher } from './ProjectSwitcher'
 import { ACTIVE_PROJECT_STORAGE_KEY } from '../lib/activeProject'
-import { getStoredProjectScopeMode, requestOpenProjectSwitcher, setStoredProjectScopeMode } from '../lib/projectScope'
+import { adoptLinkedAppScope, getStoredProjectScopeMode, requestOpenProjectSwitcher, setStoredProjectScopeMode } from '../lib/projectScope'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -146,6 +146,20 @@ describe('ProjectSwitcher — All apps', () => {
     expect(params().get('apps')).toBe('all')
     expect(chip().textContent).toContain('All apps')
   })
+
+  it.each(['/pipeline', '/reports', '/dashboard', '/ci'])(
+    'a deep link %s?project=<id> opens that one app even when All apps was stored',
+    async (path) => {
+      setStoredProjectScopeMode('all')
+      // main.tsx runs this on the URL the console loads with.
+      expect(adoptLinkedAppScope(`?project=${PROJECT_B}`)).toBe(true)
+      await render(`${path}?project=${PROJECT_B}`)
+      expect(params().has('apps')).toBe(false)
+      expect(params().get('project')).toBe(PROJECT_B)
+      expect(chip().textContent).toContain('yen-yen')
+      expect(getStoredProjectScopeMode()).toBe('project')
+    },
+  )
 
   it('falls back to a real app when the stored one no longer exists, staying in All apps', async () => {
     window.localStorage.setItem(ACTIVE_PROJECT_STORAGE_KEY, GONE)
