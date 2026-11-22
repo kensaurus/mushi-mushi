@@ -137,12 +137,20 @@ describe('StatusStepper', () => {
     expect(host.textContent).toContain('Fixed')
   })
 
-  // Round-3 sweep 2026-11-19: "○ Classified" on almost every row beside the bar.
-  it('draws the resting Classified step as the bar alone in the table row', () => {
+  // Console UX pass 2026-11-22: the table's bar alone was an unlabeled meter.
+  // Every step now prints its word and "n of 4" as text (keyboard and touch
+  // users see it without a tooltip); the resting Classified step stays muted
+  // (round-3 sweep 2026-11-19: "○ Classified" shouted on almost every row).
+  it('labels every table step with its word and "n of 4", Classified muted', () => {
     act(() => root.render(createElement(StatusStepper, { status: 'classified', size: 'table' })))
-    expect(host.querySelector('[data-testid="status-stepper-word"]')).toBeNull()
+    const word = host.querySelector('[data-testid="status-stepper-word"]')
+    expect(word?.textContent).toBe('Classified')
+    expect(word?.className).toContain('text-fg-muted')
+    expect(host.querySelector('[data-testid="status-stepper-step"]')?.textContent).toBe('2 of 4')
     expect(accessibleNames(host)).toEqual(['Status: Classified, step 2 of 4'])
     act(() => root.render(createElement(StatusStepper, { status: 'fixing', size: 'table' })))
+    expect(host.querySelector('[data-testid="status-stepper-word"]')?.className).not.toContain('text-fg-muted')
+    expect(host.querySelector('[data-testid="status-stepper-step"]')?.textContent).toBe('3 of 4')
     expect(host.querySelector('[data-testid="status-stepper-word"]')?.textContent).toBe('Fixing')
   })
 
