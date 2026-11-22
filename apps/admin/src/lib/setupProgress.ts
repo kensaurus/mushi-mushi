@@ -1,7 +1,9 @@
 /**
  * FILE: apps/admin/src/lib/setupProgress.ts
  * PURPOSE: Shared helpers for rendering setup progress in compact UI
- *          (project switcher, chips, tooltips). Mirrors /v1/admin/setup:
+ *          (project switcher, chips, tooltips). Mirrors /v1/admin/setup, whose
+ *          steps come from the server's one list
+ *          (packages/server/supabase/functions/_shared/setup-steps.ts):
  *
  *          Required (4) — must complete for `done: true`:
  *            project_created, api_key_generated, sdk_installed,
@@ -19,6 +21,11 @@ import type { SetupProject } from './useSetupStatus'
  * applied to the Setup page's stats. The activation payload counts the SDK
  * step as optional, so the page said "ready, 3/3" while setup said 3/4 with
  * the SDK never seen (mushi-demo, 2026-10-26). Ready only when both agree.
+ *
+ * Since the server reads one step list (_shared/setup-steps.ts), the activation
+ * payload and /v1/admin/setup agree, so with a current `api` deploy this
+ * changes nothing. It stays as a guard while an older `api` may still answer;
+ * remove it (and its call in OnboardingPage.tsx) once that deploy is live.
  */
 export function withSetupRequiredCounts<
   T extends {
