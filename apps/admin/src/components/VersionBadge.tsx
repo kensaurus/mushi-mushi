@@ -41,6 +41,7 @@ import {
 } from './icons'
 import { headerDropdownPanelClass } from '../lib/appChrome'
 import { CHIP_TONE } from '../lib/chipTone'
+import { formatStamp } from '../lib/buildInfo'
 
 interface VersionBadgeProps {
   whatsNew: ReturnType<typeof useWhatsNew>
@@ -192,7 +193,7 @@ function VersionPill({
               : 'border-edge/70 bg-surface-overlay text-fg-secondary'
   return (
     <span
-      className={`inline-flex min-w-11 items-center justify-center rounded-full border px-1.5 py-0.5 font-mono text-2xs font-medium tabular-nums leading-none shrink-0 ${toneClass}`}
+      className={`inline-flex min-w-11 items-center justify-center rounded-sm px-1.5 py-px font-mono text-2xs font-medium tabular-nums leading-none shrink-0 ${toneClass}`}
     >
       {version}
     </span>
@@ -233,7 +234,7 @@ function SectionDivider({
   return (
     <div className="flex items-center gap-2">
       {icon && theme && <ThemeIconChip icon={icon} theme={theme} />}
-      <p className={`text-2xs font-semibold uppercase tracking-wider shrink-0 ${labelClass}`}>{label}</p>
+      <p className={`text-2xs font-semibold shrink-0 ${labelClass}`}>{label}</p>
       <div className="h-px flex-1 bg-edge" aria-hidden="true" />
       {trailing}
     </div>
@@ -360,8 +361,8 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
         // installed SDK lives on Connect.
         aria-label={`Versions — latest web SDK release ${__SDK_WEB_VERSION__}, Admin console ${__APP_VERSION__}${whatsNew.hasUnread ? ', new updates available' : ''}`}
         title={`Latest @mushi-mushi/web release ${__SDK_WEB_VERSION__} · Admin app ${__APP_VERSION__} · ${__BUILD_SHA__}. Your project's installed SDK is on Connect.`}
-        className={`group relative inline-flex min-w-0 max-w-full items-center gap-1.5 h-6 px-2 rounded-full border border-edge bg-surface-raised hover:bg-surface-overlay motion-safe:transition-[transform,opacity] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
-          open ? 'bg-surface-overlay border-edge-subtle' : ''
+        className={`group relative inline-flex min-w-0 max-w-full items-center gap-1.5 h-6 px-2 rounded-sm hover:bg-surface-overlay motion-safe:transition-[transform,opacity] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
+          open ? 'bg-surface-overlay' : ''
         }`}
       >
         {/* Compact (md..lg): SDK version only — the figure embedders watch. */}
@@ -375,7 +376,7 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
         </span>
         <span
           aria-hidden
-          className="hidden lg:inline text-2xs font-semibold uppercase tracking-wider leading-none"
+          className="hidden lg:inline text-2xs font-semibold leading-none"
           title="Latest @mushi-mushi/web release on npm"
         >
           <span className={SDK_LABEL}>Latest SDK</span>
@@ -395,7 +396,7 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
         </span>
         <span
           aria-hidden
-          className="hidden 2xl:inline text-2xs font-semibold uppercase tracking-wider leading-none"
+          className="hidden 2xl:inline text-2xs font-semibold leading-none"
           title="This admin console (Vite SPA) — not the customer-facing SDK"
         >
           <span className={ADMIN_LABEL}>Admin</span>
@@ -409,7 +410,7 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
         {whatsNew.hasUnread && (
           <span
             aria-hidden
-            className="ml-0.5 inline-block h-1.5 w-1.5 rounded-full bg-brand motion-safe:animate-pulse"
+            className="ml-0.5 inline-block h-1.5 w-1.5 rounded-full bg-accent motion-safe:animate-pulse"
             title="New release notes"
           />
         )}
@@ -426,7 +427,7 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
             <div>
               <div className="flex items-center gap-1.5">
                 <ThemeIconChip icon={IconGauge} theme={ACCENT_THEMES.accent} />
-                <p className="text-2xs font-semibold uppercase tracking-wider text-accent leading-none">Running</p>
+                <p className="text-2xs font-semibold text-accent leading-none">Running</p>
               </div>
               <p className="mt-1 flex flex-wrap items-center gap-1.5 text-sm font-semibold text-fg leading-none">
                 <span>
@@ -445,7 +446,7 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
             </div>
             <div className="text-right shrink-0 space-y-1">
               <VersionPill version={__BUILD_SHA__} />
-              <p className="text-2xs text-fg-faint leading-none">{__BUILD_DATE__}</p>
+              <p className="text-2xs text-fg-faint leading-none font-mono tabular-nums">{formatStamp(__BUILD_TIME__) ?? __BUILD_DATE__}</p>
               <a
                 href={REPO_URL}
                 target="_blank"
@@ -598,7 +599,7 @@ function PackageGroup({ id, children }: { id: PackageGroupId; children: ReactNod
     <div className={`rounded-md border border-edge-subtle/80 border-l-[3px] ${meta.rail} bg-surface/40 overflow-hidden`}>
       <div className={`flex items-center gap-1.5 border-b px-2 py-1 ${meta.header}`}>
         <ThemeIconChip icon={GroupIcon} theme={meta} size={12} />
-        <p className={`text-2xs font-semibold uppercase tracking-wider ${meta.text}`}>{id}</p>
+        <p className={`text-2xs font-semibold ${meta.text}`}>{id}</p>
       </div>
       <div className="grid grid-cols-2 gap-x-2 px-1 py-0.5">
         {rows}

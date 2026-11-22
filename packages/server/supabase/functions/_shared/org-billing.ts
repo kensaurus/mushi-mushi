@@ -1,7 +1,7 @@
 /**
  * FILE: packages/server/supabase/functions/_shared/org-billing.ts
  * PURPOSE: A paid plan belongs to the team (organization), not to one app
- *          (VISION.md §2.2: apps, seats, diagnoses, overage and the spend cap
+ *          (docs/VISION.md §2.2: apps, seats, diagnoses, overage and the spend cap
  *          are limits per team). This is the one place that answers "which
  *          plan is this team on?" and "how much has this team used?".
  *
@@ -161,7 +161,7 @@ export async function resolveProjectBilling(
 ): Promise<OrgBilling> {
   const { data, error } = await db
     .from('projects')
-    .select('organization_id, organizations(billing_mode, plan_id)')
+    .select('organization_id, organizations!projects_organization_id_fkey(billing_mode, plan_id)')
     .eq('id', projectId)
     .maybeSingle()
   if (error) throw new Error(`projects read failed: ${error.message}`)

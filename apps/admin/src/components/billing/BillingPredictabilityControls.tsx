@@ -99,7 +99,7 @@ export function BillingPredictabilityControls({
   return (
     <ContainedBlock tone="muted" className="p-3 space-y-3">
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs font-semibold uppercase tracking-wider text-fg-secondary">
+        <span className="text-xs font-semibold text-fg-secondary">
           Predictability controls
         </span>
         <ConfigHelp helpId="billing.spend_cap" />

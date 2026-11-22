@@ -16,7 +16,8 @@
  */
 
 import { useState } from 'react'
-import { Badge, Btn, Callout, DisclosurePanel, Input, Loading, Section, SelectField } from '../ui'
+import { Badge, Btn, Callout, DisclosurePanel, Input, Section, SelectField } from '../ui'
+import { TimedLoading } from './TimedLoading'
 import { usePageData } from '../../lib/usePageData'
 import { apiFetchMutate, apiFetchRaw } from '../../lib/supabase'
 import { actionErrorText } from '../../lib/actionErrorText'
@@ -123,12 +124,13 @@ export function AccountsRegisterCard({ orgId }: { orgId: string }) {
 
   return (
     <Section title="Accounts and resilience">
-      <p className="mb-3 text-xs text-fg-muted">
-        Every account your apps depend on, who owns it, and who else can get in if that person cannot. Names and contacts only: never
-        passwords, keys or recovery codes. Everything here is what you declare; Mushi Mushi cannot see a provider's own settings.
+      {/* One line, the rule the user must keep; what the register is lives in the page's
+          "How this page works" help (2026-11-18: the card opened with two sentences). */}
+      <p className="mb-2 text-xs text-fg-muted" data-testid="accounts-intro">
+        Names and contacts only: never passwords, keys or recovery codes.
       </p>
       {error && <PageLoadError error={error} resource="accounts and resilience" endpoint={path} onRetry={reload} />}
-      {loading && !data && <Loading text="Reading the register…" />}
+      <TimedLoading waiting={loading && !data && !error} text="Reading the register…" what="Accounts register" onRetry={reload} testId="portfolio-accounts-not-checked" />
       {notice && (
         <Callout tone={notice.tone}>
           <span role="status">{notice.text}</span>
@@ -228,7 +230,7 @@ export function AccountsRegisterCard({ orgId }: { orgId: string }) {
               }}
             >
               <div className="flex flex-col gap-2 p-3">
-                <div className="grid gap-2 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <SelectField label="Provider" value={form.provider} onChange={(e) => set('provider', e.target.value as AccountForm['provider'])}>
                     {ACCOUNT_PROVIDERS.map((p) => <option key={p} value={p}>{PROVIDER_LABEL[p]}</option>)}
                   </SelectField>

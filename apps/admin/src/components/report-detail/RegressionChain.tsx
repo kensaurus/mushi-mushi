@@ -21,7 +21,7 @@ export function RegressionChain({ report, className = '' }: RegressionChainProps
 
   return (
     <Card className={`p-3 ${className}`}>
-      <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-fg-secondary mb-2">
+      <h3 className="flex items-center gap-1.5 text-xs font-semibold text-fg-secondary mb-2">
         <IconLink /> Regression chain
       </h3>
       <ul className="space-y-1.5 text-xs text-fg-secondary">

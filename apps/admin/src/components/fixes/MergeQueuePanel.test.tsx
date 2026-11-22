@@ -54,9 +54,9 @@ async function render(projectId: string | null = 'p1') {
   })
 }
 
-async function answer(rows: unknown[], release: unknown[] = []) {
+async function answer(rows: unknown[], release: unknown[] = [], trains: unknown[] = []) {
   await act(async () => {
-    mocks.resolve?.({ ok: true, data: { rows, trains: [], release } })
+    mocks.resolve?.({ ok: true, data: { rows, trains, release } })
   })
 }
 
@@ -121,5 +121,52 @@ describe('MergeQueuePanel', () => {
   it('renders nothing without an active app', async () => {
     await render(null)
     expect(host.innerHTML).toBe('')
+  })
+})
+
+describe('MergeQueuePanel as a picture (2026-11-18)', () => {
+  const stage = (id: string) => host.querySelector(`[data-testid="train-stage-${id}"]`)!
+
+  it('draws the queue as a stage train with counts, colouring only held and merged', async () => {
+    await render()
+    await answer(
+      [
+        row({ id: 'a', state: 'queued' }),
+        row({ id: 'b', state: 'queued', pr_number: 8 }),
+        row({ id: 'c', state: 'resolving', pr_number: 9 }),
+        row({ id: 'd', state: 'blocked', pr_number: 10, detail: 'The follow-up Cursor key cannot be used here (key_used_up).' }),
+        row({ id: 'e', state: 'merged', pr_number: 11, merged_at: '2026-10-24T01:00:00Z' }),
+      ],
+      [{ projectId: 'p1', mode: 'train', intervalMinutes: 360, maxMembers: 15 }],
+      [{ id: 't1', project_id: 'p1', repo: 'o/r', pr_number: 99, state: 'testing', members: [1, 2, 3], attempt: 1, detail: null, created_at: '2026-10-24T00:00:00Z', updated_at: '2026-10-24T00:00:00Z', merged_at: null }],
+    )
+    const train = host.querySelector('[data-testid="merge-queue-train"]')!
+    expect(train.querySelector('figcaption')!.textContent).toBe('Merge queue: Queued 2, Waiting 0, Agent resolving 1, Held 1, Train running 3, Merged today 1')
+    expect(stage('held').getAttribute('data-tone')).toBe('warn')
+    expect(stage('held').textContent).toContain('1 key used up')
+    expect(stage('queued').getAttribute('data-tone')).toBe('neutral')
+    expect(stage('train').getAttribute('data-tone')).toBe('neutral')
+    expect(stage('merged').getAttribute('data-tone')).toBe('ok')
+    // The paragraph is now one short line.
+    expect(train.textContent).toContain('one release train every 6 hours')
+    expect(host.textContent).not.toContain('one branch, one CI run, one merge, so they ship as one release')
+  })
+
+  it('shows a held reason as a plain-word chip, never the raw code', async () => {
+    await render()
+    await answer([row({ id: 'd', state: 'blocked', detail: 'The follow-up Cursor key cannot be used here (key_used_up).' })])
+    const chip = host.querySelector('[data-testid="merge-queue-row-d-why"]')!
+    expect(chip.textContent).toBe('key used up')
+    expect(chip.getAttribute('title')).toContain('(key_used_up)')
+    expect(host.querySelector('[data-testid="merge-queue-row-d"]')!.textContent).not.toContain('key_used_up')
+    // A held row is a failed mark: it waits on you.
+    expect(host.querySelector('[data-testid="merge-queue-row-d"] [data-testid="status-pill"]')?.getAttribute('data-status')).toBe('failed')
+  })
+
+  it('a queued row has no reason chip', async () => {
+    await render()
+    await answer([row({ id: 'a' })])
+    expect(host.querySelector('[data-testid="merge-queue-row-a-why"]')).toBeNull()
+    expect(host.querySelector('[data-testid="merge-queue-row-a"] [data-testid="status-pill"]')?.getAttribute('data-status')).toBe('waiting')
   })
 })

@@ -46,6 +46,70 @@ The setup adds `mushi-mushi` to your `package.json` and writes your two settings
 
 More detail on each: [what it does](https://kensaur.us/mushi-mushi/docs/what-it-does).
 
+## Page by page
+
+Nine pages of the console, recorded on the maker's own apps (glot.it, tsumagoi, Help Her Take Photo, yen-yen and more). Real data, nothing staged; other people's emails and keys are masked. Each page has a longer write-up in the [console guide](https://kensaur.us/mushi-mushi/docs/admin).
+
+### Find out what broke
+
+**Home: the coffee-length check**  
+*Open it when* you just woke up and want to know whether your app survived the night.  
+Is the site up, what broke, which pull requests wait for you and what ships next, on one screen per app.
+
+<img src="https://raw.githubusercontent.com/kensaurus/mushi-mushi/master/docs/media/tour/dashboard.gif" alt="Home for one app: site status, what needs you, the release train, pages with bugs and who can reach the repo" width="800" />
+
+**Bugs: every report, already sorted**  
+*Open it when* a user wrote “it's broken” and you need to know how bad, how many and where.  
+Reports from your users, Sentry and your own checks land in one list. “Fix first” ranks open bugs by severity and by how many people they reached.
+
+<img src="https://raw.githubusercontent.com/kensaurus/mushi-mushi/master/docs/media/tour/reports.gif" alt="The Bugs list across all apps: severity tiles, Fix first, and reports from users and Sentry with their status" width="800" />
+
+**Bug detail: the cause in plain English**  
+*Open it when* you don't fully understand the code your AI wrote, and now you need to.  
+Each report gets a diagnosis: what the person saw, why it broke, the file at fault, and a fix prompt to paste into Claude Code, Cursor or any MCP client.
+
+<img src="https://raw.githubusercontent.com/kensaurus/mushi-mushi/master/docs/media/tour/report-detail.gif" alt="One bug report: its plain-English classification, the fix prompt for your coding agent, and the evidence behind it" width="800" />
+
+### Get it fixed
+
+**Fixes: what your agent tried**  
+*Open it when* you sent a few bugs to an agent and want to know which fixes are safe to merge.  
+Every attempt with its pull request, review verdict and CI. Ready ones sit at the top; the ones that stopped say why.
+
+<img src="https://raw.githubusercontent.com/kensaurus/mushi-mushi/master/docs/media/tour/fixes.gif" alt="Fixes: pull requests ready to merge with their review and CI state, then every attempt with its outcome" width="800" />
+
+**Pipeline: where fixes get stuck**  
+*Open it when* bugs go in, but nothing seems to come out the other end.  
+Every stage from report to deploy, with stuck items counted and the action for each group (re-run CI, re-run the review, close the PR) right beside it.
+
+<img src="https://raw.githubusercontent.com/kensaurus/mushi-mushi/master/docs/media/tour/pipeline.gif" alt="Pipeline: stage cards from reported to deployed, then the stuck groups with an action button each" width="800" />
+
+**CI runners: why the merge is still waiting**  
+*Open it when* a fix is done but its tests haven't run, or your Actions bill jumped.  
+Which jobs wait for which machine and for how long, what every machine is running, and how long each job usually takes. On a big screen it uses the whole width.
+
+<img src="https://raw.githubusercontent.com/kensaurus/mushi-mushi/master/docs/media/tour/ci.gif" alt="CI runners: what needs a look, the machines running now, jobs with time left, the queue and job times" width="800" />
+
+### Keep it from coming back
+
+**Lessons: never the same bug a fourth time**  
+*Open it when* you have fixed the same kind of bug twice and you're tired of it.  
+Bugs that keep coming back become rules, and your editor reads them over MCP before it writes the next fix.
+
+<img src="https://raw.githubusercontent.com/kensaurus/mushi-mushi/master/docs/media/tour/lessons.gif" alt="Lessons: rules learned from repeated bugs, each with how often it was seen and where it came from" width="800" />
+
+**Checks: is my app OK?**  
+*Open it when* you want one answer before you ship.  
+Every automatic check in one grid (the full-stack audit, scheduled browser tests, triage grading and more), failing ones first.
+
+<img src="https://raw.githubusercontent.com/kensaurus/mushi-mushi/master/docs/media/tour/checks.gif" alt="Checks: every automatic check for one app in a grid, failing ones first" width="800" />
+
+**Connect: Mushi Mushi inside your editor**  
+*Open it when* you'd rather ask your editor than open another dashboard.  
+Pick your AI client and run one command; your editor can then ask what broke and pull the fix context. The SDK, GitHub and upgrade PRs live here too.
+
+<img src="https://raw.githubusercontent.com/kensaurus/mushi-mushi/master/docs/media/tour/connect.gif" alt="Connect: pick an AI client, the one-command MCP setup, GitHub, SDK keys and the install snippet" width="800" />
+
 ## Ask your AI editor to do it
 
 Paste this into Cursor, Claude Code or any AI editor that can run commands:
@@ -99,7 +163,7 @@ export default [mushi.configs.recommended]
 
 ## Free to start
 
-The free plan covers one app and 100 diagnoses a month, with no card and no AI key of your own. Repeat reports of one bug count once. [Pricing](https://kensaur.us/mushi-mushi/docs/pricing).
+The free plan covers three apps and 300 diagnoses a month, with no card and no AI key of your own. Repeat reports of one bug count once. [Pricing](https://kensaur.us/mushi-mushi/docs/pricing).
 
 You don't need Sentry or any monitoring tool. If you have one, Mushi Mushi can read its errors too.
 
@@ -111,6 +175,7 @@ npx mushi-mushi --framework next      # skip framework detection
 npx mushi-mushi --cwd apps/web        # run inside a monorepo package
 npx mushi-mushi --skip-install        # print the install command instead
 npx mushi-mushi --audit               # health-check an existing install
+npx mushi-mushi --dry-run             # show what it would install and write; change nothing
 npx mushi-mushi --endpoint https://mushi.your-company.com   # self-hosted
 npx mushi-mushi -y --project-id <uuid> --api-key mushi_xxx  # CI, no prompts
 npx mushi-mushi --help
@@ -148,10 +213,11 @@ MIT © [Kenji Sakuramoto](https://github.com/kensaurus). The server packages are
 | <img src="https://kensaur.us/yen-yen/icon.svg" width="28" height="28" alt=""> | [yen-yen](https://kensaur.us/yen-yen/?utm_source=github&utm_medium=readme) | Where did the money go? Now you'll know. A kakeibo for households |
 | <img src="https://kensaur.us/the-wanting-mind/pwa-512x512.png" width="28" height="28" alt=""> | [The Wanting Mind](https://kensaur.us/the-wanting-mind/?utm_source=github&utm_medium=readme) | How the Battle Between Extraction and Generation Is Reshaping Our World — a 147,000-word interactive webbook with 268 concepts, 242 citations, and original illustrations |
 | <img src="https://kensaur.us/help-her-take-photo/assets/apple-touch-icon.png" width="28" height="28" alt=""> | [Help Her Take Photo](https://kensaur.us/help-her-take-photo/?utm_source=github&utm_medium=readme) | Pair phones, direct the pose, nail the photo |
-| <img src="https://talk.kensaur.us/pwa-192.png" width="28" height="28" alt=""> | [Cooler Heads](https://talk.kensaur.us/?utm_source=github&utm_medium=readme) | Practice hard conversations before you have them |
+| <img src="https://talk.kensaur.us/pwa-192.png" width="28" height="28" alt=""> | [lets-talk](https://talk.kensaur.us/?utm_source=github&utm_medium=readme) | Practice hard conversations before you have them |
 | <img src="https://solo-boss.kensaur.us/apple-touch-icon.png" width="28" height="28" alt=""> | [一人社長 Solo Boss](https://solo-boss.kensaur.us/?utm_source=github&utm_medium=readme) | Bookkeeping and tax-filing co-pilot for one-person companies in Japan |
-| <img src="https://tsumagoi.kensaur.us/apple-touch-icon.png" width="28" height="28" alt=""> | [Tsumagoi Work&Camp 嬬恋牧場](https://tsumagoi.kensaur.us/?utm_source=github&utm_medium=readme) | Coworking camp at 1,444 m — [Instagram](https://www.instagram.com/tsumagoicamp/) · [Facebook](https://www.facebook.com/profile.php?id=61592113053042) · [Maps](https://maps.app.goo.gl/JCNnTfsdQVHCS1FA7) |
+| <img src="https://tsumagoi.kensaur.us/apple-touch-icon.png" width="28" height="28" alt=""> | [Tsumagoi Work&Camp](https://tsumagoi.kensaur.us/?utm_source=github&utm_medium=readme) | Coworking camp at 1,444 m — [Instagram](https://www.instagram.com/tsumagoicamp/) · [Facebook](https://www.facebook.com/profile.php?id=61592113053042) · [Maps](https://maps.app.goo.gl/JCNnTfsdQVHCS1FA7) |
 | <img src="https://github.com/kensaurus.png" width="28" height="28" alt=""> | [kenji skills](https://github.com/kensaurus/skills) | Agent skills and slash commands for Claude Code, Cursor, Codex, and Gemini |
+| <img src="https://raw.githubusercontent.com/kensaurus/lazycow-studio/main/server/brand/icon-192.png" width="28" height="28" alt=""> | [Lazycow Studio](https://github.com/kensaurus/lazycow-studio) | Turns your own footage into reels and books the posts; you only approve. Open source — [npm `lazycow`](https://www.npmjs.com/package/lazycow) · [Connect your AI agent (MCP)](https://github.com/kensaurus/lazycow-studio/blob/main/docs/mcp.md) |
 | <img src="https://kensaur.us/favicon.svg" width="28" height="28" alt=""> | [kensaur.us](https://kensaur.us/?view=portfolio&utm_source=github&utm_medium=readme) | All apps from the same maker |
 
 All apps live under [kensaur.us](https://kensaur.us).

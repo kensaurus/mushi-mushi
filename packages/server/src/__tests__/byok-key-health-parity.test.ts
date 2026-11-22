@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   byokKeyHealth,
+  countByokKeysNeedingAction,
   legacyKeyStatus,
   type ByokKeyHealthInput,
 } from '../../supabase/functions/_shared/byok-key-health.ts'
@@ -139,3 +140,22 @@ it('a Cursor key used up for its plan reads as attention on both sides (2026-10-
   expect(byokKeyHealth(back, [back], NOW)).toBe('working')
 })
 
+
+describe('countByokKeysNeedingAction — one number for the sidebar and the Settings banner', () => {
+  const ok = (over: Partial<ByokKeyHealthInput> = {}): ByokKeyHealthInput => ({
+    provider_slug: 'anthropic', status: 'active', test_status: 'ok', ...over,
+  })
+  it('counts broken and unchecked keys and a second working copy, not working or turned-off keys', () => {
+    const keys: ByokKeyHealthInput[] = [
+      ok({ key_hint: 'ab12', created_at: '2026-01-01' }),
+      ok({ key_hint: 'ab12', created_at: '2026-02-01' }), // second copy of the same key
+      ok({ provider_slug: 'openai', test_status: null }), // never checked
+      ok({ provider_slug: 'firecrawl', test_status: 'error_auth' }), // broken, nothing replaces it
+      ok({ provider_slug: 'browserbase', status: 'disabled' }), // a choice, never asks
+    ]
+    expect(countByokKeysNeedingAction(keys)).toBe(3)
+  })
+  it('is 0 when every key works and none is a copy', () => {
+    expect(countByokKeysNeedingAction([ok({ key_hint: 'a1' }), ok({ provider_slug: 'openai', key_hint: 'b2' })])).toBe(0)
+  })
+})

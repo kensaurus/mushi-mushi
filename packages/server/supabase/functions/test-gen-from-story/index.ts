@@ -289,13 +289,13 @@ Write a comprehensive Playwright TDD test for this user story.`
       // withAnthropicOrOpenAi takes TWO separate callbacks (anthropicFn,
       // openAiFn) and returns { result, usedProvider }. Each callback receives
       // exactly one ResolvedKey from its own provider pool.
-      const { result, usedProvider } = await withAnthropicOrOpenAi(
+      const { result, usedProvider, model: routeModel } = await withAnthropicOrOpenAi(
         db,
         project_id,
         async (anthropicKey) => {
-          const { object } = await withLlmUsage(db, { ...usageCtx, model: TEST_GEN_MODEL, keySource: anthropicKey.source }, () => claudeGenerateObject({
+          const { object } = await withLlmUsage(db, { ...usageCtx, model: anthropicKey.model ?? TEST_GEN_MODEL, keySource: anthropicKey.source }, () => claudeGenerateObject({
             apiKey: anthropicKey.key,
-            model: TEST_GEN_MODEL,
+            model: anthropicKey.model ?? TEST_GEN_MODEL,
             effort: TEST_GEN_EFFORT,
             system: SYSTEM_PROMPT,
             prompt,
@@ -306,8 +306,8 @@ Write a comprehensive Playwright TDD test for this user story.`
           return object
         },
         async (openaiKey) => {
-          const { object } = await withLlmUsage(db, { ...usageCtx, model: STAGE2_FALLBACK, keySource: openaiKey.source }, () => generateObject({
-            model: openAiProvider({ apiKey: openaiKey.key, baseURL: openaiKey.baseUrl })(STAGE2_FALLBACK, { structuredOutputs: false }),
+          const { object } = await withLlmUsage(db, { ...usageCtx, model: openaiKey.model ?? STAGE2_FALLBACK, keySource: openaiKey.source }, () => generateObject({
+            model: openAiProvider({ apiKey: openaiKey.key, baseURL: openaiKey.baseUrl })(openaiKey.model ?? STAGE2_FALLBACK, { structuredOutputs: false }),
             system: SYSTEM_PROMPT,
             prompt,
             schema: testGenSchema,
@@ -315,9 +315,10 @@ Write a comprehensive Playwright TDD test for this user story.`
           }))
           return object
         },
+        { feature: 'test-gen-from-story', tier: 'standard' },
       )
       output = result
-      llmSpan.end({ model: usedProvider === 'openai' ? STAGE2_FALLBACK : TEST_GEN_MODEL })
+      llmSpan.end({ model: routeModel ?? (usedProvider === 'openai' ? STAGE2_FALLBACK : TEST_GEN_MODEL) })
       await trace.end()
     } catch (err) {
       llmSpan.end({ model: TEST_GEN_MODEL, error: err instanceof Error ? err.message : String(err) })

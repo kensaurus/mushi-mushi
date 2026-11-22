@@ -83,7 +83,11 @@ self.addEventListener('install', (event) => {
           }
         }),
       )
-      await self.skipWaiting()
+      // First install: take over at once (nothing to replace). An update
+      // waits until the page posts SKIP_WAITING from its "New version —
+      // Reload" banner (lib/swUpdate.ts), so a deploy never reloads a page
+      // mid-load or mid-form.
+      if (!self.registration.active) await self.skipWaiting()
     })(),
   )
 })
@@ -252,9 +256,9 @@ self.addEventListener('notificationclick', (event) => {
   )
 })
 
-// The update flow is "autoUpdate": a new SW skips waiting on install and
-// claims clients on activate (see above). A page that wants to force the
-// swap can still post SKIP_WAITING.
+// The update flow is "prompt": an updated SW waits after install until the
+// page's "New version — Reload" banner posts SKIP_WAITING, then claims the
+// clients on activate (see above) and the page reloads once.
 self.addEventListener('message', (event) => {
   // Only act on messages from our own pages. A service worker's message port
   // is reachable from any client it controls, so the sender is checked before

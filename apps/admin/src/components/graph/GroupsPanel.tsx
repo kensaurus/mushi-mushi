@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { apiFetch } from '../../lib/supabase'
 import { usePageData } from '../../lib/usePageData'
 import { useToast } from '../../lib/toast'
-import { Card, Btn, ErrorAlert, EmptyState, Badge, RelativeTime } from '../ui'
+import { Card, Btn, ErrorAlert, Badge, RelativeTime } from '../ui'
 import { Modal } from '../Modal'
 import { TableSkeleton } from '../skeletons/TableSkeleton'
 
@@ -73,10 +73,12 @@ export function GroupsPanel() {
         <div>
           <h3 className="text-xs font-semibold text-fg-secondary">Report groups</h3>
           <p className="text-2xs text-fg-faint">
-            Reports the LLM clustered as duplicates of the same underlying bug. Merge two groups when the dedup signature missed a match.
+            Reports with the same root cause. Merge two when a match was missed.
           </p>
         </div>
-        <span className="text-2xs font-mono text-fg-faint">{groups.length} groups</span>
+        {groups.length > 0 ? (
+          <span className="shrink-0 whitespace-nowrap text-2xs tabular-nums text-fg-faint">{groups.length} groups</span>
+        ) : null}
       </div>
 
       {loading ? (
@@ -84,10 +86,7 @@ export function GroupsPanel() {
       ) : error ? (
         <ErrorAlert message={error} onRetry={reload} />
       ) : groups.length === 0 ? (
-        <EmptyState
-          title="No groups yet"
-          description="Mushi Mushi groups reports with the same root cause. They'll appear here once your project has a few classified reports."
-        />
+        <p className="text-2xs text-fg-muted">No groups yet. They appear once a few reports are explained.</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-2xs">
@@ -121,7 +120,7 @@ export function GroupsPanel() {
                     <td className="px-2 py-1.5">
                       <Badge className={sevTone}>{severity ?? 'Not set'}</Badge>
                     </td>
-                    <td className="px-2 py-1.5 text-right font-mono tabular-nums">
+                    <td className="px-2 py-1.5 text-right tabular-nums">
                       {g.report_count}
                     </td>
                     <td className="px-2 py-1.5 text-fg-muted">

@@ -122,3 +122,14 @@ export function seatBillingExplainer(ctx: SeatBillingContext): {
     calloutLabel: nearCap ? 'Seat limit' : 'Seat usage',
   }
 }
+
+/**
+ * Members only shows the seat card when it says something the page does not
+ * already: the Seats tile, the readout and the status line all carry "3/5", and
+ * a Teams-off app already gets the upgrade banner (owner, 2026-11-18: "Seat
+ * usage" repeated 3/5). Left: a seat-limited plan one seat from its cap.
+ */
+export function membersSeatCalloutHasNews(ctx: SeatBillingContext): boolean {
+  if (!ctx.teamsEnabled || ctx.seatLimit === null) return false
+  return seatBillingExplainer(ctx).tone === 'warn'
+}

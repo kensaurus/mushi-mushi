@@ -66,6 +66,52 @@ describe('vercel probe', () => {
   })
 })
 
+describe('anthropic probe', () => {
+  /** projects → organization_id, organizations → ai_provider (ai-provider.ts reads them with two plain selects). */
+  function orgDb(aiProvider: 'anthropic' | 'openai') {
+    return {
+      from: (table: string) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const b: any = {
+          select: () => b,
+          eq: () => b,
+          maybeSingle: async () => ({
+            data: table === 'projects' ? { organization_id: 'org-1' } : { ai_provider: aiProvider },
+            error: null,
+          }),
+        }
+        return b
+      },
+    } as never
+  }
+
+  async function loadWithClaudeEnv() {
+    vi.resetModules()
+    vi.stubGlobal('Deno', { env: { get: (k: string) => (k === 'ANTHROPIC_API_KEY' ? 'sk-ant-platform' : undefined) } })
+    return import('../../supabase/functions/_shared/integration-probes.ts')
+  }
+
+  it('sends nothing to Anthropic for an organization that runs AI on OpenAI', async () => {
+    const { probeIntegration } = await loadWithClaudeEnv()
+    const fetchSpy = vi.fn(async () => new Response('{}', { status: 200 }))
+    vi.stubGlobal('fetch', fetchSpy)
+    const r = await probeIntegration('anthropic', orgDb('openai'), {}, {}, 'project-1')
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(r.status).toBe('unknown')
+    expect(r.detail).toMatch(/OpenAI/)
+  })
+
+  it('still probes the platform Claude key for an organization on Claude', async () => {
+    const { probeIntegration } = await loadWithClaudeEnv()
+    const fetchSpy = vi.fn(async () => new Response('{}', { status: 200 }))
+    vi.stubGlobal('fetch', fetchSpy)
+    const r = await probeIntegration('anthropic', orgDb('anthropic'), {}, {}, 'project-1')
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    expect(String((fetchSpy.mock.calls[0] as unknown[])[0])).toContain('api.anthropic.com')
+    expect(r.status).toBe('ok')
+  })
+})
+
 describe('manual probe route', () => {
   // Source-level: the Hono app is not booted under vitest.
   const { readFileSync } = require('node:fs') as typeof import('node:fs')

@@ -11,9 +11,12 @@ import { CHIP_TONE } from '../../lib/chipTone'
 
 const FIXED_STATUSES = new Set(['fixed', 'verified', 'resolved'])
 
-/** Neutral row action for a fixed or dismissed report, else null (keep Triage / Fix). */
+/**
+ * Neutral row action for a fixed or dismissed report, else null (keep Triage / Fix).
+ * The Status column already says "✓ Fixed"; a green "Fixed ✓" button beside
+ * it said it twice (R2 sweep 2026-11-18), so a closed row's action is "View".
+ */
 export function closedRowAction(status: string): { label: string; className: string } | null {
-  if (FIXED_STATUSES.has(status)) return { label: 'Fixed ✓', className: `${CHIP_TONE.okSubtle} hover:opacity-90` }
-  if (status === 'dismissed') return { label: 'View', className: `${CHIP_TONE.neutral} hover:text-fg` }
+  if (FIXED_STATUSES.has(status) || status === 'dismissed') return { label: 'View', className: `${CHIP_TONE.neutral} hover:text-fg` }
   return null
 }

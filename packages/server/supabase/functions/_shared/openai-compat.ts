@@ -13,6 +13,7 @@
  */
 import { createOpenAI } from 'npm:@ai-sdk/openai@1'
 import { isOpenRouterBaseUrl, openAiCompatibleModelId } from './openai-model-id.ts'
+import { withRouteParamsFetch } from './route-request-params.ts'
 
 // The id rule lives in an npm-free module so raw-fetch callers can use it
 // without loading the AI SDK. Inside the api function, import this module
@@ -29,7 +30,11 @@ type OpenAiProvider = ReturnType<typeof createOpenAI>
  * sent to api.openai.com (that 401s and marks the key auth_failed).
  */
 export function openAiProvider(options: OpenAiOptions): OpenAiProvider {
-  const base = createOpenAI(isOpenAiHost(options.baseURL) ? { ...options, fetch: withMaxCompletionTokens(options.fetch ?? fetch) } : options)
+  // A KENSAURUS AI route's params (reasoning_effort, body) are added to route
+  // calls only (route-request-params.ts); the max_completion_tokens rewrite
+  // runs on OpenAI's own host.
+  const routed = withRouteParamsFetch(options.fetch ?? fetch)
+  const base = createOpenAI({ ...options, fetch: isOpenAiHost(options.baseURL) ? withMaxCompletionTokens(routed) : routed })
   const make = ((modelId: string, settings?: unknown) =>
     jsonObjectMode((base as unknown as (id: string, s?: unknown) => unknown)(openAiCompatibleModelId(modelId, options.baseURL), settings))
   ) as unknown as OpenAiProvider

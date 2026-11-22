@@ -4,7 +4,7 @@
  * Regression: POST …/qa-stories accepted `target_url` but never wrote it, and
  * PATCH could not set it, so every console-created story ran with no target
  * and ended `no_target_url`. Enabling a story from the console must also
- * approve it, because the runner only checks `enabled`.
+ * approve it. The scheduled runner executes only approval_status = 'approved'.
  */
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 

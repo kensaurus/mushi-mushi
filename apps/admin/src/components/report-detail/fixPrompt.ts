@@ -95,6 +95,7 @@ type PromptReport = Pick<
   | 'app_version'
   | 'sdk_package'
   | 'sdk_version'
+  | 'source'
 >
 
 /** Collapse whitespace and cut to `max` chars with an ellipsis. */
@@ -211,10 +212,61 @@ function fenced(lines: string[]): string {
 }
 
 /**
+ * A setup task Mushi Mushi filed itself (e.g. "Add the Mushi SDK to
+ * kensaur.us"), not a bug a user hit. Keyed on `source = 'sdk_health'`, which
+ * only the server's task route writes. Never on `component`: the classifier
+ * and triage set that on user reports, and a matching user report would put
+ * its own text unfenced into the prompt as "the task".
+ */
+function isSetupTask(report: Pick<PromptReport, 'source'>): boolean {
+  return report.source === 'sdk_health'
+}
+
+/** Files the task's own steps name, `package.json` first when the task names one. */
+function setupTaskFiles(report: PromptReport): string[] {
+  const env = report.environment as Record<string, unknown> | null | undefined
+  const pkg = typeof env?.packageJson === 'string' && env.packageJson ? env.packageJson : null
+  const named = pathsNamedIn(report.description ?? '')
+  return [...(pkg ? [pkg] : []), ...named.filter((p) => p !== pkg)]
+}
+
+/**
+ * The prompt for a setup task. Owner, 2026-11-17 (report "Add the Mushi SDK
+ * to kensaur.us"): the bug prompt cut the steps mid-sentence in a "What the
+ * user said" block, listed code-search noise as likely files, said "Not
+ * diagnosed yet" beside "Diagnosis confidence: 100%", and ended on bug
+ * checks ("You reproduced the bug…"). Here the steps Mushi Mushi wrote are the
+ * prompt, whole: they carry their own "Done when". Only a link-carried copy
+ * (`maxChars` given) is ever shortened, and it says where the rest is.
+ */
+function buildSetupTaskPrompt(report: PromptReport, maxChars: number | null): string {
+  const title = report.title?.trim() || report.summary?.trim() || 'Finish setting up Mushi Mushi in this app'
+  const files = setupTaskFiles(report)
+  const head = [
+    `# ${title} (Mushi report ${report.id})`,
+    '',
+    'This is a setup task Mushi Mushi filed from its SDK check, not a bug a user hit. Follow the steps below; no Mushi tools are required.',
+  ].join('\n')
+  const task = ['## The task', defuse(report.description?.trim() || title)].join('\n')
+  const fileList = files.length > 0 ? ['## Files the steps name', ...files.map((f) => `- \`${f}\``)].join('\n') : ''
+  const tail = [
+    '## When you are done',
+    `Check every "Done when" item above, run the project's tests and build, then open a pull request whose description says "Mushi report ${report.id}".`,
+    'If a step does not fit this repo, say what you found instead of guessing.',
+  ].join('\n')
+  const prompt = [head, task, fileList, tail].filter(Boolean).join('\n\n')
+  if (maxChars == null || prompt.length <= maxChars) return prompt
+  const note = `\n\n[…shortened to fit a link. The full steps are on Mushi report ${report.id}.]\n\n`
+  const room = Math.max(0, maxChars - head.length - tail.length - note.length - 4)
+  return `${head}\n\n${task.slice(0, room).trimEnd()}${note}${tail}`
+}
+
+/**
  * Build the self-contained fix prompt for one report. Pure: same input, same
  * string. Never throws on partial or malformed report rows.
  */
 export function buildFixPrompt(report: PromptReport, options: FixPromptOptions = {}): string {
+  if (isSetupTask(report)) return buildSetupTaskPrompt(report, options.maxChars ?? null)
   const maxChars = options.maxChars ?? FIX_PROMPT_MAX_CHARS
   const includeCode = options.includeCode ?? true
 

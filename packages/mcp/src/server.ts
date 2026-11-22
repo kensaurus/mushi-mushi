@@ -39,6 +39,7 @@ import {
 import { findMushiDoc, mushiDocMarkdownUrl, searchMushiDocs } from './docs-index.js';
 import { wrapUntrustedJson, type UntrustedContentRole } from './wrap-untrusted.js';
 import { installStdoutGuard } from './stdout-guard.js';
+import { sdkKeyNextAction, type SdkKeyFixContext } from './key-scopes.js';
 import { normalizeArgAliases, snakeAliasOf } from './arg-aliases.js';
 import {
   JOURNEY_FINDING_KINDS,
@@ -2375,6 +2376,27 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
 
   // --- Setup / admin tools -----------------------------------------------
 
+  /**
+   * The ingest steps for diagnose_setup. The SDK route answers for a project
+   * key; an account key is refused there (it cannot ingest), so for one the
+   * project is named on the admin route instead of failing the whole check.
+   */
+  async function ingestSetupCall<T>(projectIdForAccountKey: string | undefined): Promise<T> {
+    try {
+      return await apiCall<T>('/v1/sync/ingest-setup');
+    } catch (err) {
+      if (!(err instanceof MushiApiError) || err.code !== 'ORG_KEY_NOT_ALLOWED') throw err;
+      if (!projectIdForAccountKey) {
+        throw new MushiApiError(
+          400,
+          'PROJECT_ID_REQUIRED',
+          'This is an account key: pass projectId (list_projects shows them) to check a project.',
+        );
+      }
+      return apiCall<T>(`/v1/admin/projects/${encodeURIComponent(projectIdForAccountKey)}/ingest-setup`);
+    }
+  }
+
   server.registerTool(
     'diagnose_setup',
     {
@@ -2409,7 +2431,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       const resolvedId = args.projectId ?? projectId;
 
       if (mode === 'ingest') {
-        const data = await apiCall<{
+        const data = await ingestSetupCall<{
           ready: boolean;
           required_complete: number;
           required_total: number;
@@ -2423,7 +2445,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
             hint: string;
           }>;
           diagnostic?: Record<string, unknown>;
-        }>('/v1/sync/ingest-setup');
+        }>(resolvedId);
         const failed = data.steps.filter((s) => s.required && !s.complete);
         const summary = data.ready
           ? `Ingest setup complete (${data.required_complete}/${data.required_total}) for ${data.project_name}.`
@@ -2536,11 +2558,11 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         }
       }
 
-      const ingest = await apiCall<{
+      const ingest = await ingestSetupCall<{
         ready: boolean;
         steps: Array<{ label: string; complete: boolean; required: boolean; hint: string }>;
         project_name?: string;
-      }>('/v1/sync/ingest-setup');
+      }>(resolvedId);
       let dispatchReady = true;
       let dispatchBlock: string | undefined;
       let dispatchChecks: unknown = null;
@@ -5839,6 +5861,8 @@ export interface SetupModeServerConfig {
    * key without mcp:read or mcp:write, such as the report:write SDK key.
    */
   reason?: 'missing-key' | 'sdk-key';
+  /** For `sdk-key`: the project and key source, so the fix is one exact command. */
+  sdkKeyFix?: SdkKeyFixContext;
   fetch?: typeof fetch;
   timeoutMs?: number;
 }
@@ -5862,8 +5886,8 @@ export function createSetupModeServer(config: SetupModeServerConfig): McpServer 
     instructions:
       config.reason === 'sdk-key'
         ? 'Mushi is running in setup mode: the configured API key is an SDK key (report:write). It can send bug ' +
-          'reports but not read them, so only search_mushi_docs, get_mushi_doc and diagnose_setup work. Call ' +
-          'diagnose_setup for how to mint an MCP key (mcp:read), then restart the MCP server.'
+          'reports but not read them, so only search_mushi_docs, get_mushi_doc and diagnose_setup work. Fix: ' +
+          sdkKeyNextAction(MUSHI_CONSOLE_URL, config.sdkKeyFix)
         : 'Mushi is running in setup mode: no API key is configured, so only search_mushi_docs, get_mushi_doc and ' +
           'diagnose_setup work. Call diagnose_setup for the exact steps to connect (run `npx mushi-mushi` or ' +
           '`mushi login`, or put MUSHI_API_KEY in this server\'s env block), then restart the MCP server.',
@@ -5891,8 +5915,7 @@ export function createSetupModeServer(config: SetupModeServerConfig): McpServer 
   if (!spec) throw new Error('[mushi-mcp] diagnose_setup is missing from TOOL_CATALOG');
   const sdkKey = config.reason === 'sdk-key';
   const nextAction = sdkKey
-    ? `Mint an MCP key in the console (${MUSHI_CONSOLE_URL}/mcp → "Mint mcp:read key") or run \`mushi login\`, ` +
-      'put it in MUSHI_API_KEY for this server, then restart it.'
+    ? sdkKeyNextAction(MUSHI_CONSOLE_URL, config.sdkKeyFix)
     : 'Run `npx mushi-mushi` in your project (signs you in and writes the key) or `mushi login`, then restart this MCP server.';
   server.registerTool(
     'diagnose_setup',

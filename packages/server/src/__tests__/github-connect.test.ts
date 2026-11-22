@@ -308,6 +308,28 @@ describe('repository picker', () => {
     expect(kicked).toEqual([P])
   })
 
+  it('linking the same repository again binds the App install and clears the old "no token" error', async () => {
+    // Owner, 2026-11-17: the repo was linked before the App could reach it;
+    // after access was given, Keep left the stale no_token error on the card.
+    ;(state.db as FakeDb).table('project_repos').push({
+      id: 'same',
+      project_id: P,
+      repo_url: 'https://github.com/kensaurus/kensaur.us',
+      is_primary: true,
+      github_app_installation_id: null,
+      last_index_error: 'no_token: neither github_app_installation_id nor project_settings.github_installation_token_ref resolved',
+    })
+    const res = await app().request(`/v1/admin/projects/${P}/github/repo`, {
+      method: 'POST',
+      body: JSON.stringify({ grant: await grantFor(), fullName: 'kensaurus/kensaur.us' }),
+    })
+    expect(res.status).toBe(200)
+    const rows = (state.db as FakeDb).table('project_repos').filter((r) => r.project_id === P)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ github_app_installation_id: 7, last_index_error: null, is_primary: true })
+    expect(kicked).toEqual([P])
+  })
+
   it('an org member sees and saves only the repos they can reach, not every repo the App covers', async () => {
     const list = await app().request(`/v1/admin/projects/${P}/github/repos`, { method: 'POST', body: JSON.stringify({ grant: await grantFor({ r: [101] }) }) })
     const { data } = (await list.json()) as { data: { repos: Array<{ fullName: string }> } }

@@ -17,20 +17,33 @@ interface Props {
   statsFetchedAt: string | null
   statsValidating?: boolean
   statLabels?: Record<string, string>
+  /** Open PRs (fix or not) whose checks passed, from the open-PR list; null until it loads. */
+  readyToMerge?: number | null
 }
 
-function repoSentence(stats: RepoStats): string {
-  if (stats.prOpen === 0) return stats.merged > 0 ? `No fix PRs open; ${pluralizeWithCount(stats.merged, 'fix', 'fixes')} merged.` : 'No fix PRs open.'
-  if (stats.ciFailed > 0) return `${failingCiTitle(stats.ciFailed)}, of ${pluralizeWithCount(stats.prOpen, 'open fix PR')}.`
-  return `${pluralizeWithCount(stats.prOpen, 'fix PR')} open, CI green on ${stats.ciPassing}.`
+/**
+ * @internal Exported for tests. A PR ready to merge leads: "No fix PRs open" above a list
+ * that offers Merge read as a contradiction (fresh-eyes sweep 2026-11-18).
+ */
+export function repoSentence(stats: RepoStats, readyToMerge: number | null = null): string {
+  const ready = readyToMerge && readyToMerge > 0 ? `${pluralizeWithCount(readyToMerge, 'PR')} ready to merge` : null
+  if (stats.prOpen === 0) {
+    if (ready) return `${ready}.`
+    return stats.merged > 0 ? `No fix PRs open; ${pluralizeWithCount(stats.merged, 'fix', 'fixes')} merged.` : 'No fix PRs open.'
+  }
+  const fixes =
+    stats.ciFailed > 0
+      ? `${failingCiTitle(stats.ciFailed)}, of ${pluralizeWithCount(stats.prOpen, 'open fix PR')}`
+      : `${pluralizeWithCount(stats.prOpen, 'fix PR')} open, CI green on ${stats.ciPassing}`
+  return ready ? `${ready}; ${fixes}.` : `${fixes.charAt(0).toUpperCase()}${fixes.slice(1)}.`
 }
 
-export function RepoSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels }: Props) {
+export function RepoSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels, readyToMerge = null }: Props) {
   return (
     <PageStatus
       ariaLabel="Pull requests status"
-      tone={stats.ciFailed > 0 ? 'danger' : stats.prOpen > 0 ? 'info' : 'ok'}
-      sentence={repoSentence(stats)}
+      tone={stats.ciFailed > 0 ? 'danger' : stats.prOpen > 0 || (readyToMerge ?? 0) > 0 ? 'info' : 'ok'}
+      sentence={repoSentence(stats, readyToMerge)}
       freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
       metrics={[
         {

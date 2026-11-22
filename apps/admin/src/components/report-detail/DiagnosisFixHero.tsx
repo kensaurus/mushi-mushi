@@ -19,20 +19,18 @@
  *          "Not sure yet — here's what I'd check first."
  */
 
+import { roundLongDecimals } from '../../lib/format'
+import { summaryPlace } from './summaryPlace'
 import type { ReactNode } from 'react'
-import { Badge } from '../ui'
+import { InfoHint } from '../ui'
+import { Link } from 'react-router-dom'
 import { Card } from '../../components/ui'
 import { IconIntelligence } from '../icons'
-import {
-  SEVERITY,
-  CATEGORY_LABELS,
-  severityLabel,
-  confidenceBadgeClass,
-} from '../../lib/tokens'
 import { reportDiagnosisView, type Stage2Diagnosis } from '../../lib/reportDiagnosis'
 import { FixWithAgentPanel } from './FixWithAgentPanel'
 import { modelLine } from '../../lib/reportInternals'
 import type { ReportDetail } from './types'
+import { VitalText } from '../signal/VitalText'
 
 /** Below this, we hedge instead of asserting a root cause. */
 const LOW_CONFIDENCE = 0.7
@@ -48,12 +46,9 @@ export function DiagnosisFixHero({
   showInternals?: boolean
 }) {
   const conf = report.confidence
-  const confLabel = conf != null ? `${(conf * 100).toFixed(0)}%` : 'n/a'
   const reproHint = (report.stage1_classification as { reproductionHint?: string } | null)
     ?.reproductionHint
-  const summary = report.summary?.trim()
-  const categoryText = CATEGORY_LABELS[report.category] ?? report.category
-  const severityText = report.severity ? severityLabel(report.severity) : null
+  const summary = report.summary ? roundLongDecimals(report.summary.trim()) : undefined
 
   // Stage 2's root cause / fix / repro, when it ran (lib/reportDiagnosis.ts).
   const view = reportDiagnosisView(report)
@@ -61,12 +56,14 @@ export function DiagnosisFixHero({
 
   // Confident enough to lead with an answer?
   const isConfident = Boolean(summary) && (conf == null || conf >= LOW_CONFIDENCE)
+  // The page heading is the summary when there is no title: say it once (sweep 2026-11-18).
+  const summaryInHeading = summaryPlace(report) === 'hero'
 
   // What to check first, when we hedge — the most concrete signals we have.
   const checkFirst = [
     report.component ? `the \`${report.component}\` component` : null,
     reproHint || null,
-    summary || null,
+    summaryInHeading ? null : summary || null,
   ].filter((x): x is string => Boolean(x))
 
   return (
@@ -82,28 +79,15 @@ export function DiagnosisFixHero({
               ? isConfident ? 'Diagnosis' : 'Diagnosis — low confidence'
               : isConfident ? 'Classification' : 'Low confidence — check these first'}
           </div>
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
-            {severityText && (
-              <Badge className={SEVERITY[report.severity!] ?? 'bg-surface-overlay border border-edge-subtle text-fg-muted'}>
-                {severityText}
-              </Badge>
-            )}
-            <Badge className="border border-edge-subtle bg-surface-overlay text-fg-secondary">
-              {categoryText}
-            </Badge>
-            <Badge
-              className={confidenceBadgeClass(conf)}
-              title={conf != null ? `Classifier confidence: ${(conf * 100).toFixed(1)}%` : 'No confidence score'}
-            >
-              {confLabel} sure
-            </Badge>
-          </div>
+          {/* No category or "97% sure" chips here: the LLM classification
+              card shows them, and they were on the page 5x and 4x (round-3
+              sweep 2026-11-19). */}
         </div>
 
         {stage2 ? (
           <Stage2DiagnosisBody diagnosis={stage2} summary={summary ?? null} streaming={view.kind === 'streaming'} showInternals={showInternals} />
         ) : isConfident ? (
-          <p className="text-sm leading-relaxed text-fg-secondary">{summary}</p>
+          summaryInHeading ? null : <p className="text-sm leading-relaxed text-fg-secondary"><VitalText text={summary ?? ''} /></p>
         ) : (
           <div className="text-sm leading-relaxed text-fg-secondary">
             <p>
@@ -169,10 +153,10 @@ function Stage2DiagnosisBody({
   return (
     <div className="space-y-2 text-sm leading-relaxed text-fg-secondary">
       {streaming && <p className="text-2xs text-fg-faint italic">Full diagnosis still running — fields fill in as they arrive.</p>}
-      <DiagnosisField label="Why it broke">{inlineMarkdown(diagnosis.rootCause ?? summary ?? 'No root cause yet.')}</DiagnosisField>
+      <DiagnosisField label="Why it broke">{inlineMarkdown(roundLongDecimals(diagnosis.rootCause ?? summary ?? 'No root cause yet.'))}</DiagnosisField>
       {diagnosis.suggestedFix && (
         <DiagnosisField label="Suggested fix">
-          <span className="whitespace-pre-line">{inlineMarkdown(diagnosis.suggestedFix)}</span>
+          <span className="whitespace-pre-line">{inlineMarkdown(roundLongDecimals(diagnosis.suggestedFix))}</span>
         </DiagnosisField>
       )}
       {diagnosis.reproductionSteps.length > 0 && (
@@ -213,7 +197,7 @@ export function inlineMarkdown(text: string): ReactNode[] {
 function DiagnosisField({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
-      <p className="text-2xs font-medium uppercase tracking-wide text-fg-faint">{label}</p>
+      <p className="text-2xs font-semibold text-fg-secondary">{label}</p>
       <div className="mt-0.5">{children}</div>
     </div>
   )
@@ -233,27 +217,19 @@ function DiagnosisField({ label, children }: { label: string; children: ReactNod
 function Stage2AbsentNote({ view, stage1Model }: { view: ReturnType<typeof reportDiagnosisView>; stage1Model: string | null }) {
   if (view.kind === 'stage1_only') {
     const heuristic = stage1Model === 'heuristic'
+    // One line, the why behind ⓘ and one link (round-3 sweep 2026-11-19: it
+    // was a 3-line paragraph, and the diagnosis graph says the same).
+    const why = heuristic
+      ? 'The AI that explains bugs was not available when this one arrived (its key was out of credits or rejected), so only a rule-based sort ran. For this bug, copy the fix prompt below: your editor\'s AI reads the evidence and works out the cause.'
+      : 'The first check was sure what kind of bug this is, so the full diagnosis (why it broke and how to fix it) did not run. For this bug, copy the fix prompt below: your editor\'s AI reads the evidence and works out the cause. For new bugs, set Quick check confidence to 100% and every bug gets the full diagnosis (each one uses a diagnosis from your plan).'
     return (
-      <div className="mt-1.5 space-y-1 text-2xs text-fg-faint" data-testid="stage2-absent">
-        <p>
-          {heuristic
-            ? 'Quick summary only. The AI that explains bugs was not available when this one arrived (its key was out of credits or rejected), so only a rule-based sort ran and the full diagnosis (why it broke and how to fix it) is missing.'
-            : 'Quick summary only. The first check was sure what kind of bug this is, so the full diagnosis (why it broke and how to fix it) did not run.'}
-        </p>
-        <p>
-          For this bug: copy the fix prompt below; your editor&apos;s AI reads the evidence and works out the cause.{' '}
-          {heuristic ? (
-            <>
-              For new bugs: check the AI key under <strong className="font-medium">Settings → AI keys</strong>.
-            </>
-          ) : (
-            <>
-              For new bugs: set <strong className="font-medium">Settings → General → Quick check confidence</strong> to
-              100% and every bug gets the full diagnosis (each one uses a diagnosis from your plan).
-            </>
-          )}
-        </p>
-      </div>
+      <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-fg-muted" data-testid="stage2-absent">
+        <span>{heuristic ? 'Quick summary only: the AI key was not available.' : 'Quick summary only.'}</span>
+        <InfoHint content={why} />
+        <Link to={heuristic ? '/settings?tab=byok' : '/settings?tab=general'} className="text-link hover:underline">
+          {heuristic ? 'Check AI keys' : 'Change threshold'}
+        </Link>
+      </p>
     )
   }
   if (view.kind === 'failed') {

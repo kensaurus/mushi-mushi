@@ -63,7 +63,7 @@ if you read the Show HN and find one of these false, you can say so.
 - The VS Code extension is either published or marked "deferred" in the
   distribution notes, and is not mentioned on HN until it is published.
 - The privacy policy and terms of service return 200.
-- `CONTRIBUTING.md` promises a first reply on issues within 24 hours on
+- `.github/CONTRIBUTING.md` promises a first reply on issues within 24 hours on
   weekdays.
 - This page tells the truth (done 2026-09-21, updated 2026-10-29).
 - The site's structured data lists only accounts that exist.

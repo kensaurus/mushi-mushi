@@ -33,7 +33,7 @@ export function ConfiguredSecretChip({
 }) {
   return (
     <span
-      className="inline-flex max-w-full items-center gap-1.5 rounded-sm border border-ok/25 bg-ok/5 px-1.5 py-0.5 text-2xs"
+      className="inline-flex max-w-full items-center gap-1.5 rounded-sm bg-ok/5 px-1.5 py-px text-2xs"
       title={`${label} configured`}
     >
       <span className="text-fg-muted shrink-0">{label}</span>

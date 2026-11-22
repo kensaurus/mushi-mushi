@@ -2,17 +2,20 @@ package dev.mushimushi.sdk.widget
 
 import android.app.Dialog
 import android.content.res.Configuration
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
+import android.util.Base64
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.RadioGroup
@@ -26,6 +29,9 @@ import dev.mushimushi.sdk.config.MushiConfig
  * category tag. We avoid the Material `BottomSheetDialogFragment` to keep
  * the SDK free of the Material lib dependency — a thin styled dialog is
  * enough and reduces APK bloat for consumers.
+ *
+ * The screenshot taken when the sheet opened is shown as a preview the
+ * reporter can remove; only what is still shown is sent.
  */
 class MushiBottomSheet : AppCompatDialogFragment() {
 
@@ -125,6 +131,62 @@ class MushiBottomSheet : AppCompatDialogFragment() {
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply { topMargin = dp(8) })
+
+        // Never send an image the reporter cannot see: no preview, no screenshot.
+        val bitmap = attachedScreenshot?.let { shot ->
+            runCatching {
+                val bytes = Base64.decode(shot, Base64.DEFAULT)
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            }.getOrNull()
+        }
+        if (bitmap == null) attachedScreenshot = null
+        if (bitmap != null) {
+            val row = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            val previewHeight = dp(120)
+            val previewWidth = if (bitmap.height > 0) previewHeight * bitmap.width / bitmap.height else previewHeight / 2
+            row.addView(ImageView(ctx).apply {
+                setImageBitmap(bitmap)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                contentDescription = "Screenshot that will be sent with this report"
+                background = GradientDrawable().apply {
+                    setStroke(dp(1), if (resolvedDark) Color.parseColor("#374151") else Color.LTGRAY)
+                    cornerRadius = dpf(6)
+                }
+            }, LinearLayout.LayoutParams(previewWidth, previewHeight))
+            val texts = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(12), 0, 0, 0)
+            }
+            texts.addView(TextView(ctx).apply {
+                text = "Screenshot attached"
+                textSize = 14f
+                setTextColor(textColor)
+            })
+            texts.addView(TextView(ctx).apply {
+                text = "Check it, and remove it if anything private is visible."
+                textSize = 12f
+                setTextColor(hintColor)
+            })
+            texts.addView(Button(ctx).apply {
+                text = "Remove"
+                setAllCaps(false)
+                contentDescription = "Remove screenshot"
+                setOnClickListener {
+                    attachedScreenshot = null
+                    row.visibility = View.GONE
+                    @Suppress("DEPRECATION")
+                    row.announceForAccessibility("Screenshot removed")
+                }
+            })
+            row.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            root.addView(row, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(8) })
+        }
 
         val submit = Button(ctx).apply {
             text = "Submit"

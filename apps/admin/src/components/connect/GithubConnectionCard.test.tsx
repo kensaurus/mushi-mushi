@@ -77,5 +77,24 @@ describe('GithubConnectionCard', () => {
     expect(pageData.usePageData).toHaveBeenCalledWith(null)
     expect(host.textContent).toContain('https://github.com/o/web')
     expect(host.textContent).toContain('Connected')
+    // Connected is the passed status pill (2026-11-18).
+    const pill = host.querySelector('[data-testid="status-pill"]')
+    expect([pill?.getAttribute('data-status'), pill?.textContent]).toEqual(['passed', 'Connected'])
+  })
+
+  // Owner, 2026-11-17: the same status as Integrations, never "Connect GitHub"
+  // for a repo that is linked but the App cannot reach.
+  it('a linked repo the App cannot reach reads "app access missing" with Finish connecting', () => {
+    pageData.usePageData.mockReturnValue({ data: [] })
+    const noAccess = { ...PREFLIGHT, error: null, checks: [{ key: 'github', ready: false }], reload: vi.fn() } as unknown as PreflightState
+    act(() =>
+      root.render(
+        createElement(MemoryRouter, null, createElement(GithubConnectionCard, { projectId: P, preflight: noAccess, fallbackRepoUrl: null })),
+      ),
+    )
+    const text = host.textContent ?? ''
+    expect(text).toContain('Repo linked · app access missing')
+    expect(text).toContain('Finish connecting')
+    expect(text).not.toContain('Connected: o/web')
   })
 })

@@ -183,6 +183,12 @@ export interface CanaryRunDeps {
   now: () => Date;
   sleep: (ms: number) => Promise<void>;
   classify: (db: SupabaseClient, reportId: string, projectId: string) => Promise<void> | void;
+  /**
+   * Called when a canary goes down (its second failing run in a row) or comes
+   * back up (passes after that). site-watch-poll hands these to the Ops hub.
+   * Must not throw.
+   */
+  onTransition?: (t: { projectId: string; canaryId: string; label: string; url: string; state: 'down' | 'up'; detail: string; failingSince: string | null }) => void;
 }
 
 export interface CanaryRunResult {
@@ -240,6 +246,9 @@ export async function runEdgeCanaries(db: SupabaseClient, deps: CanaryRunDeps, o
     if (v.verdict.pass) {
       const { error: upErr } = await db.from('edge_canaries').update({ ...base, fail_streak: 0, failing_since: null }).eq('id', v.c.id);
       if (upErr) throw new Error(`edge_canaries update failed: ${upErr.message}`);
+      if ((v.c.fail_streak ?? 0) >= 2) {
+        deps.onTransition?.({ projectId: v.c.project_id, canaryId: v.c.id, label: v.c.label, url: v.c.url, state: 'up', detail: v.verdict.detail, failingSince: v.c.failing_since });
+      }
       continue;
     }
     result.failing++;
@@ -249,6 +258,9 @@ export async function runEdgeCanaries(db: SupabaseClient, deps: CanaryRunDeps, o
       .update({ ...base, fail_streak: streak, failing_since: v.c.failing_since ?? nowIso })
       .eq('id', v.c.id);
     if (upErr) throw new Error(`edge_canaries update failed: ${upErr.message}`);
+    if (streak === 2) {
+      deps.onTransition?.({ projectId: v.c.project_id, canaryId: v.c.id, label: v.c.label, url: v.c.url, state: 'down', detail: v.verdict.detail, failingSince: v.c.failing_since ?? nowIso });
+    }
     const hasOpenReport = v.c.report_id ? openReports.has(v.c.report_id) : false;
     if (streak >= 2 && !hasOpenReport) {
       const list = toFile.get(v.c.project_id) ?? [];

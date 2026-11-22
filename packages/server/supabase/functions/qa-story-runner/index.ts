@@ -25,11 +25,11 @@
 // ────
 // Registered in the migration as every-minute via:
 //   SELECT cron.schedule('qa-story-runner', '* * * * *', $$...$$)
-// The function itself gates execution on whether each story's
-// schedule_cron aligns with the current time (via a simple cron-match
-// check) so we don't need one pg_cron job per story. Since 2026-11-11 the
-// job posts only when mushi.qa_story_runner_has_work() finds a story that
-// may be due this minute or a stale manual run (migration
+// The function itself gates execution on approval_status = 'approved' and
+// whether each story's schedule_cron aligns with the current time (via a
+// simple cron-match check) so we don't need one pg_cron job per story.
+// Since 2026-11-11 the job posts only when mushi.qa_story_runner_has_work()
+// finds a story that may be due this minute or a stale manual run (migration
 // 20261111091825_cron_edge_work_gates), about 340 calls a day instead of
 // 1,440; a call with nothing due returns before writing cron_runs.
 //
@@ -39,6 +39,10 @@
 // to prevent a user with 100 stories from monopolising edge function
 // compute. Stories are queued as FIFO; skipped ones get a 'skipped'
 // run row with the reason.
+//
+// Text assertions (assertContains, quoted prompt phrases, mustNotContain)
+// are scored in _shared/qa-story-assertions.ts. An empty scrape fails when
+// the story has any of those. It used to be stored as passed.
 // ============================================================
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
@@ -54,8 +58,9 @@ import { sendBotMessage, sendSlackText, buildQaStoryRunBlocks, sendDiscordNotifi
 import { dispatchPluginEventDetached } from '../_shared/plugins.ts'
 import { safeFetch } from '../_shared/inventory-guards.ts'
 import { monitorScrapeBody } from '../_shared/monitor-url.ts'
+import { qaContentFailures } from '../_shared/qa-story-assertions.ts'
 import { sweepAbandonedManualRuns } from './abandoned-runs.ts'
-import { cronTickTime } from './cron-tick.ts'
+import { cronTickTime, isApprovedForSchedule } from './cron-tick.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -75,6 +80,8 @@ interface QaStory {
   browser_provider: string
   schedule_cron: string
   enabled: boolean
+  /** Scheduled runs require 'approved'. Manual runs do not read this. */
+  approval_status: string
   capture_video: boolean
   byok_provider: string | null
   /** Explicit scrape target set by the user in the console. Takes precedence over prompt/env. */
@@ -186,7 +193,7 @@ async function resolveStoryApiKey(
   try {
     const result = await resolveLlmKey(db, projectId, slug)
     if (result) return result.key
-    rlog.warn('no_byok_key_configured — story will fail; add key via Settings → API Keys', {
+    rlog.warn('no_byok_key_configured — story will fail; add key via Settings → AI keys', {
       provider: slug,
       storyId: story.id,
     })
@@ -220,29 +227,10 @@ function isDirectFetchMode(story: QaStory): boolean {
 // Activated by `directFetch: true` in the story's script JSON.
 //
 // Uses Deno's built-in fetch() with a 20-second timeout via AbortController.
-// Checks assertContains (or prompt-quoted strings) against the raw HTML body.
+// Checks the same text assertions as Firecrawl against the raw HTML body.
 // No Firecrawl API key needed.
-async function runDirectFetch(story: QaStory, targetUrl: string): Promise<RunResult> {
+export async function runDirectFetch(story: QaStory, targetUrl: string): Promise<RunResult> {
   const start = Date.now()
-  const assertionFailures: RunResult['assertion_failures'] = []
-
-  // Parse assertContains from script
-  let assertContains: string[] = []
-  if (story.script && !story.script.startsWith('http')) {
-    try {
-      const parsed = JSON.parse(story.script) as unknown
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        const spec = parsed as { assertContains?: string[] }
-        if (Array.isArray(spec.assertContains)) assertContains = spec.assertContains
-      }
-    } catch { /* use defaults */ }
-  }
-
-  const termsToCheck: string[] = assertContains.length > 0
-    ? assertContains
-    : story.prompt
-        ? [...(story.prompt.matchAll(/["']([^"']{2,50})["']/g))].map((m) => m[1]).slice(0, 8)
-        : []
 
   try {
     // The target comes from a tenant-authored story (target_url or a URL in
@@ -269,13 +257,7 @@ async function runDirectFetch(story: QaStory, targetUrl: string): Promise<RunRes
     }
 
     const html = await res.text()
-
-    // Check terms against raw HTML (case-insensitive)
-    for (const term of termsToCheck) {
-      if (!html.toLowerCase().includes(term.toLowerCase())) {
-        assertionFailures.push({ step: 'content', expected: term, actual: '(not found in HTML)' })
-      }
-    }
+    const assertionFailures = qaContentFailures(story, html, '(not found in HTML)')
 
     // directFetch returns no screenshot evidence — the run status + assertion
     // failures are the signal. Storing raw HTML inline would exceed column limits.
@@ -309,22 +291,21 @@ async function runDirectFetch(story: QaStory, targetUrl: string): Promise<RunRes
 //
 // script column supports two formats:
 //   1. Array  — raw Firecrawl actions (legacy): [...actions]
-//   2. Object — structured spec: { actions?: [...], assertContains?: string[], waitFor?: number, htmlOnly?: boolean, directFetch?: boolean }
+//   2. Object — structured spec: { actions?: [...], assertContains?: string[], mustNotContain?: string[], waitFor?: number, htmlOnly?: boolean, directFetch?: boolean }
 //
-// assertContains is the preferred way to define pass criteria — each string is
-// checked as a case-insensitive substring in the scraped markdown. The old NL
-// prompt regex (30-60 char prose phrases) produced too many false failures on
-// SPA-rendered pages and is replaced by quoted-string extraction when no
-// assertContains is present.
-async function runFirecrawl(story: QaStory, apiKey: string, targetUrl: string): Promise<RunResult> {
+// Pass criteria are assertContains (or quoted strings in the prompt) and
+// mustNotContain, both case-insensitive substrings of the scraped markdown.
+// The old NL prompt regex (30-60 char prose phrases) produced too many false
+// failures on SPA-rendered pages and is replaced by quoted-string extraction
+// when no assertContains is present. An empty scrape does not skip the checks.
+export async function runFirecrawl(story: QaStory, apiKey: string, targetUrl: string): Promise<RunResult> {
   const start = Date.now()
-  const assertionFailures: RunResult['assertion_failures'] = []
   const evidence: RunResult['evidence'] = []
 
   try {
     // Parse script — supports array (legacy) or structured object:
     //
-    //   { actions?, assertContains?, waitFor?, htmlOnly? }
+    //   { actions?, assertContains?, mustNotContain?, waitFor?, htmlOnly? }
     //
     // htmlOnly=true  → rawHtml format, no headless browser (fast, for SSR/SSG pages)
     // htmlOnly=false → full browser mode with actions + screenshot
@@ -336,7 +317,6 @@ async function runFirecrawl(story: QaStory, apiKey: string, targetUrl: string): 
       { type: 'wait', milliseconds: 3000 },
       { type: 'screenshot' },
     ]
-    let assertContains: string[] = []
     let waitFor = 5000
     // htmlOnly skips the headless browser entirely — ideal for SSR/SSG pages
     // that have all content in the initial HTML. Avoids SCRAPE_TIMEOUT on
@@ -353,15 +333,14 @@ async function runFirecrawl(story: QaStory, apiKey: string, targetUrl: string): 
           // Structured spec object
           const spec = parsed as {
             actions?: Array<Record<string, unknown>>
-            assertContains?: string[]
             waitFor?: number
             htmlOnly?: boolean
           }
-          // Only these keys are copied. test-gen-from-story also stores
-          // `playwrightSource` here so the spec survives when no PR is opened.
-          // Do not spread unknown keys into the Firecrawl body.
+          // Only these keys are copied into the Firecrawl body.
+          // assertContains / mustNotContain are scored locally, and
+          // test-gen-from-story also stores `playwrightSource` here so the
+          // spec survives when no PR is opened. Do not spread unknown keys.
           if (Array.isArray(spec.actions)) actions = spec.actions
-          if (Array.isArray(spec.assertContains)) assertContains = spec.assertContains
           if (typeof spec.waitFor === 'number') waitFor = spec.waitFor
           if (typeof spec.htmlOnly === 'boolean') htmlOnly = spec.htmlOnly
         }
@@ -425,22 +404,8 @@ async function runFirecrawl(story: QaStory, apiKey: string, targetUrl: string): 
       ?? data?.data?.actions?.screenshots?.[0]
       ?? ''
 
-    // Assertions — prefer explicit assertContains; fall back to quoted strings
-    // in the prompt (single or double quoted terms, ≤ 50 chars). The old broad
-    // regex extracted full NL sentences and caused false failures on SPAs.
-    const termsToCheck: string[] = assertContains.length > 0
-      ? assertContains
-      : story.prompt
-          ? [...(story.prompt.matchAll(/["']([^"']{2,50})["']/g))].map((m) => m[1]).slice(0, 8)
-          : []
-
-    if (markdown && termsToCheck.length > 0) {
-      for (const term of termsToCheck) {
-        if (!markdown.toLowerCase().includes(term.toLowerCase())) {
-          assertionFailures.push({ step: 'content', expected: term, actual: '(not found)' })
-        }
-      }
-    }
+    // Empty markdown used to skip this and the run was stored as passed.
+    const assertionFailures = qaContentFailures(story, markdown)
 
     if (screenshot) {
       const b64 = screenshot.replace(/^data:image\/\w+;base64,/, '')
@@ -587,7 +552,7 @@ async function executeManualRun(
       result = {
         status: 'error',
         latency_ms: 0,
-        summary: 'Firecrawl API key not configured. Add one via Settings → API Keys → Firecrawl, or run `mushi keys add --provider firecrawl` in the CLI.',
+        summary: 'Firecrawl API key not configured. Add one via Settings → AI keys → Firecrawl, or run `mushi keys add --provider firecrawl` in the CLI.',
         assertion_failures: [],
         provider_session_url: null,
         error_message: 'No Firecrawl key. Run: mushi keys add --provider firecrawl',
@@ -602,10 +567,10 @@ async function executeManualRun(
       result = {
         status: 'error',
         latency_ms: 0,
-        summary: 'Browserbase API key not configured. Add one via Settings → API Keys → Browserbase.',
+        summary: 'Browserbase API key not configured. Add one via Settings → AI keys → Browserbase.',
         assertion_failures: [],
         provider_session_url: null,
-        error_message: 'No Browserbase key. Add via Settings → API Keys → Browserbase.',
+        error_message: 'No Browserbase key. Add via Settings → AI keys → Browserbase.',
         evidence: [],
       }
     } else {
@@ -703,7 +668,10 @@ Deno.serve(
     })
     if (abandoned > 0) rlog.info('abandoned manual runs', { failed: abandoned })
 
-    // Fetch all enabled stories. The previous select embedded
+    // Scheduled runs: enabled and approved. pending_review and rejected
+    // stories are not executed, even when enabled is still true
+    // (20260602000002). Manual runs go through executeManualRun and are
+    // not filtered here. The previous select embedded
     // `projects!inner(id, base_url:mushi_runtime_config!inner(config))`
     // which referenced a non-existent `projects → mushi_runtime_config`
     // foreign key (PostgREST returned PGRST200 → 500). The embedded
@@ -716,6 +684,7 @@ Deno.serve(
       .from('qa_stories')
       .select('*')
       .eq('enabled', true)
+      .eq('approval_status', 'approved')
 
     if (storiesErr) {
       // Truncate the message before logging and persisting — a transient Supabase
@@ -755,6 +724,7 @@ Deno.serve(
     // pg_net delivers a minute late must not miss it.
     const matchAt = cronTickTime(body.tick, now)
     const dueStories = (stories ?? []).filter((s: QaStory) =>
+      isApprovedForSchedule(s) &&
       cronMatches(s.schedule_cron ?? '*/15 * * * *', matchAt)
     )
 
@@ -849,10 +819,10 @@ Deno.serve(
             result = {
               status: 'error',
               latency_ms: 0,
-              summary: 'Firecrawl API key not configured. Add one via Settings → API Keys → Firecrawl, or run `mushi keys add --provider firecrawl` in the CLI.',
+              summary: 'Firecrawl API key not configured. Add one via Settings → AI keys → Firecrawl, or run `mushi keys add --provider firecrawl` in the CLI.',
               assertion_failures: [],
               provider_session_url: null,
-              error_message: 'firecrawl_key_missing: Add a Firecrawl API key via Settings → API Keys in the Mushi console, or run: mushi keys add --provider firecrawl',
+              error_message: 'firecrawl_key_missing: Add a Firecrawl API key via Settings → AI keys in the Mushi console, or run: mushi keys add --provider firecrawl',
               evidence: [],
             }
           } else {
@@ -864,10 +834,10 @@ Deno.serve(
             result = {
               status: 'error',
               latency_ms: 0,
-              summary: 'Browserbase API key not configured. Add one via Settings → API Keys → Browserbase.',
+              summary: 'Browserbase API key not configured. Add one via Settings → AI keys → Browserbase.',
               assertion_failures: [],
               provider_session_url: null,
-              error_message: 'browserbase_key_missing: Add a Browserbase API key via Settings → API Keys in the Mushi console.',
+              error_message: 'browserbase_key_missing: Add a Browserbase API key via Settings → AI keys in the Mushi console.',
               evidence: [],
             }
           } else {

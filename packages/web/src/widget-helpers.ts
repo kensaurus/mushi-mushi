@@ -340,6 +340,13 @@ export interface WidgetCallbacks {
       intent?: string;
     },
   ): void | Promise<WidgetSubmitOutcome | void>;
+  /**
+   * Runs when the reporter presses Send, before `onSubmit`. Resolves `true`
+   * when it just attached a screenshot the reporter has not seen (the
+   * `on-report` capture): the widget then stays on the report step with the
+   * preview open and waits for a second Send, so no image leaves unseen.
+   */
+  onBeforeSubmit?(): boolean | Promise<boolean>;
   onOpen(): void;
   onClose(): void;
   /** "Bug reports by Mushi Mushi" mark: impression once per widget instance, click per activation → loop_* events. */

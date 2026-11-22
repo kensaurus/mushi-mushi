@@ -196,4 +196,4 @@ The api function serves them under `/v1/schemas/*` (see [`packages/server/supaba
 
 ## License
 
-[AGPLv3](../server/LICENSE), copyleft. Part of the open-core server (self-host and fork freely; modified SaaS publishes changes or takes a [commercial license](../../COMMERCIAL-LICENSE.md)).
+[AGPLv3](../server/LICENSE), copyleft. Part of the open-core server (self-host and fork freely; modified SaaS publishes changes or takes a [commercial license](../../docs/legal/COMMERCIAL-LICENSE.md)).

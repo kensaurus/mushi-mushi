@@ -20,7 +20,7 @@ describe('placement in words', () => {
 
   it('greys out GitHub-hosted on a private repo under the agreement, not on public or allowed repos', () => {
     const repo = placementFixture().repos[0]
-    expect(hostedDisabledReason(policyFixture(), repo)).toBe('Your CI agreement says no paid GitHub-hosted minutes on private repos (CI-AGREEMENT.md, 2026-10-22).')
+    expect(hostedDisabledReason(policyFixture(), repo)).toBe('Off: your CI agreement above rules out paid GitHub-hosted minutes on private repos.')
     expect(hostedDisabledReason(policyFixture(), { ...repo, visibility: 'public' })).toBeNull()
     expect(hostedDisabledReason(policyFixture(), { ...repo, repo: 'kensaurus/mushi-mushi' })).toBeNull()
     expect(hostedDisabledReason(null, repo)).toBeNull()

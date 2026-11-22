@@ -87,6 +87,23 @@ function stateChangeMs(alarm: CloudWatchAlarm, fallbackMs: number): number {
   return Number.isFinite(t) ? t : fallbackMs;
 }
 
+/**
+ * Round numbers with four or more decimals to a readable precision:
+ * "15.341893476" reads "15.34" (owner's walkthrough, 2026-11-17: the alarm's
+ * own reason text carried it into the report and its summary). Whole numbers,
+ * versions and short decimals ("15.0") are left as they are.
+ */
+export function roundLongDecimals(text: string): string {
+  return text.replace(/(?<![\w.])(-?\d+)\.(\d{4,})(?![\w.])/g, (match, whole: string) => {
+    const n = Number(match)
+    if (!Number.isFinite(n)) return match
+    // Under 1, three significant digits (0.000123), never a bare 0.
+    const fixed = Math.abs(n) < 1 && n !== 0 ? String(Number(n.toPrecision(3))) : n.toFixed(Math.abs(n) >= 100 ? 1 : 2)
+    const trimmed = fixed.includes('e') ? fixed : fixed.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')
+    return trimmed === '' || trimmed === '-' ? whole : trimmed
+  })
+}
+
 function metricLine(alarm: CloudWatchAlarm): string | null {
   const t = alarm.Trigger;
   if (!t?.MetricName) return null;
@@ -114,7 +131,7 @@ export function buildCloudWatchReport(projectId: string, alarm: CloudWatchAlarm,
   const description = [
     `CloudWatch alarm ${alarm.AlarmName} went into ALARM${alarm.OldStateValue ? ` (was ${alarm.OldStateValue})` : ''}.`,
     alarm.AlarmDescription ? `What it watches: ${alarm.AlarmDescription}` : null,
-    alarm.NewStateReason ? `Why: ${alarm.NewStateReason}` : null,
+    alarm.NewStateReason ? `Why: ${roundLongDecimals(alarm.NewStateReason)}` : null,
     metric ? `Metric: ${metric}` : null,
     alarm.StateChangeTime ? `Changed at: ${alarm.StateChangeTime}` : null,
     link ? `Alarm: ${link}` : null,

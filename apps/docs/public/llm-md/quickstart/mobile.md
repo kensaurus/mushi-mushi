@@ -39,7 +39,7 @@ each use one small extra package, which the setup page lists. On Capacitor
 they are settings. The setup takes a few minutes, then you make a new build of
 your app so the button ships with it.
 
-The free plan covers one app and 100 diagnoses a month, with no card and no AI
+The free plan covers three apps and 300 diagnoses a month, with no card and no AI
 key of your own. See [pricing](/pricing).
 
 ## Native iOS, Android and Flutter (previews)

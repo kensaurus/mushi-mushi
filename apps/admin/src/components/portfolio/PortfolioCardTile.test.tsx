@@ -8,7 +8,7 @@
 
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 // The icon is not under test, and its resolver needs a built @mushi-mushi/core.
 vi.mock('../ProjectFavicon', () => ({ ProjectFavicon: () => null }))
@@ -71,7 +71,7 @@ describe('PortfolioCardTile', () => {
     expect(host.textContent).not.toContain('Needs attention')
     const next = host.querySelector('[data-testid="portfolio-next-step"]') as HTMLAnchorElement
     expect(next.textContent).toContain('Fix the worst of 29 open bugs')
-    expect(next.getAttribute('href')).toBe('/reports')
+    expect(next.getAttribute('href')).toBe('/reports?project=p1')
   })
 
   it('names a failing part in the chip and links to its page', () => {
@@ -83,7 +83,7 @@ describe('PortfolioCardTile', () => {
       }),
     )
     expect(host.textContent).toContain('CI failing')
-    expect((host.querySelector('[data-testid="portfolio-next-step"]') as HTMLAnchorElement).getAttribute('href')).toBe('/ci')
+    expect((host.querySelector('[data-testid="portfolio-next-step"]') as HTMLAnchorElement).getAttribute('href')).toBe('/ci?project=p1')
   })
 })
 
@@ -91,5 +91,64 @@ describe('PortfolioCompactRow', () => {
   it('shows the chore an app without urgent problems still has', () => {
     render(createElement('ul', null, createElement(PortfolioCompactRow, { card: card({ openReports: 0 }), favicon })))
     expect(host.textContent).toContain('Mushi setup')
+  })
+})
+
+describe("links open the card's own app", () => {
+  // Owner, 2026-11-17: in "All apps" mode every link on the kensaur.us card
+  // opened the app picked before it (the URL kept the old ?project=).
+  const OLD = '11111111-1111-4111-8111-111111111111'
+  const MINE = '22222222-2222-4222-8222-222222222222'
+
+  function Probe() {
+    const loc = useLocation()
+    return createElement('output', { 'data-testid': 'probe' }, `${loc.pathname}${loc.search}`)
+  }
+
+  function renderAt(node: ReturnType<typeof createElement>) {
+    act(() =>
+      root.render(
+        createElement(
+          MemoryRouter,
+          { initialEntries: [`/portfolio?project=${OLD}&apps=all`] },
+          createElement(Routes, null,
+            createElement(Route, { path: '/portfolio', element: node }),
+            createElement(Route, { path: '*', element: createElement(Probe) }),
+          ),
+        ),
+      ),
+    )
+  }
+
+  const where = () => new URLSearchParams((host.querySelector('[data-testid="probe"]')?.textContent ?? '').split('?')[1] ?? '')
+
+  beforeEach(() => {
+    window.localStorage.setItem('mushi:active_project_id', OLD)
+    window.localStorage.setItem('mushi:project_scope', 'all')
+  })
+  afterEach(() => window.localStorage.clear())
+
+  const mine = () => card({ projectId: MINE, name: 'kensaur.us' })
+  const click = (el: Element | null) => act(() => (el as HTMLElement).click())
+
+  it.each([
+    ['a status chip', () => host.querySelector('[aria-label="Status"] a')],
+    ['the next step', () => host.querySelector('[data-testid="portfolio-next-step"]')],
+    ['the Blueprint footer link', () => [...host.querySelectorAll('a')].find((a) => a.textContent === 'Blueprint') ?? null],
+    ['the app name', () => host.querySelector('h3 a')],
+  ])("%s navigates with that card's project and leaves All apps", (_label, find) => {
+    renderAt(createElement(PortfolioCardTile, { card: mine(), favicon, showSpend: false }))
+    click(find())
+    expect(where().get('project')).toBe(MINE)
+    expect(where().has('apps')).toBe(false)
+    expect(window.localStorage.getItem('mushi:active_project_id')).toBe(MINE)
+    expect(window.localStorage.getItem('mushi:project_scope')).toBeNull()
+  })
+
+  it('the compact row does the same', () => {
+    renderAt(createElement('ul', null, createElement(PortfolioCompactRow, { card: mine(), favicon })))
+    click(host.querySelector('a'))
+    expect(where().get('project')).toBe(MINE)
+    expect(where().has('apps')).toBe(false)
   })
 })

@@ -35,7 +35,7 @@ $$;
 -- grant. On PG15 plain membership is the closest equivalent: postgres can
 -- SET ROLE and hand ownership over, and what it inherits is SELECT on tables it
 -- already owns.
-do $
+do $$
 begin
   if current_setting('server_version_num')::int >= 160000 then
     execute 'grant mushi_nl_reader to postgres with set true, inherit false';
@@ -43,7 +43,7 @@ begin
     execute 'grant mushi_nl_reader to postgres';
   end if;
 end
-$;
+$$;
 
 create schema if not exists mushi_nl;
 revoke all on schema mushi_nl from public;

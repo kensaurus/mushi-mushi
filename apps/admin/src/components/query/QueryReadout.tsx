@@ -26,7 +26,7 @@ interface Props {
   isValidating?: boolean
 }
 
-export function QueryReadout({ stats, fetchedAt, isValidating }: Props) {
+export function QueryReadout({ stats }: Props) {
   if (!stats.projectId) return null
 
   const statsApi = `${RESOLVED_EXTERNAL_API_URL}/v1/admin/query/stats`
@@ -66,7 +66,8 @@ export function QueryReadout({ stats, fetchedAt, isValidating }: Props) {
   ]
 
   return (
-    <ReadoutPanel title="Query readout" freshness={{ at: fetchedAt, isValidating }}>
+    // The status strip at the top carries the one "Updated" time (round 3: two on Schema).
+    <ReadoutPanel title="Query readout">
       <div className="grid gap-4 lg:grid-cols-2">
         <ReadoutSection title="Endpoints" icon={<IconGlobe size={14} aria-hidden />}>
           <EndpointCodeRow label="Query stats API" url={statsApi} />

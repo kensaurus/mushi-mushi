@@ -1,0 +1,112 @@
+# HTTP API: file a bug report with one curl
+
+Source: https://kensaur.us/mushi-mushi/docs/quickstart/http-api
+
+---
+title: "HTTP API: file a bug report with one curl"
+description: Send a bug report to Mushi Mushi with one HTTP call, no SDK. How to get a key, the scopes, the rate limits, and the OpenAPI 3.1 spec for code generators.
+---
+
+# HTTP API: one curl, no SDK
+
+Use the API when an SDK does not fit: a server, a cron job, a script, a
+no-code tool, or a language Mushi Mushi has no SDK for. One `POST` files a
+report. Mushi Mushi diagnoses it like a report from the widget.
+
+- Get a key with `npx mushi-mushi`, or in the console under **Manage apps**.
+- `POST /v1/reports` with the key in the `X-Mushi-Api-Key` header.
+- The report shows up in the console with a plain-English cause, and your editor can read it over MCP.
+
+### Get your project ID and key
+
+Run `npx mushi-mushi` in your app's folder. It signs you in through your
+browser and writes both values to `.env.local` (`*_MUSHI_PROJECT_ID` and
+`*_MUSHI_API_KEY`). No app folder? Open **Manage apps** in the
+[console](https://kensaur.us/mushi-mushi/admin), pick your project and click
+**Generate API key**.
+
+This key can only send reports. It cannot read them, so it is safe in a page
+or a public script.
+
+### Send a report
+
+```bash
+curl -sS https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/reports -H "Content-Type: application/json" -H "X-Mushi-Api-Key: $MUSHI_API_KEY" -d '{"projectId":"'"$MUSHI_PROJECT_ID"'","category":"bug","description":"The Save button on the settings page does nothing.","reporterToken":"curl-test-1","createdAt":"2026-11-18T09:00:00Z","environment":{"url":"https://example.com/settings","userAgent":"curl","platform":"server","language":"en","viewport":{"width":0,"height":0},"referrer":"","timestamp":"2026-11-18T09:00:00Z","timezone":"UTC"}}'
+```
+
+**You'll see:** `{"ok":true,"data":{"reportId":"…","status":"submitted"}}`, then the report in the [console](https://kensaur.us/mushi-mushi/admin/reports) with a title, how serious it is and the likely cause, usually within a minute.
+
+### Check it
+
+```bash
+curl -sS https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/reports/REPORT_ID/status -H "X-Mushi-Api-Key: $MUSHI_API_KEY"
+```
+
+**You'll see:** the status (`new`, then `classified`), the category, the severity and a one-line summary.
+
+## The fields
+
+Every field below is required. The rest of the body is optional.
+
+| Field | What to send |
+| --- | --- |
+| `projectId` | Your project ID. It must match the key's project. |
+| `category` | `bug`, `slow`, `visual`, `confusing`, `other`, `feedback`, `question` or `feature` |
+| `description` | What the user saw, in their words. Up to 5,000 characters. |
+| `reporterToken` | A random ID for the person reporting, with no name or email in it. Reports with the same token group together. |
+| `createdAt` | The time, in ISO 8601 with a time zone, for example `2026-11-18T09:00:00Z`. |
+| `environment` | `url`, `userAgent`, `platform`, `language`, `viewport` (`width`, `height`), `referrer`, `timestamp`, `timezone`. Send `""` or `0` when you have no value. |
+
+Optional fields that make the diagnosis better: `severity`
+(`low` to `critical`), `consoleLogs`, `networkLogs`, `screenshotDataUrl`
+(a `data:` URL, about 1.5 MB at most), `metadata`, and `environment.route`.
+
+A missing field returns `400` with the field named, for example
+`{"ok":false,"error":{"code":"INGEST_ERROR","message":"environment.timezone: Required"}}`.
+
+## Keys and scopes
+
+Each key has scopes. Use the smallest one that does the job.
+
+| Scope | What it can do | Where it can live |
+| --- | --- | --- |
+| `report:write` | Send reports, spans and metrics; read its own report's status | In your app or a public script |
+| `mcp:read` | Read reports, diagnoses and lessons (`/v1/sync/*`, MCP) | On your computer or a server only |
+| `mcp:write` | Everything `mcp:read` can, plus replying to reporters and starting fixes | On your computer or a server only |
+
+  Never put an `mcp:read` or `mcp:write` key in a web page. Mushi Mushi
+  refuses such a key once it has been seen in a browser
+  (`KEY_EXPOSED_IN_BROWSER`).
+
+## Rate limits
+
+| Route | Limit, per project |
+| --- | --- |
+| `POST /v1/reports` and `/v1/reports/batch` | 120 reports a minute (you can change it per project); a batch counts each report |
+| `POST /v1/ingest/spans` | 500 calls a minute |
+| `POST /v1/ingest/metrics` | 60 calls a minute |
+
+Over the limit you get `429 RATE_LIMITED` with a `Retry-After` header in
+seconds. When the plan's monthly reports run out you get
+`402 QUOTA_EXCEEDED`, also with `Retry-After`. Wait that long, then retry.
+
+To make a retry safe, add an `id` to the body (a UUID you make once per
+report). Sending the same `id` again returns the report already stored instead
+of filing a second one. The same reporter, text and category within 60 seconds
+is also merged into the first report.
+
+## More than one report
+
+`POST /v1/reports/batch` takes `{"reports":[…]}`. It keeps the first 10 and
+drops the rest, and checks each report on its own, so one bad report does not
+fail the others.
+
+## OpenAPI spec
+
+The full machine-readable spec (OpenAPI 3.1) is at
+[`/functions/v1/api/openapi.json`](https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/openapi.json).
+Point a code generator or an agent at it. It covers ingest, the
+`/v1/sync/*` read routes, fix dispatch and the A2A task routes.
+
+Want your editor to read reports instead of calling the API by hand? Use the
+[MCP server](/quickstart/mcp).

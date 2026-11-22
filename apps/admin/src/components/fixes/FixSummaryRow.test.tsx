@@ -51,7 +51,7 @@ function render(data: FixSummary) {
 /** The KPI card that shows `label`, including its number and subtitle. */
 function tileText(label: string): string {
   const labelEl = [...host.querySelectorAll('div')].find(
-    (el) => el.textContent === label && el.className.includes('uppercase'),
+    (el) => el.textContent === label && el.children.length === 0,
   )
   expect(labelEl, label).toBeTruthy()
   return labelEl?.parentElement?.parentElement?.parentElement?.textContent ?? ''

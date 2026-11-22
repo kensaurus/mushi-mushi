@@ -21,7 +21,7 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { reportDetailPath } from '../lib/reportUrl'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import { InboxStatusBanner, isInboxStatusBannerCritical } from '../components/inbox/InboxStatusBanner'
+import { InboxStatusBanner, inboxBannerRepeatsCards, isInboxStatusBannerCritical, reconcileInboxStats } from '../components/inbox/InboxStatusBanner'
 import { InboxPdcaGuide } from '../components/inbox/InboxPdcaGuide'
 import { InboxOverviewBody } from '../components/inbox/InboxOverviewBody'
 import {
@@ -32,7 +32,7 @@ import {
 } from '../components/inbox/inbox-card-parts'
 import { EMPTY_INBOX_STATS, type InboxStats, type InboxTabId } from '../components/inbox/types'
 import type { ActivityItem, DashboardData } from '../components/dashboard/types'
-import { buildInboxCards, type InboxCardGroup } from '../lib/actionInboxFromDashboard'
+import { buildInboxCards, inboxCardCounts, type InboxCardGroup } from '../lib/actionInboxFromDashboard'
 import { useInboxUx, resolveQuickInboxTab } from '../lib/inboxModeUx'
 import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
 import {
@@ -43,6 +43,10 @@ import {
 } from '../components/report-detail/ReportSurface'
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import { PageLoadError } from '../components/PageLoadError'
+import type { PipelineData } from '../lib/pipeline'
+import { needsYouGroups } from '../lib/pipelineSignals'
+import { LANES_PATH, type WorkLanesData } from '../lib/workers'
+import { StatusGlyph, type SignalTone } from '../components/signal/StatusGlyph'
 
 type Group = InboxCardGroup
 
@@ -64,7 +68,7 @@ const INBOX_TABS: Array<{ id: InboxTabId; label: string; description: string }> 
   },
 ]
 
-type FilterValue = 'all' | 'open' | 'clear' | Group
+type FilterValue = 'all' | 'open' | 'clear' | 'unchecked' | Group
 
 const INBOX_FILTER_TONE: Record<'do' | 'act' | 'idle', FilterChipTone> = {
   do: 'brand',
@@ -93,32 +97,61 @@ export function InboxPage() {
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
   } = usePageData<InboxStats>('/v1/admin/inbox/stats')
-  const stats = statsData ?? EMPTY_INBOX_STATS
+  const serverStats = statsData ?? EMPTY_INBOX_STATS
 
   const { data, loading, error, isValidating, lastFetchedAt, reload } =
     usePageData<DashboardData>('/v1/admin/dashboard')
+  // The same stuck pipeline groups Home's "Needs you" lists, and the local worker problems the
+  // Pipeline page shows: Home said "2 reports: triaged over 3 days ago" and Pipeline had two
+  // worker problems while this page listed one card and ticked "Integration health"
+  // (round-2 review, 2026-11-18).
+  const pipeline = usePageData<PipelineData>(activeProjectId ? `/v1/admin/pipeline?projectId=${encodeURIComponent(activeProjectId)}` : null, { scope: 'project' })
+  // The same request Pipeline > This app reads for "Workers (N problems)", so the two pages count
+  // worker problems from one response (round-3 review, 2026-11-19).
+  const lanes = usePageData<WorkLanesData>(
+    activeProjectId ? `${LANES_PATH}?projectId=${encodeURIComponent(activeProjectId)}` : LANES_PATH,
+    { scope: activeProjectId ? 'project' : 'enumeration' },
+  )
+  const pipelineNeedsYou = useMemo(() => {
+    if (!activeProjectId) return undefined
+    const stages = pipeline.data?.stages
+    if (!Array.isArray(stages)) return null
+    return needsYouGroups(stages).map((g) => ({ id: g.id, label: g.label, count: g.count }))
+  }, [activeProjectId, pipeline.data])
+  const workerProblems = useMemo(() => {
+    const flags = lanes.data?.flags
+    if (!lanes.data) return null
+    return (Array.isArray(flags) ? flags : []).length
+  }, [lanes.data])
   const cards = useMemo(
     () =>
       buildInboxCards(data ?? undefined, {
-        judgeStale: stats.judgeStale,
-        judgeStaleHours: stats.judgeStaleHours,
+        judgeStale: serverStats.judgeStale,
+        judgeStaleHours: serverStats.judgeStaleHours,
         // Only once stats have loaded; the empty defaults would tick every card.
         ...(statsData
           ? {
-              urgentOpenReports: stats.urgentOpenReports,
-              integrationRed: stats.integrationRed,
-              integrationAmber: stats.integrationAmber,
+              urgentOpenReports: serverStats.urgentOpenReports,
+              integrationRed: serverStats.integrationRed,
+              integrationAmber: serverStats.integrationAmber,
             }
           : {}),
+        pipelineNeedsYou,
+        workerProblems,
       }),
-    [data, statsData, stats.judgeStale, stats.judgeStaleHours, stats.urgentOpenReports, stats.integrationRed, stats.integrationAmber],
+    [data, statsData, serverStats.judgeStale, serverStats.judgeStaleHours, serverStats.urgentOpenReports, serverStats.integrationRed, serverStats.integrationAmber, pipelineNeedsYou, workerProblems],
   )
+  // One count for the banner, the Stages badge and the filter chips: the cards themselves.
+  const counts = useMemo(() => inboxCardCounts(cards), [cards])
+  const stats = useMemo(() => reconcileInboxStats(serverStats, counts), [serverStats, counts])
   const [filter, setFilter] = useState<FilterValue>('all')
 
+  const reloadPipeline = pipeline.reload
   const reloadAll = useCallback(() => {
     reloadStats()
     reload()
-  }, [reloadStats, reload])
+    reloadPipeline()
+  }, [reloadStats, reload, reloadPipeline])
 
   // Not integration_health_history: probes write it about 150 times an hour
   // across the projects a user can see, which reloaded both of this page's
@@ -153,17 +186,22 @@ export function InboxPage() {
   const clearCards = cards.filter((c) => c.action === null)
 
   const visibleOpen =
-    filter === 'clear'
+    filter === 'clear' || filter === 'unchecked'
       ? []
       : filter === 'open' || filter === 'all'
         ? openCards
         : openCards.filter((c) => c.group === filter)
+  // Clear lists only checked-and-passing cards; nothing-yet and not-checked ones have their own chip.
   const visibleClear =
     filter === 'open'
       ? []
-      : filter === 'clear' || filter === 'all'
-        ? clearCards
-        : clearCards.filter((c) => c.group === filter)
+      : filter === 'clear'
+        ? clearCards.filter((c) => c.state === 'pass')
+        : filter === 'unchecked'
+          ? clearCards.filter((c) => c.state !== 'pass')
+          : filter === 'all'
+            ? clearCards
+            : clearCards.filter((c) => c.group === filter)
 
   const activity = data?.activity ?? []
   const activityAtByGroup = useMemo(() => {
@@ -197,7 +235,7 @@ export function InboxPage() {
     actions: [{ id: 'inbox-refresh', label: 'Refresh', hint: 'Re-fetch stats + dashboard', run: reloadAll }],
   })
 
-  const openStages = Math.max(0, stats.totalSurfaces - stats.clearStages)
+  const openStages = counts.open
 
   const tabOptions = useMemo(
     () => [
@@ -248,7 +286,7 @@ export function InboxPage() {
         }
         helpHowToUse={
           copy?.help?.howToUse ??
-          'Red banner = open work. Green banner = inbox zero. Every card has a primary CTA — no dead buttons.'
+          'Amber banner = open work. Green banner = inbox zero. Every card has a primary CTA — no dead buttons.'
         }
       >
         <FreshnessPill
@@ -261,7 +299,8 @@ export function InboxPage() {
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
-            show: isInboxStatusBannerCritical(stats),
+            // One open card: the card is the banner (sweep 2026-11-18).
+            show: isInboxStatusBannerCritical(stats) && !inboxBannerRepeatsCards(stats, openCards.length),
             children: (
               <InboxStatusBanner
                 stats={stats}
@@ -269,6 +308,7 @@ export function InboxPage() {
                 onRefresh={reloadAll}
                 refreshing={statsValidating || isValidating}
                 plainBanner={ux.plainBanner}
+                cardsShown={activeTab !== 'activity'}
               />
             ),
           },
@@ -287,6 +327,8 @@ export function InboxPage() {
           options={tabOptions}
           ariaLabel="Inbox sections"
           size="sm"
+          // Its own width, not a full-width bordered strip holding three tabs (2026-11-18).
+          className="self-start"
         />
       )}
 
@@ -308,22 +350,32 @@ export function InboxPage() {
               label="All"
               active={filter === 'all'}
               onClick={() => setFilter('all')}
-              count={cards.length}
+              count={counts.total}
             />
             <FilterChip
               label="Open"
               active={filter === 'open'}
               onClick={() => setFilter('open')}
-              count={openCards.length}
-              tone={INBOX_FILTER_TONE[openCards.length > 0 ? 'do' : 'idle']}
+              count={counts.open}
+              tone={INBOX_FILTER_TONE[counts.open > 0 ? 'do' : 'idle']}
             />
             <FilterChip
               label="Clear"
               active={filter === 'clear'}
               onClick={() => setFilter('clear')}
-              count={clearCards.length}
+              count={counts.settled}
               tone={INBOX_FILTER_TONE.act}
             />
+            {/* All = Open + Clear + this: the sixth card was in no chip (round-3 review, 2026-11-19). */}
+            {counts.unchecked > 0 ? (
+              <FilterChip
+                label="Not checked"
+                active={filter === 'unchecked'}
+                onClick={() => setFilter('unchecked')}
+                count={counts.unchecked}
+                tone={INBOX_FILTER_TONE.idle}
+              />
+            ) : null}
             <span aria-hidden className="mx-1 text-fg-faint">
               ·
             </span>
@@ -331,13 +383,14 @@ export function InboxPage() {
               const groupOpen = openCards.filter((c) => c.group === g).length
               const groupTotal = cards.filter((c) => c.group === g).length
               if (groupTotal === 0) return null
+              // The open count only: a "1" on every stage chip counted cards, not work (2026-11-18).
               return (
                 <FilterChip
                   key={g}
                   label={GROUP_LABEL[g]}
                   active={filter === g}
                   onClick={() => setFilter(g)}
-                  count={groupTotal}
+                  count={groupOpen > 0 ? groupOpen : undefined}
                   tone={INBOX_FILTER_TONE[groupOpen > 0 ? 'do' : 'idle']}
                 />
               )
@@ -348,7 +401,7 @@ export function InboxPage() {
             <section aria-labelledby="inbox-stages-open" className="mb-6">
               <header className="mb-2">
                 <h2 id="inbox-stages-open" className="text-sm font-semibold text-fg">
-                  Open in filter
+                  Open
                 </h2>
               </header>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -366,13 +419,11 @@ export function InboxPage() {
 
           {visibleClear.length > 0 ? (
             <section aria-labelledby="inbox-clear">
-              <header className="mb-2 flex items-center gap-2">
+              {/* The Clear chip above holds the count; a "2 settled" chip here said it again. */}
+              <header className="mb-2">
                 <h2 id="inbox-clear" className="text-sm font-semibold text-fg-secondary">
-                  Clear stages
+                  Nothing to do
                 </h2>
-                <SignalChip tone="ok" className="tabular-nums">
-                  {visibleClear.length} settled
-                </SignalChip>
               </header>
               <ul className="flex flex-wrap gap-1.5">
                 {visibleClear.map((card) => (
@@ -391,7 +442,7 @@ export function InboxPage() {
                 hint={
                   filter === 'all'
                     ? 'The loop is clear — new reports will appear here automatically.'
-                    : `No ${filter === 'open' ? 'open' : filter === 'clear' ? 'cleared' : GROUP_LONG_LABEL[filter as Group]} cards right now.`
+                    : `No ${filter === 'open' ? 'open' : filter === 'clear' ? 'cleared' : filter === 'unchecked' ? 'unchecked' : GROUP_LONG_LABEL[filter as Group]} cards right now.`
                 }
               />
               {filter !== 'all' ? (
@@ -423,9 +474,6 @@ export function InboxPage() {
                 <h2 id="inbox-activity" className="text-sm font-semibold text-fg-secondary">
                   Recent activity
                 </h2>
-                <SignalChip tone="neutral" className="tabular-nums">
-                  Last {activity.length} events
-                </SignalChip>
               </header>
               <ul className="divide-y divide-edge-subtle/60 rounded-md border border-edge-subtle bg-surface-raised">
                 {activity.map((item) => (
@@ -452,21 +500,53 @@ export function InboxPage() {
   )
 }
 
+const SEVERITY_WORDS: ReadonlySet<string> = new Set(['critical', 'high', 'medium', 'low'])
+
+/**
+ * What an activity row's meta is: the server sends a report's severity (or its category or
+ * status) and a fix's model or agent. "Meta:" explained nothing (round-2 review, 2026-11-18).
+ */
+export function activityMetaLabel(item: Pick<ActivityItem, 'kind' | 'meta'>): string | null {
+  if (!item.meta) return null
+  if (item.kind === 'fix') return 'Agent'
+  return SEVERITY_WORDS.has(item.meta.toLowerCase()) ? 'Severity' : 'Status'
+}
+
+const SEVERITY_TONE: Record<string, SignalTone> = { critical: 'danger', high: 'warn', medium: 'info', low: 'off' }
+
+/**
+ * Raw float noise in a report title ("15.341893476 GB") reads as a bug of its own: round any
+ * number with more than two decimals to one (round-3 review, 2026-11-19).
+ */
+export function tidyActivityLabel(label: string): string {
+  return label.replace(/\d+\.\d{3,}/g, (n) => String(Math.round(Number(n) * 10) / 10))
+}
+
 function ActivityFeedRow({ item }: { item: ActivityItem }) {
   const activeProjectId = useActiveProjectId()
   const to = item.kind === 'report' ? reportDetailPath(item.id, activeProjectId) : `/fixes`
+  const metaLabel = activityMetaLabel(item)
+  const severityTone = metaLabel === 'Severity' && item.meta ? SEVERITY_TONE[item.meta.toLowerCase()] : undefined
   return (
     <li>
+      {/* The title wraps (three lines at most) instead of cutting mid-word at 390 px; a report row
+          needs no "report" chip, only a fix row says what it is. A severity is a mark, not
+          "Severity: medium" written out on every row (round-3 review, 2026-11-19). */}
       <Link
         to={to}
-        className="flex items-center gap-2 px-3 py-2 text-xs hover:bg-surface-overlay motion-safe:transition-opacity"
+        className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 px-3 py-2 text-xs hover:bg-surface-overlay motion-safe:transition-opacity"
       >
-        <SignalChip tone={item.kind === 'report' ? 'info' : 'brand'}>{item.kind}</SignalChip>
-        <span className="min-w-0 flex-1 truncate text-fg-secondary">{item.label}</span>
-        {item.meta ? (
-          <MetaChip label="Meta">{item.meta}</MetaChip>
+        {severityTone ? (
+          <span className="self-center" title={`Severity: ${item.meta}`}>
+            <StatusGlyph tone={severityTone} label={`Severity: ${item.meta}`} />
+          </span>
         ) : null}
-        <AgeChip at={item.at} />
+        {item.kind === 'fix' ? <SignalChip tone="neutral">fix</SignalChip> : null}
+        <span className="min-w-0 flex-1 basis-48 line-clamp-3 wrap-break-word text-fg-secondary">{tidyActivityLabel(item.label)}</span>
+        <span className="flex shrink-0 items-center gap-2 whitespace-nowrap">
+          {item.meta && metaLabel && !severityTone ? <MetaChip label={metaLabel}>{item.meta}</MetaChip> : null}
+          <AgeChip at={item.at} />
+        </span>
       </Link>
     </li>
   )

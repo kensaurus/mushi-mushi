@@ -8,7 +8,7 @@ category line), and its rejection of a new tagline. It also replaces what was
 left of the one job in [0052](0052-public-surface-leads-with-one-job.md).
 The rest of 0056 stands; see "What survives from 0056" below.
 
-Related: [`VISION.md`](../../VISION.md) §1 and §2.1, `AGENTS.md` (positioning
+Related: [`docs/VISION.md`](../VISION.md) §1 and §2.1, `AGENTS.md` (positioning
 block), `packages/brand/src/index.js` (`MUSHI_TAGLINE_V2`),
 `scripts/check-positioning-consistency.mjs`,
 `scripts/check-tagline-consistency.mjs`,
@@ -24,7 +24,7 @@ bug fixing please." And, on the new Journey optimizer: "journey optimizer is
 good - because we want to enhance our vibe coded apps and sites".
 
 0056 was an agent's call on the owner's delegation (2026-11-11). This is the
-human reversal that `docs/adr/INDEX.md` and `VISION.md` ask for.
+human reversal that `docs/adr/INDEX.md` and `docs/VISION.md` ask for.
 
 ## Context
 
@@ -108,9 +108,9 @@ human reversal that `docs/adr/INDEX.md` and `VISION.md` ask for.
 ## Consequences
 
 - `MUSHI_TAGLINE_V2` (hero, north star, one-liner, promise, sub-hero, offer
-  line, category, micro), `VISION.md` §1 and §2.1, the `AGENTS.md` positioning
+  line, category, micro), `docs/VISION.md` §1 and §2.1, the `AGENTS.md` positioning
   block, the README first screen, every package README hero, the npm
-  descriptions, `server.json`, `glama.json`, `TRADEMARK.md`,
+  descriptions, `server.json`, `glama.json`, `docs/legal/TRADEMARK.md`,
   `docs/marketing/VOICE.md` and the docs landing change together. The old
   hero is now a stale variant in `scripts/check-tagline-consistency.mjs`.
 - Generated files follow on their next run: `llms.txt`, `llms-full.txt`,

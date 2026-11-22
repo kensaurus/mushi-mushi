@@ -85,11 +85,21 @@ Types live on `MushiConfig` in `mushi-mushi/core`.
 
 ## Screenshot preview & consent (1.19+)
 
-When screenshot capture is enabled (`capture.screenshot: 'on-report'` or
-`'auto'`), the report screen shows a **visible preview** of the image that will
-be attached, not just a "Screenshot attached ✓" label. Reporters can **Remove**
-the screenshot before submit and optionally read a **privacy caption** beneath
-the preview.
+The reporter sees every screenshot before it is sent: a **visible preview** of
+the image, **Mark up** to blur parts of it, **Remove**, and an optional
+**privacy caption**. When the screenshot is taken depends on
+`capture.screenshot`:
+
+| Value | Taken |
+| --- | --- |
+| not set | Only when the reporter presses the camera button |
+| `'on-report'` | When the reporter presses **Send**. The report stays open with the preview and a "check it, then press Send again" line; the second **Send** sends it (1.38+; earlier versions sent it unseen) |
+| `'auto'` | When the report opens |
+| `'off'` | Never; the camera button is hidden |
+
+A screenshot the reporter removed is never taken again for that report (1.38+).
+What else a report carries, and how to keep private areas out of it:
+[What leaves the browser](/security/what-leaves-the-browser).
 
 ```typescript
 Mushi.init({
@@ -134,6 +144,19 @@ troubleshooting table. Maintainer deep-dive:
 [SDK_RUNTIME_CONFIG.md](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SDK_RUNTIME_CONFIG.md).
 
 ---
+
+## Diagnostics at send time
+
+`setDiagnosticsProvider` attaches what your app knows when the reporter presses **Send** (load timings, recent errors, feature flags). The function runs at that moment, gets 300 ms, and is never allowed to block or drop the report.
+
+```ts
+mushi.setDiagnosticsProvider(() => ({
+  timings: { feed: performance.now() - feedStart },
+  flags: currentFlags(),
+}))
+```
+
+The keys merge into the report's metadata. `screenLoading` / `timings` lines are triage evidence: a step of 1.5 s or more reads as slowness even when the description is short. Strings are scrubbed for personal data and the result is size-capped; keep personal data out anyway. Pass `null` to remove the provider.
 
 ## Capture availability & errors
 

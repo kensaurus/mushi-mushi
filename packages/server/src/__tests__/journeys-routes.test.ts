@@ -174,6 +174,18 @@ describe('GET /v1/admin/projects/:id/journeys', () => {
     expect(res.body.data.map.stats).toMatchObject({ sessions: 1500, pageViews: 1500, sampled: false })
   })
 
+  it('fills the live address from the SDK origin when no watch or audit has one, never a local one', async () => {
+    state.db = makeFakeDb({
+      session_page_views: [], site_structure_scans: [], site_watch_pages: [], site_watches: [], site_audits: [], project_settings: [], story_map_runs: [],
+      project_api_keys: [
+        { project_id: P, last_seen_origin: 'http://localhost:5173' },
+        { project_id: P, last_seen_origin: 'https://kensaur.us' },
+      ],
+    })
+    const res = await app.call('GET', '/v1/admin/projects/:id/journeys')
+    expect(res.body.data.liveUrl).toBe('https://kensaur.us')
+  })
+
   it('defaults to 30 days and 404s for an app the user cannot open', async () => {
     expect((await app.call('GET', '/v1/admin/projects/:id/journeys', { query: { days: '999' } })).body.data.days).toBe(30)
     expect((await app.call('GET', '/v1/admin/projects/:id/journeys', { id: OTHER })).status).toBe(404)

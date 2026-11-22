@@ -43,8 +43,9 @@ All re-queried 2026-11-13. Re-run each one on launch day.
   2026-11-13 it was 36 and 2,042; the 60-day window moves).
 - **The three pillars and the hourly-watch and code-audit key requirement:**
   ADR 0058 §1, ADR 0056 §1.
-- **Free plan, one app and 100 diagnoses a month; "I pay for the model":**
-  the live sample-diagnosis page ("Get this for your own app") and ADR 0056.
+- **Free plan, three apps and 300 diagnoses a month; "I pay for the model":**
+  the pricing page after the 2026-11-19 change, and ADR 0056. Check the live
+  page says so before posting.
 - **"Home page and three pages it links to", "Lovable App", public pages
   only:** the live `/docs/check` page text, 2026-11-13.
 - **Field Kenji guides sign-in, setup and first diagnosis:** commit 73ee22ef6

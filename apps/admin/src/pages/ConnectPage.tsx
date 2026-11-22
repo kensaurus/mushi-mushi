@@ -46,6 +46,7 @@ import { mintMcpKeyHref } from '../components/mcp/McpStatusBanner'
 import { useScrollToHash } from '../lib/useScrollToHash'
 import { Mascot } from '../components/mascot/Mascot'
 import { editorConnectGuide } from '../lib/fieldGuide'
+import { connectedEditor } from '../lib/connectEditor'
 
 interface ProjectRepoLite {
   repo_url: string | null
@@ -79,13 +80,14 @@ interface ProjectsPayload {
   projects: ProjectRow[]
 }
 
+// The same order as the page: GitHub and Update share the first row.
 const CONNECT_SECTIONS = [
   { id: 'connect-studio', label: 'Studio' },
   { id: 'connect-github', label: 'GitHub' },
+  { id: 'connect-update', label: 'Update' },
   { id: SDK_HEALTH_ANCHOR, label: 'SDK health' },
   { id: 'connect-sdk', label: 'Bug capture' },
   { id: 'connect-native-ci', label: 'Native CI' },
-  { id: 'connect-update', label: 'Update' },
 ] as const
 
 function SectionDescription({ children, when = true }: { children: React.ReactNode; when?: boolean }) {
@@ -274,14 +276,20 @@ export function ConnectPage() {
         <ConnectStudio
           projectId={project?.id ?? activeProjectId}
           projectName={project?.name}
+          connectedEditor={mcpStatsQuery.data ? connectedEditor(mcpStats) : null}
         />
+        {/* One line: Kenji above already says why (round-3 review, 2026-11-19: three stacked
+            instruction paragraphs). The detail moves to the link's tooltip. */}
         {mcpOptional && project ? (
           <p className="mt-2 text-xs text-fg-muted" data-testid="connect-mcp-optional">
-            Optional: to let your editor's coding agent read this app's reports, add an MCP key with mcp:read. Your SDK
-            key only sends bug reports, which is all the app needs.{' '}
-            <Link to={mintMcpKeyHref(project.id)} className={LINK_ACCENT}>
+            <Link
+              to={mintMcpKeyHref(project.id)}
+              className={LINK_ACCENT}
+              title="Optional. An MCP key with mcp:read lets your editor's coding agent read this app's reports. Your SDK key only sends bug reports, which is all the app needs."
+            >
               Add an MCP key
-            </Link>
+            </Link>{' '}
+            (optional) so your editor can read these reports.
           </p>
         ) : null}
       </div>
@@ -306,10 +314,12 @@ export function ConnectPage() {
         </HelpBanner>
       )}
 
-      {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
-      <div className="space-y-6 xl:grid xl:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.85fr)] xl:items-start xl:gap-6">
-        <div className="space-y-6 min-w-0">
-          <div id="connect-github" className="scroll-mt-chrome">
+      {/* GitHub and Update center are both short: they share the first row, and the long
+          sections run full width under them. A sticky right column ended at about 1110 px beside
+          a 2500 px left column (round-3 review, 2026-11-19). */}
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-2">
+          <div id="connect-github" className="scroll-mt-chrome min-w-0">
             <Section
               title="GitHub"
               action={
@@ -331,13 +341,35 @@ export function ConnectPage() {
             </Section>
           </div>
 
+          <div id="connect-update" className="scroll-mt-chrome min-w-0">
+            <Section title="Update center">
+              <SectionDescription when={showSectionDescriptions}>
+                Keep the Mushi Mushi SDK up to date in your connected repository. A one-click PR bumps only
+                @mushi-mushi/* version strings — you review and merge.
+              </SectionDescription>
+              {project ? (
+                <UpdateCenter
+                  project={project}
+                  preflight={preflight}
+                />
+              ) : (
+                <ProjectFallbackNote
+                  pending={projectPending}
+                  missing={projectMissing}
+                  hasError={Boolean(feedError)}
+                />
+              )}
+            </Section>
+          </div>
+        </div>
+
           <div id={SDK_HEALTH_ANCHOR} className="scroll-mt-chrome">
             <Section title="SDK health">
               <SectionDescription when={showSectionDescriptions}>
                 Problems that stop bug reports from arriving, each with a fix.
               </SectionDescription>
               {project ? (
-                <SdkHealthPanel projectId={project.id} nativeApp={isNativeProject(project)} />
+                <SdkHealthPanel projectId={project.id} nativeApp={isNativeProject(project)} bare />
               ) : (
                 <ProjectFallbackNote
                   card
@@ -378,10 +410,13 @@ export function ConnectPage() {
                 </HelpBanner>
               ) : null}
               {project ? (
+                // Embedded: the section is the one card; the SDK card and the
+                // key box inside it drew two more frames (fresh-eyes 2026-11-18).
                 <SdkInstallCard
                   projectId={project.id}
                   projectSlug={project.slug}
                   compact
+                  embedded
                 />
               ) : (
                 <ProjectFallbackNote
@@ -395,30 +430,6 @@ export function ConnectPage() {
           </div>
 
           <NativeCiSection project={project} showSectionDescriptions={showSectionDescriptions} />
-        </div>
-
-        <div className="space-y-6 min-w-0 xl:sticky xl:top-4">
-          <div id="connect-update" className="scroll-mt-chrome">
-            <Section title="Update center">
-              <SectionDescription when={showSectionDescriptions}>
-                Keep the Mushi Mushi SDK up to date in your connected repository. A one-click PR bumps only
-                @mushi-mushi/* version strings — you review and merge.
-              </SectionDescription>
-              {project ? (
-                <UpdateCenter
-                  project={project}
-                  preflight={preflight}
-                />
-              ) : (
-                <ProjectFallbackNote
-                  pending={projectPending}
-                  missing={projectMissing}
-                  hasError={Boolean(feedError)}
-                />
-              )}
-            </Section>
-          </div>
-        </div>
       </div>
     </div>
   )

@@ -113,4 +113,34 @@ describe('TimeToFirstDiagnosisCard', () => {
       'Your test bug got its plain-English read',
     )
   })
+
+  it('shows a measured first report in days, and a slow one stays neutral', async () => {
+    api.apiFetch.mockImplementation(async (path: string) => {
+      if (path === TIME_TO_FIRST_DIAGNOSIS_PATH) {
+        return {
+          ok: true,
+          data: {
+            ...WAITING,
+            firstDiagnosisAt: '2026-11-16T00:01:00.000Z',
+            ms: (346 * 60 + 8) * 60_000,
+            firstReportId: 'r1',
+          },
+        }
+      }
+      throw new Error(`unexpected ${path}`)
+    })
+    await render()
+    const card = host.querySelector('[data-testid="ttfd-measured"]')
+    expect(card?.textContent).toContain('14 d')
+    expect(card?.textContent).toContain('Target: under 2 minutes')
+    expect(card?.textContent).not.toContain('Waiting on the first report')
+    expect(card?.className ?? '').not.toMatch(/info/)
+    const caption = card?.querySelector('span')
+    expect(caption?.className).toContain('text-fg-muted')
+    expect(caption?.className).not.toMatch(/\btext-info\b/)
+    const heading = card?.querySelector('p')
+    expect(heading?.className).toContain('font-semibold')
+    expect(heading?.className).toContain('text-fg-secondary')
+    expect(heading?.className).not.toContain('uppercase')
+  })
 })

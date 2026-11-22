@@ -362,6 +362,31 @@ describe('POST /v1/admin/pipeline/actions', () => {
     })
   })
 
+  it('CI repair on a PR a local lane opened goes to the local lanes even when cloud follow-ups can run', async () => {
+    // glot.it #1032 (2026-11-16): the console answered "Only pull requests a Mushi
+    // cloud agent opened get follow-ups" and nothing could repair it.
+    const { app, db } = setup()
+    state.followupsOn = true
+    db.table('byok_keys').find((k) => k.id === 'k1')!.status = 'active'
+    state.enqueue = { queued: true }
+    db.table('fix_attempts').find((a) => a.id === F1)!.agent = 'mcp'
+    const res = await app.call('POST', '/v1/admin/pipeline/actions', { action: 'ci_repair', fixIds: [F1] })
+    expect((res.body.data as { results: Array<{ ok: boolean; message: string }> }).results[0]).toMatchObject({
+      ok: true,
+      message: 'Queued for the local mushi work lanes (glot.it): mushi work --followups takes it on its next run. A local mushi work lane opened this pull request.',
+    })
+    expect(db.table('fix_events').find((e) => e.dedupe_key === `local-ci-repair-request:${F1}:head-${F1}`)).toMatchObject({ label: 'CI repair handed to the local lanes' })
+  })
+
+  it('the pipeline offers CI repair on a local-lane PR while cloud follow-ups can run', async () => {
+    const cases = await offered(P1, (db) => {
+      state.followupsOn = true
+      db.table('byok_keys').find((k) => k.id === 'k1')!.status = 'active'
+      db.table('fix_attempts').find((a) => a.id === F1)!.agent = 'mcp'
+    })
+    expect(cases.find((c) => c.fixId === F1 && c.action === 'ci_repair')?.blocked).toBeUndefined()
+  })
+
   it('a hand-off the local lanes cannot take says why: CI is green', async () => {
     const { app, db } = setup()
     db.table('ci_jobs').find((j) => j.head_sha === `head-${F1}`)!.conclusion = 'success'

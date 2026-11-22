@@ -13,6 +13,7 @@ import { MetricStrip } from '../MetricStrip'
 import type { Tone } from '../charts'
 import { useAdminMode } from '../../lib/mode'
 import { PageLoadError } from '../PageLoadError'
+import { SEVERITY_TRAFFIC } from '../../lib/severityTraffic'
 
 type SeverityKey = 'critical' | 'high' | 'medium' | 'low'
 
@@ -42,10 +43,12 @@ function severityDelta(values: number[]): KpiDelta | null {
   const last7 = values.slice(-7).reduce((a, n) => a + n, 0)
   const prev7 = values.slice(-14, -7).reduce((a, n) => a + n, 0)
   if (last7 === 0 && prev7 === 0) return null
-  if (prev7 === 0) return { value: 'new', direction: 'up', tone: 'warn' }
+  const title = `${last7} filed in the last 7 days vs ${prev7} the 7 days before`
+  if (prev7 === 0) return { value: 'new', direction: 'up', tone: 'warn', title }
   const pct = Math.round(((last7 - prev7) / prev7) * 100)
-  if (pct === 0) return { value: '0%', direction: 'flat', tone: 'muted' }
+  if (pct === 0) return { value: '0%', direction: 'flat', tone: 'muted', title }
   return {
+    title,
     value: `${Math.abs(pct)}%`,
     direction: pct > 0 ? 'up' : 'down',
     tone: pct > 0 ? 'warn' : 'ok',
@@ -63,28 +66,32 @@ interface Props {
   windowDays?: number
 }
 
-const TONE_SHARE_BAR: Record<Tone, string> = {
-  danger: 'bg-danger/80',
-  warn: 'bg-warn/80',
-  info: 'bg-info/70',
-  ok: 'bg-ok/80',
-  brand: 'bg-brand/70',
-  muted: 'bg-fg-faint/40',
+/**
+ * One severity palette for the whole console (lib/severityTraffic.ts, what
+ * Home and the Bugs rows use): the tiles drew Medium blue and Low grey while
+ * the rows beside them drew Medium yellow and Low green (R2 sweep
+ * 2026-11-18). Each tile's trend line takes its severity's hue; only the two
+ * problem severities colour the number itself (critical red, high amber).
+ * @internal Exported for tests.
+ */
+export function severityTileSparkAccent(key: SeverityKey): string {
+  return SEVERITY_TRAFFIC[key].bg.replace(/^bg-/, 'text-')
 }
 
 const TILES_ADVANCED: Array<{
   key: 'critical' | 'high' | 'medium' | 'low'
   label: string
-  accent: Tone
+  /** Number colour; null keeps the number ink. */
+  accent: Tone | null
   meaning: string
 }> = [
   { key: 'critical', label: 'Critical', accent: 'danger',
     meaning: 'Critical reports from the window that are not fixed yet (the line below counts all that came in). These usually block user flow: triage first.' },
   { key: 'high', label: 'High', accent: 'warn',
     meaning: 'High-severity reports — broken functionality but with a workaround. Schedule a fix before next release.' },
-  { key: 'medium', label: 'Medium', accent: 'info',
+  { key: 'medium', label: 'Medium', accent: null,
     meaning: 'Medium-severity reports — annoyance or polish. Batch-review at end of week.' },
-  { key: 'low', label: 'Low', accent: 'muted',
+  { key: 'low', label: 'Low', accent: null,
     meaning: 'Low-severity reports — usually visual nits or confusion. Useful signal, low individual urgency.' },
 ]
 
@@ -93,9 +100,9 @@ const TILES_PLAIN: typeof TILES_ADVANCED = [
     meaning: 'Bugs that block user flow — review these first.' },
   { key: 'high', label: 'High', accent: 'warn',
     meaning: 'Broken functionality with a workaround — fix before next release.' },
-  { key: 'medium', label: 'Medium', accent: 'info',
+  { key: 'medium', label: 'Medium', accent: null,
     meaning: 'Annoyance or polish issues — batch-review at end of week.' },
-  { key: 'low', label: 'Low', accent: 'muted',
+  { key: 'low', label: 'Low', accent: null,
     meaning: 'Visual nits or confusion — low urgency individually.' },
 ]
 
@@ -165,19 +172,22 @@ export function ReportsKpiStrip({ scope = 'project', activeSeverity, onFilter, w
               // The quick-filter chips count all time; these tiles count a
               // window, so the label says which. "Not fixed", not "open": the
               // Open chip below means "waiting on a decision" and counted 280
-              // beside tiles adding up to 511 (2026-10-28).
-              label={openCount == null ? `${tile.label} · ${windowDays}d` : `${tile.label} · not fixed`}
+              // beside tiles adding up to 511 (2026-10-28). The window goes in
+              // the label too: "Critical · not fixed 3" beside "Critical 40"
+              // and Home's all-open count read as a contradiction (2026-11-19).
+              label={openCount == null ? `${tile.label} · ${windowDays} d` : `${tile.label} · ${windowDays} d, not fixed`}
               value={loading ? '…' : (openCount ?? count)}
               sublabel={
                 loading
                   ? `last ${windowDays} days`
                   : openCount != null
-                    ? `${count} filed in ${windowDays}d · ${count - openCount} closed${isActive ? ' · filtering' : ''}`
+                    ? `${count} filed · ${count - openCount} closed${isActive ? ' · filtering' : ''}`
                     : total > 0
                       ? `${sharePct}% of ${total} in ${windowDays}d${isActive ? ' · filtering' : ''}`
                       : `none in ${windowDays}d${isActive ? ' · filtering' : ''}`
               }
-              accent={tile.accent}
+              accent={tile.accent ?? undefined}
+              seriesAccent={severityTileSparkAccent(tile.key)}
               meaning={tile.meaning}
               series={trendHidden ? [] : sparks[tile.key]}
               delta={trendHidden ? null : severityDelta(sparks[tile.key])}
@@ -188,17 +198,9 @@ export function ReportsKpiStrip({ scope = 'project', activeSeverity, onFilter, w
               reserveSeriesSpace
               variant={isHero ? 'primary' : 'default'}
             />
-            {!loading && total > 0 && sharePct > 0 ? (
-              <div
-                className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-surface-overlay/40"
-                aria-hidden="true"
-              >
-                <div
-                  className={`h-full motion-safe:transition-[width] ${TONE_SHARE_BAR[tile.accent]}`}
-                  style={{ width: `${sharePct}%` }}
-                />
-              </div>
-            ) : null}
+            {/* No unlabeled share bar under the tile: its width (share of the
+                window) had no label and the sub-line already gives the
+                counts (R2 sweep 2026-11-18). */}
           </button>
         )
       })}

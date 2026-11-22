@@ -1,7 +1,8 @@
 /**
  * FILE: apps/admin/src/components/pipeline/SendToWorkerButton.tsx
- * PURPOSE: "Send to my local worker" (ADR 0048): put reports at the end of one
- *          of your own worker lanes for that app (PUT …/queue with append).
+ * PURPOSE: "Send to my local worker" (ADR 0048): put reports at the top of one
+ *          of your own worker lanes for that app (PUT …/queue with front), so
+ *          the lane fixes them next; one already queued moves up too.
  *          One lane → one click; several → pick one. Hidden when you have no
  *          lane for the app. Used on report detail and on pipeline groups.
  */
@@ -10,10 +11,7 @@ import { useState } from 'react'
 import { Btn } from '../ui'
 import { usePageData } from '../../lib/usePageData'
 import { useToast } from '../../lib/toast'
-import { LANES_PATH, myLanesFor, putQueue, type WorkerLane, type WorkLanesData } from '../../lib/workers'
-
-/** A lane holds at most this many queued reports (the server's QUEUE_MAX). */
-const MAX_SEND = 50
+import { LANES_PATH, myLanesFor, putQueue, QUEUE_REQUEST_MAX, type WorkerLane, type WorkLanesData } from '../../lib/workers'
 
 interface Props {
   projectId: string
@@ -30,22 +28,25 @@ export function SendToWorkerButton({ projectId, reportIds, lanes: given, size = 
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const toast = useToast()
-  const ids = [...new Set(reportIds)].slice(0, MAX_SEND)
+  const unique = [...new Set(reportIds)]
+  const ids = unique.slice(0, QUEUE_REQUEST_MAX)
+  const leftOut = unique.length - ids.length
   if (lanes.length === 0 || ids.length === 0) return null
 
   const send = async (lane: WorkerLane) => {
     setBusy(true)
     setOpen(false)
-    const res = await putQueue(lane.id, ids, true)
+    const res = await putQueue(lane.id, ids, 'top')
     setBusy(false)
-    if (res.ok) toast.success(`${res.message.replace("the lane's queue", `lane ${lane.name}`)} It takes them after what it is working on.`)
-    else toast.error(res.message)
+    if (!res.ok) return toast.error(res.message)
+    const rest = leftOut > 0 ? ` Sent the first ${ids.length}; send the other ${leftOut} next.` : ''
+    toast.success(`Lane ${lane.name}: ${res.message} It starts on them after what it is working on now.${rest}`)
   }
   const label = `Send to my local worker${ids.length > 1 ? ` (${ids.length})` : ''}`
 
   if (lanes.length === 1) {
     return (
-      <Btn size={size} variant="ghost" loading={busy} onClick={() => void send(lanes[0]!)} title={`Queue on lane ${lanes[0]!.name}`} data-testid={testId}>
+      <Btn size={size} variant="ghost" loading={busy} onClick={() => void send(lanes[0]!)} title={`Fix next on lane ${lanes[0]!.name}: top of its queue`} data-testid={testId}>
         {label}
       </Btn>
     )

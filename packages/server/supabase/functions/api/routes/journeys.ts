@@ -34,7 +34,7 @@ import { firecrawlBatchScrapeOwnSite, firecrawlBatchStatus, firecrawlMapOwnSite 
 import { assertSafeOutboundUrl } from '../../_shared/inventory-guards.ts'
 import { pickCrawlUrls } from '../../_shared/crawl-urls.ts'
 import { readAllPages } from '../../_shared/paged-read.ts'
-import { normalizeRoute } from '../../_shared/project-home.ts'
+import { isLocalOrigin, normalizeRoute } from '../../_shared/project-home.ts'
 import {
   boilerplateLines,
   buildJourneyMap,
@@ -346,11 +346,12 @@ export function rootPathOf(baseUrl: string): string {
 
 /** The app's live address, from the same places Home reads it. */
 async function liveUrlFor(db: Db, projectId: string): Promise<string | null> {
-  const [watch, audit, settings, crawl] = await Promise.all([
+  const [watch, audit, settings, crawl, keys] = await Promise.all([
     db.from('site_watches').select('base_url').eq('project_id', projectId).maybeSingle(),
     db.from('site_audits').select('base_url').eq('project_id', projectId).maybeSingle(),
     db.from('project_settings').select('crawler_base_url').eq('project_id', projectId).maybeSingle(),
     db.from('story_map_runs').select('base_url').eq('project_id', projectId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+    db.from('project_api_keys').select('last_seen_origin').eq('project_id', projectId),
   ])
   const candidates = [
     watch.data?.base_url as string | undefined,
@@ -358,7 +359,13 @@ async function liveUrlFor(db: Db, projectId: string): Promise<string | null> {
     settings.data?.crawler_base_url as string | null | undefined,
     crawl.data?.base_url as string | undefined,
   ]
-  return candidates.find((u): u is string => !!u && /^https?:\/\//i.test(u)) ?? null
+  const configured = candidates.find((u): u is string => !!u && /^https?:\/\//i.test(u))
+  if (configured) return configured
+  // Like Home (pickLiveUrl): the public origin the SDK last reported from, so the scan field is
+  // filled for an app with no watch or audit yet (fresh-eyes 2026-11-18: kensaur.us showed an
+  // empty field and a disabled Scan).
+  const origins = ((keys.data ?? []) as Array<{ last_seen_origin: string | null }>).map((k) => k.last_seen_origin)
+  return origins.find((o): o is string => !!o && /^https:\/\//i.test(o) && !isLocalOrigin(o)) ?? null
 }
 
 /**

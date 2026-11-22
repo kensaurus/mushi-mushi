@@ -14,6 +14,7 @@ import {
 } from '../../_shared/org-billing.ts';
 import { log } from '../../_shared/logger.ts';
 import { diagnosisOverageBillable } from '../../_shared/billing-rules.ts';
+import { projectHasOwnLlmKey } from '../../_shared/byok.ts';
 import { assertTargetProjectAccess, callerProjectIds, requireProjectAdmin } from '../shared.ts';
 
 /** Stripe price IDs of the annual (flat-rate, no overage) base prices. */
@@ -104,7 +105,7 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
 
     // The plan, the subscription, the customer and the quota are the team's
     // (the active app's organization): one Studio plan covers every app in
-    // the team and its diagnoses are pooled (VISION.md §2.2).
+    // the team and its diagnoses are pooled (docs/VISION.md §2.2).
     let billing: Awaited<ReturnType<typeof resolveProjectBilling>> | null = null;
     let cust: Awaited<ReturnType<typeof orgCustomer>> = null;
     try {
@@ -161,7 +162,7 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
     const freeLimitReports =
       hobby?.included_reports_per_month ??
       Number(Deno.env.get('MUSHI_FREE_REPORTS_PER_MONTH') ?? '1000');
-    const freeLimitDiagnoses = freeCloud?.included_diagnoses_per_month ?? 50;
+    const freeLimitDiagnoses = freeCloud?.included_diagnoses_per_month ?? 300;
 
     if (!activeProject || !billing) {
       return c.json({
@@ -188,8 +189,12 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
     // Annual subscriptions carry no overage item: diagnoses stop at the limit.
     const diagnosisOverage =
       !!plan.overage_unit_amount_decimal_diagnoses && diagnosisOverageBillable(sub);
+    // ADR 0063: with no paid subscription, a project on its own AI key is never stopped at
+    // the free cap (byokLiftsFreeCap in classify-report), so it is never "over quota" here.
+    const byokUncapped = !isComplimentary && !subPlanActive && (await projectHasOwnLlmKey(db, activeProject.id));
     const overDiagnosisQuota =
       !isComplimentary &&
+      !byokUncapped &&
       diagnosesLimit !== null &&
       u.diagnoses >= diagnosesLimit &&
       !diagnosisOverage;
@@ -232,6 +237,7 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
         diagnosesUsagePct,
         overDiagnosisQuota,
         approachingDiagnosisQuota,
+        byokUncapped,
         monthlySpendCapUsd,
         overageRateDiagnoses: diagnosisOverage ? (plan.overage_unit_amount_decimal_diagnoses ?? null) : null,
         fixesAttempted: u.fixes,
@@ -502,6 +508,8 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
         );
         const limit = plan.included_reports_per_month;
         const diagnosesLimit = plan.included_diagnoses_per_month ?? null;
+        // ADR 0063: see /stats — a free project on its own AI key is not capped.
+        const byokUncapped = !isComplimentary && !subPlanActive && (await projectHasOwnLlmKey(db, p.id));
 
         // Effective spend cap: sub override > plan default > null.
         const spendCapUsd =
@@ -603,8 +611,10 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
           diagnoses_used: teamDiagnoses,
           limit_diagnoses: diagnosesLimit,
           diagnoses_usage_pct: diagnosesLimit ? Math.round((teamDiagnoses / diagnosesLimit) * 100) : null,
+          byok_uncapped: byokUncapped,
           over_diagnosis_quota:
             !isComplimentary &&
+            !byokUncapped &&
             diagnosesLimit !== null &&
             teamDiagnoses >= diagnosesLimit &&
             !(
@@ -625,7 +635,7 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
     const freeLimit =
       hobbyOrFreeCloud?.included_reports_per_month ??
       Number(Deno.env.get('MUSHI_FREE_REPORTS_PER_MONTH') ?? '1000');
-    const freeLimitDiagnoses = plans.find((pl) => pl.id === 'free_cloud')?.included_diagnoses_per_month ?? 50;
+    const freeLimitDiagnoses = plans.find((pl) => pl.id === 'free_cloud')?.included_diagnoses_per_month ?? 300;
 
     return c.json({
       ok: true,

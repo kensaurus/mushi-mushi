@@ -37,7 +37,9 @@ export function hostedDisabledReason(policy: CiRunnerPolicy | null, repo: Placem
   if (!policy?.noPaidHostedOnPrivate) return null
   if (repo.visibility === 'public') return null
   if (policy.hostedAllowedRepos.some((r) => sameRepo(r, repo.repo))) return null
-  return `Your CI agreement says no paid GitHub-hosted minutes on private repos${policy.sourceNote ? ` (${policy.sourceNote})` : ''}.`
+  // The agreement and its source are in the box above the repos; here only why this choice is off
+  // (round 3: the owner's decision text was printed twice on Settings).
+  return 'Off: your CI agreement above rules out paid GitHub-hosted minutes on private repos.'
 }
 
 function matches(value: string, pattern: string): boolean {

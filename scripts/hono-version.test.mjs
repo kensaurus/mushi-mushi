@@ -1,6 +1,9 @@
 /**
- * GHSA-5r4p-p66f-jhc7 (serveStatic decodes the path twice) is fixed in
- * hono 4.13.11. The workspace must install that release or newer.
+ * GHSA-5r4p-p66f-jhc7 (serveStatic decodes the path twice) was fixed in
+ * hono 4.13.11; the November 2026 advisories (GHSA-46wx-v44x-9hh2,
+ * GHSA-4h7h-rv7c-7m2v, GHSA-4m76-xfj5-7975, GHSA-h7mg-cq63-vhpq,
+ * GHSA-3gg2-335m-rxc6) in 4.13.16. The workspace and the edge functions'
+ * deno.lock must install 4.13.16 or newer.
  * Run with `pnpm test:scripts`.
  */
 import { test } from 'node:test'
@@ -12,7 +15,7 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 /** First release that includes the fix. */
-const FIX = [4, 13, 11]
+const FIX = [4, 13, 16]
 
 function parts(version) {
   const match = /^(\d+)\.(\d+)\.(\d+)/.exec(version)
@@ -28,24 +31,24 @@ function atLeast(version, floor) {
   return true
 }
 
-test('the direct dependency and the applied override floor are 4.13.11', () => {
+test('the direct dependency allows the fix and the applied override floor is 4.13.16', () => {
   const root = JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8'))
   const server = JSON.parse(readFileSync(path.join(ROOT, 'packages/server/package.json'), 'utf8'))
   assert.equal(server.devDependencies.hono, '^4.13.11')
-  assert.equal(root.pnpm.overrides.hono, '>=4.13.11 <5')
+  assert.equal(root.pnpm.overrides.hono, '>=4.13.16 <5')
 })
 
-test('pnpm-lock.yaml resolves hono at or above 4.13.11', () => {
+test('pnpm-lock.yaml resolves hono at or above 4.13.16', () => {
   const lock = readFileSync(path.join(ROOT, 'pnpm-lock.yaml'), 'utf8')
-  assert.match(lock, /^ {2}hono: '>=4\.13\.11 <5'$/m)
+  assert.match(lock, /^ {2}hono: '>=4\.13\.16 <5'$/m)
   const resolved = [...lock.matchAll(/^ {2}hono@(\d+\.\d+\.\d+):/gm)].map((m) => m[1])
   assert.ok(resolved.length > 0, 'no hono package in the lockfile')
   for (const version of resolved) {
-    assert.ok(atLeast(version, FIX), `hono@${version} is below 4.13.11`)
+    assert.ok(atLeast(version, FIX), `hono@${version} is below 4.13.16`)
   }
 })
 
-test('deno.lock pins hono at or above 4.13.11', () => {
+test('deno.lock pins hono at or above 4.13.16', () => {
   for (const rel of ['deno.lock', 'packages/server/deno.lock']) {
     const lock = JSON.parse(readFileSync(path.join(ROOT, rel), 'utf8'))
     const specs = Object.entries(lock.specifiers ?? {}).filter(([spec]) => spec.includes('hono'))

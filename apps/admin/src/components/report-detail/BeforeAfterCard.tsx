@@ -55,7 +55,7 @@ export function BeforeAfterCard({ report, className = '' }: Props) {
       className={`mb-3 rounded-lg border border-edge-subtle bg-surface-raised/30 p-3 motion-safe:animate-mushi-fade-in ${className}`}
     >
       <header className="mb-2 flex items-baseline justify-between">
-        <h3 className="text-2xs font-semibold text-fg-muted uppercase tracking-wider">
+        <h3 className="text-2xs font-semibold text-fg-secondary">
           Before → After
         </h3>
         <span className="text-3xs text-fg-faint">as reported vs. after the fix</span>

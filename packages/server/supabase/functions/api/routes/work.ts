@@ -15,16 +15,27 @@
  *                                          one audit pass (ADR 0050)
  *     POST /v1/worker/claims/:id/renew     extend the lease
  *     POST /v1/worker/claims/:id/done      { outcome, failureKind?, fixId?, prUrl?, detail?, headAfter? }
- *     POST /v1/worker/claims/:id/findings  an audit claim files one reproduced finding (code_audit)
+ *     POST /v1/worker/claims/:id/findings  an audit claim files one reproduced finding (code_audit):
+ *                                          201 filed, 200 merged into an open pattern or regressed,
+ *                                          202 deferred over the app's open cap (ADR 0063)
+ *     GET  /v1/worker/claims/:id/recheck   an audit claim reads the app's open code-audit reports and
+ *                                          the deferred findings that fit (ADR 0063)
+ *     POST /v1/worker/claims/:id/recheck   { sha, base, results, deferredGone } closes what no longer
+ *                                          reproduces on the default branch (ADR 0063)
  *     POST /v1/worker/revoke               the key revokes itself (`mushi worker revoke`)
  *
  *   The console and the CLI:
  *     GET    /v1/admin/work/lanes          ?projectId= hosts, lanes, queues, recent runs (mcp:read)
  *     PATCH  /v1/admin/work/lanes/:id      lane settings (console session, non-viewers)
- *     PUT    /v1/admin/work/lanes/:id/queue { reportIds, append? } (console session, non-viewers)
+ *     PUT    /v1/admin/work/lanes/:id/queue { reportIds, append?, front? } (console session, non-viewers):
+ *                                          replace the queue, or add to its end (append) or its top (front)
+ *     POST   /v1/admin/work/lanes/:id/queue/move { reportId, to: top|up|down|bottom|remove } one report,
+ *                                          one or two rows; answers the fresh queue
  *     PATCH  /v1/admin/work/hosts/:id      host guards (console session, the host's owner)
  *     DELETE /v1/admin/work/hosts/:id      revoke a host and its key (console session, the owner)
  *     POST   /v1/admin/work/key            { projectIds, label? } mint a worker:run key (mcp:write)
+ *     GET    /v1/admin/work/code-audit/backlog, POST …/code-audit/collapse: work-collapse.ts
+ *            (`mushi work --collapse-backlog`, ADR 0065)
  *     GET    /v1/admin/work/stats, POST …/claims/:id/stop, POST …/hosts/:id/recheck: work-status.ts
  *            (worker flags, ADR 0048 amendment 2026-10-28; the lanes answer carries `flags` too)
  *
@@ -44,8 +55,9 @@ import { hashApiKey } from '../../_shared/api-key-mint.ts'
 import { claimTenantRateLimit } from '../../_shared/tenant-observability.ts'
 import { composeFixPacket, fixPacketContextFromReport } from '../../_shared/fix-packet.ts'
 import { activeWorkClaims, enqueueReports, queuedForLocalLanes, QUEUE_MODES, WORK_LEASE_MS, type QueueLane } from '../../_shared/work-claims.ts'
-import { AUDIT_FINDINGS_PER_HOUR, outcomeKindRefusal, parseAuditFinding } from '../../_shared/work-modes.ts'
-import { auditFiledLastHour, fileAuditFinding } from './work-audit.ts'
+import { AUDIT_FINDINGS_PER_HOUR, auditRecheckDue, outcomeKindRefusal, parseAuditFinding } from '../../_shared/work-modes.ts'
+import { registerCodeAuditCollapseRoutes } from './work-collapse.ts'
+import { applyRecheck, auditFiledLastHour, codeAuditBacklog, fileAuditFinding, parseRecheckBody, recheckList } from './work-audit.ts'
 import { claimFreshEyes, endFreshEyesRun, type FreshEyesClaimDeps } from './work-fresh-eyes.ts'
 import { mintSyntheticAccount } from '../../_shared/synthetic-accounts.ts'
 import { isOperatorUser } from '../../_shared/operator-gate.ts'
@@ -90,8 +102,17 @@ const IN_CHUNK = 100
 /** Reports a claim considers per pass: the lane's queue head, then this many ranked candidates per status. */
 const QUEUE_HEAD = 20
 const CANDIDATES_PER_STATUS = 50
-/** Reports in a queue at once, per lane. */
-export const QUEUE_MAX = 50
+/**
+ * Waiting (open) reports in a queue at once, per lane. A fixed, verified or
+ * dismissed report leaves the queue on every queue write, so it never counts.
+ * 200 holds the largest real queue (glot.it, 159 open on 2026-11-16) with room;
+ * the claim only reads the head (QUEUE_HEAD), so a long queue costs nothing.
+ */
+export const QUEUE_MAX = 200
+/** Report ids one queue request may carry (a bulk "Send to my local worker" sends at most this many). */
+export const QUEUE_REQUEST_MAX = 50
+const QUEUE_MOVES = ['top', 'up', 'down', 'bottom', 'remove'] as const
+type QueueMove = (typeof QUEUE_MOVES)[number]
 const CLOSED_STATUSES = new Set(['fixed', 'verified', 'dismissed'])
 export const WORKER_KEY_SCOPES = ['worker:run'] as const
 export const WORKER_KEY_MINTS_PER_HOUR = 10
@@ -604,7 +625,16 @@ async function claimAuditMode(c: Ctx, db: Db, lane: LaneRow, host: HostRow, now:
   if (((running ?? []) as unknown[]).length > 0) return c.json({ ok: true, data: { claim: null, reason: 'An audit lane runs one pass at a time.' } })
   const filed = await auditFiledLastHour(db, lane.project_id, now)
   if (filed === null) return err(c, 'DB_ERROR', "Could not read the audit's hourly count. Try again in a minute.", 503)
-  if (filed >= AUDIT_FINDINGS_PER_HOUR) {
+  // ADR 0063: at the app's open cap the lane only rechecks (once a day, no model); new findings would only wait.
+  const backlog = await codeAuditBacklog(db, lane.project_id)
+  if (!backlog) return err(c, 'DB_ERROR', 'Could not read the open code-audit count. Try again in a minute.', 503)
+  const { data: recheckRow } = await db.from('work_lanes').select('audit_rechecked_at').eq('id', lane.id).maybeSingle()
+  const recheck = auditRecheckDue((recheckRow as { audit_rechecked_at?: string | null } | null)?.audit_rechecked_at, now)
+  const backlogFull = backlog.open >= backlog.cap
+  if (backlogFull && !recheck) {
+    return c.json({ ok: true, data: { claim: null, reason: `This app has ${backlog.open} open code-audit reports (its cap is ${backlog.cap}); the audit waits until some are fixed or closed.` } })
+  }
+  if (filed >= AUDIT_FINDINGS_PER_HOUR && !recheck) {
     return c.json({ ok: true, data: { claim: null, reason: `This app already filed ${AUDIT_FINDINGS_PER_HOUR} code-audit findings in the last hour.` } })
   }
   const { data, error } = await db
@@ -613,6 +643,10 @@ async function claimAuditMode(c: Ctx, db: Db, lane: LaneRow, host: HostRow, now:
     .select('id')
     .single()
   if (error || !data) return err(c, 'DB_ERROR', 'The claim could not be stored. Try again in a minute.', 500)
+  // The recheck is handed out once per 20 h, done or not: a worker older than
+  // ADR 0063 never posts it, and would otherwise get a model pass on every claim
+  // while the backlog is full (its findings only land in code_audit_deferred).
+  if (recheck) await db.from('work_lanes').update({ audit_rechecked_at: now.toISOString() }).eq('id', lane.id)
   return c.json({
     ok: true,
     data: {
@@ -623,7 +657,14 @@ async function claimAuditMode(c: Ctx, db: Db, lane: LaneRow, host: HostRow, now:
         projectId: lane.project_id,
         leaseUntil,
         model: cfg.model,
-        audit: { reviewModel: lane.review_model, findingsLeft: AUDIT_FINDINGS_PER_HOUR - filed },
+        audit: {
+          reviewModel: lane.review_model,
+          findingsLeft: Math.max(0, AUDIT_FINDINGS_PER_HOUR - filed),
+          // The worker rechecks every open finding first; with no room it proposes nothing.
+          recheck,
+          propose: !backlogFull && filed < AUDIT_FINDINGS_PER_HOUR,
+          backlog,
+        },
       },
     },
   })
@@ -746,10 +787,53 @@ async function finding(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
   const lane = laneData as ModeLane
   const res = await deps.fileFinding(db, parsed.value, { lane, ownerUserId: userId, now })
   if (!res.ok) return c.json({ ok: false, error: { code: res.code, message: res.message, ...(res.reportId ? { reportId: res.reportId } : {}) } }, res.status)
-  await deps
-    .logAudit(db, own.project_id, userId, 'report.created', 'report', res.reportId, { source: 'code_audit', lane: lane.name, file: parsed.value.file, rule: parsed.value.rule }, { actorType: 'api_key' })
-    .catch(() => {})
-  return c.json({ ok: true, data: { reportId: res.reportId, queuedLaneId: res.queuedLaneId } }, 201)
+  if (res.outcome === 'deferred') return c.json({ ok: true, data: { outcome: 'deferred', reportId: null, queuedLaneId: null } }, 202)
+  if (res.outcome === 'filed') {
+    await deps
+      .logAudit(db, own.project_id, userId, 'report.created', 'report', res.reportId, { source: 'code_audit', lane: lane.name, file: parsed.value.file, rule: parsed.value.rule }, { actorType: 'api_key' })
+      .catch(() => {})
+  }
+  return c.json({ ok: true, data: { outcome: res.outcome, reportId: res.reportId, queuedLaneId: res.queuedLaneId } }, res.outcome === 'filed' ? 201 : 200)
+}
+
+/** An audit claim and its lane, for the recheck routes; a Refusal otherwise. */
+async function auditClaimLane(c: Ctx, deps: WorkRouteDeps, db: Db, now: Date): Promise<{ own: ClaimRow; lane: ModeLane } | Refusal> {
+  const own = await ownClaim(db, c, c.req.param('id') ?? '')
+  if (own instanceof Refusal) return own
+  if (own.kind !== 'audit') return new Refusal(err(c, 'VALIDATION_ERROR', 'Only an audit claim rechecks findings.', 400))
+  if (own.status !== 'active' || Date.parse(own.lease_until) <= now.getTime()) return new Refusal(err(c, 'CLAIM_ENDED', 'This audit claim already ended; claim again.', 409))
+  const userId = c.get('userId') as string
+  const access = await deps.access(c, db, userId, own.project_id)
+  if (!access.allowed || access.role === 'viewer') return new Refusal(err(c, 'FORBIDDEN', 'This key can no longer change reports for that app.', 403))
+  const { data: laneData, error } = await db.from('work_lanes').select('id, host_id, project_id, name, repo, review_model').eq('id', own.lane_id).maybeSingle()
+  if (error || !laneData) return new Refusal(err(c, 'DB_ERROR', 'Could not read the lane.', 500))
+  return { own, lane: laneData as ModeLane }
+}
+
+/** ADR 0063: what the audit lane's daily recheck reads. */
+async function recheckRead(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
+  const denied = workerOnly(c)
+  if (denied) return denied
+  const db = deps.getServiceClient()
+  const got = await auditClaimLane(c, deps, db, deps.now())
+  if (got instanceof Refusal) return got.response
+  const list = await recheckList(db, got.own.project_id)
+  if (!list) return err(c, 'DB_ERROR', 'Could not read the open code-audit reports. Try again in a minute.', 503)
+  return c.json({ ok: true, data: list })
+}
+
+/** ADR 0063: the audit lane's recheck result. */
+async function recheckWrite(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
+  const denied = workerOnly(c)
+  if (denied) return denied
+  const db = deps.getServiceClient()
+  const now = deps.now()
+  const got = await auditClaimLane(c, deps, db, now)
+  if (got instanceof Refusal) return got.response
+  const parsed = parseRecheckBody(await c.req.json().catch(() => null))
+  if (!parsed.ok) return err(c, 'VALIDATION_ERROR', parsed.message, 400)
+  const out = await applyRecheck(db, { projectId: got.own.project_id, laneId: got.lane.id, laneName: got.lane.name, now }, parsed.value)
+  return c.json({ ok: true, data: out })
 }
 
 async function revokeSelf(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
@@ -832,6 +916,8 @@ async function listLanes(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
     const { data } = await db.from('reports').select('id, summary, severity, status').in('id', part)
     for (const r of (data ?? []) as Array<{ id: string; summary: string | null; severity: string | null; status: string }>) reports.set(r.id, r)
   }
+  // A closed report still in a queue (the next queue write or claim drops it) is not shown or counted.
+  const waiting = queue.filter((q) => !CLOSED_STATUSES.has(reports.get(q.report_id)?.status ?? ''))
   const { data: projectRows } = await db.from('projects').select('id, name').in('id', projectIds)
   const names = new Map(((projectRows ?? []) as Array<{ id: string; name: string }>).map((p) => [p.id, p.name]))
   const title = (id: string) => reports.get(id)?.summary ?? `Report ${id.slice(0, 8)}`
@@ -851,7 +937,7 @@ async function listLanes(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
     projectIds,
     {
       hosts: [...hosts.values()].map((h) => ({ id: h.id, hostname: h.hostname, platform: h.platform, lastHeartbeatAt: h.last_heartbeat_at, revoked: !!h.revoked_at, status: h.status ?? {} })),
-      lanes: lanes.map((l) => ({ id: l.id, hostId: l.host_id, projectId: l.project_id, name: l.name, config: laneConfigFromRow(l), status: l.status ?? {}, queued: queue.filter((q) => q.lane_id === l.id).length })),
+      lanes: lanes.map((l) => ({ id: l.id, hostId: l.host_id, projectId: l.project_id, name: l.name, config: laneConfigFromRow(l), status: l.status ?? {}, queued: waiting.filter((q) => q.lane_id === l.id).length })),
       claims: claims.map(flagClaim),
     },
     now,
@@ -897,7 +983,7 @@ async function listLanes(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
             status: l.status ?? {},
             lastSeenAt: l.last_seen_at,
             active: mineClaims.filter(isActive).map((x) => ({ claimId: x.id, kind: x.kind, reportId: x.report_id, title: claimTitle(x), since: x.claimed_at, leaseUntil: x.lease_until, fromQueue: x.from_queue })),
-            queue: queue
+            queue: waiting
               .filter((q) => q.lane_id === l.id)
               .map((q) => ({ reportId: q.report_id, title: title(q.report_id), severity: reports.get(q.report_id)?.severity ?? null, status: reports.get(q.report_id)?.status ?? null, source: q.source, position: q.position })),
             recent: finished.slice(0, 20).map((x) => ({
@@ -963,50 +1049,159 @@ async function patchLane(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
   return c.json({ ok: true, data: { id: lane.id, config: laneConfigFromRow(data as LaneRow), reviewModel: (data as LaneRow).review_model, minSeverity: (data as LaneRow).min_severity } })
 }
 
+type QueueRow = { report_id: string; position: number; source: string; added_by: string | null; created_at: string }
+
+/**
+ * The lane's queue in order, after dropping what can no longer run: a report
+ * that was fixed, verified, dismissed, deleted or moved to another app. Every
+ * queue write starts here, so a closed report never counts against QUEUE_MAX
+ * (glot.it held 50 of them on 2026-11-16, and the console showed "full").
+ */
+async function waitingQueue(db: Db, lane: LaneRow): Promise<QueueRow[] | { error: string }> {
+  const { data, error } = await db
+    .from('work_queue')
+    .select('report_id, position, source, added_by, created_at')
+    .eq('lane_id', lane.id)
+    .order('position', { ascending: true })
+    .order('created_at', { ascending: true })
+  if (error) return { error: error.message }
+  const rows = (data ?? []) as QueueRow[]
+  const open = new Set<string>()
+  for (const part of chunks(rows.map((r) => r.report_id))) {
+    const { data: reps, error: repErr } = await db.from('reports').select('id, project_id, status').in('id', part)
+    if (repErr) return { error: repErr.message }
+    for (const r of (reps ?? []) as Array<{ id: string; project_id: string; status: string }>) {
+      if (r.project_id === lane.project_id && !CLOSED_STATUSES.has(r.status)) open.add(r.id)
+    }
+  }
+  const stale = rows.filter((r) => !open.has(r.report_id)).map((r) => r.report_id)
+  for (const part of chunks(stale)) await db.from('work_queue').delete().eq('lane_id', lane.id).in('report_id', part)
+  return rows.filter((r) => open.has(r.report_id))
+}
+
+async function queueAnswer(c: Ctx, db: Db, laneId: string, extra: Record<string, unknown> = {}): Promise<Response> {
+  const { data: rows } = await db.from('work_queue').select('report_id, position').eq('lane_id', laneId).order('position', { ascending: true }).order('created_at', { ascending: true })
+  return c.json({ ok: true, data: { laneId, reportIds: ((rows ?? []) as Array<{ report_id: string }>).map((r) => r.report_id), ...extra } })
+}
+
+function queueRowsFor(lane: LaneRow, rows: ReadonlyArray<{ report_id: string; position: number; source?: string; added_by?: string | null }>, userId: string) {
+  return rows.map((r) => ({ lane_id: lane.id, project_id: lane.project_id, report_id: r.report_id, position: r.position, source: r.source ?? 'console', added_by: r.added_by ?? userId }))
+}
+
 async function putQueue(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
   const db = deps.getServiceClient()
   const now = deps.now()
-  const body = (await c.req.json().catch(() => ({}))) as { reportIds?: unknown; append?: unknown }
+  const body = (await c.req.json().catch(() => ({}))) as { reportIds?: unknown; append?: unknown; front?: unknown }
+  const front = body.front === true
+  const adding = front || body.append === true
   const reportIds = Array.isArray(body.reportIds) ? [...new Set(body.reportIds.filter((x): x is string => typeof x === 'string' && UUID_RE.test(x)))] : null
-  if (!reportIds || reportIds.length > QUEUE_MAX || (body.append === true && reportIds.length === 0)) {
-    return err(c, 'VALIDATION_ERROR', `reportIds must list up to ${QUEUE_MAX} report ids (at least one to append).`, 400)
-  }
+  if (!reportIds) return err(c, 'VALIDATION_ERROR', 'Send the reports as a list of report ids.', 400)
+  if (adding && reportIds.length === 0) return err(c, 'VALIDATION_ERROR', 'Pick at least one report to add.', 400)
+  const max = adding ? QUEUE_REQUEST_MAX : QUEUE_MAX
+  if (reportIds.length > max) return err(c, 'VALIDATION_ERROR', `Send at most ${max} reports at a time (you sent ${reportIds.length}).`, 400)
   const lane = await writableLane(c, deps, db, c.req.param('id') ?? '', 'change a queue')
   if (lane instanceof Refusal) return lane.response
   if (reportIds.length && !QUEUE_MODES.includes(lane.mode)) {
     return err(c, 'LANE_MODE', `This lane is in ${lane.mode} mode and takes no reports from a queue. Switch its mode, or send the reports to a fix lane.`, 409)
   }
   const userId = c.get('userId') as string
+  let ids = reportIds
+  let skippedClosed = 0
   if (reportIds.length) {
-    const { data, error } = await db.from('reports').select('id, project_id').in('id', reportIds)
-    if (error) return err(c, 'DB_ERROR', 'Could not read the reports.', 500)
-    const ok = new Set(((data ?? []) as Array<{ id: string; project_id: string }>).filter((r) => r.project_id === lane.project_id).map((r) => r.id))
-    const foreign = reportIds.filter((id) => !ok.has(id))
-    if (foreign.length) return err(c, 'VALIDATION_ERROR', `${foreign.length} of these reports are not in this lane's app.`, 422)
+    const { data, error } = await db.from('reports').select('id, project_id, status').in('id', reportIds)
+    if (error) return err(c, 'DB_ERROR', 'Could not read the reports. Try again.', 500)
+    const rows = (data ?? []) as Array<{ id: string; project_id: string; status: string }>
+    const inApp = new Map(rows.filter((r) => r.project_id === lane.project_id).map((r) => [r.id, r.status]))
+    const foreign = reportIds.filter((id) => !inApp.has(id))
+    if (foreign.length) return err(c, 'VALIDATION_ERROR', `${foreign.length === 1 ? 'One of these reports is' : `${foreign.length} of these reports are`} not in this lane's app. Send them to a lane of their own app.`, 422)
+    // A closed report would leave the queue on the next write: skip it and say so.
+    ids = reportIds.filter((id) => !CLOSED_STATUSES.has(inApp.get(id) ?? ''))
+    skippedClosed = reportIds.length - ids.length
+    if (adding && ids.length === 0) return err(c, 'ALREADY_CLOSED', reportIds.length === 1 ? 'That report is already fixed or dismissed, so there is nothing to queue.' : 'These reports are all fixed or dismissed already, so there is nothing to queue.', 409)
   }
-  const ref: QueueLane = { id: lane.id, projectId: lane.project_id, hostId: lane.host_id }
-  if (body.append === true) {
-    const { count } = await db.from('work_queue').select('id', { count: 'exact', head: true }).eq('lane_id', lane.id)
-    if ((count ?? 0) + reportIds.length > QUEUE_MAX) return err(c, 'QUEUE_FULL', `A lane holds at most ${QUEUE_MAX} queued reports.`, 409)
-    const q = await enqueueReports(db, ref, reportIds, { source: 'console', addedBy: userId, now })
-    if ('error' in q) return err(c, 'DB_ERROR', 'The reports could not be queued.', 500)
+  const current = await waitingQueue(db, lane)
+  if ('error' in current) return err(c, 'DB_ERROR', 'Could not read the queue. Try again.', 500)
+
+  if (adding) {
+    const have = new Set(current.map((r) => r.report_id))
+    const added = ids.filter((id) => !have.has(id)).length
+    if (current.length + added > QUEUE_MAX) {
+      return err(c, 'QUEUE_FULL', `This lane already has ${current.length} reports waiting and holds at most ${QUEUE_MAX}. Remove some from its queue, or send these to another lane.`, 409)
+    }
+    if (front) {
+      // Before everything, in the order given. A report already queued moves up too:
+      // "fix this next" must never be a silent no-op.
+      const start = (current[0]?.position ?? 0) - ids.length
+      const prior = new Map(current.map((r) => [r.report_id, r]))
+      const rows = ids.map((id, i) => ({ report_id: id, position: start + i, source: prior.get(id)?.source, added_by: prior.get(id)?.added_by }))
+      const { error } = await db.from('work_queue').upsert(queueRowsFor(lane, rows, userId), { onConflict: 'lane_id,report_id' })
+      if (error) return err(c, 'DB_ERROR', 'The reports could not be queued. Try again.', 500)
+    } else {
+      const ref: QueueLane = { id: lane.id, projectId: lane.project_id, hostId: lane.host_id }
+      const q = await enqueueReports(db, ref, ids, { source: 'console', addedBy: userId, now })
+      if ('error' in q) return err(c, 'DB_ERROR', 'The reports could not be queued. Try again.', 500)
+    }
+    await deps.logAudit(db, lane.project_id, userId, 'settings.updated', 'work_queue', lane.id, { lane: lane.name, append: !front, front, reports: ids.length }).catch(() => {})
+    return queueAnswer(c, db, lane.id, { added, moved: ids.length - added, skippedClosed })
+  }
+
+  // Replace: the list is the queue, in this order.
+  const drop = current.map((r) => r.report_id).filter((id) => !ids.includes(id))
+  for (const part of chunks(drop)) await db.from('work_queue').delete().eq('lane_id', lane.id).in('report_id', part)
+  if (ids.length) {
+    const { error: upErr } = await db.from('work_queue').upsert(queueRowsFor(lane, ids.map((report_id, position) => ({ report_id, position, source: 'console' })), userId), { onConflict: 'lane_id,report_id' })
+    if (upErr) return err(c, 'DB_ERROR', 'The queue could not be saved. Try again.', 500)
+  }
+  await deps.logAudit(db, lane.project_id, userId, 'settings.updated', 'work_queue', lane.id, { lane: lane.name, append: false, reports: ids.length }).catch(() => {})
+  return queueAnswer(c, db, lane.id, { skippedClosed })
+}
+
+/**
+ * One report: to the top, up or down one, to the bottom, or out of the queue.
+ * It writes one or two rows, never the whole list, so a long queue moves as
+ * easily as a short one (it used to resend every id and fail past 50).
+ */
+async function moveQueue(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
+  const db = deps.getServiceClient()
+  const body = (await c.req.json().catch(() => ({}))) as { reportId?: unknown; to?: unknown }
+  const reportId = typeof body.reportId === 'string' && UUID_RE.test(body.reportId) ? body.reportId : null
+  const to = (QUEUE_MOVES as readonly string[]).includes(body.to as string) ? (body.to as QueueMove) : null
+  if (!reportId || !to) return err(c, 'VALIDATION_ERROR', `Name one report and where it goes: ${QUEUE_MOVES.join(', ')}.`, 400)
+  const lane = await writableLane(c, deps, db, c.req.param('id') ?? '', 'change a queue')
+  if (lane instanceof Refusal) return lane.response
+  const userId = c.get('userId') as string
+  let rows = await waitingQueue(db, lane)
+  if ('error' in rows) return err(c, 'DB_ERROR', 'Could not read the queue. Try again.', 500)
+  const i = rows.findIndex((r) => r.report_id === reportId)
+  if (i < 0) return err(c, 'NOT_QUEUED', 'That report is no longer in this queue: the lane took it, it was closed, or someone removed it.', 404)
+
+  const setPosition = (id: string, position: number) => db.from('work_queue').update({ position }).eq('lane_id', lane.id).eq('report_id', id)
+  if (to === 'remove') {
+    const { error } = await db.from('work_queue').delete().eq('lane_id', lane.id).eq('report_id', reportId)
+    if (error) return err(c, 'DB_ERROR', 'The report could not be removed. Try again.', 500)
   } else {
-    // Replace: the list is the queue, in this order.
-    const { data: current, error } = await db.from('work_queue').select('report_id').eq('lane_id', lane.id)
-    if (error) return err(c, 'DB_ERROR', 'Could not read the queue.', 500)
-    const drop = ((current ?? []) as Array<{ report_id: string }>).map((r) => r.report_id).filter((id) => !reportIds.includes(id))
-    if (drop.length) await db.from('work_queue').delete().eq('lane_id', lane.id).in('report_id', drop)
-    if (reportIds.length) {
-      const { error: upErr } = await db.from('work_queue').upsert(
-        reportIds.map((reportId, position) => ({ lane_id: lane.id, project_id: lane.project_id, report_id: reportId, position, source: 'console', added_by: userId })),
-        { onConflict: 'lane_id,report_id' },
-      )
-      if (upErr) return err(c, 'DB_ERROR', 'The queue could not be saved.', 500)
+    const j = to === 'top' ? 0 : to === 'bottom' ? rows.length - 1 : to === 'up' ? i - 1 : i + 1
+    if (j >= 0 && j < rows.length && j !== i) {
+      // Equal positions order by time, so a swap or an end move could land in the
+      // wrong place: number the queue 0..n-1 once first (the order stays the same).
+      if (new Set(rows.map((r) => r.position)).size !== rows.length) {
+        const renumbered = rows.map((r, k) => ({ ...r, position: k }))
+        const { error } = await db.from('work_queue').upsert(queueRowsFor(lane, renumbered, userId), { onConflict: 'lane_id,report_id' })
+        if (error) return err(c, 'DB_ERROR', 'The queue could not be saved. Try again.', 500)
+        rows = renumbered
+      }
+      const self = rows[i]!
+      const other = rows[j]!
+      const writes =
+        to === 'top' ? [setPosition(self.report_id, rows[0]!.position - 1)]
+        : to === 'bottom' ? [setPosition(self.report_id, rows[rows.length - 1]!.position + 1)]
+        : [setPosition(self.report_id, other.position), setPosition(other.report_id, self.position)]
+      const results = await Promise.all(writes)
+      if (results.some((r) => r.error)) return err(c, 'DB_ERROR', 'The queue could not be saved. Try again.', 500)
     }
   }
-  await deps.logAudit(db, lane.project_id, userId, 'settings.updated', 'work_queue', lane.id, { lane: lane.name, append: body.append === true, reports: reportIds.length }).catch(() => {})
-  const { data: rows } = await db.from('work_queue').select('report_id, position').eq('lane_id', lane.id).order('position', { ascending: true }).order('created_at', { ascending: true })
-  return c.json({ ok: true, data: { laneId: lane.id, reportIds: ((rows ?? []) as Array<{ report_id: string }>).map((r) => r.report_id) } })
+  await deps.logAudit(db, lane.project_id, userId, 'settings.updated', 'work_queue', lane.id, { lane: lane.name, move: to, report: reportId }).catch(() => {})
+  return queueAnswer(c, db, lane.id)
 }
 
 /** A host the console caller owns. */
@@ -1098,13 +1293,18 @@ export function registerWorkRoutes(app: Hono<{ Variables: Variables }>, deps: Wo
   app.post('/v1/worker/claims/:id/renew', deps.workerAuth, (c) => renew(c as Ctx, deps))
   app.post('/v1/worker/claims/:id/done', deps.workerAuth, (c) => done(c as Ctx, deps))
   app.post('/v1/worker/claims/:id/findings', deps.workerAuth, (c) => finding(c as Ctx, deps))
+  app.get('/v1/worker/claims/:id/recheck', deps.workerAuth, (c) => recheckRead(c as Ctx, deps))
+  app.post('/v1/worker/claims/:id/recheck', deps.workerAuth, (c) => recheckWrite(c as Ctx, deps))
   app.post('/v1/worker/revoke', deps.workerAuth, (c) => revokeSelf(c as Ctx, deps))
 
   app.get('/v1/admin/work/lanes', deps.adminOrApiKeyRead, (c) => listLanes(c as Ctx, deps))
   app.patch('/v1/admin/work/lanes/:id', deps.jwtAuth, (c) => patchLane(c as Ctx, deps))
   app.put('/v1/admin/work/lanes/:id/queue', deps.jwtAuth, (c) => putQueue(c as Ctx, deps))
+  app.post('/v1/admin/work/lanes/:id/queue/move', deps.jwtAuth, (c) => moveQueue(c as Ctx, deps))
   app.patch('/v1/admin/work/hosts/:id', deps.jwtAuth, (c) => patchHost(c as Ctx, deps))
   app.delete('/v1/admin/work/hosts/:id', deps.jwtAuth, (c) => deleteHost(c as Ctx, deps))
   app.post('/v1/admin/work/key', deps.adminOrApiKeyWrite, (c) => mintWorkerKey(c as Ctx, deps))
+  // ADR 0065: `mushi work --collapse-backlog` (one-shot, reversible by its tag).
+  registerCodeAuditCollapseRoutes(app as never, deps)
   registerWorkStatusRoutes(app, deps)
 }

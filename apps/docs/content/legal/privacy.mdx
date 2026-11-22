@@ -9,13 +9,13 @@ import { Callout } from 'nextra/components'
 
 <Callout type="warning">
   **Draft, not yet reviewed by a lawyer.** This page is a complete plain-English
-  description of how Mushi Mushi handles personal data as of 2026-11-11. Treat
+  description of how Mushi Mushi handles personal data as of 2026-11-19. Treat
   it as a description of current practice, not a finished legal document.
   Operator details are set; a lawyer's review is pending.
   Questions: kensaurus@gmail.com.
 </Callout>
 
-**Effective date:** 2026-11-11 · **Version:** 6. Version 6 adds the operator's address (sections 1, 9 and 13); nothing about the data we handle changes. Version 5, 2026-10-29, added two things we record from that day: for each SDK key, the first and last time it checked in from each kind of place (dev machine, live site, store app, server), with the host only; and milestones our servers record about your account and projects (section 2, "Product usage events" and "SDK key check-ins"). Version 4, earlier the same day, lists Langfuse and Browserbase, which we already used but had left out of section 5; neither is new, and we are telling console account holders about the omission by email; says Sentry also receives errors from Mushi Mushi's own servers; says model providers also receive code snippets for fixes and reviews; describes the request tracker as it is (it records requests, it does not produce a signed export); and corrects the tester ID-check threshold to US$400. (Version 3, 2026-10-28, did not include the version 4 corrections; version 2, 2026-10-10, did not list the free production check or the cookieless visit count; version 1, 2026-09-21, did not list the opt-in known-fix search sent to Firecrawl.)
+**Effective date:** 2026-11-19 · **Version:** 7. Version 7 keeps reports on the Free plan for 30 days instead of 14 (section 7). Version 6, 2026-11-11, added the operator's address (sections 1, 9 and 13); nothing about the data we handle changed. Version 5, 2026-10-29, added two things we record from that day: for each SDK key, the first and last time it checked in from each kind of place (dev machine, live site, store app, server), with the host only; and milestones our servers record about your account and projects (section 2, "Product usage events" and "SDK key check-ins"). Version 4, earlier the same day, lists Langfuse and Browserbase, which we already used but had left out of section 5; neither is new, and we are telling console account holders about the omission by email; says Sentry also receives errors from Mushi Mushi's own servers; says model providers also receive code snippets for fixes and reviews; describes the request tracker as it is (it records requests, it does not produce a signed export); and corrects the tester ID-check threshold to US$400. (Version 3, 2026-10-28, did not include the version 4 corrections; version 2, 2026-10-10, did not list the free production check or the cookieless visit count; version 1, 2026-09-21, did not list the opt-in known-fix search sent to Firecrawl.)
 
 This policy covers **Mushi Mushi Cloud** (the hosted service at
 `kensaur.us/mushi-mushi`), the **admin console**, the **docs site**, the
@@ -32,7 +32,7 @@ section 3, and the "processor" for the data described in section 4).
 - **Address:** 〒150-0043　東京都渋谷区道玄坂1丁目10番8号　渋谷道玄坂東急ビル2F-C, Japan
 - **Contact for anything in this policy:** [kensaurus@gmail.com](mailto:kensaurus@gmail.com)
 - **Subject line that gets the fastest answer:** `[mushi-privacy]`
-- **Security reports:** see [SECURITY.md](https://github.com/kensaurus/mushi-mushi/blob/master/SECURITY.md) and the [security summary](/security).
+- **Security reports:** see [.github/SECURITY.md](https://github.com/kensaurus/mushi-mushi/blob/master/.github/SECURITY.md) and the [security summary](/security).
 
 There is no separate data-protection officer. The founder answers these
 requests personally.
@@ -148,7 +148,7 @@ Dedicated US and EU clusters are planned, not live. See
 
 | Data | Kept for | Mechanism |
 | --- | --- | --- |
-| End-user reports and everything attached to them | The retention window of your plan: **Free 14 days · Builder 90 days · Studio 180 days · Enterprise as agreed**, or a shorter per-project policy you set in **Compliance → Data retention** | A daily `retention-sweep` job hard-deletes rows past the window. Legal-hold rows are skipped |
+| End-user reports and everything attached to them | The retention window of your plan: **Free 30 days · Builder 90 days · Studio 180 days · Enterprise as agreed**, or a shorter per-project policy you set in **Compliance → Data retention** | A daily `retention-sweep` job hard-deletes rows past the window. Legal-hold rows are skipped |
 | Product usage events (Mushi Mushi's own console analytics) | **730 days (2 years)** | Nightly `prune_product_events` job, using the 730-day retention set on Mushi Mushi's own analytics project |
 | Docs-site analytics | 730 days (2 years) | Same table and job as above |
 | SDK key check-ins (first and last seen per key and kind of place) | While the key exists | Deleted with the key or the project (database cascade) |

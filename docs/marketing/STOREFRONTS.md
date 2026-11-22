@@ -111,7 +111,7 @@ cared-for.
   in `.env.local`, delete `.cache/bluesky-session.json`, and the next script run
   will mint a fresh session under the brand identity.
   **Not reserved as of 2026-09-21**: the handle does not resolve and the domain
-  is unregistered, so every public link (README, SUPPORT.md) points at
+  is unregistered, so every public link (README, .github/SUPPORT.md) points at
   `kensaur.us`. Do not link `mushimushi.dev` anywhere until it
   resolves.
 - [ ] **Self-label as a bot** — the script-posted account should mark itself in

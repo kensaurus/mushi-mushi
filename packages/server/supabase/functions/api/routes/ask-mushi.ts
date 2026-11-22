@@ -17,7 +17,7 @@ import {
 } from '../../_shared/models.ts';
 import { claudeGenerateObject, claudeStreamText } from '../../_shared/claude-messages.ts';
 import { logLlmInvocation, extractAnthropicCacheUsage } from '../../_shared/telemetry.ts';
-import { withAnthropicOrOpenAi } from '../../_shared/llm-failover.ts';
+import { withAnthropicOrOpenAi, withPlatformRoute } from '../../_shared/llm-failover.ts';
 import { createTrace, scoreExistingTrace } from '../../_shared/observability.ts';
 import { generateValidatedObject } from '../../_shared/structured-output.ts';
 import {
@@ -28,7 +28,6 @@ import {
   validateNavReply,
 } from '../../_shared/console-knowledge.ts';
 import { dbError, ownedProjectIds } from '../shared.ts';
-import { platformAnthropicKey } from '../../_shared/ai-provider.ts';
 
 // ============================================================
 // ASK MUSHI — scoped chat sidebar (Cmd/Ctrl+J)
@@ -441,68 +440,24 @@ async function runAskMushiLlmTurn(args: {
 
   try {
     if (!effectiveProjectId) {
-      // No active project — env-key fallback (same as pre-BYOK behaviour).
-      const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
-      if (anthropicKey) {
-        try {
-          keySource = 'env';
-          const result = await claudeGenerateObject({
-            apiKey: anthropicKey,
-            model: primaryModel,
-            schema: AskMushiReplyLlmSchema,
-            effort: ASSIST_EFFORT,
-            messages: [
-              {
-                role: 'system',
-                content: systemPrompt,
-                experimental_providerMetadata: {
-                  anthropic: { cacheControl: { type: 'ephemeral' } },
-                },
-              },
-              ...messages.map((m) => ({ role: m.role, content: m.content })),
-            ],
-            maxTokens: maxTokens + THINKING_HEADROOM_TOKENS,
-          });
-          const cache = extractAnthropicCacheUsage(result.experimental_providerMetadata);
-          llmSpan.end({
-            model: primaryModel,
-            inputTokens: result.usage?.promptTokens,
-            outputTokens: result.usage?.completionTokens,
-          });
-          await trace.end();
-          let reply = validateNavReply(
-            normalizeAskMushiReply(result.object as z.infer<typeof AskMushiReplyLlmSchema>),
-          ) as AskMushiReply;
-          return {
-            reply,
-            usedModel: primaryModel,
-            fallbackUsed: false,
-            fallbackReason: null,
-            inputTokens: result.usage?.promptTokens,
-            outputTokens: result.usage?.completionTokens,
-            cacheCreate: cache.cacheCreationInputTokens,
-            cacheRead: cache.cacheReadInputTokens,
-            langfuseTraceId: trace.id,
-            keySource,
-          };
-        } catch (err) {
-          fallbackUsed = true;
-          fallbackReason = err instanceof Error ? err.message : String(err);
-        }
-      }
-      const openaiKey = Deno.env.get('OPENAI_API_KEY');
-      if (!openaiKey) throw new Error('No LLM provider configured');
-      usedModel = ASSIST_FALLBACK;
-      fallbackUsed = true;
-      keySource = 'env';
+      // No active project, so no organization whose AI provider says Claude
+      // may run (ADR 0039 amendment): the platform keys answer, on the
+      // OpenAI-compatible candidates of the ask-mushi route.
       const { openAiProvider } = await import('../../_shared/openai-compat.ts');
-      const openai = openAiProvider({ apiKey: openaiKey });
-      const result = await generateValidatedObject(AskMushiReplyLlmSchema, {
-        model: openai(ASSIST_FALLBACK),
-        system: systemPrompt,
-        messages: messages.map((m) => ({ role: m.role, content: m.content })),
-        maxTokens,
+      const routed = await withPlatformRoute(db, null, { feature: 'ask-mushi', tier: 'fast' }, {
+        openai: (key) =>
+          generateValidatedObject(AskMushiReplyLlmSchema, {
+            model: openAiProvider({ apiKey: key.key, baseURL: key.baseUrl })(key.model ?? ASSIST_FALLBACK),
+            system: systemPrompt,
+            messages: messages.map((m) => ({ role: m.role, content: m.content })),
+            maxTokens,
+          }),
       });
+      const result = routed.result;
+      usedModel = routed.model ?? ASSIST_FALLBACK;
+      fallbackUsed = routed.fallbackUsed;
+      fallbackReason = routed.fallbackUsed ? 'primary_unavailable' : null;
+      keySource = 'env';
       llmSpan.end({
         model: usedModel,
         inputTokens: result.usage?.promptTokens,
@@ -526,14 +481,14 @@ async function runAskMushiLlmTurn(args: {
       };
     }
 
-    const { result, usedProvider } = await withAnthropicOrOpenAi(
+    const routed = await withAnthropicOrOpenAi(
       db,
       effectiveProjectId,
       async (key) => {
         keySource = key.source;
         return claudeGenerateObject({
           apiKey: key.key,
-          model: primaryModel,
+          model: key.model ?? primaryModel,
           schema: AskMushiReplyLlmSchema,
           effort: ASSIST_EFFORT,
           messages: [
@@ -551,24 +506,21 @@ async function runAskMushiLlmTurn(args: {
       },
       async (key) => {
         keySource = key.source;
-        usedModel = ASSIST_FALLBACK;
-        fallbackUsed = true;
-        fallbackReason = 'anthropic unavailable';
         const { openAiProvider } = await import('../../_shared/openai-compat.ts');
         const openai = openAiProvider({ apiKey: key.key, baseURL: key.baseUrl });
         return generateValidatedObject(AskMushiReplyLlmSchema, {
-          model: openai(ASSIST_FALLBACK),
+          model: openai(key.model ?? ASSIST_FALLBACK),
           system: systemPrompt,
           messages: messages.map((m) => ({ role: m.role, content: m.content })),
           maxTokens,
         });
       },
+      { feature: 'ask-mushi', tier: 'fast' },
     );
-
-    if (usedProvider === 'openai') {
-      usedModel = ASSIST_FALLBACK;
-      fallbackUsed = true;
-    }
+    const { result, usedProvider } = routed;
+    usedModel = routed.model ?? (usedProvider === 'openai' ? ASSIST_FALLBACK : primaryModel);
+    fallbackUsed = routed.fallbackUsed;
+    fallbackReason = routed.fallbackUsed ? 'primary_unavailable' : null;
 
     const cache = extractAnthropicCacheUsage(result.experimental_providerMetadata);
     llmSpan.end({
@@ -1034,77 +986,85 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
       await stream.write(toSseEvent({ threadId, model: primaryModel }, { event: 'start' }));
 
       try {
-        // An organization that runs AI on OpenAI never gets the platform Claude key (ADR 0039 amendment).
-        const anthropicKey = activeProject?.id ? await platformAnthropicKey(db, activeProject.id) : Deno.env.get('ANTHROPIC_API_KEY');
-        let primaryFailed = false;
-        if (anthropicKey) {
+        // The platform keys, through the ask-mushi-stream route (provider and
+        // model from kenji). A candidate that fails before its first delta
+        // hands over to the next; one that fails after output started ends
+        // the stream instead of repeating text.
+        const [{ openAiProvider }, { streamText }] = await Promise.all([
+          import('../../_shared/openai-compat.ts'),
+          import('../../_shared/ai-sdk.ts'),
+        ]);
+        const pipe = async (textStream: AsyncIterable<string>) => {
+          let wrote = false;
           try {
-            const result = claudeStreamText({
-              apiKey: anthropicKey,
-              model: primaryModel,
-              effort: ASSIST_EFFORT,
-              messages: [
-                {
-                  role: 'system',
-                  content: systemPrompt,
-                  experimental_providerMetadata: {
-                    anthropic: { cacheControl: { type: 'ephemeral' } },
-                  },
-                },
-                ...messages.map((m) => ({ role: m.role, content: m.content })),
-              ],
-              maxTokens: maxTokens + THINKING_HEADROOM_TOKENS,
-            });
-            for await (const delta of result.textStream) {
+            for await (const delta of textStream) {
+              wrote = true;
               acc += delta;
               await stream.write(toSseEvent({ delta }, { event: 'delta' }));
             }
-            const usage = await result.usage;
-            inputTokens = usage?.promptTokens;
-            outputTokens = usage?.completionTokens;
-            const provMeta = await result.experimental_providerMetadata;
-            const cache = extractAnthropicCacheUsage(provMeta);
-            cacheCreate = cache.cacheCreationInputTokens;
-            cacheRead = cache.cacheReadInputTokens;
           } catch (err) {
-            primaryFailed = true;
-            fallbackUsed = true;
-            fallbackReason = err instanceof Error ? err.message : String(err);
+            if (!wrote) throw err;
+            log.warn('Ask Mushi stream stopped after output started', { err: String(err).slice(0, 200) });
+            throw new Error('Ask Mushi stream stopped after output started');
           }
-        } else {
-          primaryFailed = true;
-          fallbackUsed = true;
-          fallbackReason = 'ANTHROPIC_API_KEY not set';
-        }
-
-        if (primaryFailed) {
-          const openaiKey = Deno.env.get('OPENAI_API_KEY');
-          if (!openaiKey) {
-            await stream.write(
-              toSseEvent(
-                { code: 'LLM_UNAVAILABLE', message: 'No LLM provider configured.' },
-                { event: 'error' },
-              ),
-            );
-            return;
-          }
-          usedModel = ASSIST_FALLBACK;
-          const [{ openAiProvider }, { streamText }] = await Promise.all([import('../../_shared/openai-compat.ts'), import('../../_shared/ai-sdk.ts')]);
-          const openai = openAiProvider({ apiKey: openaiKey });
-          const result = streamText({
-            model: openai(ASSIST_FALLBACK),
-            system: systemPrompt,
-            messages: messages.map((m) => ({ role: m.role, content: m.content })),
-            maxTokens,
+        };
+        type StreamOut = {
+          usage?: { promptTokens?: number; completionTokens?: number };
+          cache: { cacheCreationInputTokens: number | null; cacheReadInputTokens: number | null } | null;
+        };
+        let routed;
+        try {
+          routed = await withPlatformRoute<StreamOut>(db, activeProject?.id ?? null, { feature: 'ask-mushi-stream', tier: 'fast' }, {
+            anthropic: async (key) => {
+              const result = claudeStreamText({
+                apiKey: key.key,
+                model: key.model ?? primaryModel,
+                effort: ASSIST_EFFORT,
+                messages: [
+                  {
+                    role: 'system',
+                    content: systemPrompt,
+                    experimental_providerMetadata: {
+                      anthropic: { cacheControl: { type: 'ephemeral' } },
+                    },
+                  },
+                  ...messages.map((m) => ({ role: m.role, content: m.content })),
+                ],
+                maxTokens: maxTokens + THINKING_HEADROOM_TOKENS,
+              });
+              await pipe(result.textStream);
+              const usage = await result.usage;
+              const cache = extractAnthropicCacheUsage(await result.experimental_providerMetadata);
+              return { usage, cache };
+            },
+            openai: async (key) => {
+              const result = streamText({
+                model: openAiProvider({ apiKey: key.key, baseURL: key.baseUrl })(key.model ?? ASSIST_FALLBACK),
+                system: systemPrompt,
+                messages: messages.map((m) => ({ role: m.role, content: m.content })),
+                maxTokens,
+              });
+              await pipe(result.textStream);
+              return { usage: await result.usage, cache: null };
+            },
           });
-          for await (const delta of result.textStream) {
-            acc += delta;
-            await stream.write(toSseEvent({ delta }, { event: 'delta' }));
-          }
-          const usage = await result.usage;
-          inputTokens = usage?.promptTokens;
-          outputTokens = usage?.completionTokens;
+        } catch (err) {
+          if (acc) throw err;
+          await stream.write(
+            toSseEvent(
+              { code: 'LLM_UNAVAILABLE', message: 'No AI provider could answer.' },
+              { event: 'error' },
+            ),
+          );
+          return;
         }
+        usedModel = routed.model ?? primaryModel;
+        fallbackUsed = routed.fallbackUsed;
+        fallbackReason = routed.fallbackUsed ? 'primary_unavailable' : null;
+        inputTokens = routed.result.usage?.promptTokens;
+        outputTokens = routed.result.usage?.completionTokens;
+        cacheCreate = routed.result.cache?.cacheCreationInputTokens ?? null;
+        cacheRead = routed.result.cache?.cacheReadInputTokens ?? null;
 
         const latencyMs = Date.now() - started;
         const costUsd = estimateCallCostUsd(usedModel, inputTokens ?? 0, outputTokens ?? 0);

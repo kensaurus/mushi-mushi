@@ -14,7 +14,6 @@ import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
 import { ErrorAlert, Input } from '../ui'
-import { IconCost } from '../icons'
 import { SettingsFormFooter } from './SettingsFormFooter'
 import { SettingsList, SettingsRow } from './SettingsRow'
 import {
@@ -86,7 +85,10 @@ export function SpendLimitsPanel() {
         description="Caps on what this project spends. Mushi Mushi stops when a limit is reached and says why on the report or fix."
       >
           {SPEND_LIMITS.map((m) => (
-            <SettingsRow key={m.field} icon={<IconCost size={16} />} title={m.label} purpose={m.help}>
+            // No icon (seven limit rows drew the same one) and a narrow field: a
+            // one-digit number stretched about 1090 px (round-3 review 2026-11-19).
+            <SettingsRow key={m.field} title={m.label} purpose={m.help}>
+              <div className="max-w-40">
               <Input
                 id={`spend-limit-${m.field}`}
                 label={m.unit === 'usd' ? 'Amount in US dollars' : 'Number of fixes'}
@@ -100,6 +102,7 @@ export function SpendLimitsPanel() {
                   setErrors((er) => ({ ...er, [m.field]: undefined }))
                 }}
               />
+              </div>
             </SettingsRow>
           ))}
       </SettingsList>

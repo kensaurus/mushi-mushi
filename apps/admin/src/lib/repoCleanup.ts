@@ -132,3 +132,32 @@ export function actionTitle(a: Pick<CleanupAction, 'action' | 'itemCount' | 'rep
 }
 
 export const shortSha = (sha: string | null | undefined) => (sha ? sha.slice(0, 7) : '')
+
+export interface CleanupBlocker {
+  /** The server's message, said once for every repo it applies to. */
+  message: string
+  repos: string[]
+  /** The fix is a stored GitHub token (offer "Add token"). */
+  needsToken: boolean
+}
+
+/**
+ * The repos' errors grouped by message, so "No GitHub token is stored..." is
+ * said once at the top of the tab with its fix, not as an amber box inside each
+ * repository card under the explainer (fresh-eyes 2026-11-18).
+ */
+export function cleanupBlockers(repos: ReadonlyArray<Pick<CleanupRepo, 'repo' | 'error'>>): CleanupBlocker[] {
+  const byMessage = new Map<string, string[]>()
+  for (const r of repos) {
+    if (!r.error) continue
+    byMessage.set(r.error, [...(byMessage.get(r.error) ?? []), r.repo])
+  }
+  return [...byMessage.entries()].map(([message, list]) => ({
+    message,
+    repos: list,
+    needsToken: /\btoken\b/i.test(message),
+  }))
+}
+
+/** Where the app's GitHub token is stored. */
+export const GITHUB_TOKEN_SETTINGS_PATH = '/integrations/config#platform-card-github'

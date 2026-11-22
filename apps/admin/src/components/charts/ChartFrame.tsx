@@ -65,7 +65,7 @@ export function ChartFrame({
   const chartVisual = (
     <>
       {yAxisCaption && (
-        <span className="text-3xs font-medium uppercase tracking-wider text-fg-muted">
+        <span className="text-3xs font-semibold text-fg-secondary">
           {yAxisCaption}
         </span>
       )}

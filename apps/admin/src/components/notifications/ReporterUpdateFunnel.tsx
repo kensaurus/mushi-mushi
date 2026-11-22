@@ -35,7 +35,26 @@ export function funnelSentence(f: ReporterFunnel): string {
   return `${notOpened} of ${f.told} reporters have not opened their update yet. They see it the next time they open the widget.`
 }
 
-export function ReporterUpdateFunnel({ funnel }: { funnel: ReporterFunnel }) {
+/**
+ * @internal Exported for tests. What the funnel counts over: the latest 500, or nothing to add
+ * when it counts every update (2026-11-19: "over all 2 updates" was the 2 said a seventh time).
+ */
+export function funnelScope(totalUpdates?: number | null): string | null {
+  if (totalUpdates != null && totalUpdates >= 0 && totalUpdates < 500) return null
+  return 'over your latest 500 updates'
+}
+
+export function ReporterUpdateFunnel({
+  funnel,
+  totalUpdates,
+  unopenedShownAbove = false,
+}: {
+  funnel: ReporterFunnel
+  /** Updates sent in all (the stats total), so "latest 500" never reads over 2. */
+  totalUpdates?: number | null
+  /** The banner already says how many are not opened: the bars carry it, no sentence. */
+  unopenedShownAbove?: boolean
+}) {
   const stages: Stage[] = [
     { key: 'told', label: 'Told', value: funnel.told, bar: 'bg-info' },
     { key: 'opened', label: 'Opened', value: funnel.opened, bar: 'bg-brand' },
@@ -44,7 +63,7 @@ export function ReporterUpdateFunnel({ funnel }: { funnel: ReporterFunnel }) {
   return (
     <Card className="p-4" data-testid="reporter-update-funnel">
       <h2 className="text-sm font-semibold text-fg">Did reporters hear back?</h2>
-      <p className="mb-3 text-2xs text-fg-muted">Counted in bug reports, over your latest 500 updates.</p>
+      <p className="mb-3 text-2xs text-fg-muted">Counted in bug reports{funnelScope(totalUpdates) ? `, ${funnelScope(totalUpdates)}` : ''}.</p>
       <dl className="space-y-2">
         {stages.map((s) => {
           const pct = funnelPct(s.value, funnel.told)
@@ -66,7 +85,9 @@ export function ReporterUpdateFunnel({ funnel }: { funnel: ReporterFunnel }) {
           )
         })}
       </dl>
-      <p className="mt-3 text-xs text-fg-secondary">{funnelSentence(funnel)}</p>
+      {unopenedShownAbove && funnel.opened < funnel.told ? null : (
+        <p className="mt-3 text-xs text-fg-secondary">{funnelSentence(funnel)}</p>
+      )}
     </Card>
   )
 }

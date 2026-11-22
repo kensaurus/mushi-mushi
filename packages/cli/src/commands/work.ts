@@ -31,7 +31,7 @@ import type { WhoamiData } from '../cli-types.js'
 import { interruptedBy, onInterrupt } from '../signals.js'
 import { agentRun, agentSpec, agentUnavailable, cursorSignInState, parseLocalAgent, type AgentSignIn, type LocalAgent } from './work-agents.js'
 import { wrongRepoMessage } from './work-repo.js'
-import { goneNote, recheckReport, verdictCommits } from './work-recheck.js'
+import { capCandidates, collapseGroups, collapseRevertSql, goneNote, planBacklog, recheckReport, verdictCommits, type BacklogPlan, type BacklogRow } from './work-recheck.js'
 
 export { cursorSignInState }
 
@@ -150,7 +150,7 @@ function cap(text: string | null | undefined, max: number): string {
 }
 
 /**
- * @internal Exported for tests only. The END of a failed command's output: a
+ * The END of a failed command's output: a
  * hook prints its passing checks first and the failure last (a pre-commit
  * failure read as "✓ check-no-secrets … [cut]", 2026-10-24).
  */
@@ -426,7 +426,6 @@ export function commitBody(...paragraphs: string[]): string {
  * it is signed in to). The credential helper list is emptied too: Git for
  * Windows' system config names `manager`, which can hand git a stored
  * GitHub login without any environment variable.
- * @internal Exported for tests only.
  */
 export function agentEnv(base: NodeJS.ProcessEnv, emptyDir: string): NodeJS.ProcessEnv {
   const keep = ['PATH', 'HOME', 'USER', 'LOGNAME', 'LANG', 'LC_ALL', 'TERM', 'SHELL', 'TMPDIR', 'TZ', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'NODE_OPTIONS']
@@ -614,8 +613,8 @@ export async function defaultBranch(repoDir: string): Promise<string> {
 /** Used by the local worker (worker/daemon.ts). */
 export type Api = <T>(path: string, init?: RequestInit) => Promise<T>
 
-/** @internal Exported for the daemon. */
-export function apiFor(cfg: CliConfig): Api {
+/** The API caller for one CLI config. */
+function apiFor(cfg: CliConfig): Api {
   return async <T>(path: string, init: RequestInit = {}) => {
     const res = await apiCall<T>(path, cfg, init)
     if (!res.ok) throw new MushiCliError('E_API_ERROR', `${path}: ${res.error.code} ${res.error.message}`)
@@ -776,6 +775,8 @@ interface RecheckSweep {
   stillThere: number
   unclear: number
   closeFailed: number
+  /** With --dry-run: how what is still there collapses into one report per pattern (ADR 0063). */
+  plan?: Pick<BacklogPlan, 'patterns' | 'collapsed' | 'remaining'>
 }
 
 /**
@@ -805,6 +806,10 @@ async function recheckBacklog(api: Api, repoDir: string, o: { dryRun: boolean; l
         if (got.length < RECHECK_PAGE) break
       }
     }
+    if (o.dryRun) {
+      const plan = planBacklog(rows, wt, o.readFile)
+      out.plan = { patterns: plan.patterns, collapsed: plan.collapsed, remaining: plan.remaining }
+    }
     for (const r of rows) {
       if (interruptedBy()) break
       out.checked++
@@ -829,7 +834,59 @@ async function recheckBacklog(api: Api, repoDir: string, o: { dryRun: boolean; l
   const verb = o.dryRun ? 'would close' : 'closed'
   o.log(`Rechecked ${out.checked} open code-audit report(s) on origin/${base}${sha ? ` (${sha.slice(0, 9)})` : ''}: ${verb} ${out.gone.length} that no longer reproduce, ${out.stillThere} still reproduce, ${out.unclear} left to the agent (check unreadable or file moved).`)
   if (out.closeFailed) o.log(`${out.closeFailed} could not be closed; see the lines above.`)
+  if (out.plan) o.log(`The ${out.stillThere + out.unclear} left would be ${out.plan.remaining} report(s), one per pattern: ${out.plan.collapsed} would join a pattern's report as a duplicate.`)
   return out
+}
+
+interface CollapseOutcome {
+  tag: string
+  applied: boolean
+  before: number
+  after: number
+  groups: number
+  children: number
+  skipped: number
+  keyTaken: number
+  cap?: { cap: number; openBefore: number; openAfter: number; deferred: number; keptLivePr: number; keptNoFinding: number }
+  capFailed?: boolean
+}
+
+/**
+ * `mushi work --collapse-backlog` (ADR 0065): the open code-audit reports filed
+ * before pattern keys, grouped by root cause on one worktree at the base
+ * branch, each group's children closed as duplicates of its parent. Without
+ * --apply the server only counts. Every change carries `tag`, and the revert
+ * is one UPDATE (collapseRevertSql), printed every time.
+ */
+async function collapseBacklog(api: Api, repoDir: string, o: { projectId: string; apply: boolean; applyCap: boolean; tag: string; log: (line: string) => void }): Promise<CollapseOutcome & { plan: ReturnType<typeof collapseGroups>; revertSql: string }> {
+  const base = await defaultBranch(repoDir)
+  await git(repoDir, ['fetch', '--quiet', 'origin', base])
+  const root = join(homedir(), '.cache', 'mushi', 'work', basename(repoDir))
+  mkdirSync(root, { recursive: true })
+  const wt = join(root, 'collapse')
+  await clearWorktree(repoDir, wt)
+  await git(repoDir, ['worktree', 'add', '--detach', wt, `origin/${base}`])
+  try {
+    const { reports } = await api<{ reports: BacklogRow[] }>(`/v1/admin/work/code-audit/backlog?projectId=${encodeURIComponent(o.projectId)}`)
+    const plan = planBacklog(reports, wt)
+    const groups = collapseGroups(plan, reports)
+    const cap = o.applyCap ? { candidates: capCandidates(plan, reports, groups, wt) } : null
+    const res = await api<CollapseOutcome>('/v1/admin/work/code-audit/collapse', {
+      method: 'POST',
+      body: JSON.stringify({ projectId: o.projectId, tag: o.tag, apply: o.apply, groups, ...(cap ? { cap } : {}) }),
+    })
+    const revertSql = collapseRevertSql(o.tag)
+    o.log(`${o.apply ? 'Collapsed' : 'Would collapse (dry run, nothing changed)'}: open code-audit reports ${res.before} → ${res.after}; ${res.children} closed as duplicates into ${res.groups} pattern report(s); ${res.skipped} left open (a live PR, or changed meanwhile)${res.keyTaken ? `; ${res.keyTaken} group(s) skipped, their pattern is already open` : ''}.`)
+    for (const g of groups.slice(0, 10)) o.log(`  ${g.patternKey}: ${g.childIds.length + 1} reports → ${g.parentId}${g.title ? ` "${g.title}"` : ''}`)
+    if (res.cap) {
+      const c = res.cap
+      o.log(`${o.apply ? 'Open cap applied' : 'Open cap (dry run)'}: ${c.openBefore} → ${c.openAfter} open (cap ${c.cap}); ${c.deferred} set aside in code_audit_deferred as deferred_over_cap; kept open whatever the cap: ${c.keptLivePr} with a live PR${c.keptNoFinding ? `, ${c.keptNoFinding} with no finding to re-file` : ''}.`)
+    } else if (res.capFailed) o.log('The open cap could not be applied (a read failed); the collapse above stands. Run it again.')
+    o.log(`Tag ${o.tag}. To undo it, run this once in the SQL editor:\n${revertSql}`)
+    return { ...res, plan: groups, revertSql }
+  } finally {
+    await clearWorktree(repoDir, wt)
+  }
 }
 
 /** One report, start to end: the run `mushi work` and the local worker (worker/daemon.ts) both make. */
@@ -1115,7 +1172,7 @@ export async function followUpOne(api: Api, f: LocalFollowupCandidate, o: WorkOp
 }
 
 /**
- * @internal Exported for tests only. The install command for the worktree's
+ * The install command for the worktree's
  * lockfile, or null when it has none. Without dependencies the agent cannot
  * run the project's tests, and commit hooks that import a package fail
  * (`check-config-docs.mjs` needs `jiti`: a commit failed with
@@ -1138,9 +1195,9 @@ export async function installDeps(wt: string, log: (line: string) => void): Prom
   const cmd = installCommand((f) => existsSync(join(wt, f)))
   if (!cmd) return
   log(`  deps: ${cmd[0]} ${cmd[1][0]} (so the agent can run tests and the commit hooks work)`)
-  const spawnable = windowsInstaller(cmd, process.platform, process.execPath, existsSync)
+  const spawnable = windowsInstaller(cmd, process.platform, process.execPath, existsSync, (process.env['PATH'] ?? '').split(';'))
   if (!spawnable) {
-    log(`  deps: no ${cmd[0]} script next to this Node, so no install; the agent works without dependencies`)
+    log(`  deps: no ${cmd[0]} found next to this Node or on PATH, so no install; the agent works without dependencies (install it: npm i -g ${cmd[0]})`)
     return
   }
   const [bin, args] = spawnable
@@ -1163,12 +1220,23 @@ const WINDOWS_PM_SCRIPTS: Record<string, readonly string[]> = {
  * with this Node instead, never through cmd.exe: a shell anywhere in runProc
  * made CodeQL treat every git argument as shell input (alerts 417-420). Null
  * when no script is found, and the run goes on without an install.
+ *
+ * Beside node.exe first, then each PATH folder: `npm i -g pnpm` puts pnpm in
+ * %APPDATA%\npm (on PATH, not beside node.exe), so the worker found no pnpm
+ * and pnpm repos ran with no dependencies (2026-11-20). A standalone
+ * `pnpm.exe` on PATH starts directly.
  */
-export function windowsInstaller(cmd: [string, string[]], platform: NodeJS.Platform, nodeExe: string, hasFile: (path: string) => boolean): [string, string[]] | null {
+export function windowsInstaller(cmd: [string, string[]], platform: NodeJS.Platform, nodeExe: string, hasFile: (path: string) => boolean, pathDirs: readonly string[] = []): [string, string[]] | null {
   if (platform !== 'win32') return cmd
   // Windows path rules whatever the host: the tests run this on Linux too.
-  const script = (WINDOWS_PM_SCRIPTS[cmd[0]] ?? []).map((rel) => win32.join(win32.dirname(nodeExe), rel)).find((p) => hasFile(p))
-  return script ? [nodeExe, [script, ...cmd[1]]] : null
+  const dirs = [win32.dirname(nodeExe), ...pathDirs.map((d) => d.trim().replace(/^"|"$/g, '')).filter(Boolean)]
+  for (const dir of dirs) {
+    const script = (WINDOWS_PM_SCRIPTS[cmd[0]] ?? []).map((rel) => win32.join(dir, rel)).find((p) => hasFile(p))
+    if (script) return [nodeExe, [script, ...cmd[1]]]
+    const exe = win32.join(dir, `${cmd[0]}.exe`)
+    if (hasFile(exe)) return [exe, cmd[1]]
+  }
+  return null
 }
 
 /** @internal Exported for tests only. Pure: a commit hook that failed because a package is not installed, not because of the change. */
@@ -1233,6 +1301,28 @@ const CURSOR_STATUS_RETRY_DELAY_MS = 5_000
  * one machine the old single 60 s check reported "not signed in" 5 times in
  * one lane while `cursor-agent status` said "Logged in" (Mushi report 7880503f).
  */
+/**
+ * @internal Exported for tests only. One line for the console's account check.
+ * `claude auth status` answers in JSON, so its first line was "{" and the
+ * console read `checked 2 min ago: "{"` (2026-11-20). A JSON answer becomes
+ * "logged in (claude.ai)"; the account's e-mail never goes into it.
+ */
+export function signInDetail(text: string): string {
+  const start = text.indexOf('{')
+  if (start >= 0) {
+    try {
+      const j = JSON.parse(text.slice(start)) as { loggedIn?: unknown; authMethod?: unknown }
+      if (typeof j.loggedIn === 'boolean') {
+        const how = typeof j.authMethod === 'string' && /^[\w.-]{1,30}$/.test(j.authMethod) ? ` (${j.authMethod})` : ''
+        return j.loggedIn ? `logged in${how}` : 'logged out'
+      }
+    } catch {
+      // Not JSON after all: the first line below.
+    }
+  }
+  return text.split('\n')[0]?.slice(0, 200) ?? ''
+}
+
 export async function checkAgentSignIn(
   agent: LocalAgent,
   run: (cmd: string, args: readonly string[], opts: { timeoutMs: number }) => Promise<Proc> = runProc,
@@ -1246,7 +1336,7 @@ export async function checkAgentSignIn(
     const state = spec.signInState(p)
     const detail = p.timedOut
       ? `timed out after ${CURSOR_STATUS_TIMEOUT_MS / 1000} s`
-      : stripVTControlCharacters(`${p.stdout}\n${p.stderr}`).trim().split('\n')[0]?.slice(0, 200) || `exit ${p.code}`
+      : signInDetail(stripVTControlCharacters(`${p.stdout}\n${p.stderr}`).trim()) || `exit ${p.code}`
     last = { state, detail, output: stripVTControlCharacters(`${p.stdout}\n${p.stderr}`).slice(0, 2000) }
     if (state === 'signed_in' || state === 'missing') break
   }
@@ -1261,8 +1351,8 @@ export function checkCursorSignIn(
   return checkAgentSignIn('cursor', run, wait)
 }
 
-/** @internal Exported for the daemon. */
-export async function preflight(repoDir: string, warn: (line: string) => void, agent: LocalAgent = 'cursor'): Promise<void> {
+/** The API caller for one CLI config. */
+async function preflight(repoDir: string, warn: (line: string) => void, agent: LocalAgent = 'cursor'): Promise<void> {
   const spec = agentSpec(agent)
   const signIn = await checkAgentSignIn(agent)
   if (signIn.state === 'missing') {
@@ -1344,17 +1434,21 @@ export function registerWorkCommands(program: Command): void {
     .option('--max <n>', 'Reports per run', '3')
     .option('--report <id>', 'Work on this report only')
     .option('--followups', 'Instead of new reports: fix the Opus "fix first" findings on PRs mushi work opened, and push to them')
-    .option('--recheck', 'Instead of fixing: run the check each open code-audit report was filed with again on the base branch (no agent, no tokens) and close those that no longer reproduce; with --dry-run, only count them')
+    .option('--recheck', 'Instead of fixing: run the check each open code-audit report was filed with again on the base branch (no agent, no tokens; shared wrappers followed) and close those that no longer reproduce; with --dry-run, only count them and show how the rest collapse into one report per pattern')
+    .option('--collapse-backlog', 'Instead of fixing: group the open code-audit reports filed before pattern keys by root cause, on the base branch, and close each group\'s children as duplicates of its parent (ADR 0065); a dry run unless --apply')
+    .option('--apply', 'With --collapse-backlog: make the change (every row is tagged, and the revert SQL is printed)')
+    .option('--collapse-tag <tag>', 'With --collapse-backlog: the tag on every changed row (default collapse_<today, UTC>)')
+    .option('--apply-cap', 'With --collapse-backlog: then keep only the best open reports up to the app\'s open cap (severity × confidence); the rest wait in code_audit_deferred and come back as slots free. Never a report with a live PR')
     .option('--keep', 'Keep the worktree after the run')
     .option('--dry-run', 'Show what would run; change nothing')
     .option('--any-repo', 'Skip the check that the clone is a repo the key\'s project is linked to (a monorepo or a fork)')
     .option('--json', 'Machine-readable JSON output')
     .option('--daemon', 'Run as a local worker: register this machine, send a heartbeat every 60 s, take the console\'s lane settings and claim reports (set up with `mushi worker install`)')
     .option('--worker-config <path>', 'With --daemon: the lanes file (default ~/.config/mushi/worker.json)')
-    .action(async (opts: { repoDir?: string; project?: string; agent?: string; model?: string; max: string; report?: string; followups?: boolean; recheck?: boolean; keep?: boolean; dryRun?: boolean; anyRepo?: boolean; json?: boolean; daemon?: boolean; workerConfig?: string }) => {
+    .action(async (opts: { repoDir?: string; project?: string; agent?: string; model?: string; max: string; report?: string; followups?: boolean; recheck?: boolean; collapseBacklog?: boolean; apply?: boolean; applyCap?: boolean; collapseTag?: string; keep?: boolean; dryRun?: boolean; anyRepo?: boolean; json?: boolean; daemon?: boolean; workerConfig?: string }) => {
       const agent = parseLocalAgent(opts.agent)
       if (opts.daemon) {
-        if (opts.repoDir || opts.report || opts.followups || opts.recheck) {
+        if (opts.repoDir || opts.report || opts.followups || opts.recheck || opts.collapseBacklog) {
           throw new MushiCliError('E_INVALID_INPUT', '--daemon takes its lanes and clones from the worker config, not from --repo-dir, --report or --followups.', 'mushi worker install')
         }
         const { runDaemon } = await import('../worker/daemon.js')
@@ -1375,6 +1469,15 @@ export function registerWorkCommands(program: Command): void {
       // Before any listing, plan or claim (the dry run too): the key decides whose reports come back.
       const whoami = await readWhoami(cfg)
       if (!opts.anyRepo) await requireRightRepo(whoami, repoDir)
+      if (opts.collapseBacklog) {
+        if (opts.apply) requireWriteScope(cfg, whoami)
+        const tag = opts.collapseTag ?? `collapse_${new Date().toISOString().slice(0, 10).replace(/-/g, '_')}`
+        if (!/^collapse_\d{4}_\d{2}_\d{2}$/.test(tag)) throw new MushiCliError('E_INVALID_INPUT', '--collapse-tag must look like collapse_2026_11_21.', 'mushi work --collapse-backlog --collapse-tag collapse_2026_11_21')
+        if (!cfg.projectId) throw new MushiCliError('E_INVALID_INPUT', 'mushi work --collapse-backlog needs a project.', 'mushi work --collapse-backlog --project <id> --repo-dir <clone>')
+        const out = await collapseBacklog(api, repoDir, { projectId: cfg.projectId, apply: !!opts.apply && !opts.dryRun, applyCap: !!opts.applyCap, tag, log })
+        if (opts.json) process.stdout.write(`${JSON.stringify(out, null, 2)}\n`)
+        return
+      }
       if (opts.recheck) {
         if (!opts.dryRun) requireWriteScope(cfg, whoami)
         const sweep = await recheckBacklog(api, repoDir, { dryRun: !!opts.dryRun, log })

@@ -134,18 +134,20 @@ export const PAGE_SIZE = 50
  * Left-edge stripe color per severity. Drawn 4px wide on the row so triage
  * scan is instant — `critical` jumps off the page in red, `low` blends in.
  *
- * Colors align with SEVERITY_TRAFFIC_BADGE so stripe, badge, and segment
- * strip all use the same palette:
- *   critical → danger (red)
- *   high     → warn   (amber)
- *   medium   → brand  (blue) — not warn, to create a clear step between high and medium
- *   low      → ok     (green)
+ * The stripe follows the severity ramp (lib/severityTraffic) for critical,
+ * high and medium. Low deliberately differs from its green Low pill: a green
+ * edge on every low row read as "ok" down the whole list.
+ *   critical → danger    (red)
+ *   high     → warn      (amber)
+ *   medium   → sev-medium (yellow), as its pill. It was bg-brand/70, which
+ *              drew salmon beside a yellow "Med" pill (sweep 2026-11-18)
+ *   low      → faint grey. Green read as "ok", and a low bug is still a bug.
  */
 const SEVERITY_STRIPE: Record<string, string> = {
   critical: 'bg-danger',
   high:     'bg-warn',
-  medium:   'bg-brand/70',
-  low:      'bg-ok/80',
+  medium:   'bg-sev-medium',
+  low:      'bg-fg-faint/60',
 }
 
 export function severityStripeClass(severity: string | null): string {

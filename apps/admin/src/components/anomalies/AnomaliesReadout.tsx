@@ -64,7 +64,8 @@ export function AnomaliesReadout({ stats, fetchedAt, isValidating }: Props) {
   ]
 
   return (
-    <ReadoutPanel title="Anomalies readout" freshness={{ at: fetchedAt, isValidating }}>
+    // No "Updated" time on a page that has no numbers yet (round 3).
+    <ReadoutPanel title="Anomalies readout" freshness={stats.metricPointCount > 0 ? { at: fetchedAt, isValidating } : undefined}>
       <div className="grid gap-4 lg:grid-cols-2">
         <ReadoutSection title="Endpoints" icon={<IconGlobe size={14} aria-hidden />}>
           <EndpointCodeRow label="Anomalies stats API" url={statsApi} />

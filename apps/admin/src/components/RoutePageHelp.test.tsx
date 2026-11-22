@@ -5,8 +5,8 @@
 /**
  * Pattern P2 (console journeys 2026-10-27): a page's "What it is / When to
  * use it / How to use it" help opens from "How this page works" in its
- * header. It shows expanded under the content only on an empty page (a
- * PageFirstStep is mounted) or when the user keeps tips open; the
+ * header. It shows expanded under the content only when the user keeps tips
+ * open (2026-11-18: no longer on a first visit or an empty page); the
  * "Related:" links stay either way.
  */
 
@@ -82,22 +82,20 @@ describe('RoutePageHelp', () => {
     expect(container.querySelector('nav[aria-label="Related pages"]')).not.toBeNull()
   })
 
-  it('shows it expanded on the first visit, then marks it read for the next', async () => {
+  it('keeps it in the header on the first visit, and marks it read', async () => {
     expect(isPageHelpRead('judge')).toBe(false)
     await render(page(false))
-    expect(container.querySelector('details')?.open).toBe(true)
+    expect(container.querySelector('details')).toBeNull()
+    expect(container.textContent).not.toContain('What it is')
     expect(isPageHelpRead('judge')).toBe(true)
   })
 
-  it('shows the explainer expanded under an empty page', async () => {
+  it('does not repeat the explainer under an empty page (the first-step card leads)', async () => {
     markPageHelpRead('judge')
     await render(page(true))
-    const details = container.querySelector('details')
-    expect(details).not.toBeNull()
-    expect(details?.open).toBe(true)
-    expect(container.textContent).toContain('What it is')
-    // The open help lists its related pages itself; the row under it would repeat them.
-    expect(container.textContent).not.toContain('Related:')
+    expect(container.querySelector('details')).toBeNull()
+    expect(container.textContent).not.toContain('What it is')
+    expect(container.textContent).toContain('Nothing graded yet')
   })
 
   it('shows it expanded when the user keeps tips open', async () => {

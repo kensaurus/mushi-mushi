@@ -18,16 +18,20 @@ With no token files read yet, the page is one step: point Mushi Mushi at the fil
 
 ## Tokens
 
-A status chip (OK, Needs attention, Not checked yet, Not set up, or Check failed) sits with the reason and where the snapshot came from: repo files, a CI push, derived data, or a connector, plus the short commit when one is recorded. When the scan is OK but the token files have issues, the chip reads Needs attention and the reason counts those issues. A failed refresh or scan is printed under the chip.
+The page opens on one status line: how many places use a hard-coded style instead of your tokens and in how many files, up to three numbers (hard-coded styles, files, drift score) and one button: **Copy fix prompt for all files**, or **Check for drift** when no check has run or the last one failed.
 
-Under it, **Your colours** shows the colour tokens as swatches and **Drift from your design** draws the deviance score over time (lower is better; unscored checks are left out).
+**Hard-coded styles by file** comes next: one row per file, worst first, with its count as a bar, the kinds of problem in plain words (off-token colour, off-scale spacing…) and **Copy fix prompt** for that file. A row opens to its findings: the line, the value, and the token to use instead. Up to 200 stored findings are grouped; when the scan counted more, the section says so.
+
+**Token files** lists real problems in the token files (invalid JSON, an alias to a missing token, a token defined twice). Format notes, tokens written in an older DTCG form that are still read correctly, fold into one row ("67 token format notes · not breaking") with **Fix all (prompt)**; it opens to the count per kind in plain words.
+
+Then **Drift from your design** (the score, **Check for drift**, and the per-rule breakdown behind a disclosure), **Your colours** with the drift trend, and the status chip with where the tokens were read from (repo files, a CI push, derived data or a connector, plus the short commit) and any failed refresh.
 
 When the project has more than one token set, a switch lists them and marks the active set from `mushi.recipe.json`. The view then shows:
 
 | Section | What you see |
 | --- | --- |
-| **Token issues** | Severity, message, and file or token path. Empty: "No token issues in this set." |
-| **Drift from your design** | The deviance score, a per-rule breakdown, a trend, the top findings, and **Check for drift**. |
+| **Token files** | Problems in the token files, then the format notes folded into one row. Hidden when there are none. |
+| **Drift from your design** | The deviance score, **Check for drift**, and the per-rule breakdown. |
 | **Contrast** | An "Aa" sample for each declared pair, the ratio, the minimum it needs, and Pass, Fail, or Not judged. |
 | **When the score is too high** | A 0–100 threshold and two switches, off until an owner or admin turns them on. |
 | **Token catalogue** | Closed until the edit queue has an edit. Swatches, Latin and Thai type samples, spacing bars, radius boxes, motion values, and other tokens. Filter by name. The first 12 tokens in a section, then **View all**. **Edit** queues a new value. |

@@ -42,6 +42,7 @@ import { DEFAULT_FEATURE_GROUPS, parseFeaturesCsv } from './feature-groups.js'
 import { createMushiServer, createSetupModeServer, MUSHI_CONSOLE_URL } from './server.js'
 import { decideScopes, fetchKeyScopes, sdkKeyReport } from './key-scopes.js'
 import { startInventoryPoll } from './inventory-poll.js'
+import { stdioArgsAction, stdioUsage } from './stdio-args.js'
 import { initOptionalSentry } from './optional-sentry.js'
 import {
   missingApiKeyReport,
@@ -52,6 +53,18 @@ import {
 
 const require = createRequire(import.meta.url)
 const VERSION = (require('../package.json') as { version: string }).version
+
+// `--help` / `--version` answer and exit before anything else runs (CLI config
+// read, Sentry, the server). process.stdout.write, not console: the stdout
+// guard sends console output to stderr. Wait for the write to flush before
+// exiting: stdout to a pipe is asynchronous on Windows.
+const ARGS_ACTION = stdioArgsAction(process.argv.slice(2))
+if (ARGS_ACTION !== 'serve') {
+  await new Promise<void>((resolve) => {
+    process.stdout.write(ARGS_ACTION === 'help' ? stdioUsage(VERSION) : `${VERSION}\n`, () => resolve())
+  })
+  process.exit(0)
+}
 
 const log = createLogger({ scope: 'mushi:mcp', level: 'info', destination: 'stderr' })
 
@@ -240,12 +253,13 @@ async function main() {
     const keyScopes = await fetchKeyScopes({ apiEndpoint: API_ENDPOINT, apiKey: API_KEY, projectId: PROJECT_ID || undefined })
     const decision = decideScopes(keyScopes, SCOPES)
     if (decision.kind === 'sdk-key') {
-      const report = sdkKeyReport(decision.keyScopes, MUSHI_CONSOLE_URL)
+      const sdkKeyFix = { projectId: PROJECT_ID || undefined, keySource: CREDENTIALS.apiKeySource }
+      const report = sdkKeyReport(decision.keyScopes, MUSHI_CONSOLE_URL, sdkKeyFix)
       process.stderr.write(report)
       log.warn('The API key has no MCP scope (mcp:read / mcp:write) — serving setup mode.', {
         keyScopes: decision.keyScopes.join(','),
       })
-      serveUntilClosed(serveStdio(() => createSetupModeServer({ version: VERSION, missingKeyReport: report, reason: 'sdk-key' }), {
+      serveUntilClosed(serveStdio(() => createSetupModeServer({ version: VERSION, missingKeyReport: report, reason: 'sdk-key', sdkKeyFix }), {
         onerror: (err) => log.error('stdio transport error', { err: String(err) }),
       }))
       return

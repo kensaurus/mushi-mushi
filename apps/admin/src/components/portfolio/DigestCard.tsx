@@ -8,10 +8,15 @@
  * Data: GET /v1/admin/orgs/:orgId/digest → DigestPreviewResponse
  *       PUT /v1/admin/orgs/:orgId/digest/settings
  *       POST /v1/admin/orgs/:orgId/digest/send
+ *
+ * Sweep 2026-11-18: the preview is a quoted block, not a card in the card; each channel picker
+ * says what it picks ("Slack: Off" / "glot.it's channel"); a disabled Send now says why.
+ * The preview keeps the server's order: it is the message that is sent.
  */
 
 import { useState } from 'react'
-import { Btn, Callout, Card, Loading, Section } from '../ui'
+import { Btn, Callout, Section } from '../ui'
+import { TimedLoading } from './TimedLoading'
 import { usePageData } from '../../lib/usePageData'
 import { apiFetchMutate } from '../../lib/supabase'
 import { actionErrorText } from '../../lib/actionErrorText'
@@ -27,17 +32,28 @@ interface ProjectOption {
 const SELECT = 'rounded-sm border border-edge bg-surface-root px-2 py-1 text-xs'
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
-/** One "send through this project's <channel>" picker; the project's existing connection is reused. */
-function ProjectChannel({ label, none, value, projects, onChange }: { label: string; none: string; value: string | null; projects: ProjectOption[]; onChange: (projectId: string | null) => void }) {
+/**
+ * One "send through this app's <channel>" picker; the app's existing connection is reused.
+ * Each option names what it sends to ("glot.it's channel"), and "Off" sends nothing there.
+ */
+function ProjectChannel({ label, what, value, projects, onChange }: { label: string; what: string; value: string | null; projects: ProjectOption[]; onChange: (projectId: string | null) => void }) {
   return (
     <label className="flex flex-wrap items-center gap-2">
-      <span className="text-fg-muted">{label}</span>
-      <select className={SELECT} value={value ?? ''} onChange={(e) => onChange(e.target.value || null)}>
-        <option value="">{none}</option>
-        {projects.map((p) => <option key={p.projectId} value={p.projectId}>{p.name}</option>)}
+      <span className="w-20 text-fg-muted">{label}</span>
+      {/* One width for the four pickers, so they line up (round 2: ragged widths, each as wide as its longest app name). */}
+      <select className={`${SELECT} w-64 max-w-full`} value={value ?? ''} onChange={(e) => onChange(e.target.value || null)} aria-label={`${label}: which app's ${what}`}>
+        <option value="">Off</option>
+        {projects.map((p) => <option key={p.projectId} value={p.projectId}>{`${p.name}'s ${what}`}</option>)}
+        {/* A channel already set on a hidden app (the public demo) stays selectable, unnamed. */}
+        {value && !projects.some((p) => p.projectId === value) && <option value={value}>{`A hidden app's ${what}`}</option>}
       </select>
     </label>
   )
+}
+
+/** Why Send now cannot run, in a few words; null when it can. @internal Exported for tests. */
+export function sendNowBlocker(s: Pick<DigestSettingsView, 'enabled'>): string | null {
+  return s.enabled ? null : 'Turn on "Send the digest every day" first.'
 }
 
 export function DigestCard({ orgId, projects }: { orgId: string; projects: ProjectOption[] }) {
@@ -95,7 +111,7 @@ export function DigestCard({ orgId, projects }: { orgId: string; projects: Proje
     <Section title="Daily digest">
       <p className="mb-3 text-xs text-fg-muted">One message a day across all your apps: new reports, holes found, releases and a jump in AI spend, plus once a week each app's signups and activations from the team funnel. Off until you pick where it goes.</p>
       {error && <PageLoadError error={error} resource="the daily digest" endpoint={path} onRetry={reload} />}
-      {loading && !data && <Loading text="Building today's digest…" />}
+      <TimedLoading waiting={loading && !data && !error} text="Building today's digest…" what="Daily digest" onRetry={reload} testId="portfolio-digest-not-checked" />
       {notice && (
         <Callout tone={notice.tone}>
           <span role="status">{notice.text}</span>
@@ -103,8 +119,10 @@ export function DigestCard({ orgId, projects }: { orgId: string; projects: Proje
       )}
       {data && s && (
         <div className="flex flex-col gap-3">
-          <Card className="p-3">
-            <p className="text-xs font-medium text-fg">{data.preview.title}</p>
+          {/* The preview as a quoted block, not a card inside the card. */}
+          <figure className="border-l-2 border-edge pl-3" data-testid="digest-preview">
+            <figcaption className="text-2xs font-semibold text-fg-secondary">Today's preview</figcaption>
+            <p className="mt-0.5 text-xs font-medium text-fg">{data.preview.title}</p>
             {data.preview.lines.length === 0 ? (
               <p className="mt-1 text-xs text-fg-muted">Nothing new across your apps today.</p>
             ) : (
@@ -112,7 +130,7 @@ export function DigestCard({ orgId, projects }: { orgId: string; projects: Proje
                 {data.preview.lines.map((l) => <li key={l}>{l}</li>)}
               </ul>
             )}
-          </Card>
+          </figure>
           {canManage === false && <p className="text-xs text-fg-muted">Digest settings: {ORG_ADMIN_ONLY_HINT}</p>}
           <fieldset className="flex flex-col gap-2 text-sm" disabled={busy || canManage === false}>
             <legend className="sr-only">Where to send the digest</legend>
@@ -120,10 +138,10 @@ export function DigestCard({ orgId, projects }: { orgId: string; projects: Proje
               <input type="checkbox" checked={s.enabled} onChange={(e) => save({ enabled: e.target.checked })} />
               <span>Send the digest every day</span>
             </label>
-            <ProjectChannel label="Slack channel of" none="No Slack" value={s.slackProjectId} projects={projects} onChange={(id) => save({ slackProjectId: id })} />
-            <ProjectChannel label="Discord webhook of" none="No Discord" value={s.discordProjectId} projects={projects} onChange={(id) => save({ discordProjectId: id })} />
-            <ProjectChannel label="Teams webhook of" none="No Teams" value={s.teamsProjectId} projects={projects} onChange={(id) => save({ teamsProjectId: id })} />
-            <ProjectChannel label="Telegram chats of" none="No Telegram" value={s.telegramProjectId} projects={projects} onChange={(id) => save({ telegramProjectId: id })} />
+            <ProjectChannel label="Slack" what="Slack channel" value={s.slackProjectId} projects={projects} onChange={(id) => save({ slackProjectId: id })} />
+            <ProjectChannel label="Discord" what="Discord webhook" value={s.discordProjectId} projects={projects} onChange={(id) => save({ discordProjectId: id })} />
+            <ProjectChannel label="Teams" what="Teams webhook" value={s.teamsProjectId} projects={projects} onChange={(id) => save({ teamsProjectId: id })} />
+            <ProjectChannel label="Telegram" what="Telegram chats" value={s.telegramProjectId} projects={projects} onChange={(id) => save({ telegramProjectId: id })} />
             <p className="text-2xs text-fg-faint">Each uses that app's own connection from Integrations; nothing new to set up.</p>
             <label className="flex items-center gap-2">
               <input type="checkbox" checked={s.email} onChange={(e) => save({ email: e.target.checked })} />
@@ -161,9 +179,16 @@ export function DigestCard({ orgId, projects }: { orgId: string; projects: Proje
               {s.lastError ? ` ${s.lastError}` : ''}
             </span>
             {canManage !== false && (
-              <Btn size="sm" variant="ghost" onClick={sendNow} loading={busy} disabled={busy || !s.enabled}>
-                Send now
-              </Btn>
+              <span className="flex flex-wrap items-center gap-2">
+                {sendNowBlocker(s) && (
+                  <span className="text-2xs text-fg-secondary" id="digest-send-blocker" data-testid="digest-send-blocker">
+                    {sendNowBlocker(s)}
+                  </span>
+                )}
+                <Btn size="sm" variant="ghost" onClick={sendNow} loading={busy} disabled={busy || !s.enabled} aria-describedby={sendNowBlocker(s) ? 'digest-send-blocker' : undefined}>
+                  Send now
+                </Btn>
+              </span>
             )}
           </div>
         </div>

@@ -1,13 +1,20 @@
 # FILE: Dockerfile.edge
-# PURPOSE: Container for Supabase Edge Functions (Deno runtime)
+# PURPOSE: Every Mushi Mushi edge function in one supabase/edge-runtime
+#          container. deploy/edge/main routes /<function>/... to the function's
+#          worker, so this serves api, fast-filter, classify-report, fix-worker,
+#          mcp and the cron workers alike. Behind a gateway that strips
+#          /functions/v1 (deploy/Caddyfile does).
+#
+# Build from the repo root: docker build -f deploy/Dockerfile.edge .
+# The context is filtered by deploy/Dockerfile.edge.dockerignore.
 
-# Base image pinned by digest (OpenSSF Scorecard Pinned-Dependencies). Refresh
-# with `docker buildx imagetools inspect denoland/deno:2.0.0` on upgrade.
-FROM denoland/deno:2.0.0@sha256:675499743d2bc74ad8f4d6c8c65c13b254b8bf039d27769cc840780521d8206d
+# Same version as supabase/docker/docker-compose.yml. TODO(pin): add the
+# digest (`docker buildx imagetools inspect supabase/edge-runtime:v1.77.4`).
+FROM supabase/edge-runtime:v1.77.4
 
-WORKDIR /app
-COPY supabase/functions /app/functions
+COPY packages/server/supabase/functions /home/deno/functions
+COPY deploy/edge/main /home/deno/functions/main
 
 EXPOSE 8000
-
-CMD ["deno", "serve", "--allow-all", "--port=8000", "/app/functions/api/index.ts"]
+# The image's entrypoint is `edge-runtime`; these are its arguments.
+CMD ["start", "--main-service", "/home/deno/functions/main", "--port", "8000", "--user-worker-request-idle-timeout", "150000"]

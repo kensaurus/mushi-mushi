@@ -4,16 +4,16 @@
  * role, so a split frontend/backend project reads as one app.
  */
 
-import { Card, Btn, Badge } from '../ui'
-import { JobStatusPill } from '../ui/job-status-pill'
-import { CHIP_TONE } from '../../lib/chipTone'
+import { Btn, Badge } from '../ui'
+import { StatusPill } from '../signal/StatusMark'
 import type { PreflightState } from '../../lib/useDispatchPreflight'
-import { IconCheck, IconArrowRight, IconIntegrations } from '../icons'
+import { IconArrowRight, IconIntegrations } from '../icons'
 import { BrandIcon } from '../ui/BrandIcon'
 import { usePageData } from '../../lib/usePageData'
 import { repoRoleMeta } from '../../lib/repoRoles'
 import { GitHubConnectCard } from '../GitHubConnectCard'
 import { isReturningFromGithub } from '../../lib/githubConnect'
+import { githubAccessFromPreflight } from '../../lib/githubAccess'
 
 /** The project_repos columns this card reads (GET /v1/admin/repo/repos). */
 interface LinkedRepo {
@@ -46,14 +46,27 @@ export function GithubConnectionCard({
   // Not connected (or back from GitHub): the connect flow itself, not a link
   // to another page that has it.
   if (projectId && ((!loading && !hasGithub) || isReturningFromGithub(projectId))) {
-    return <GitHubConnectCard projectId={projectId} returnTo="connect" currentRepoUrl={hasGithub ? repoUrl : null} />
+    // A linked repo the App cannot reach reads "Repo linked · app access
+    // missing" with "Finish connecting", the same status as Integrations.
+    return (
+      <GitHubConnectCard
+        projectId={projectId}
+        returnTo="connect"
+        currentRepoUrl={repoUrl}
+        access={githubAccessFromPreflight(preflight)}
+        onConnected={preflight.reload}
+      />
+    )
   }
 
+  // The GitHub section on Connect is the card; a second frame here was card in card.
   return (
-    <Card>
-      <div className="flex flex-wrap items-center gap-3 p-4">
+    <div>
+      <div className="flex flex-wrap items-center gap-3 py-1">
         <BrandIcon brand="github" size={20} decorative className="text-fg" />
-        <div className="min-w-0 flex-1">
+        {/* A floor width so the actions wrap below on a phone instead of
+            squeezing the name to "GitHub rep" under them (round-2 review 2026-11-18). */}
+        <div className="min-w-44 flex-1">
           <p className="text-sm font-medium text-fg">
             {linked.length > 1 ? `GitHub repositories (${linked.length})` : 'GitHub repository'}
           </p>
@@ -90,13 +103,10 @@ export function GithubConnectionCard({
           )}
         </div>
         {loading ? (
-          <JobStatusPill status="running" runningLabel="Loading" />
+          <StatusPill status="running" label="Checking" />
         ) : hasGithub ? (
-          <div className="flex items-center gap-2 shrink-0">
-            <span className={`inline-flex items-center gap-1 text-xs rounded-full px-2 py-0.5 ${CHIP_TONE.okSubtle}`}>
-              <IconCheck className="h-3.5 w-3.5" aria-hidden />
-              Connected
-            </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusPill status="passed" label="Connected" />
             <Btn to="/repo" size="sm" variant="ghost" className="gap-1.5">
               {linked.length > 1 ? 'Manage repos' : 'Add a repo'}
               <IconArrowRight className="h-3.5 w-3.5" aria-hidden />
@@ -113,6 +123,6 @@ export function GithubConnectionCard({
             </Btn>
         )}
       </div>
-    </Card>
+    </div>
   )
 }

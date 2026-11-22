@@ -79,4 +79,30 @@ describe('setup mode for an SDK key', () => {
     expect(diagnosis.steps[0].label).toBe('MCP server key can read reports (mcp:read)')
     expect(diagnosis.nextAction).toContain(`${MUSHI_CONSOLE_URL}/mcp`)
   })
+
+  it('gives one copy-paste command with the project, worded for where the key came from', async () => {
+    const fromCli = sdkKeyReport(['report:write'], MUSHI_CONSOLE_URL, { projectId: 'p-123', keySource: 'cli-config' })
+    expect(fromCli).toContain('npx mushi-mushi login --project-id p-123')
+    expect(fromCli).toContain('then restart this server.')
+    expect(fromCli).not.toContain('remove MUSHI_API_KEY')
+
+    const fromEnv = sdkKeyReport(['report:write'], MUSHI_CONSOLE_URL, { keySource: 'env' })
+    expect(fromEnv).toContain('npx mushi-mushi login\n')
+    expect(fromEnv).toContain("remove MUSHI_API_KEY from this server's env block")
+
+    const server = createSetupModeServer({
+      version: '0.0.0-test',
+      missingKeyReport: fromCli,
+      reason: 'sdk-key',
+      sdkKeyFix: { projectId: 'p-123', keySource: 'cli-config' },
+    })
+    const [ct, st] = InMemoryTransport.createLinkedPair()
+    client = new Client({ name: 'scopes-test', version: '0.0.0' }, { capabilities: {} })
+    await Promise.all([server.connect(st), client.connect(ct)])
+    expect(client.getInstructions()).toContain('npx mushi-mushi login --project-id p-123')
+    const res = (await client.callTool({ name: 'diagnose_setup', arguments: {} })) as { content: Array<{ text: string }> }
+    const diagnosis = JSON.parse(res.content[0].text) as { nextAction: string }
+    expect(diagnosis.nextAction).toContain('`npx mushi-mushi login --project-id p-123`')
+    expect(diagnosis.nextAction).toContain(`${MUSHI_CONSOLE_URL}/mcp`)
+  })
 })

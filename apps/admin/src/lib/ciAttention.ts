@@ -38,21 +38,37 @@ interface RunningLong {
  * Running jobs past max(p90, 2 × median) + a minute for their own job type, longest overrun first.
  * A type with fewer than three runs has no usual time, so its jobs are never flagged.
  */
+/** Job types by repo + workflow + job name, for `usualTime`. */
+export function jobTypeIndex(byJob: CiJobType[] | undefined): Map<string, CiJobType> {
+  return new Map((byJob ?? []).map((t) => [jobTypeKey(t), t]))
+}
+
+/**
+ * How long this kind of job usually runs (median), its slow runs (p90), and the
+ * point past which it counts as "longer than usual": max(p90, 2 × median) + a
+ * minute. Null with fewer than three runs: no usual time yet. The status board
+ * and "running longer than usual" use this one rule, so they never disagree.
+ */
+export function usualTime(job: CiJob, types: Map<string, CiJobType>): { typicalS: number; p90S: number; limitS: number } | null {
+  const t = types.get(jobTypeKey(job))
+  if (!t || t.runs < MIN_RUNS_FOR_TYPICAL || t.durationP50s == null || t.durationP90s == null) return null
+  return { typicalS: t.durationP50s, p90S: t.durationP90s, limitS: Math.max(t.durationP90s, 2 * t.durationP50s) + LONG_RUN_GRACE_S }
+}
+
 export function runningLong(jobs: CiJob[], byJob: CiJobType[] | undefined, now: number): RunningLong[] {
-  const types = new Map((byJob ?? []).map((t) => [jobTypeKey(t), t]))
+  const types = jobTypeIndex(byJob)
   const out: RunningLong[] = []
   for (const job of jobs) {
     if (jobOutcome(job) !== 'running') continue
     const elapsedS = jobElapsedSeconds(job, now)
-    const t = types.get(jobTypeKey(job))
-    if (elapsedS == null || !t || t.runs < MIN_RUNS_FOR_TYPICAL || t.durationP50s == null || t.durationP90s == null) continue
-    const limit = Math.max(t.durationP90s, 2 * t.durationP50s) + LONG_RUN_GRACE_S
-    if (elapsedS > limit) out.push({ job, elapsedS, typicalS: t.durationP50s, p90S: t.durationP90s, ratio: elapsedS / Math.max(1, t.durationP50s) })
+    const u = usualTime(job, types)
+    if (elapsedS == null || !u) continue
+    if (elapsedS > u.limitS) out.push({ job, elapsedS, typicalS: u.typicalS, p90S: u.p90S, ratio: elapsedS / Math.max(1, u.typicalS) })
   }
   return out.sort((a, b) => b.ratio - a.ratio)
 }
 
-interface RecentFailure {
+export interface RecentFailure {
   job: CiJob
   /** code: tests failed · machine: the machine died mid-job · waited: cancelled before any machine took it. */
   kind: 'code' | 'machine' | 'waited'

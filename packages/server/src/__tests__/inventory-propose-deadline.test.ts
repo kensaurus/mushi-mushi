@@ -105,18 +105,14 @@ vi.mock('../../supabase/functions/_shared/claude-messages.ts', () => ({
   },
 }))
 vi.mock('../../supabase/functions/_shared/llm-failover.ts', () => ({
-  // Run the proposer with a fake resolved key, like the real helper does.
-  withLlmFailover: async (
+  // Run the Claude leg with a fake resolved key, like the real helper does for
+  // an app with its own Claude key. withAnthropicOrOpenAi takes no meter: the
+  // proposer writes its own llm_invocations row, and a meter would bill twice.
+  withAnthropicOrOpenAi: async (
     _db: unknown,
     _p: string,
-    _v: string,
-    run: (r: { key: string; source: 'byok' }) => Promise<unknown>,
-    meter?: unknown,
-  ) => {
-    // The proposer writes its own llm_invocations row; a meter as well would bill twice.
-    if (meter !== undefined) throw new Error('inventory-propose must not pass meter')
-    return run({ key: 'test-key', source: 'byok' })
-  },
+    anthropicFn: (r: { key: string; source: 'byok' }) => Promise<unknown>,
+  ) => ({ result: await anthropicFn({ key: 'test-key', source: 'byok' }), usedProvider: 'anthropic' }),
   WalletDeniedError: class WalletDeniedError extends Error {},
 }))
 

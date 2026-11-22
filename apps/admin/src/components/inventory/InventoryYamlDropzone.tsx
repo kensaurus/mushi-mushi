@@ -10,21 +10,29 @@ interface Props {
 
 export function InventoryYamlDropzone({ onParsed, onCleared, disabled }: Props) {
   const [err, setErr] = useState<string | null>(null)
+  // The picked file's name: Clear is off until there is one (round 3: an enabled Clear beside
+  // the browser's "No file chosen").
+  const [fileName, setFileName] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
   return (
     <div className="rounded-md border border-dashed border-edge-subtle p-4 space-y-2">
       <p className="text-2xs text-fg-muted">
-        Select a local <code>inventory.yaml</code> to preview — ingestion validates on the server.
+        Pick a local <code>inventory.yaml</code> to preview it; the server checks it when you save.
       </p>
+      <div className="flex flex-wrap items-center gap-2">
+      {/* A labelled picker, not the browser's "Choose File No file chosen". */}
+      <label className={`relative inline-flex items-center rounded-sm border border-edge-subtle px-2 py-1 text-2xs font-medium text-fg-secondary focus-within:ring-2 focus-within:ring-brand/60 ${disabled ? 'opacity-50' : 'cursor-pointer hover:bg-surface-overlay'}`}>
       <input
         ref={inputRef}
         type="file"
         accept=".yml,.yaml,text/yaml"
         disabled={disabled}
-        className="text-2xs w-full"
+        aria-label="inventory.yaml file"
+        className="sr-only"
         onChange={async (e) => {
           setErr(null)
           const file = e.target.files?.[0]
+          setFileName(file?.name ?? null)
           if (!file) {
             onCleared?.()
             return
@@ -51,20 +59,26 @@ export function InventoryYamlDropzone({ onParsed, onCleared, disabled }: Props) 
           onParsed?.(text)
         }}
       />
-      {err && <ErrorAlert message={err} />}
+        {fileName ? 'Choose another file' : 'Choose inventory.yaml'}
+      </label>
+      <span className="min-w-0 text-2xs text-fg-muted wrap-break-word" data-testid="inventory-yaml-file">{fileName ?? 'No file picked yet.'}</span>
       <Btn
         size="sm"
         variant="ghost"
         type="button"
-        disabled={disabled}
+        disabled={disabled || !fileName}
+        title={fileName ? undefined : 'Nothing picked to clear'}
         onClick={() => {
           setErr(null)
+          setFileName(null)
           if (inputRef.current) inputRef.current.value = ''
           onCleared?.()
         }}
       >
         Clear
       </Btn>
+      </div>
+      {err && <ErrorAlert message={err} />}
     </div>
   )
 }

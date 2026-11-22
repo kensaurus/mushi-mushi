@@ -118,22 +118,82 @@ export function followupKeyLabel(k: ReviewFollowupKey): string {
   return `${name} (${owner})${k.status !== 'active' ? ` · ${k.status}` : ''}`
 }
 
-/** One recent follow-up in a line. */
-export function followupRecentLine(r: ReviewFollowupRecent): string {
-  const app = r.appName ?? 'An app'
+function pushedChange(r: ReviewFollowupRecent): boolean {
+  return !!r.head_sha_after && r.head_sha_after !== r.head_sha_before
+}
+
+/** What one recent follow-up did, without the app name. */
+export function followupRecentResult(r: ReviewFollowupRecent): string {
   switch (r.status) {
     case 'queued':
-      return `${app}: queued${r.reason ? `, waiting: ${r.reason}` : ''}`
+      return `queued${r.reason ? `, waiting: ${r.reason}` : ''}`
     case 'dispatched':
     case 'running':
-      return `${app}: agent working on ${plural(r.findings_count ?? 0, 'finding')}`
+      return `agent working on ${plural(r.findings_count ?? 0, 'finding')}`
     case 'skipped':
-      return `${app}: skipped${r.reason ? `: ${r.reason}` : ''}${r.error ? ` (${r.error.slice(0, 200)})` : ''}`
+      return `skipped${r.reason ? `: ${r.reason}` : ''}${r.error ? ` (${r.error.slice(0, 200)})` : ''}`
     case 'completed':
     case 'failed': {
-      const pushed = !!r.head_sha_after && r.head_sha_after !== r.head_sha_before
-      if (!pushed) return `${app}: ${r.status === 'failed' ? 'agent failed' : 'agent finished'}, no change pushed`
-      return `${app}: pushed ${String(r.head_sha_after).slice(0, 7)}${r.verdict_after ? `, Opus: ${VERDICT_WORDS[r.verdict_after]}` : ', awaiting review'}`
+      if (!pushedChange(r)) return `${r.status === 'failed' ? 'agent failed' : 'agent finished'}, no change pushed`
+      return `pushed ${String(r.head_sha_after).slice(0, 7)}${r.verdict_after ? `, Opus: ${VERDICT_WORDS[r.verdict_after]}` : ', awaiting review'}`
     }
   }
+}
+
+/** @internal Exported for tests. One recent follow-up in a line. */
+export function followupRecentLine(r: ReviewFollowupRecent): string {
+  return `${r.appName ?? 'An app'}: ${followupRecentResult(r)}`
+}
+
+/**
+ * The mark beside a recent follow-up, so a failure reads as a cross and a push
+ * as a tick instead of a plain line of text (round-3 review 2026-11-19).
+ */
+export function followupRecentMark(
+  r: ReviewFollowupRecent,
+): 'running' | 'passed' | 'failed' | 'waiting' | 'idle' {
+  switch (r.status) {
+    case 'queued':
+      return 'waiting'
+    case 'dispatched':
+    case 'running':
+      return 'running'
+    case 'skipped':
+      return 'idle'
+    case 'failed':
+      return pushedChange(r) ? 'passed' : 'failed'
+    case 'completed':
+      return pushedChange(r) ? (r.verdict_after ? 'passed' : 'waiting') : 'idle'
+  }
+}
+
+const MODEL_WORD: Record<string, string> = { gpt: 'GPT', ai: 'AI' }
+const PARAM_WORD: Record<string, string> = { context: 'context', reasoning_effort: 'effort' }
+
+/**
+ * A Cursor model spec as a person reads it: "grok-4.7?context=500k&reasoning_effort=xhigh"
+ * becomes "Grok 4.7 (500k context, xhigh effort)". Settings showed the raw spec.
+ */
+export function cursorModelName(spec: string): string {
+  const text = spec.trim()
+  if (!text) return text
+  const q = text.indexOf('?')
+  const id = q < 0 ? text : text.slice(0, q)
+  const name = id
+    .split('-')
+    .filter(Boolean)
+    .map((w) => MODEL_WORD[w.toLowerCase()] ?? w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
+  if (q < 0) return name
+  const params = text
+    .slice(q + 1)
+    .split('&')
+    .map((part) => {
+      const eq = part.indexOf('=')
+      if (eq <= 0) return null
+      const key = part.slice(0, eq)
+      return `${part.slice(eq + 1)} ${PARAM_WORD[key] ?? key.replace(/_/g, ' ')}`
+    })
+    .filter(Boolean)
+  return params.length > 0 ? `${name} (${params.join(', ')})` : name
 }

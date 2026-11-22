@@ -144,7 +144,7 @@ was deleted; every remaining finding is the A2 register or debt to pay down.
 
 `--max-issues` counts only issue types whose rule is `error`. The eight
 "referenced optional peerDependencies" are reported at `warn` (see
-`knip.json` → `rules`) because optional peers that are referenced are the
+`package.json#knip` → `rules`) because optional peers that are referenced are the
 intended design of the plugin and react-native packages; they are visible in
 the report but never count. Configuration hints are zero in both modes and
 are enforced with `--treat-config-hints-as-errors` on the default run.
@@ -243,7 +243,7 @@ Warn-level (not counted): optionalPeerDependencies 8.
    (`packages/core/src/index.ts`, `apps/admin/src/components/ui.tsx`) are entry
    files and never counted; the rest are candidates for the A3 exports pass.
 
-## knip.json decisions
+## Knip config decisions (`package.json#knip`)
 
 - `compilers.mdx: true` enables the built-in MDX import extractor (knip only
   auto-enables it when `@mdx-js/*` is a direct dependency; here Nextra brings

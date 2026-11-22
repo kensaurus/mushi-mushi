@@ -2,7 +2,8 @@
  * FILE: packages/server/supabase/functions/_shared/plan-app-limit.ts
  * PURPOSE: How many apps an organization may create on its plan
  *          (docs/plan-pricing.md, 2026-10-28: apps watched is the value
- *          metric; Free 1, Builder 3, Studio 10, Enterprise no limit).
+ *          metric; Free 3 since 2026-11-19, Builder 3, Studio 10,
+ *          Enterprise no limit).
  *          Pure, so the route and its tests share one rule.
  */
 
@@ -22,7 +23,8 @@ export interface AppLimitDenial {
 
 /** The plan to suggest when an organization is out of apps. */
 function nextPlan(planId: string): AppLimitDenial['upgradeTo'] {
-  if (planId === 'indie') return 'pro'
+  // Free has as many apps as Builder since 2026-11-19, so more apps means Studio.
+  if (planId === 'free_cloud' || planId === 'indie') return 'pro'
   if (planId === 'pro') return 'enterprise'
   return 'indie'
 }

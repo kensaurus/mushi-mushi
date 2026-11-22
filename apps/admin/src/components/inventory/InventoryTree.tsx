@@ -139,7 +139,7 @@ export function InventoryTree({ rows, onRowClick }: Props) {
   })
 
   if (!rows.length) {
-    return <p className="text-xs text-fg-muted py-6 text-center">No inventory rows — ingest yaml first.</p>
+    return <p className="text-xs text-fg-muted py-6 text-center">No actions yet. Accept drafted stories on Discovery, or save a map file on Map file.</p>
   }
 
   return (

@@ -75,13 +75,15 @@ export function SetupProgressRail({ project, apiKey, onTab, onMintKey, minting, 
             testing={testing}
             onTab={onTab}
           />
-          <p className="mt-3 flex min-w-0 items-start gap-2 text-2xs text-fg-muted" data-testid="setup-heartbeat">
-            <span
-              aria-hidden="true"
-              className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${rail.heartbeat ? 'bg-ok' : 'bg-fg-faint'}`}
-            />
-            <span className="min-w-0 wrap-anywhere">{heartbeatSentence(rail.heartbeat)}</span>
-          </p>
+          {heartbeatSentence(rail.heartbeat) ? (
+            <p className="mt-3 flex min-w-0 items-start gap-2 text-2xs text-fg-muted" data-testid="setup-heartbeat">
+              <span
+                aria-hidden="true"
+                className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${rail.heartbeat ? 'bg-ok' : 'bg-fg-faint'}`}
+              />
+              <span className="min-w-0 wrap-anywhere">{heartbeatSentence(rail.heartbeat)}</span>
+            </p>
+          ) : null}
         </>
       )}
     </section>

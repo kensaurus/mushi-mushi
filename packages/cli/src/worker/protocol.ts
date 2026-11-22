@@ -200,7 +200,7 @@ export interface FreshEyesTarget {
 type ParsedClaim =
   | { kind: 'fix'; id: string; model: string | null; raw: Record<string, unknown> }
   | { kind: 'conflict'; id: string; model: string | null; conflict: ConflictTarget }
-  | { kind: 'audit'; id: string; model: string | null; audit: { reviewModel: string | null; findingsLeft: number } }
+  | { kind: 'audit'; id: string; model: string | null; audit: { reviewModel: string | null; findingsLeft: number; recheck: boolean; propose: boolean } }
   | { kind: 'fresh_eyes'; id: string; model: string | null; freshEyes: FreshEyesTarget }
 
 const RUN_ID_RE = /^[0-9]{8}-[0-9]{6}-[a-z0-9]{4}$/
@@ -241,7 +241,7 @@ function parseFreshEyesTarget(raw: unknown): Parsed<FreshEyesTarget> {
 }
 
 /**
- * @internal Exported for tests. A claim answer, checked by kind. A fix claim's
+ * A claim answer, checked by kind. A fix claim's
  * report goes on to `workOne` as it always did (a claim without `kind` is a fix
  * claim from a server that predates P3). A conflict claim names a PR of the
  * lane's repository and the head Mushi saw; its branch is checked so it can
@@ -274,7 +274,10 @@ export function parseClaim(raw: unknown): Parsed<ParsedClaim> {
     const reviewModel = a.reviewModel == null ? null : typeof a.reviewModel === 'string' && MODEL_RE.test(a.reviewModel) ? a.reviewModel : undefined
     if (reviewModel === undefined) return { ok: false, message: 'the audit claim\'s review model is not a model id' }
     const left = typeof a.findingsLeft === 'number' && Number.isInteger(a.findingsLeft) && a.findingsLeft >= 0 ? a.findingsLeft : 0
-    return { ok: true, value: { kind: 'audit', id: c.id, model, audit: { reviewModel, findingsLeft: left } } }
+    // ADR 0063: a server older than the open cap sends neither: no recheck, propose as before.
+    const recheck = a.recheck === true
+    const propose = a.propose !== false
+    return { ok: true, value: { kind: 'audit', id: c.id, model, audit: { reviewModel, findingsLeft: left, recheck, propose } } }
   }
   if (kind === 'fresh_eyes') {
     const t = parseFreshEyesTarget(c.freshEyes)

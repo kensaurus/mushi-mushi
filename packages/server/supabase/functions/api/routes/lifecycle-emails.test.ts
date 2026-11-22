@@ -74,23 +74,27 @@ Deno.test('templates carry the deep links, plain text + html, and List-Unsubscri
   assert(day0.text.includes(`${admin}/onboarding?tab=verify`))
   assert(day0.text.includes('npx mushi-mushi setup --ide cursor'))
   assert(day0.text.includes("import { Mushi } from 'mushi-mushi'"))
-  assert(day0.html.includes('href="https://kensaur.us/mushi-mushi/admin/onboarding?tab=verify"'))
+  // The console link keeps its ?tab=verify; the kit adds its UTM tags after it.
+  assert(day0.html.includes('href="https://kensaur.us/mushi-mushi/admin/onboarding?tab=verify&amp;utm_source=email&amp;utm_medium=marketing&amp;utm_campaign=lifecycle-day0_welcome'))
   // Sober subject lines: no mascot, no emoji.
   assert(!/mushi-chan|🐛/i.test(day0.subject))
 
   for (const key of LIFECYCLE_EMAIL_KEYS) {
     const email = buildLifecycleEmail({ key, adminUrl: admin, unsubscribeUrl: unsub, signedUpOn: '2026-09-14' })
+    // RFC 8058 one-click pair: the signed https URL only (no mailto).
     assertEquals(email.headers['List-Unsubscribe'], `<${unsub}>`)
     assertEquals(email.headers['List-Unsubscribe-Post'], 'List-Unsubscribe=One-Click')
     assert(email.text.includes(unsub))
     assert(email.html.includes('href="https://api.test/v1/public/email/unsubscribe?t=abc"'))
-    // The founder's words are kept, on the branded layout.
+    // The founder's words are kept, on the kit's layout.
     assert(email.html.includes('Kenji, Mushi Mushi'))
-    assert(email.html.includes('Mushi Mushi</span>'))
+    assert(email.html.includes('>mushi-mushi</span>'))
     assert(email.text.includes('2026-09-14'))
     assert(!/🐛|✨|🚀/.test(email.subject))
-    // No tracking pixels.
-    assert(!/<img/i.test(email.html))
+    // No tracking pixels: the only images are the other apps' own kensaur.us PNG icons.
+    for (const [, src] of email.html.matchAll(/<img src="([^"]+)"/g)) {
+      assert(/^https:\/\/([a-z-]+\.)?kensaur\.us\/[\w./-]+\.png$/.test(src), `${key} image ${src}`)
+    }
   }
   assert(buildLifecycleEmail({ key: 'day7_activated', adminUrl: admin, unsubscribeUrl: unsub }).text.includes('npx mushi-mushi setup --ide cursor'))
 })

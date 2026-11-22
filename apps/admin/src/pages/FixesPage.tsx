@@ -33,11 +33,14 @@ import type { FixTimelineEvent } from '../components/FixGitGraph'
 import { FixSummaryRow } from '../components/fixes/FixSummaryRow'
 import { FixRecommendation } from '../components/fixes/FixRecommendation'
 import { InflightDispatches } from '../components/fixes/InflightDispatches'
+import { StatusMark } from '../components/signal/StatusMark'
+import { VitalText } from '../components/signal/VitalText'
 import { FixesTable } from '../components/fixes/FixesTable'
 import { FixBulkActionBar } from '../components/fixes/FixBulkActionBar'
 import { canMergeFix, isFixMerged, mergeFixAttempt } from '../lib/mergeFix'
 import { queueMerges } from '../lib/mergeQueue'
 import { MergeQueuePanel } from '../components/fixes/MergeQueuePanel'
+import { heldReasonOf } from '../lib/heldReason'
 import { failureCause, fixCauseLabel, fixReportLabel, needsAttention, retryCandidates } from '../lib/fixReportTruth'
 import {
   RETRY_AGENT_OPTIONS,
@@ -226,10 +229,17 @@ export function FixesPage() {
   // both happen often in StrictMode dev because effects mount twice.
   const inFlightRef = useRef(false)
   const cancelledRef = useRef(false)
+  // The app the list belongs to. These reads take the app from the request
+  // headers, so a load started for one app must never land on another
+  // (2026-11-16: switching glot.it → mushi-mushi kept glot.it's 629 fixes).
+  const projectRef = useRef(activeProjectId)
+  projectRef.current = activeProjectId
+  const loadedProjectRef = useRef<string | null>(null)
 
   const loadFixes = useCallback(async () => {
     if (inFlightRef.current) return
     inFlightRef.current = true
+    const forProject = projectRef.current
     setError(false)
     setIsValidating(true)
     try {
@@ -239,6 +249,9 @@ export function FixesPage() {
         apiFetch<FixSummary>('/v1/admin/fixes/summary'),
       ])
       if (cancelledRef.current) return
+      // The app changed while this load ran: drop it, the reload below follows.
+      if (projectRef.current !== forProject) return
+      loadedProjectRef.current = forProject ?? null
       if (fixRes.ok && fixRes.data) {
         setLatestFixes(fixRes.data.fixes)
         setFixesTotal(typeof fixRes.data.total === 'number' ? fixRes.data.total : null)
@@ -253,9 +266,13 @@ export function FixesPage() {
       if (!cancelledRef.current) {
         setLoading(false)
         setIsValidating(false)
+        // The app changed while this load ran: load the new one now.
+        if (projectRef.current !== forProject) void loadFixesRef.current()
       }
     }
   }, [])
+  const loadFixesRef = useRef(loadFixes)
+  loadFixesRef.current = loadFixes
 
   const loadOlderFixes = useCallback(async () => {
     setLoadingOlder(true)
@@ -302,6 +319,19 @@ export function FixesPage() {
       cancelledRef.current = true
     }
   }, [loadFixes])
+
+  // Switching apps: clear the old app's rows at once (never show them under the
+  // new app's name), then load the new app's.
+  useEffect(() => {
+    if (loadedProjectRef.current === null || loadedProjectRef.current === activeProjectId) return
+    setLatestFixes([])
+    setOlderFixes([])
+    setFixesTotal(null)
+    setDispatches([])
+    setSummary(null)
+    setLoading(true)
+    void loadFixes()
+  }, [activeProjectId, loadFixes])
 
   // Realtime replaces the 5s poll. `fix_attempts` flips when an agent
   // moves through queued → running → succeeded/failed; `fix_events` fires
@@ -687,7 +717,7 @@ export function FixesPage() {
     reloadPipeline()
     toast.push({
       tone: skipped.length ? 'warning' : 'success',
-      message: `Queued ${queued} ${pluralize(queued, 'PR', 'PRs')} to merge when ready${skipped.length ? ` · ${skipped.length} skipped: ${[...new Set(skipped.map((s) => s.reason))].join(' ')}` : ''}`,
+      message: `Queued ${queued} ${pluralize(queued, 'PR', 'PRs')} to merge when ready${skipped.length ? ` · ${skipped.length} skipped: ${[...new Set(skipped.map((s) => heldReasonOf(s.reason) ?? s.reason))].join(', ')}` : ''}`,
     })
   }, [toast, reloadPipeline])
 
@@ -785,13 +815,15 @@ export function FixesPage() {
   // Publish page context so Ask Mushi and command palette can react
   // to the current bucket + counts (e.g. "Retry all failed fixes" only
   // makes sense when `failedFixes.length > 0`). The summary is the browser
-  // tab title. Failed matches the banner (B3); in flight matches the card.
+  // tab title. Stopped matches the banner (B3); in flight matches the card.
+  // Attempts are the total, not the loaded page: the title read "200 fixes ·
+  // 228 failed" (200 loaded of 639 attempts, 228 stopped reports, 2026-11-20).
   usePublishPageContext({
     route: '/fixes',
     title: projectName ? `Fixes · ${projectName}` : 'Fixes',
     summary: loading
       ? 'Loading fix pipeline…'
-      : `${pluralizeWithCount(fixes.length, 'fix', 'fixes')} · ${inFlightCount} in flight · ${Math.max(bucketCounts.failed, fixesStats.failed)} failed`,
+      : `${pluralizeWithCount(Math.max(fixesTotal ?? 0, fixes.length), 'attempt')} · ${inFlightCount} in flight · ${Math.max(bucketCounts.failed, fixesStats.failed)} stopped`,
     filters: {
       bucket: statusBucket,
     },
@@ -876,15 +908,15 @@ export function FixesPage() {
         helpHowToUse={copy?.help?.howToUse ?? 'The list shows every attempt. Filter by status; In flight shows runs still going.'}
       >
         <FreshnessPill at={lastFetchedAt ?? statsFetchedAt} isValidating={isValidating || statsValidating} channel={channelState} />
-        <span className="inline-flex items-center rounded-sm border border-edge-subtle bg-surface-overlay/40 px-2 py-0.5 font-mono text-2xs tabular-nums text-fg-muted">
-          {fixesTotal != null && fixesTotal > fixes.length
-            ? `${fixes.length} of ${pluralizeWithCount(fixesTotal, 'attempt')}`
-            : pluralizeWithCount(fixes.length, 'attempt')}
-        </span>
+        {/* "0 attempts" beside "No fixes in the last 30 days" was noise (round-2 review). */}
+        {fixes.length > 0 && (
+          <span className="inline-flex items-center whitespace-nowrap rounded-sm bg-surface-overlay/40 px-2 py-px text-2xs tabular-nums text-fg-muted">
+            {fixesTotal != null && fixesTotal > fixes.length
+              ? `${fixes.length} of ${pluralizeWithCount(fixesTotal, 'attempt')}`
+              : pluralizeWithCount(fixes.length, 'attempt')}
+          </span>
+        )}
       </PageHeaderBar>
-
-      {/* Before the first fix: the no-setup path first (copy the fix prompt), GitHub second (audit 2026-11-11). */}
-      {fixes.length === 0 && <FixesStartCard githubConnected={fixesStats.topPriority !== 'no_github'} />}
 
       {/* Out of credits: say so, with the remedy, where Retry would have been (audit 2026-11-11). */}
       {agentCredits.state?.out && (
@@ -919,25 +951,25 @@ export function FixesPage() {
                 stats={snapshotStats}
                 ready={readyCount}
                 inFlight={inFlightCount}
-                statsFetchedAt={statsFetchedAt}
-                statsValidating={statsValidating}
-              />
-            ),
-          },
-          {
-            priority: POSTURE_PRIORITY.guide,
-            // A third explainer next to the help row and the banner; only
-            // worth its space before the first attempt.
-            show: fixes.length === 0,
-            children: (
-              <FixesPipelineGuide
-                topPriority={fixesStats.topPriority}
-                stats={{ ...fixesStats, inProgress: inFlightCount }}
               />
             ),
           },
         ]}
       />
+
+      {/* Before the first fix: the status line above leads ("4 bugs waiting
+          for a fix"), then how a fix starts: the no-setup path first (copy the
+          fix prompt), Autofix second with its "How Autofix works" disclosure
+          inside, not a second panel repeating it (audit 2026-11-11, round-2 review). */}
+      {fixes.length === 0 && (
+        <FixesStartCard
+          githubConnected={fixesStats.topPriority !== 'no_github'}
+          projectId={activeProjectId}
+          autofixGuide={
+            <FixesPipelineGuide flat topPriority={fixesStats.topPriority} stats={{ ...fixesStats, inProgress: inFlightCount }} />
+          }
+        />
+      )}
 
       {codebaseStats &&
         (!codebaseStats.codebase_index_enabled || codebaseStats.indexed_files === 0) &&
@@ -1003,11 +1035,14 @@ export function FixesPage() {
           </div>
           <ul className="space-y-1">
             {mergeFailures.map(({ fix, reason }) => (
-              <li key={fix.id} className="text-2xs text-fg-secondary">
+              <li key={fix.id} className="flex items-baseline gap-1.5 text-2xs text-fg-secondary" data-testid="fixes-merge-failure">
+                <StatusMark status="failed" label="Did not merge" className="self-center" />
                 <a href={fix.pr_url} target="_blank" rel="noreferrer" className="font-mono hover:underline">
                   #{fix.pr_number ?? '?'}
-                </a>{' '}
-                {fixReportLabel(fix)}: <span className="text-fg-muted">{reason}</span>
+                </a>
+                <span className="min-w-0">
+                  <VitalText text={fixReportLabel(fix)} />: <span className="text-fg-muted">{reason}</span>
+                </span>
               </li>
             ))}
           </ul>
@@ -1198,7 +1233,7 @@ export function FixesPage() {
             <ul className="max-h-40 overflow-y-auto space-y-0.5">
               {selectedMergeable.map((f) => (
                 <li key={f.id} className="truncate">
-                  <span className="font-mono">#{f.pr_number ?? '?'}</span> {fixReportLabel(f)}
+                  <span className="font-mono">#{f.pr_number ?? '?'}</span> <VitalText text={fixReportLabel(f)} />
                 </li>
               ))}
             </ul>

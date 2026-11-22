@@ -218,7 +218,7 @@ export function PageHelp({
             {summaryPills.map((pill) => (
               <span
                 key={pill}
-                className="shrink-0 rounded-full border border-edge-subtle/80 bg-surface-overlay/50 px-1.5 py-px text-2xs text-fg-faint"
+                className="shrink-0 rounded-sm bg-surface-overlay/50 px-1.5 py-px text-2xs text-fg-faint"
               >
                 {pill}
               </span>
@@ -266,7 +266,7 @@ export function PageHelp({
             onClick={() => commandPalette.open()}
           >
             Jump to any page
-            <kbd className="rounded border border-edge-subtle bg-surface-overlay/80 px-1 py-px font-mono text-2xs text-fg-faint">
+            <kbd className="rounded bg-surface-overlay/80 px-1 py-px font-mono text-2xs text-fg-faint">
               ⌘K
             </kbd>
           </button>

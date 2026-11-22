@@ -67,10 +67,10 @@ export const MUSHI: Vendor = {
   whatItIs:
     'An in-app bug reporter for production apps: a user reports from the widget, Mushi Mushi attaches the screenshot and console/network tail, writes a plain-English diagnosis, and hands a fix prompt to Cursor or Claude Code over MCP.',
   facts: [
-    { claim: 'Free tier', value: 'Free: 1 app, 100 diagnoses per month (hard stop; later reports are kept, not diagnosed), 1 seat, 14-day retention, your own AI key allowed, no card', sourceUrl: MUSHI_PRICING, reviewedAt: MUSHI_FACTS_REVIEWED_AT },
+    { claim: 'Free tier', value: 'Free: 3 apps, 300 diagnoses per month (hard stop; later reports are kept, not diagnosed; no cap with your own Anthropic or OpenAI key), 1 seat, 30-day retention, no card', sourceUrl: MUSHI_PRICING, reviewedAt: MUSHI_FACTS_REVIEWED_AT },
     { claim: 'Paid tiers', value: 'Builder $29/mo (3 apps, 1,000 diagnoses) · Studio $79/mo (10 apps, 3,000 diagnoses) · Enterprise from $499/mo', sourceUrl: MUSHI_PRICING, reviewedAt: MUSHI_FACTS_REVIEWED_AT },
     { claim: 'License', value: 'SDKs MIT; server AGPLv3, except the enterprise folder (packages/server/ee: SSO, audit export, retention policies), which is source-available and needs a license in production', sourceUrl: `${MUSHI_REPO}/blob/master/LICENSE`, reviewedAt: R },
-    { claim: 'Self-host', value: 'Free, whole stack, one command onto your own Supabase project (free tier works); bring your own Anthropic key (SELF_HOSTED.md)', sourceUrl: `${MUSHI_REPO}/blob/master/SELF_HOSTED.md`, reviewedAt: R },
+    { claim: 'Self-host', value: 'Free, whole stack, one command onto your own Supabase project (free tier works) or Docker Compose; an Anthropic or OpenAI key turns on the AI diagnosis', sourceUrl: 'https://kensaur.us/mushi-mushi/docs/self-hosting', reviewedAt: R },
     { claim: 'Editor loop', value: 'MCP server for Cursor / Claude Code; no second LLM key in the MCP process', sourceUrl: 'https://kensaur.us/mushi-mushi/docs/quickstart/mcp', reviewedAt: R },
     { claim: 'Diagnosis accuracy', value: 'An LLM reading of the report and your repo. It can be wrong or name the wrong file; read it before you apply the fix.', sourceUrl: 'https://kensaur.us/mushi-mushi/docs/concepts/judge-loop', reviewedAt: R },
   ],
@@ -110,7 +110,7 @@ export const SENTRY_PRICING_ROWS: readonly LandingComparisonRow[] = [
   {
     label: 'Free tier',
     foil: 'Developer: 5k errors/mo, one user',
-    mushi: 'Free: 1 app, 100 diagnoses/mo, 1 seat, 14-day retention, no card',
+    mushi: 'Free: 3 apps, 300 diagnoses/mo, 1 seat, 30-day retention, no card',
   },
   {
     label: 'AI diagnosis',
@@ -139,7 +139,7 @@ export const SENTRY_FAQ: readonly FaqEntry[] = [
   },
   {
     q: 'What does Mushi Mushi cost?',
-    a: 'Free covers one app and 100 diagnoses a month with no card. Builder is $29 a month for 3 apps, Studio $79 a month for 10. Self-hosting the AGPLv3 server is free.',
+    a: 'Free covers three apps and 300 diagnoses a month with no card. Builder is $29 a month for 1,000 diagnoses and 90 days of history, Studio $79 a month for 10 apps. Self-hosting the AGPLv3 server is free.',
   },
 ]
 
@@ -190,7 +190,7 @@ export const JAM_ROWS: readonly LandingComparisonRow[] = [
   {
     label: 'Free tier',
     foil: '30 Jams/mo, 5-min recordings, 5 creator seats',
-    mushi: '1 app, 100 diagnoses/mo, 1 seat, 14-day retention, no card',
+    mushi: '3 apps, 300 diagnoses/mo, 1 seat, 30-day retention, no card',
   },
   {
     label: 'Paid entry',
@@ -219,7 +219,7 @@ export const JAM_FAQ: readonly FaqEntry[] = [
   },
   {
     q: 'What do the free tiers cover?',
-    a: 'Jam Free (2026-10-29): 30 Jams a month, recordings up to 5 minutes, 5 Recording Links, 5 creator seats. Mushi Mushi Free: one app, 100 diagnoses a month, no card, unlimited reports.',
+    a: 'Jam Free (2026-10-29): 30 Jams a month, recordings up to 5 minutes, 5 Recording Links, 5 creator seats. Mushi Mushi Free: three apps, 300 diagnoses a month, no card, unlimited reports.',
   },
 ]
 
@@ -290,7 +290,7 @@ export const POSTHOG_ROWS: readonly LandingComparisonRow[] = [
   {
     label: 'Free tier',
     foil: '5K replays + 100K exceptions/mo, 500 AI credits, 3 AI PRs, no card, 1 project',
-    mushi: '1 app, 100 diagnoses/mo, 1 seat, 14-day retention, no card',
+    mushi: '3 apps, 300 diagnoses/mo, 1 seat, 30-day retention, no card',
   },
   {
     label: 'Self-host',
@@ -306,7 +306,7 @@ export const POSTHOG_FAQ: readonly FaqEntry[] = [
   },
   {
     q: 'Does PostHog fix errors with AI?',
-    a: 'Yes, in two ways. Every error-tracking issue has a "Fix with AI" button that writes a fix or explain prompt for PostHog AI or a coding assistant, and PostHog AI can search errors and find their root cause. Self-driving, in open beta, turns recurring high-impact errors into Inbox reports and opens a draft pull request when a code fix is possible: 3 a month free, then $15 per PR. Both are on PostHog\'s free plan (500 AI credits and 3 PRs a month). The difference with Mushi Mushi is where it starts: PostHog works from the exceptions it captured; Mushi Mushi starts from what a user reported, with their screenshot, writes a plain-English diagnosis (100 a month on Free, unlimited self-hosted with your own key), and pulls the fix context into Cursor or Claude Code over MCP.',
+    a: 'Yes, in two ways. Every error-tracking issue has a "Fix with AI" button that writes a fix or explain prompt for PostHog AI or a coding assistant, and PostHog AI can search errors and find their root cause. Self-driving, in open beta, turns recurring high-impact errors into Inbox reports and opens a draft pull request when a code fix is possible: 3 a month free, then $15 per PR. Both are on PostHog\'s free plan (500 AI credits and 3 PRs a month). The difference with Mushi Mushi is where it starts: PostHog works from the exceptions it captured; Mushi Mushi starts from what a user reported, with their screenshot, writes a plain-English diagnosis (300 a month on Free, unlimited self-hosted with your own key), and pulls the fix context into Cursor or Claude Code over MCP.',
   },
   {
     q: 'Can I run PostHog and Mushi Mushi together?',
@@ -318,7 +318,7 @@ export const POSTHOG_FAQ: readonly FaqEntry[] = [
   },
   {
     q: 'What do the free tiers cover?',
-    a: 'PostHog (2026-10-29): 5K session recordings, 100K exceptions and 1M analytics events a month, 500 PostHog AI credits (worth $5) and 3 Inbox pull requests a month, no card, one project, one-year retention. Mushi Mushi: one app and 100 diagnoses a month, no card; self-hosting is free.',
+    a: 'PostHog (2026-10-29): 5K session recordings, 100K exceptions and 1M analytics events a month, 500 PostHog AI credits (worth $5) and 3 Inbox pull requests a month, no card, one project, one-year retention. Mushi Mushi: three apps and 300 diagnoses a month, no card; self-hosting is free.',
   },
 ]
 
@@ -417,9 +417,9 @@ export const ALTERNATIVES: readonly AlternativeRow[] = [
   {
     vendor: 'Mushi Mushi',
     url: 'https://kensaur.us/mushi-mushi/',
-    freeTier: 'Free: 1 app, 100 diagnoses/mo (hard stop), 1 seat, 14-day retention, no card',
+    freeTier: 'Free: 3 apps, 300 diagnoses/mo (hard stop), 1 seat, 30-day retention, no card',
     selfHost: 'Yes, free, AGPLv3 server on your own Supabase project, one command; bring your own Anthropic key',
-    aiFix: 'Included within the plan\'s diagnosis quota (100/mo on Free): plain-English diagnosis + fix prompt, which can be wrong; MCP into Cursor / Claude Code; optional agent-drafted PR',
+    aiFix: 'Included within the plan\'s diagnosis quota (300/mo on Free): plain-English diagnosis + fix prompt, which can be wrong; MCP into Cursor / Claude Code; optional agent-drafted PR',
     pickIf: 'You did not write most of the code, your users tell you about bugs, and you want the fix in your editor.',
     sourceUrl: MUSHI_PRICING,
   },
@@ -517,7 +517,7 @@ export const MUSHI_FOR_AGENCIES: Vendor = {
   whatItIs:
     'An in-app bug reporter: the person using the app reports from a widget, and Mushi Mushi writes the likely cause in plain English with a fix prompt for Cursor, Claude Code, Lovable or Bolt.',
   facts: [
-    { claim: 'Price', value: 'Free $0 (1 app, 100 diagnoses a month, no card) · Builder $29/mo (3 apps) · Studio $79/mo (10 apps, 5 seats). A paid plan is attached to one app: that app gets the plan\'s diagnoses (1,000 on Builder, 3,000 on Studio) and the other apps in the team keep 100 a month until they are upgraded too.', sourceUrl: MUSHI_PRICING, reviewedAt: A },
+    { claim: 'Price', value: 'Free $0 (3 apps, 300 diagnoses a month, no card) · Builder $29/mo (3 apps, 1,000 diagnoses) · Studio $79/mo (10 apps, 5 seats). A paid plan belongs to the team: every app in it shares the plan\'s diagnoses (1,000 on Builder, 3,000 on Studio).', sourceUrl: MUSHI_PRICING, reviewedAt: A },
     { claim: 'Clients', value: 'No free guest seats. A client who signs in takes one of the 5 Studio seats, and every member of a team, a read-only Viewer included, can read every app in that team. To show a client only their own app, give it its own team.', sourceUrl: MUSHI_AGENCY_PAGE, reviewedAt: A },
     { claim: 'Task board, internal comments, video', value: 'None of these. Reports sit in a list with filters, and can be sent on to Linear, Jira or GitHub Issues. No video feedback; the web SDK has an optional session replay setting that is off unless you turn it on.', sourceUrl: 'https://kensaur.us/mushi-mushi/docs/migrations/bugherd-to-mushi', reviewedAt: A },
     { claim: 'Console and network logs', value: 'On every plan, Free included: the last console and network events arrive with each report.', sourceUrl: 'https://kensaur.us/mushi-mushi/docs/sdks/web', reviewedAt: A },
@@ -525,7 +525,7 @@ export const MUSHI_FOR_AGENCIES: Vendor = {
     { claim: 'Mobile SDKs', value: 'React Native and Capacitor SDKs on every plan, Free included. Native iOS, Android and Flutter libraries are previews.', sourceUrl: 'https://kensaur.us/mushi-mushi/docs/quickstart/mobile', reviewedAt: A },
     { claim: 'Brand mark on the widget', value: 'None on Builder and Studio. On Free, a small "Bug reports by Mushi Mushi" link that you can turn off in Settings.', sourceUrl: MUSHI_AGENCY_PAGE, reviewedAt: A },
     { claim: 'Security', value: 'No SOC 2 report. Mushi Mushi collects evidence toward one; that is not a certification. SAML single sign-on on Enterprise.', sourceUrl: 'https://kensaur.us/mushi-mushi/docs/security/soc2', reviewedAt: A },
-    { claim: 'Self-host', value: 'Yes, free: MIT SDKs and an AGPLv3 server you can run yourself.', sourceUrl: `${MUSHI_REPO}/blob/master/SELF_HOSTED.md`, reviewedAt: A },
+    { claim: 'Self-host', value: 'Yes, free: MIT SDKs and an AGPLv3 server you can run yourself.', sourceUrl: 'https://kensaur.us/mushi-mushi/docs/self-hosting', reviewedAt: A },
   ],
 }
 

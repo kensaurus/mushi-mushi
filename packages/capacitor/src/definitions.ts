@@ -32,7 +32,11 @@ export interface MushiCapacitorPluginConfig {
   endpoint?: string;
   /** Defaults to `'shake'`. */
   triggerMode?: MushiTriggerMode;
-  /** When `true`, captures a base64 screenshot via the native bridge. */
+  /**
+   * Defaults to `true`. Lets the native bottom sheet (`useNativeWidget`)
+   * capture a screenshot when it opens; the reporter sees it there and can
+   * remove it. `report()` never captures on its own: pass `screenshot`.
+   */
   captureScreenshot?: boolean;
   /** Minimum description length in the widget. Mirrors the web SDK. */
   minDescriptionLength?: number;
@@ -54,6 +58,12 @@ export interface MushiCapacitorReport {
   description: string;
   category?: 'bug' | 'slow' | 'visual' | 'confusing' | string;
   metadata?: Record<string, unknown>;
+  /**
+   * A screenshot the reporter has seen in your form and chose to keep:
+   * the `image` from `captureScreenshot()`. `report()` sends this and
+   * nothing else; without it the report has no screenshot.
+   */
+  screenshot?: string;
 }
 
 export interface MushiCapacitorUser {
@@ -84,8 +94,10 @@ export interface MushiCapacitorPlugin {
    *  network is unreachable. */
   report(payload: MushiCapacitorReport): Promise<{ accepted: boolean }>;
 
-  /** Capture a screenshot of the active webview as a base64-encoded PNG.
-   *  Returns `null` if `captureScreenshot` is disabled or unsupported. */
+  /** Capture a screenshot of the screen as base64 (JPEG on iOS and Android,
+   *  a `data:` URL on the web fallback). Show it in your report form, let the
+   *  reporter remove it, and pass what they keep as `report({ screenshot })`.
+   *  Returns `null` when no screen can be captured. */
   captureScreenshot(): Promise<{ image: string | null }>;
 
   /** Present the native bottom-sheet widget. Resolves when the user

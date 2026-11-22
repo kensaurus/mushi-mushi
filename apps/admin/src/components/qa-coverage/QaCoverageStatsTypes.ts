@@ -1,11 +1,9 @@
 /**
  * FILE: apps/admin/src/components/qa-coverage/QaCoverageStatsTypes.ts
- * PURPOSE: QA Coverage shell stats — banner + QA SNAPSHOT strip.
+ * PURPOSE: Scheduled tests stats (GET …/qa-coverage/stats): the page reads pendingRuns and its freshness.
  */
 
-export type QaCoverageTabId = 'overview' | 'stories' | 'failing'
-
-export type QaCoverageTopPriority =
+type QaCoverageTopPriority =
   | 'no_project'
   | 'no_stories'
   | 'failing'

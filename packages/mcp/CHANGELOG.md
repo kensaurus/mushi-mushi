@@ -1,5 +1,55 @@
 # @mushi-mushi/mcp
 
+## 0.31.8
+
+### Patch Changes
+
+- c98879e: - **`search_mushi_docs` finds the new "What leaves the browser" page** — what the web SDK sends with a report, where each part is filtered, and how to keep private pages out of reports.
+
+## 0.31.7
+
+### Patch Changes
+
+- 84043c1: - **`diagnose_setup` with an account key** — it now diagnoses instead of failing with `ORG_KEY_NOT_ALLOWED`. An account key (from `mushi setup` in account mode) cannot ingest, so the SDK ingest check refused it and the whole tool errored in `full` and `ingest` mode. The ingest steps are now read for the named project (`projectId`, or the configured one) from the new `GET /v1/admin/projects/:id/ingest-setup`. Without a project, the tool asks for `projectId`.
+- df894db: `search_mushi_docs` finds the one-command Docker install (`deploy/selfhost/install.sh`) and the updated self-hosting pages.
+
+## 0.31.6
+
+### Patch Changes
+
+- fa71919: Self-hosting is easier to follow and to check:
+
+  - `mushi selfhost doctor` exits 0 on a healthy minimal install. Optional extras that are not set up (Langfuse, Sentry, an AI key, a console address) print as `INFO` and never change the exit code; `WARN` exits 2 and `FAIL` exits 1 as before.
+  - The doctor now also checks that the console answers at the saved address (and warns when the CLI would sign you in on Mushi Mushi Cloud instead), that `/health` reports a stamped, self-hosted deploy, and, on the server, the AI key, that cron jobs no longer call Mushi Mushi Cloud, and that the private screenshots bucket exists. Lines lead with a plain name and the app's name, never `codebase_index:<uuid>`. `--console-url` checks another address.
+  - `mushi selfhost up` stamps the deploy with your commit (using the clone's own `scripts/deploy-edge-function.mjs` helper), so `/health` no longer reports `"dev"`, and sets `MUSHI_INSTANCE_MODE=self-hosted` so the server and console agree on what the instance is.
+  - With `--console-url`, `up` also sets `MUSHI_ADMIN_ORIGIN_ALLOWLIST` to the console's origin, so the API answers a console served on your own domain (before, only Mushi Mushi Cloud and localhost dev ports were allowed). The server now sends `mushi login` to that console (`ADMIN_BASE_URL`) on a self-host, instead of Mushi Mushi Cloud's.
+  - The no-key note points at Settings → AI keys (it said API Keys).
+  - The MCP docs index includes the new self-hosting pages (Environment variables, Operate and upgrade).
+
+## 0.31.5
+
+### Patch Changes
+
+- 141c554: `npx @mushi-mushi/mcp --help` now prints how to set it up and the env vars it reads, then exits, instead of starting the server and waiting. `--version` prints the version.
+
+  With an SDK key (report:write), setup mode now gives one command to fix it: `npx mushi-mushi login --project-id <id>`, then restart the server (and, if the key came from `MUSHI_API_KEY` in the server's env block, remove it there so the saved key is used).
+
+- 8f4759b: `search_mushi_docs` and `get_mushi_doc` now find the new Ops hub guide (payments, releases and alerts in your team's Slack) and the Ops console page.
+
+## 0.31.4
+
+### Patch Changes
+
+- fd05f9a: The docs index the MCP `search_mushi_docs` tool reads now covers `setDiagnosticsProvider()`, the React Native app version and `loadMyReports()`.
+- Updated dependencies [fd05f9a]
+  - @mushi-mushi/core@1.37.0
+
+## 0.31.3
+
+### Patch Changes
+
+- e4266e6: The docs index the MCP `search_mushi_docs` tool reads now describes the CI runners page's new **Right now** board and **Machines** view.
+
 ## 0.31.2
 
 ### Patch Changes

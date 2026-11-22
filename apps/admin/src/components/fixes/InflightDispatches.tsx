@@ -9,9 +9,11 @@
  */
 
 import { Link } from 'react-router-dom'
-import { Card, Badge, RelativeTime } from '../ui'
+import { Card, RelativeTime } from '../ui'
 import { statusGlowClass } from '../../lib/tokens'
-import { DISPATCH_STATUS, DISPATCH_STATUS_LABEL, type DispatchJob } from './types'
+import { DISPATCH_STATUS_LABEL, type DispatchJob } from './types'
+import { StatusPill } from '../signal/StatusMark'
+import { fixRunStatus } from './fixRunStatus'
 
 interface Props {
   dispatches: DispatchJob[]
@@ -23,7 +25,7 @@ function DispatchCard({ d, showReason }: { d: DispatchJob; showReason?: boolean 
   return (
     <Card className={`p-3 space-y-1 ${statusGlowClass(d.status)}`}>
       <div className="flex justify-between items-center">
-        <Badge className={DISPATCH_STATUS[d.status]}>{DISPATCH_STATUS_LABEL[d.status]}</Badge>
+        <StatusPill status={fixRunStatus(d.status)} label={DISPATCH_STATUS_LABEL[d.status]} />
         <Link
           to={`/reports/${d.report_id}`}
           className="text-2xs font-mono text-fg-muted hover:text-fg-secondary"
@@ -58,7 +60,7 @@ export function InflightDispatches({ dispatches }: Props) {
     <div className="space-y-3">
       {active.length > 0 && (
         <div className="space-y-1.5">
-          <h3 className="text-xs font-semibold text-fg-secondary uppercase tracking-wide">Fix requests running</h3>
+          <h3 className="text-xs font-semibold text-fg-secondary">Fix requests running</h3>
           {active.map((d) => (
             <DispatchCard key={d.id} d={d} />
           ))}
@@ -68,7 +70,7 @@ export function InflightDispatches({ dispatches }: Props) {
         // Folded to one line: five full cards pushed the fix list below the
         // fold, and the reasons are only read when acting on one.
         <details className="group space-y-1.5">
-          <summary className="cursor-pointer text-xs font-semibold text-fg-secondary uppercase tracking-wide">
+          <summary className="cursor-pointer text-xs font-semibold text-fg-secondary">
             {/* Plain words: "5 stopped dispatches need attention" (2026-10-28). */}
             {needsAttention.length} fix {needsAttention.length === 1 ? 'request' : 'requests'} stopped without a pull request
             <span className="ml-1 font-normal normal-case tracking-normal text-fg-muted group-open:hidden">· show why</span>

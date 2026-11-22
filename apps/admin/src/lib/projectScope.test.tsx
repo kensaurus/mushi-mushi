@@ -16,13 +16,14 @@ import {
   allAppsSupportFor,
   combinedFetchScope,
   getStoredProjectScopeMode,
+  openAppOnly,
   resolveProjectScopeMode,
   setStoredProjectScopeMode,
   useProjectScope,
   useSetProjectScopeMode,
   type ProjectScope,
 } from './projectScope'
-import { ACTIVE_PROJECT_STORAGE_KEY } from './activeProject'
+import { ACTIVE_PROJECT_STORAGE_KEY, getActiveProjectIdSnapshot } from './activeProject'
 
 const PROJECT_A = '450e6ba8-cf2b-4841-bb38-08141e1ebe77'
 const PROJECT_B = '542b34e0-019e-41fe-b900-7b637717bb86'
@@ -82,11 +83,27 @@ describe('allAppsSupportFor', () => {
     expect(allAppsSupportFor('/portfolio')).toBe('account')
     expect(allAppsSupportFor('/projects')).toBe('account')
     expect(allAppsSupportFor('/org/acme/settings/members')).toBe('account')
+    expect(allAppsSupportFor('/providers')).toBe('account')
+    expect(allAppsSupportFor('/users')).toBe('account')
+    expect(allAppsSupportFor('/docs-bridge')).toBe('account')
+    expect(allAppsSupportFor('/feedback')).toBe('account')
+    // Report 5b386672: Ops lists every app's events, never one app's.
+    expect(allAppsSupportFor('/ops')).toBe('account')
+    expect(allAppsSupportFor('/checks')).toBe('single')
     expect(allAppsSupportFor('/projects/abc/qa-coverage/s1')).toBe('single')
     expect(allAppsSupportFor('/reports')).toBe('combined')
     expect(allAppsSupportFor('/reports/123')).toBe('single')
     expect(allAppsSupportFor('/fixes')).toBe('single')
     expect(allAppsSupportFor('/cinema')).toBe('single')
+  })
+
+  // /org/:slug/settings/members lands on /team?view=members: the team's
+  // members are never one app's, but billing and AI spend still read one.
+  it('treats the Team members view as account-wide, the other Team views as one app', () => {
+    expect(allAppsSupportFor('/team', '?view=members&org=o1')).toBe('account')
+    expect(allAppsSupportFor('/team', '?view=billing')).toBe('single')
+    // The hub drops ?view= for its first view, Members.
+    expect(allAppsSupportFor('/team', '')).toBe('account')
   })
 })
 
@@ -171,5 +188,22 @@ describe('useProjectScope', () => {
     expect(seen.scope).toEqual({ mode: 'project', projectId: PROJECT_A })
     expect(getStoredProjectScopeMode()).toBe('project')
     expect(new URLSearchParams(seen.search).has('apps')).toBe(false)
+  })
+})
+
+describe('openAppOnly', () => {
+  it('leaves All apps and pins the chosen app', () => {
+    setStoredProjectScopeMode('all')
+    window.localStorage.setItem(ACTIVE_PROJECT_STORAGE_KEY, PROJECT_A)
+    openAppOnly(PROJECT_B)
+    expect(getStoredProjectScopeMode()).toBe('project')
+    expect(window.localStorage.getItem(PROJECT_SCOPE_STORAGE_KEY)).toBeNull()
+    expect(getActiveProjectIdSnapshot()).toBe(PROJECT_B)
+  })
+
+  it('ignores an id that is not an app id, leaving the scope as it was', () => {
+    setStoredProjectScopeMode('all')
+    openAppOnly('__unassigned__')
+    expect(getStoredProjectScopeMode()).toBe('all')
   })
 })

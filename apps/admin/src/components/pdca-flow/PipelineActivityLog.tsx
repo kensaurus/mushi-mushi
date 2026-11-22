@@ -48,7 +48,7 @@ export function PipelineActivityLog({ activity, max = 5, onFocusStage }: Pipelin
       aria-live="polite"
       aria-label="Recent pipeline activity"
     >
-      <p className="font-medium text-fg-muted uppercase tracking-wider text-3xs mb-0.5">
+      <p className="font-semibold text-fg-secondary text-3xs mb-0.5">
         Live activity
       </p>
       <ul className="space-y-0.5">

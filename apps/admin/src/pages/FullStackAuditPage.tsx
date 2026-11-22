@@ -18,7 +18,7 @@ import { useLocation } from 'react-router-dom'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import { Card, Btn, Callout, Section, ErrorAlert, FindingSeverityBadge } from '../components/ui'
+import { Card, Btn, Callout, Section, ErrorAlert } from '../components/ui'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { apiFetch, invalidateApiCache } from '../lib/supabase'
 import { describeApiError } from '../lib/humanizeApiError'
@@ -35,8 +35,9 @@ import { CopyFixPromptButton } from '../components/gates/CopyFixPromptButton'
 import { KnownHolesCard } from '../components/code-health/KnownHolesCard'
 import { DatabaseHealthCard } from '../components/fullstack-audit/DatabaseHealthCard'
 import { PageStatus, type PageStatusTone } from '../components/ui/page-status'
-import { latestOpenFindings, type GateFindingsPayload } from '../lib/gateFindings'
+import { latestOpenFindings, latestRunPerGate, type GateFindingsPayload } from '../lib/gateFindings'
 import { pluralizeWithCount } from '../lib/format'
+import { StatusGlyph, TONE_INK, type SignalTone } from '../components/signal/StatusGlyph'
 
 // ─── Local type definitions (mirrors fullstack-audit.ts response shapes) ─────
 
@@ -111,19 +112,21 @@ function AuditResultCard({ result }: { result: AuditResult }) {
       )}
 
       {backend.length > 0 && (
-        <div className="space-y-1.5">
-          <p className="text-xs font-medium text-fg-secondary">Backend ({backend.length})</p>
-          {backend.map((f, i) => (
-            // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
-            <div key={i} className="flex items-start gap-2.5 rounded-md border border-edge-subtle bg-surface-raised px-3 py-2">
-              <FindingSeverityBadge severity={f.severity} />
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-fg">{f.title}</p>
-                <p className="mt-0.5 text-xs text-fg-secondary">{f.detail}</p>
-              </div>
-            </div>
-          ))}
-        </div>
+        // Rows with a status glyph, not a card per finding; past five they fold (2026-11-19).
+        <details open={backend.length <= 5} className="space-y-1">
+          <summary className="cursor-pointer text-xs font-medium text-fg-secondary hover:text-fg">Your backend ({backend.length})</summary>
+          <ul className="flex flex-col divide-y divide-edge-subtle" data-testid="audit-backend-findings">
+            {backend.map((f, i) => (
+              <li key={i} className="flex items-start gap-2 py-1.5">
+                <StatusGlyph tone={f.severity === 'error' ? 'danger' : f.severity === 'warn' ? 'warn' : 'off'} label={f.severity === 'error' ? 'Error' : f.severity === 'warn' ? 'Warning' : 'Note'} className="mt-0.5" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-fg">{f.title}</p>
+                  <p className="text-2xs text-fg-secondary">{f.detail}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
 
       {restarted.length > 0 && (
@@ -136,23 +139,72 @@ function AuditResultCard({ result }: { result: AuditResult }) {
 }
 
 /**
- * Exported for tests; page modules are knip entries, so it carries no tag. The status sentence, from the server's
- * exact counts (fullstack-audit/stats), never from the capped findings list.
+ * Exported for tests; page modules are knip entries, so it carries no tag. The checks whose newest
+ * run ended in `error` ("Could not finish" in the list), by name. The stats' failedGateCount counts
+ * `fail` runs, which are failing checks with findings, not unfinished ones (2026-11-18: the banner
+ * said "2 checks could not finish" over two checks that had run and failed).
  */
-export function auditStatus(stats: FullstackAuditStats): { tone: PageStatusTone; sentence: string } {
+export function unfinishedChecks(payload: GateFindingsPayload | null | undefined): string[] {
+  if (!payload) return []
+  return [...latestRunPerGate(payload.runs).values()].filter((r) => r.status === 'error').map((r) => gateLabel(r.gate))
+}
+
+/**
+ * Exported for tests; page modules are knip entries, so it carries no tag. The status, from the server's
+ * exact counts (fullstack-audit/stats), never from the capped findings list. `sentence` is the plain
+ * text (page context, screen readers); the banner draws it as marks.
+ */
+export function auditStatus(stats: FullstackAuditStats, unfinished: readonly string[] = []): { tone: PageStatusTone; sentence: string } {
   if (stats.topPriority === 'unknown') {
     return { tone: 'warn', sentence: `Mushi Mushi could not count the open findings${stats.readError ? `: ${stats.readError.replace(/\.$/, '')}.` : '.'} The list below may still load.` }
   }
-  const { errorCount: errors, warnCount: warnings, failedGateCount: failed } = stats
-  const stuck = failed > 0 ? ` ${pluralizeWithCount(failed, 'check')} could not finish, so ${failed === 1 ? 'its' : 'their'} result is unknown.` : ''
+  const { errorCount: errors, warnCount: warnings, failedGateCount: failing } = stats
+  const stuck = unfinished.length > 0 ? ` ${pluralizeWithCount(unfinished.length, 'check')} could not finish: ${unfinished.join(', ')}.` : ''
   if (errors + warnings === 0) {
-    return { tone: failed > 0 ? 'warn' : 'ok', sentence: `Nothing is open in the newest run of each check.${stuck}` }
+    return {
+      tone: failing > 0 ? 'danger' : unfinished.length > 0 ? 'warn' : 'ok',
+      sentence: `${failing > 0 ? `${pluralizeWithCount(failing, 'check')} failing.` : 'Nothing is open in the newest run of each check.'}${stuck}`,
+    }
   }
   const parts = [errors > 0 ? pluralizeWithCount(errors, 'error') : null, warnings > 0 ? pluralizeWithCount(warnings, 'warning') : null].filter(Boolean)
   return {
-    tone: errors > 0 || failed > 0 ? 'danger' : 'warn',
-    sentence: `${parts.join(' and ')} ${errors + warnings === 1 ? 'is' : 'are'} open. The worst check is first below; copy a fix prompt into your editor to fix one.${stuck}`,
+    tone: errors > 0 || failing > 0 ? 'danger' : 'warn',
+    sentence: `${parts.join(' and ')} ${errors + warnings === 1 ? 'is' : 'are'} open.${stuck}`,
   }
+}
+
+function Mark({ tone, n, word, testId }: { tone: SignalTone; n: number; word: string; testId: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 whitespace-nowrap" data-testid={testId}>
+      <StatusGlyph tone={tone} />
+      <span className={`font-mono font-extrabold tabular-nums ${TONE_INK[tone]}`}>{n}</span>
+      <span className="text-fg-secondary">{word}</span>
+    </span>
+  )
+}
+
+/** The banner as marks: ▲ errors, ◆ warnings, and each check that could not finish by name, hatched (unknown). */
+function AuditMarks({ stats, unfinished }: { stats: FullstackAuditStats; unfinished: readonly string[] }) {
+  const { errorCount: errors, warnCount: warnings, failedGateCount: failing } = stats
+  return (
+    <span className="flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="audit-marks">
+      {errors > 0 && <Mark tone="danger" n={errors} word={errors === 1 ? 'error' : 'errors'} testId="audit-mark-errors" />}
+      {warnings > 0 && <Mark tone="warn" n={warnings} word={warnings === 1 ? 'warning' : 'warnings'} testId="audit-mark-warnings" />}
+      {errors + warnings === 0 && failing > 0 && <Mark tone="danger" n={failing} word="failing" testId="audit-mark-failing" />}
+      {/* Unknown is not clear: no green mark beside a check that could not finish. */}
+      {errors + warnings + failing === 0 && unfinished.length === 0 && <Mark tone="ok" n={0} word="open" testId="audit-mark-clear" />}
+      {unfinished.length > 0 && (
+        <span className="inline-flex flex-wrap items-center gap-1" data-testid="audit-unfinished">
+          <Mark tone="off" n={unfinished.length} word="could not finish:" testId="audit-mark-unfinished" />
+          {unfinished.map((name) => (
+            <span key={name} className="ci-nodata rounded-sm border border-edge-subtle px-1.5 text-2xs whitespace-nowrap text-fg-secondary">
+              {name}
+            </span>
+          ))}
+        </span>
+      )}
+    </span>
+  )
 }
 
 // ─── Main page ────────────────────────────────────────────────────────────────
@@ -175,13 +227,17 @@ export function FullStackAuditPage() {
   const findingsPath = projectId ? `/v1/admin/inventory/${encodeURIComponent(projectId)}/findings` : null
   const { data: findingsData } = usePageData<GateFindingsPayload>(findingsPath, { deps: [projectId, findingsKey] })
   const topFinding = findingsData ? latestOpenFindings(findingsData)[0] ?? null : null
-  const status = auditStatsData ? auditStatus(auditStats) : null
-  // Code size links to #dependency-holes; React Router does not scroll to hashes.
+  const unfinished = unfinishedChecks(findingsData)
+  const status = auditStatsData ? auditStatus(auditStats, unfinished) : null
+  const unknownCounts = auditStats.topPriority === 'unknown'
+  // Code size links to #dependency-holes and other pages to #check-<gate>; React Router does
+  // not scroll to hashes. The check cards exist only once the findings have loaded.
   const location = useLocation()
   useEffect(() => {
-    if (location.hash !== '#dependency-holes' || !projectId) return
-    document.getElementById('dependency-holes')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, [location.hash, location.key, projectId])
+    const target = location.hash.slice(1)
+    if (!projectId || (target !== 'dependency-holes' && !target.startsWith('check-'))) return
+    document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [location.hash, location.key, projectId, findingsData])
 
   const runAudit = useCallback(async () => {
     if (!projectId) return
@@ -226,7 +282,7 @@ export function FullStackAuditPage() {
       >
         <Btn
           variant={topFinding ? 'ghost' : 'primary'}
-          size="md"
+          size="sm"
           onClick={runAudit}
           disabled={loading || !projectId}
           loading={loading}
@@ -245,7 +301,8 @@ export function FullStackAuditPage() {
         <PageStatus
           ariaLabel="Audit status"
           tone={status.tone}
-          sentence={status.sentence}
+          marked={!unknownCounts}
+          sentence={unknownCounts ? status.sentence : <AuditMarks stats={auditStats} unfinished={unfinished} />}
           freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
           action={topFinding ? <CopyFixPromptButton finding={topFinding} variant="primary" label="Copy fix prompt for the top finding" /> : undefined}
           data-testid="audit-status"
@@ -255,9 +312,6 @@ export function FullStackAuditPage() {
       {error && <ErrorAlert title="The audit failed" message={error} onRetry={projectId ? () => void runAudit() : undefined} />}
 
       {result && <AuditResultCard result={result} />}
-
-      {/* The linked Supabase project's grade, size, cache and advisors, with advice (2026-10-31). */}
-      {projectId && <DatabaseHealthCard projectId={projectId} />}
 
       {projectId && (
         <Section title="Open findings by check">
@@ -269,7 +323,8 @@ export function FullStackAuditPage() {
             neverRunText="No check has run for this project yet."
             refreshKey={findingsKey}
             totals={auditStatsData && auditStats.topPriority !== 'unknown' ? { errors: auditStats.errorCount, warnings: auditStats.warnCount } : null}
-            shownElsewhere={{ portfolio_radar_vulns: { label: 'listed under Known holes below', to: '#dependency-holes' } }}
+            shownElsewhere={{ portfolio_radar_vulns: { label: 'Known holes in your dependencies, below', to: '#dependency-holes' } }}
+            totalsShownAbove={!!status && !unknownCounts}
           />
         </Section>
       )}
@@ -280,6 +335,10 @@ export function FullStackAuditPage() {
           <KnownHolesCard projectId={projectId} />
         </div>
       ) : null}
+
+      {/* The linked Supabase project's grade, size, cache and advisors, with advice (2026-10-31).
+          Below the open findings: errors first, setup after (2026-11-18). */}
+      {projectId && <DatabaseHealthCard projectId={projectId} />}
 
       {projectId ? (
         <PagePosture

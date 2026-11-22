@@ -15,7 +15,7 @@ describe('routeFallbackTitle', () => {
   })
 
   it('resolves dynamic App.tsx segments via extra matchers', () => {
-    expect(routeFallbackTitle('/reports/abc-123')).toBe('Report')
+    expect(routeFallbackTitle('/reports/abc-123')).toBe('Bug report')
     expect(routeFallbackTitle('/content/asset-1')).toBe('Content checks')
     expect(routeFallbackTitle('/integrations')).toBe('Integrations')
     expect(routeFallbackTitle('/integrations/config')).toBe('Integrations')
@@ -23,6 +23,10 @@ describe('routeFallbackTitle', () => {
 
   it('returns null for unknown paths', () => {
     expect(routeFallbackTitle('/totally-unknown-route')).toBeNull()
+  })
+
+  it('does not name super-admin pages, which answer everyone else with a 404', () => {
+    expect(routeFallbackTitle('/users')).toBeNull()
   })
 
   it('buildRouteTitleMatchers covers every registry base path', () => {

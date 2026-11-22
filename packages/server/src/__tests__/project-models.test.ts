@@ -77,7 +77,7 @@ describe('fast-filter wiring', () => {
     expect(src).toContain("select('stage1_model, stage2_model,")
     expect(src).toContain('resolveStage1Model(settings?.stage1_model)')
     expect(src).not.toMatch(/PRIMARY_MODEL = STAGE1_MODEL\b/)
-    const branch = src.slice(src.indexOf('if (stage1Choice.messagesApi)'))
+    const branch = src.slice(src.indexOf('if (stage1Choice.messagesApi'))
     expect(branch.slice(0, 600)).toContain('claudeGenerateObject(')
     expect(branch.slice(0, 600)).toContain("effort: 'low'")
   })

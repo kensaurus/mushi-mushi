@@ -59,7 +59,8 @@ mushi runner status --json
 
 | Permission | Needed for |
 | --- | --- |
-| Actions: read | Jobs, their times, runner names and why a job was cancelled |
+| Actions: read | Jobs, their times, runner names and why a job was cancelled, and a failed job's log in the console's **Why?** panel |
+| Actions: read and write | **Re-run failed jobs** and **Cancel run** from the console. The Mushi Mushi GitHub App asks for it; an installation made before 2026-11-20 accepts it once under GitHub → Settings → Applications → **Review request**. A fine-grained token with Actions: Read and write in the app's GitHub connection works too. Without either, the console says so and links that setting |
 | Administration: read (optional) | The runner list: online, offline, busy, labels |
 | Metadata: read | Whether a repo is public or private (read once a day): it decides what GitHub-hosted minutes cost |
 | Variables: read and write (optional) | Changing where CI runs: Mushi Mushi reads and writes only `LINUX_RUNNER`, `RUNNER_` and `CI_PROFILE`, with the GitHub token stored in the project's settings (or, without one, the organization's), else the Mushi Mushi GitHub App installation for that repo once you approve its "Variables: Read and write" permission. Never Mushi Mushi's own token |

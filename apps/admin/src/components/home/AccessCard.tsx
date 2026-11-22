@@ -10,6 +10,7 @@ import { Link } from 'react-router-dom'
 import { Badge, RelativeTime, Section, Skeleton, type BadgeTone } from '../ui'
 import { initialsOf, type HomeAccess, type HomeSection, type SdkFreshness } from '../../lib/projectHome'
 import { HomeSectionBody } from './HomeSectionBody'
+import { groupHomeKeys } from '../../lib/homeView'
 
 const SDK_TONE: Record<SdkFreshness, { tone: BadgeTone; text: string }> = {
   'up-to-date': { tone: 'okSubtle', text: 'Up to date' },
@@ -72,30 +73,7 @@ export function AccessCard({ section, auditLog }: Props) {
               ) : a.keys.length === 0 ? (
                 <Link to="/projects" className="text-link hover:underline">Create a key</Link>
               ) : (
-                <ul className="space-y-1">
-                  {a.keys.map((k, i) => (
-                    <li key={`${k.label}-${i}`} className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
-                      <span className="min-w-0 truncate text-fg">{k.label}</span>
-                      <Badge tone="neutral">{KIND_LABEL[k.kind]}</Badge>
-                      <span className="text-fg-muted">
-                        {k.lastUsedAt ? (
-                          <>
-                            used <RelativeTime value={k.lastUsedAt} />
-                          </>
-                        ) : (
-                          'never used'
-                        )}
-                      </span>
-                    </li>
-                  ))}
-                  {a.keysTotal > a.keys.length && (
-                    <li>
-                      <Link to="/projects" className="text-xs text-link hover:underline">
-                        All {a.keysTotal} keys →
-                      </Link>
-                    </li>
-                  )}
-                </ul>
+                <KeyList keys={a.keys} keysTotal={a.keysTotal} />
               )}
             </Row>
             <Row term="Logs">
@@ -117,10 +95,46 @@ export function AccessCard({ section, auditLog }: Props) {
   )
 }
 
+function KeyList({ keys, keysTotal }: { keys: HomeAccess['keys']; keysTotal: number }) {
+  const g = groupHomeKeys(keys)
+  return (
+    <ul className="space-y-1">
+      {g.used.map((k) => (
+        <li key={`${k.label}-${k.kind}`} className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+          <span className="min-w-0 truncate text-fg">
+            {k.label}
+            {k.count > 1 && <span className="ml-1 text-fg-muted">×{k.count}</span>}
+          </span>
+          <Badge tone="neutral">{KIND_LABEL[k.kind]}</Badge>
+          {k.lastUsedAt && (
+            <span className="whitespace-nowrap text-fg-muted">
+              used <RelativeTime value={k.lastUsedAt} />
+            </span>
+          )}
+        </li>
+      ))}
+      {/* Never-used keys on one line: "never used" ×3 was one fact three times (round-2 sweep 2026-11-18). */}
+      {g.unused.length > 0 && (
+        <li className="text-xs text-fg-muted" data-testid="home-keys-unused">
+          <span className="text-fg-secondary">{g.unused.length} never used:</span>{' '}
+          {g.unused.map((k) => `${k.label}${k.count > 1 ? ` ×${k.count}` : ''}`).join(', ')}
+        </li>
+      )}
+      {keysTotal > keys.length && (
+        <li>
+          <Link to="/projects" className="text-xs text-link hover:underline">
+            All {keysTotal} keys →
+          </Link>
+        </li>
+      )}
+    </ul>
+  )
+}
+
 function Row({ term, children }: { term: string; children: ReactNode }) {
   return (
     <div className="grid min-w-0 grid-cols-1 gap-1 sm:grid-cols-4 sm:gap-3">
-      <dt className="text-2xs font-medium uppercase tracking-wider text-fg-muted sm:pt-0.5">{term}</dt>
+      <dt className="text-2xs font-semibold text-fg-secondary sm:pt-0.5">{term}</dt>
       <dd className="min-w-0 sm:col-span-3">{children}</dd>
     </div>
   )

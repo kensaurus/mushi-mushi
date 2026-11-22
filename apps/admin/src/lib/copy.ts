@@ -244,10 +244,10 @@ const COPY: CopyRegistry = {
     },
     '/projects': {
       title: 'Manage apps',
-      description: 'Banner shows what needs you — then Overview for the big picture, Your projects to create apps and copy keys.',
+      description: 'Banner shows what needs you — then Overview for the big picture, Your apps to add an app and copy its keys.',
       help: {
         title: 'About managing apps',
-        whatIsIt: 'A project is a container for one app or environment. Everything in Mushi Mushi — bugs, fixes, reports, integrations — belongs to a project.',
+        whatIsIt: 'Each app (one app or environment) holds its own bugs, fixes, reports and integrations in Mushi Mushi.',
         useCases: [
           'Create a project for your main app (takes 30 seconds)',
           'Add a separate project for staging so test bugs don\'t mix with real ones',
@@ -475,7 +475,7 @@ const COPY: CopyRegistry = {
       },
       tabLabels: {
         overview: 'Summary',
-        reports: 'Reports',
+        reports: 'Digests',
         pipeline: 'Jobs',
       },
       help: {
@@ -608,8 +608,8 @@ const COPY: CopyRegistry = {
       },
       actionLabels: {
         setup: 'Go to Setup',
-        create: 'Create story',
-        newStory: '+ New story',
+        create: 'Create test',
+        newStory: '+ New test',
         failures: 'Review failures',
         stories: 'View stories',
         openStories: 'Open stories',
@@ -628,7 +628,7 @@ const COPY: CopyRegistry = {
           'Catch a broken flow before users report it',
           'See a screenshot of what the test saw when it failed',
         ],
-        howToUse: 'Click "New story" to write a test in plain English. Set a schedule. Click "Run now" to test immediately. Red = something broke.',
+        howToUse: 'Click "New test" to write a test in plain English. Set a schedule. Click "Run now" to test immediately. Red = something broke.',
       },
     },
     '/anti-gaming': {
@@ -897,8 +897,8 @@ const COPY: CopyRegistry = {
         day24h: 'Last 24 hours',
         month: 'This month',
         topDriver: 'Top driver',
-        operations: 'Operations',
-        models: 'Models',
+        // One cell holds both counts on AI spend (2026-11-19: steps and models share a cell).
+        operations: 'Steps · models',
         keySource: 'Key source · 24h',
       },
       actionLabels: {
@@ -988,7 +988,7 @@ const COPY: CopyRegistry = {
       },
       help: {
         title: 'About billing',
-        whatIsIt: 'Your plan and its usage. Free watches one app with 100 diagnoses a month; Builder ($29) watches three, Studio ($79) ten. Your own AI keys work on every plan.',
+        whatIsIt: 'Your plan and its usage. Free watches three apps with 300 diagnoses a month; Builder ($29) has 1,000 diagnoses and 90 days of history; Studio ($79) watches ten apps. Your own AI keys work on every plan.',
         useCases: [
           'See reports used vs quota before new reports start returning HTTP 402',
           'Upgrade via Stripe Checkout or manage card/invoices in the Billing Portal',
@@ -1396,7 +1396,7 @@ const COPY: CopyRegistry = {
           'Forward critical bugs to Jira, Linear, or PagerDuty',
         ],
         howToUse:
-          'Use the Platform tab to paste keys and Test each card. Routing tab connects ticketing tools. Repo & index covers codebase indexing for auto-fix.',
+          'Each tile is one tool. Press it to open its settings: paste keys there and press Test. A tile that is not set up has its own Connect. The GitHub settings also hold codebase indexing for auto-fix.',
       },
     },
     '/integrations/config': {
@@ -1717,22 +1717,24 @@ export function renderDogfoodNarrative(params: {
   componentReports: number
   draftedFixes: number
   mergedFixes: number
-}): string {
+}): { lead: string; component: string; rest: string; text: string } {
   const { component, componentReports, draftedFixes, mergedFixes } = params
   const reportsWord = componentReports === 1 ? 'report' : 'reports'
-  const headline = `${component} is your most fragile area — ${componentReports} ${reportsWord} in the last 14 days.`
+  // The component is a package or area name ("next"): "next is your most
+  // fragile area" read as a broken sentence (owner, 2026-11-18). The banner
+  // shows the name as a code chip after plain words.
+  const lead = 'Most bugs come from'
+  const counted = `${componentReports} ${reportsWord} in the last 14 days.`
 
+  let fixes: string
   if (mergedFixes > 0) {
     const merged = mergedFixes === 1 ? '1 fix already merged' : `${mergedFixes} fixes already merged`
-    const drafted =
-      draftedFixes > 0
-        ? ` and ${draftedFixes} more drafted.`
-        : '.'
-    return `${headline} ${merged}${drafted}`
+    fixes = `${merged}${draftedFixes > 0 ? ` and ${draftedFixes} more drafted.` : '.'}`
+  } else if (draftedFixes > 0) {
+    fixes = `${draftedFixes === 1 ? '1 fix drafted' : `${draftedFixes} fixes drafted`}, ready for your review.`
+  } else {
+    fixes = 'No fixes drafted yet: open one and let Mushi Mushi try.'
   }
-  if (draftedFixes > 0) {
-    const drafted = draftedFixes === 1 ? '1 fix drafted' : `${draftedFixes} fixes drafted`
-    return `${headline} ${drafted} — ready for your review.`
-  }
-  return `${headline} No fixes drafted yet — open one and let Mushi Mushi try.`
+  const rest = `${counted} ${fixes}`
+  return { lead, component, rest, text: `${lead} ${component}: ${rest}` }
 }

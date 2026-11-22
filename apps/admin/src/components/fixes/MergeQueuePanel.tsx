@@ -12,14 +12,25 @@
  *          Release trains (ADR 0044, the default): approved PRs ride one
  *          train PR per interval, so a batch ships as one deploy and one
  *          release. The panel shows each repo's train and the app's cadence.
+ *
+ *          2026-11-18 (the CI page's visual language): the queue is a picture,
+ *          not paragraphs. A stage train with counts (Queued → Waiting →
+ *          Agent resolving → Held → Train running → Merged today) where only
+ *          Held (◆) and merges (●) take a colour; "Decide for me" is a
+ *          two-branch picture; each held
+ *          row carries its reason as a plain-word chip ("key used up",
+ *          lib/heldReason.ts), with the full sentence as its tooltip.
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import { Badge, Btn, Card, FILTER_SELECT_CLASS, RelativeTime, SegmentedControl, Toggle } from '../ui'
+import { Btn, Card, FILTER_SELECT_CLASS, RelativeTime, SegmentedControl, Toggle } from '../ui'
 import { useToast } from '../../lib/toast'
+import { groupQueueRows, heldReasonOf, withoutReasonCode } from '../../lib/heldReason'
+import { StageTrain, type TrainStage } from '../signal/StageTrain'
+import { StatusGlyph } from '../signal/StatusGlyph'
+import { StatusPill, type RunStatus } from '../signal/StatusMark'
 import {
   MERGE_QUEUE_STATE_LABEL,
-  MERGE_QUEUE_STATE_TONE,
   TRAIN_INTERVAL_OPTIONS,
   intervalLabel,
   isActiveQueueRow,
@@ -34,6 +45,16 @@ import {
   type ReleaseSettings,
   type ReleaseTrain,
 } from '../../lib/mergeQueue'
+
+/** A queue row's state as a mark: moving rows run, held rows fail until someone acts. */
+const QUEUE_ROW_STATUS: Record<MergeQueueRow['state'], RunStatus> = {
+  queued: 'waiting',
+  waiting: 'waiting',
+  resolving: 'running',
+  blocked: 'failed',
+  merged: 'passed',
+  removed: 'cancelled',
+}
 
 const MODE_OPTIONS = [
   { id: 'train', label: 'Batch' },
@@ -145,7 +166,7 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
     return (
       <section aria-label="Merge queue" aria-busy="true">
         <Card className={`p-3 space-y-2 ${rememberedNonEmpty(projectId) ? 'h-72' : 'h-24'}`}>
-          <h3 className="text-xs font-semibold text-fg-secondary uppercase tracking-wide">Merge queue</h3>
+          <h3 className="text-xs font-semibold text-fg-secondary">Merge queue</h3>
           <div aria-hidden="true" className="h-7 rounded-sm bg-surface-overlay/50 motion-safe:animate-pulse" />
         </Card>
       </section>
@@ -171,11 +192,35 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
         .filter((l) => l.text)
     : []
 
+  const held = active.filter((r) => r.state === 'blocked')
+  // "2 key used up · 1 merge conflict": the held rows' reasons, biggest first.
+  const heldReasons = [...held.reduce((m, r) => {
+    const why = heldReasonOf(r.detail) ?? 'see the row'
+    return m.set(why, (m.get(why) ?? 0) + 1)
+  }, new Map<string, number>())].sort((a, b) => b[1] - a[1])
+  const onTrain = trains.filter((t) => t.state === 'building' || t.state === 'testing').reduce((n, t) => n + t.members.length, 0)
+  const count = (state: MergeQueueRow['state']) => active.filter((r) => r.state === state).length
+  const stages: TrainStage[] = [
+    { id: 'queued', label: MERGE_QUEUE_STATE_LABEL.queued, count: count('queued') },
+    { id: 'waiting', label: MERGE_QUEUE_STATE_LABEL.waiting, count: count('waiting'), note: count('waiting') ? 'branch update or CI' : undefined },
+    { id: 'resolving', label: MERGE_QUEUE_STATE_LABEL.resolving, count: count('resolving'), note: count('resolving') ? 'merge conflict' : undefined },
+    {
+      id: 'held',
+      label: MERGE_QUEUE_STATE_LABEL.blocked,
+      count: held.length,
+      tone: held.length ? 'warn' : undefined,
+      note: heldReasons.length ? heldReasons.map(([why, n]) => `${n} ${why}`).join(' · ') : undefined,
+      to: held.length ? '#merge-queue-rows' : undefined,
+    },
+    { id: 'train', label: 'Train running', count: onTrain },
+    { id: 'merged', label: 'Merged today', count: merged.length, tone: merged.length ? 'ok' : undefined },
+  ]
+
   return (
     <section aria-label="Merge queue">
     <Card className="p-3 space-y-2">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-xs font-semibold text-fg-secondary uppercase tracking-wide">Merge queue</h3>
+        <h3 className="text-xs font-semibold text-fg-secondary">Merge queue</h3>
         <p className="text-2xs text-fg-muted">{mergeQueueSummary(shown)}</p>
       </div>
       {release && (
@@ -213,24 +258,39 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
         </div>
       )}
       {release?.autoDecide && (
-        <p className="text-2xs text-fg-muted" data-testid="auto-decide-note">
-          Mushi Mushi decides each fix with Opus’s review: approved ones go to the merge queue, ones Opus will not merge are closed and fixed
-          again with its findings, up to 3 tries per bug. Closed pull requests can be reopened.
+        // Decide for me as a picture: Opus's verdict splits each fix two ways (ADR 0055).
+        <p
+          className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-fg-secondary"
+          data-testid="auto-decide-note"
+        >
+          <span className="text-3xs font-bold tracking-wider uppercase">Opus decides</span>
+          <span className="inline-flex items-center gap-1">
+            <StatusGlyph tone="ok" />
+            <span className="font-semibold text-fg">merge</span> → queue
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <StatusGlyph tone="danger" />
+            <span className="font-semibold text-fg">hold</span> → close, fix again, up to 3 tries per bug
+          </span>
+          <span className="text-fg-muted">closed PRs can be reopened</span>
         </p>
       )}
-      {active.length > 0 && (
-        <p className="text-2xs text-fg-muted">
-          {batching
-            ? `Approved pull requests ride one release train ${intervalLabel(release?.intervalMinutes ?? 360)}: one branch, one CI run, one merge, so they ship as one release. Security fixes and critical bugs skip the wait.`
-            : 'Mushi Mushi updates each branch, waits for CI and an Opus “merge” on the final commit, then merges, one pull request per repo at a time.'}{' '}
-          You can leave this page.
-        </p>
+      {(active.length > 0 || onTrain > 0 || merged.length > 0) && (
+        <div className="space-y-1" data-testid="merge-queue-train">
+          <StageTrain label="Merge queue" stages={stages} />
+          <p className="text-3xs text-fg-secondary">
+            {batching
+              ? `Batch: one release train ${intervalLabel(release?.intervalMinutes ?? 360)}, one CI run, one merge · security fixes and critical bugs skip the wait`
+              : 'Each PR: branch updated, CI and an Opus “merge” on the final commit, then merged, one per repo at a time'}{' '}
+            · you can leave this page
+          </p>
+        </div>
       )}
       {trainLines.length > 0 && (
         <ul className="space-y-0.5">
           {trainLines.map((l) => (
             <li key={l.repo} className="flex flex-wrap items-baseline gap-x-2 text-2xs text-fg-muted">
-              <Badge tone={l.moving ? 'accent' : 'neutral'}>{l.moving ? 'Train' : 'Next train'}</Badge>
+              <StatusPill status={l.moving ? 'running' : 'waiting'} label={l.moving ? 'Train' : 'Next train'} />
               {l.moving?.pr_number ? (
                 <a href={prLink({ repo: l.repo, pr_number: l.moving.pr_number })} target="_blank" rel="noreferrer" className="min-w-0 max-w-full wrap-anywhere font-mono text-fg-secondary hover:text-fg hover:underline">
                   {l.repo}#{l.moving.pr_number}
@@ -246,25 +306,54 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
       {shown.length === 0 && <p className="text-2xs text-fg-muted">Nothing in the merge queue.</p>}
       {listed.length > 0 && (
         // A long queue scrolls inside the panel instead of pushing the list down.
-        <ul className="max-h-40 overflow-y-auto divide-y divide-edge-subtle">
-          {listed.map((r) => (
-            <li key={r.id} className="flex flex-wrap items-start gap-x-2 gap-y-1 py-1.5">
-              <Badge tone={MERGE_QUEUE_STATE_TONE[r.state]} className="shrink-0">{MERGE_QUEUE_STATE_LABEL[r.state]}</Badge>
+        <ul className="max-h-40 overflow-y-auto divide-y divide-edge-subtle" id="merge-queue-rows">
+          {groupQueueRows(listed).map((group) => {
+            const r = group[0]
+            const why = r.state === 'blocked' ? heldReasonOf(r.detail) : null
+            const many = group.length > 1
+            return (
+            <li key={r.id} className="flex flex-wrap items-start gap-x-2 gap-y-1 py-1.5" data-testid={`merge-queue-row-${r.id}`} data-count={group.length}>
+              <StatusPill status={QUEUE_ROW_STATUS[r.state]} label={many ? `${MERGE_QUEUE_STATE_LABEL[r.state]} ${group.length}` : MERGE_QUEUE_STATE_LABEL[r.state]} className="shrink-0" />
+              {why && (
+                <span
+                  className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-warn/55 bg-warn-muted px-1 text-3xs font-bold text-warn-foreground"
+                  title={r.detail ?? undefined}
+                  data-testid={`merge-queue-row-${r.id}-why`}
+                >
+                  <StatusGlyph tone="warn" className="h-2.5 w-2.5" />
+                  {why}
+                </span>
+              )}
               {/* A long owner/repo#N is unbreakable monospace: let it break on a
                   phone, and give the reason a content basis (flex-auto, not
                   flex-1's 0%) so it wraps onto its own line instead of
-                  collapsing beside the ref (390px, report c07fb341). */}
-              <a href={prLink(r)} target="_blank" rel="noreferrer" className="min-w-0 max-w-full wrap-anywhere text-2xs font-mono text-fg-secondary hover:text-fg hover:underline">
-                {r.repo}#{r.pr_number}
-              </a>
-              <span className="min-w-0 flex-auto wrap-break-word text-2xs text-fg-muted" title={r.detail ?? undefined}>
-                {r.detail ?? 'Queued.'} <span className="text-fg-faint">· <RelativeTime value={r.updated_at} /></span>
+                  collapsing beside the ref (390px, report c07fb341).
+                  Same state, repo and sentence: one line, every PR on it (fresh-eyes 2026-11-18). */}
+              <span className="flex min-w-0 max-w-full flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                {group.map((g, i) => (
+                  <span key={g.id} className="inline-flex items-center gap-0.5">
+                    <a href={prLink(g)} target="_blank" rel="noreferrer" className="min-w-0 max-w-full wrap-anywhere text-2xs font-mono text-fg-secondary hover:text-fg hover:underline">
+                      {i === 0 ? `${g.repo}#${g.pr_number}` : `#${g.pr_number}`}
+                    </a>
+                    {many && (
+                      <Btn variant="ghost" size="sm" className="!px-1 !text-3xs" aria-label={`Remove #${g.pr_number} from the queue`} title="Remove from the queue" loading={removing === g.id} onClick={() => void remove(g)}>
+                        ✕
+                      </Btn>
+                    )}
+                  </span>
+                ))}
               </span>
-              <Btn variant="ghost" size="sm" className="shrink-0" loading={removing === r.id} onClick={() => void remove(r)}>
-                Remove
-              </Btn>
+              <span className="min-w-0 flex-auto wrap-break-word text-2xs text-fg-muted" title={r.detail ?? undefined}>
+                {r.detail ? withoutReasonCode(r.detail) : 'Queued.'} <span className="text-fg-faint">· <RelativeTime value={r.updated_at} /></span>
+              </span>
+              {!many && (
+                <Btn variant="ghost" size="sm" className="shrink-0" loading={removing === r.id} onClick={() => void remove(r)}>
+                  Remove
+                </Btn>
+              )}
             </li>
-          ))}
+            )
+          })}
         </ul>
       )}
       {merged.length > 0 && (

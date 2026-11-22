@@ -1,6 +1,22 @@
 # Mushi Mushi Helm chart
 
-Self-host the Mushi admin + API on any Kubernetes cluster, against your own Postgres.
+> **Experimental.** Nobody has run this chart end to end yet. The supported
+> self-host path is your own Supabase project + `mushi selfhost up`
+> ([`docs/SELF_HOSTED.md`](../../docs/SELF_HOSTED.md)).
+
+Runs the Mushi Mushi edge functions and admin console on Kubernetes. It does
+**not** run Supabase: the functions need a Supabase API (Auth, PostgREST,
+Storage) at `global.supabaseUrl`, whose Postgres is `global.database.*`. That
+can be a hosted Supabase project or the [supabase/docker](https://github.com/supabase/supabase/tree/master/docker) stack.
+
+Images come from GHCR, published by
+[`publish-selfhost-images.yml`](../../.github/workflows/publish-selfhost-images.yml)
+on release tags and manual dispatch:
+
+| Image | Contents |
+| --- | --- |
+| `ghcr.io/kensaurus/mushi-mushi-edge` | `supabase/edge-runtime` with every function and a router (`deploy/edge/main`) |
+| `ghcr.io/kensaurus/mushi-mushi-admin` | The console on nginx `:3000`. Built without a Supabase URL, so it asks for the URL and anon key on first open. Bake them in with your own build (`deploy/Dockerfile.admin` build args). |
 
 ```bash
 # 1. Mirror the latest SQL migrations into the chart
@@ -8,26 +24,37 @@ pnpm sync:helm-migrations
 
 # 2. Render to verify what will be applied
 helm template mushi ./deploy/helm \
+  --set global.supabaseUrl=https://supabase.example.internal \
   --set global.database.host=postgres.example.internal \
-  --set global.database.port=5432 \
-  --set global.database.name=mushi
+  --set secrets.internalCallerSecret=$(openssl rand -hex 32)
 
-# 3. Install
+# 3. Install (pin an image tag in production)
 helm install mushi ./deploy/helm \
   --namespace mushi --create-namespace \
-  --set global.database.host=postgres.example.internal
+  --set global.image.tag=<version> \
+  --set global.supabaseUrl=https://supabase.example.internal \
+  --set global.database.host=postgres.example.internal \
+  --set secrets.internalCallerSecret=<secret> \
+  --set secrets.supabaseServiceRoleKey=<service role JWT> \
+  --set secrets.postgresPassword=<password>
 ```
+
+`global.supabaseUrl` and `secrets.internalCallerSecret` are required. The
+migrate Job writes them into `mushi_runtime_config`, so pg_cron calls your
+functions instead of Mushi Mushi Cloud. An LLM key (`secrets.anthropicApiKey`
+or `secrets.openaiApiKey`) is optional: without one, reports get rule-based
+triage only.
 
 ## What ships
 
 | Resource                         | Purpose                                                         |
 | -------------------------------- | --------------------------------------------------------------- |
-| `Job/<release>-migrate`          | Pre-install / pre-upgrade hook that applies every SQL migration |
+| `Job/<release>-migrate`          | Pre-install / pre-upgrade hook that applies new SQL migrations (ledger in `supabase_migrations.schema_migrations`) and sets `mushi_runtime_config` |
 | `ConfigMap/<release>-migrations-YYYYMM` | One per month: the `*.sql` from `packages/server/supabase/migrations/` |
 | `Deployment/<release>-api`       | Public Edge-style HTTP surface                                  |
 | `Deployment/<release>-admin`     | Admin SPA + static assets                                       |
 | `Service` + `Ingress`            | TLS-terminated routing                                          |
-| `Secret/<release>-secrets`       | Postgres password, JWT secret, Anthropic key (BYOK)             |
+| `Secret/<release>-secrets`       | Postgres password, JWT secret, internal caller secret, optional Anthropic / OpenAI key |
 
 ## Migrations stay in sync automatically
 

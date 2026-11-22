@@ -1,0 +1,199 @@
+---
+title: Ops hub (payments, releases and alerts in your team's Slack)
+description: Every app sends payments, releases and alerts to Mushi Mushi with one server key; your team's own Slack bot posts them, threads follow-ups and answers commands.
+---
+
+import { Callout, Steps } from 'nextra/components'
+
+# Ops hub
+
+Each app sends one event to Mushi Mushi. Mushi Mushi stores it, shows it on the console's
+**Ops** page and posts it to your team's Slack with your team's own bot.
+
+```
+your app's server ──POST /v1/ops/events (ops:write key)──▶ Mushi Mushi ──▶ Ops page (the record)
+GitHub production deploys ─┐                                      └──▶ your Slack bot ──▶ #payments
+Sentry production errors ──┼──▶ (Mushi Mushi's own sources) ──────────────────────────▶ #releases
+edge canaries (down / up) ─┘                                                          ▶ #alerts
+```
+
+Why a bot and not an incoming webhook: a webhook cannot thread, edit its own message,
+take a button click or answer a command, because Slack returns no message id for it.
+The bot can. A failed deploy and the next good one sit in one thread, and the fix edits
+the original message's mark to ✅ with a "Resolved: …" line.
+
+Slack is the alert; Mushi Mushi is the record. Slack's free plan shows 90 days of history,
+and the Ops page keeps everything.
+
+## What you get
+
+- **Ops page** (`/ops`): today's payments per currency, releases and open alerts; a matrix
+  of when each app last sent each kind of event (a hatched row has never sent one); and the
+  feed, with follow-ups nested under the event that opened their thread.
+- **Slack messages**, one format for every kind: a line with the app's icon, name,
+  category, environment (only when the sender stated it) and time; the title once, with an
+  emoji (💳 payment, ↩️ refund, 🚀 release, ⚠️ warning, 🔴 urgent, ✅ resolved); the summary;
+  up to four facts as fields (the rest on one line); and at most three buttons. An alert
+  gets **Acknowledge**, **Open** and a ⋯ menu with **Open in Mushi Mushi** and **Mute this
+  alert for 24 h**. A release, a payment or a resolve gets **Open** and **Open in Mushi
+  Mushi**: nothing to acknowledge or mute.
+- **A slash command** with the name you pick (the example below uses `/kensaurus`).
+
+| Command | Answers |
+| --- | --- |
+| `/kensaurus status` | Each app: last release, open alerts, open bug reports, today's CI failures. Worst first. |
+| `/kensaurus sales [today\|week\|month]` | Payments by app and currency, refunds taken off. Today is since 00:00 UTC. |
+| `/kensaurus releases [n]` | The last n releases (5 by default, at most 20). |
+| `/kensaurus alerts` | Alerts nobody acknowledged and no resolve has closed. |
+| `/kensaurus bugs` | The newest open bug reports per app, linked to the console. |
+| `/kensaurus ci` | Today's CI jobs per app: passed, failed, stopped by the test machine. |
+| `/kensaurus apps` | Every app and when it last sent each kind of event. |
+| `/kensaurus mute <app> <2h\|1d>` / `unmute <app>` | Pause an app's messages in Slack (at most 7 days). Its events are still kept. |
+| `/kensaurus help` | This list. |
+
+Every answer is visible only to the person who typed the command.
+
+## Slack bot
+
+<Steps>
+### Create a Slack app
+
+At [api.slack.com/apps](https://api.slack.com/apps), create an app in your workspace. Give
+the bot a name and icon your team will recognise.
+
+Bot token scopes: `chat:write`, `chat:write.public`, `commands`, `reactions:write`.
+
+### Point Slack at Mushi Mushi
+
+In the console, open **Settings → General → Slack bot**. It shows two Request URLs with
+copy buttons:
+
+- **Slash Commands** → create your command (for example `/kensaurus`) with the first URL.
+- **Interactivity & Shortcuts** → turn it on with the second URL.
+
+<Callout type="info">
+Slack calls from the United States and gives a command 3 seconds to answer. If your
+database is elsewhere, set the edge secret `MUSHI_FUNCTION_REGION` to its region (for
+example `ap-northeast-1`). The URLs then end in `?forceFunctionRegion=<region>`, so the
+function runs next to the database: about 0.2 s instead of 4 s from the US. Without it,
+commands fail in Slack with `operation_timeout`.
+</Callout>
+
+### Save the token and the signing secret
+
+Install the app to your workspace, then paste the **Bot User OAuth Token** (`xoxb-…`) and
+the **Signing Secret** (Basic Information) into the Slack bot card. Both go into Vault; the
+console only ever shows "saved". Mushi Mushi checks the token with Slack and remembers
+which workspace it belongs to, so each command is verified with your team's own secret.
+
+### Pick the channels
+
+Paste the channel ids for `#payments`, `#releases` and `#alerts` (right-click a channel →
+Copy link; the id starts with `C`). Press **Post a test** on each, then switch on
+**Post to Slack**.
+</Steps>
+
+Only team owners and admins can change the bot. Without a bot token, a channel can fall
+back to an incoming webhook (no threads or buttons). With neither, events are stored only.
+
+## Connect an app
+
+<Steps>
+### Create the app's ops key
+
+Console → **Projects** → the app → **Create ops key**. The key carries one scope,
+`ops:write`, and is shown once. It can send Ops events and nothing else: it cannot read
+reports, change settings or call MCP.
+
+### Put it on your server
+
+The card gives copy-ready lines, for example:
+
+```bash
+supabase secrets set MUSHI_OPS_KEY=mushi_… MUSHI_API_URL=https://<project>.supabase.co/functions/v1/api
+gh secret set MUSHI_OPS_KEY --body "mushi_…"
+```
+
+<Callout type="warning">
+The ops key is a server key. A request that comes from a web page (it carries an `Origin`,
+`Referer` or `Sec-Fetch-Site` header) is refused with `403 KEY_EXPOSED_IN_BROWSER`, and so
+is a key that was ever used from one. Never ship it in a browser bundle or a mobile app.
+</Callout>
+
+### Send events
+
+```bash
+curl -X POST "$MUSHI_API_URL/v1/ops/events" \
+  -H "X-Mushi-Api-Key: $MUSHI_OPS_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "category": "payments",
+    "severity": "info",
+    "kind": "payment.succeeded",
+    "title": "New subscription",
+    "body": "Pro plan, monthly",
+    "facts": [{ "label": "Plan", "value": "Pro" }],
+    "amount_minor": 1200,
+    "currency": "JPY",
+    "url": "https://dashboard.stripe.com/payments/pi_123",
+    "dedupe_key": "stripe:evt_123"
+  }'
+```
+</Steps>
+
+### The event
+
+| Field | Required | Rules |
+| --- | --- | --- |
+| `category` | yes | `payments`, `releases` or `alerts`: picks the channel |
+| `severity` | no | `info` (default), `warn`, `urgent` or `resolved` |
+| `kind` | yes | A short machine name such as `payment.succeeded`, `deploy.failed`, `refund.failed` |
+| `title` | yes | The plain headline, without the app name; at most 150 characters |
+| `body` | no | At most 600 characters |
+| `facts` | no | Up to 8 `{ label, value }` pairs |
+| `url` | no | `https://` only: the **Open** button |
+| `amount_minor`, `currency` | together | The amount in the currency's smallest unit (yen, cents) and its ISO code. A `kind` with `refund` in it counts as money out. |
+| `thread_key` | no | Groups an incident with its follow-ups within this app, for example `invoice:in_123` or `deploy:<repo>:production` |
+| `dedupe_key` | no | A retried request with the same key from the same app stores and posts once (answers `200` with `status: duplicate`). Two apps may use the same key |
+| `occurred_at` | no | ISO time, within the last 30 days |
+| `sandbox` | no | `true` for a store sandbox or test purchase: answered `202` with `status: dropped` and never stored or posted, so it never reaches `#payments` or the sales totals |
+
+Answers: `202` once stored (the Slack post happens right after), `400 VALIDATION_ERROR`,
+`422 PII_REJECTED` when a field holds an email address or a phone number (send the
+email's domain or a customer id instead), `429 RATE_LIMITED` above 120 events a minute
+per app, `503` when the limit cannot be checked (retry).
+
+### Threads
+
+Events with the same `thread_key` in the same category share one Slack thread for 24 hours:
+the first one is the message, the rest reply under it. An alert with no `thread_key`
+threads with the same `kind` and title, so a release that fails three times in an hour is
+one message and two replies. A `resolved` event replies in the thread and edits the first
+message (✅ and "Resolved: …"), however old it is, so a failed payment followed by a
+recovered one, or a failed deploy followed by a good one, reads as one story. A release is
+always its own message.
+
+**Mute this alert for 24 h** silences that alert only: its `kind` and thread. The app's other
+alerts, its releases and its payments still post. `/kensaurus mute <app>` pauses the whole
+app.
+
+## Mushi Mushi's own sources
+
+For teams with the Slack bot on, Mushi Mushi adds these with no app code:
+
+| Source | Becomes | Needs |
+| --- | --- | --- |
+| A GitHub production deployment (`deployment_status`) | `releases` "`<sha>` is live in production" with the commit subject; a failure is an urgent `alerts` event, resolved by the next good deploy. When the app posts its own release for the same commit (a `Commit` fact) within 30 minutes, only the app's post stays | The repo connected through the Mushi Mushi GitHub App (a personal token does not receive deployment events) |
+| A new Sentry issue at level error or fatal, or a regression ("Regressed: …", with the first-seen date) | `alerts`, threaded per issue; resolving it in Sentry posts the resolve. The title is the error's first line, at most 120 characters, with any JSON moved into the body | Sentry connected (webhook or auto-import). Events from another environment than production are skipped; an event with no environment shows "Environment: not set", never production. |
+| An edge canary going down (second failed run in a row) and back up | urgent `alerts`, then `resolved` in the same thread | Edge canaries set up for the app |
+
+Names and email addresses in these are cut down to the email's domain before they are
+stored or posted.
+
+## Privacy
+
+- Events from an app must not carry personal data: an email address or a phone number in
+  any text field is refused with `422 PII_REJECTED`.
+- Secrets (bot token, signing secret, webhook URLs) live in Supabase Vault. The API never
+  returns them.
+- Acknowledge records a Slack user id (`slack:U…`) or `console`, never a name.

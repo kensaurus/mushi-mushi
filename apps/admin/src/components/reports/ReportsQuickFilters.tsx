@@ -11,9 +11,8 @@
  *              to see how big the "new" bucket is.
  *            - One-click triage pivot: every chip is a toggle — click to
  *              filter, click again to clear.
- *            - Quiet when empty: chips with 0 results still render so
- *              the user learns the shape of the inbox (and knows the
- *              filter exists), but use a muted tone.
+ *            - Quiet when empty: a status bucket with 0 reports hides
+ *              (All, Open and the active chip always show).
  *            - Narrow viewports: status and severity are separate groups
  *              stacked in a column. The divider lives in the severity
  *              group and only shows from the sm breakpoint, so a wrap
@@ -26,7 +25,7 @@ import { useActiveProjectSignal } from '../../lib/activeProject'
 import { useRealtimeReload } from '../../lib/realtime'
 import { FilterChip } from '../ui'
 import { FilterChipCell, FilterChipRail } from '../FilterChipRail'
-import { SEVERITY_CHIPS, STATUS_CHIPS, statusChipCount, type ReportStatusStats } from '../../lib/reportsListFilters'
+import { SEVERITY_CHIPS, STATUS_CHIPS, statusChipCount, statusChipShown, type ReportStatusStats } from '../../lib/reportsListFilters'
 
 type StatsResponse = ReportStatusStats
 
@@ -36,10 +35,15 @@ interface Props {
   /** `enumeration` counts every app (All apps). Default is the pinned app. */
   scope?: 'enumeration' | 'project'
   onSetFilter: (key: string, value: string) => void
+  /**
+   * Inside the filter bar's one row (owner, 2026-11-18: two filter rows became
+   * one): no sticky box of its own, and the chip groups flow inline.
+   */
+  inline?: boolean
 }
 
 
-export function ReportsQuickFilters({ status, severity, scope = 'project', onSetFilter }: Props) {
+export function ReportsQuickFilters({ status, severity, scope = 'project', onSetFilter, inline = false }: Props) {
   const [stats, setStats] = useState<StatsResponse | null>(null)
   const activeProjectSignal = useActiveProjectSignal()
 
@@ -62,20 +66,26 @@ export function ReportsQuickFilters({ status, severity, scope = 'project', onSet
 
   return (
     <div
-      className="sticky top-0 z-10 -mx-1 mb-2 flex flex-col gap-1.5 rounded-sm border border-edge-subtle/60 bg-surface/95 px-2 py-2 backdrop-blur-sm sm:flex-row sm:items-center"
+      className={
+        inline
+          ? 'flex min-w-0 flex-wrap items-center gap-1.5'
+          : 'sticky top-0 z-10 -mx-1 mb-2 flex flex-col gap-1.5 rounded-sm border border-edge-subtle/60 bg-surface/95 px-2 py-2 backdrop-blur-sm sm:flex-row sm:items-center'
+      }
       role="toolbar"
       aria-label="Quick filters"
     >
       <FilterChipRail trackId="reports-status" aria-label="Status filters">
         {STATUS_CHIPS.map((b) => {
           const count = stats ? statusChipCount(b.value, stats) : 0
+          if (!statusChipShown(b.value, status === b.value, stats)) return null
           return (
             <FilterChipCell key={b.value || 'all'} active={status === b.value}>
               <FilterChip
                 label={b.label}
                 count={stats ? count : null}
                 active={status === b.value}
-                onClick={() => onSetFilter('status', status === b.value ? '' : b.value)}
+                // Clicking the active chip goes back to the default list (Open).
+                onClick={() => onSetFilter('status', status === b.value ? 'open' : b.value)}
                 tone={b.tone}
                 hint={
                   b.value === ''
@@ -91,6 +101,9 @@ export function ReportsQuickFilters({ status, severity, scope = 'project', onSet
       </FilterChipRail>
       <div className="flex flex-wrap items-center gap-1.5 sm:shrink-0" role="group" aria-label="Severity filters">
         <span aria-hidden className="mx-1 hidden h-4 w-px shrink-0 bg-edge/60 sm:inline-block" />
+        {/* These count every status, fixed ones too: "Critical 39" beside the tiles'
+            "Critical · not fixed 2" read as a contradiction without the word. */}
+        <span className="text-2xs font-medium text-fg-muted">Any status:</span>
         {SEVERITY_CHIPS.map((b) => (
           <FilterChip
             key={b.value}
@@ -99,7 +112,7 @@ export function ReportsQuickFilters({ status, severity, scope = 'project', onSet
             active={severity === b.value}
             onClick={() => onSetFilter('severity', severity === b.value ? '' : b.value)}
             tone={b.tone}
-            hint={`Filter to ${b.value}-severity reports`}
+            hint={`Filter to ${b.value}-severity reports, open or closed`}
           />
         ))}
       </div>

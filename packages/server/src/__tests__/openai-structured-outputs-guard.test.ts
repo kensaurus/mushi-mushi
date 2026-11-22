@@ -178,6 +178,6 @@ describe('OpenAI structured-outputs guard (MUSHI-MUSHI-SERVER-1V)', () => {
 
   it('the classify-report Stage 2 fallback keeps the fix in place', () => {
     const src = readFileSync(join(FUNCTIONS_DIR, 'classify-report', 'index.ts'), 'utf8')
-    expect(src).toMatch(/openai\(FALLBACK_MODEL,\s*\{\s*structuredOutputs:\s*false\s*\}\)/)
+    expect(src).toMatch(/openai\((?:key\.model \?\? )?FALLBACK_MODEL,\s*\{\s*structuredOutputs:\s*false\s*\}\)/)
   })
 })

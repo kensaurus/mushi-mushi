@@ -77,6 +77,9 @@ describe('ReportPreviewDrawer onSeen', () => {
     const onSeen = vi.fn()
     await renderDrawer(onSeen)
     expect(document.body.textContent).toContain('Checkout button does nothing')
+    // The report's state is a status pill: a new report waits for a fix.
+    const pill = document.body.querySelector('[data-testid="status-pill"]')
+    expect([pill?.getAttribute('data-status'), pill?.textContent]).toEqual(['waiting', 'New'])
     expect(apiFetch).toHaveBeenCalledWith(`/v1/admin/reports/${REPORT_ID}`, expect.objectContaining({ cache: 'no-store' }))
     expect(onSeen).toHaveBeenCalledTimes(1)
     expect(onSeen).toHaveBeenCalledWith(REPORT_ID)

@@ -12,21 +12,21 @@ import { Link } from 'react-router-dom'
 import { Btn, RelativeTime, Section } from '../ui'
 import { IconAlertTriangle } from '../icons'
 import { usePageData } from '../../lib/usePageData'
-import { fixFirstOrder, peopleHit } from '../../lib/fixFirst'
+import { fixFirstGroups, peopleHit } from '../../lib/fixFirst'
 import { severityTrafficBg, severityTrafficLabel } from '../../lib/severityTraffic'
-import { pluralize } from '../../lib/format'
+import { pluralize, reportHeadline } from '../../lib/format'
 import type { ReportRow } from './types'
 
 const OPEN_PATH = '/v1/admin/reports?status=open&sort=created_at&dir=desc&limit=200'
 
 function title(r: ReportRow): string {
-  return (r.title ?? r.summary ?? r.description ?? '').trim() || 'Untitled report'
+  return reportHeadline((r.title ?? r.summary ?? r.description ?? '').trim()) || 'Untitled report'
 }
 
 export function FixFirstQueue({ scope }: { scope: 'project' | 'enumeration' }) {
   const { data } = usePageData<{ reports: ReportRow[]; total: number }>(OPEN_PATH, { deps: [scope], scope })
   const reports = data?.reports ?? []
-  const top = fixFirstOrder(reports)
+  const top = fixFirstGroups(reports)
   if (top.length === 0) return null
   const onTheWay = reports.filter((r) => r.status === 'fixing').length
 
@@ -36,7 +36,7 @@ export function FixFirstQueue({ scope }: { scope: 'project' | 'enumeration' }) {
       id="reports-fix-first"
       icon={<IconAlertTriangle />}
       action={
-        <Btn size="sm" variant="primary" to={`/reports/${top[0].id}`} data-testid="reports-open-worst">
+        <Btn size="sm" variant="primary" to={`/reports/${top[0].lead.id}`} data-testid="reports-open-worst">
           Open the worst
         </Btn>
       }
@@ -46,10 +46,14 @@ export function FixFirstQueue({ scope }: { scope: 'project' | 'enumeration' }) {
         {onTheWay > 0 ? ` ${onTheWay} more already ${pluralize(onTheWay, 'has', 'have')} a fix on the way.` : ''}
       </p>
       <ol className="divide-y divide-edge-subtle" data-testid="reports-fix-first">
-        {top.map((r, i) => {
-          const people = peopleHit(r)
+        {top.map(({ lead: r, members, apps }, i) => {
+          const people = members.reduce((n, m) => n + peopleHit(m), 0)
+          // The same bug in several apps (or filed several times) is one row.
+          const spread = apps > 1 ? `${apps} apps` : members.length > 1 ? `${members.length} reports` : null
           return (
-            <li key={r.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5" data-testid={`reports-fix-first-${r.id}`}>
+            // A phone shows the worst three; the rest of the page is chrome
+            // above the list (R2 sweep 2026-11-18).
+            <li key={r.id} className={`${i >= 3 ? 'hidden sm:flex' : 'flex'} flex-wrap items-center gap-x-3 gap-y-1 py-1.5`} data-testid={`reports-fix-first-${r.id}`}>
               <span className="w-4 shrink-0 text-right font-mono text-2xs tabular-nums text-fg-faint">{i + 1}</span>
               <span className="inline-flex shrink-0 items-center gap-1.5 text-2xs text-fg-secondary">
                 <span aria-hidden className={`h-2 w-2 rounded-full ${severityTrafficBg(r.severity) ?? 'bg-fg-faint'}`} />
@@ -57,8 +61,13 @@ export function FixFirstQueue({ scope }: { scope: 'project' | 'enumeration' }) {
               </span>
               <Link to={`/reports/${r.id}`} className="min-w-0 flex-1 basis-48 wrap-break-word text-xs font-medium text-fg hover:underline">
                 {title(r)}
+                {spread && (
+                  <span className="ml-1.5 whitespace-nowrap font-normal text-fg-muted" data-testid="reports-fix-first-spread">
+                    · {spread}
+                  </span>
+                )}
               </Link>
-              <span className="shrink-0 text-2xs tabular-nums text-fg-muted">
+              <span className="shrink-0 whitespace-nowrap text-2xs tabular-nums text-fg-muted">
                 {people} {pluralize(people, 'person', 'people')} · <RelativeTime value={r.created_at} />
               </span>
             </li>

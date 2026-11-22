@@ -242,10 +242,15 @@ function optionalSteps(project: SetupProject): SetupStep[] {
   return project.steps.some((s) => s.required) ? project.steps.filter((s) => !s.required) : []
 }
 
-function optionalLabel(project: SetupProject): string {
-  const extras = optionalSteps(project)
+/**
+ * @internal Exported for unit tests only.
+ * "Optional: 2 of 6 on". It read "6 optional extras, not counted above (2 on)",
+ * which the owner's walkthrough could not parse (2026-11-17).
+ */
+export function optionalLabel(project: Pick<SetupProject, 'steps'>): string {
+  const extras = optionalSteps(project as SetupProject)
   const done = extras.filter((s) => s.complete).length
-  return `${extras.length} optional ${extras.length === 1 ? 'extra' : 'extras'}, not counted above${done > 0 ? ` (${done} on)` : ''}`
+  return `Optional: ${done} of ${extras.length} on`
 }
 
 function WizardChecklist({ project, requiredDone, pct, nextRequiredId, adminEndpointHost, extrasOnly }: InternalProps) {
@@ -256,7 +261,8 @@ function WizardChecklist({ project, requiredDone, pct, nextRequiredId, adminEndp
     const extras = project.steps.filter((step) => !step.required)
     return (
       <div className="space-y-3" data-testid="setup-extras">
-        <p className="text-xs text-fg-muted">Optional. Each one adds something once your app is set up.</p>
+        {/* The tab guide says "All optional" once; this line said it again,
+            and every card carried an "optional" chip (round-2 review). */}
         <ol className="space-y-2">
           {extras.map((step) => (
             <li key={step.id}>
@@ -462,12 +468,12 @@ function ChecklistRow({
             {stepLabel(step)}
           </span>
           {current && (
-            <span className="rounded-sm px-1 py-0.5 text-2xs uppercase tracking-wider bg-brand/12 text-brand border border-brand/28">
+            <span className="rounded-sm px-1 py-0.5 text-2xs bg-brand/12 text-brand border border-brand/28 font-semibold">
               do this next
             </span>
           )}
           {!step.required && !current && (
-            <span className="rounded-sm border border-edge-subtle bg-surface-raised px-1 py-0.5 text-2xs text-fg-faint uppercase tracking-wider">
+            <span className="rounded-sm bg-surface-raised px-1 py-px text-2xs text-fg-faint">
               optional
             </span>
           )}
@@ -504,9 +510,10 @@ function ChecklistCard({
   const diag = buildSdkDiagnostic(step, adminEndpointHost)
   const fix = useSdkFix(step, projectId)
   return (
-    <div className={`rounded-md border p-3 motion-safe:transition-[transform,opacity] ${
+    // A done step is said once, by the ✓: no green fill and no "done" chip.
+    <div data-step-done={step.complete ? 'true' : undefined} className={`rounded-md border p-3 motion-safe:transition-[transform,opacity] ${
       step.complete
-        ? 'border-ok/30 bg-ok-muted/10'
+        ? 'border-edge-subtle bg-surface-raised/30'
         : current
           ? 'border-brand/40 bg-brand/5 ring-2 ring-brand/40'
           : step.required
@@ -521,20 +528,12 @@ function ChecklistCard({
               {stepLabel(step)}
             </h4>
             {current && (
-              <span className="rounded-sm bg-brand text-brand-fg px-1.5 py-0.5 text-2xs uppercase tracking-wider font-semibold">
+              <span className="rounded-sm bg-brand text-brand-fg px-1.5 py-0.5 text-2xs font-semibold">
                 do this next
               </span>
             )}
-            {!step.required && !current && (
-              <span className="rounded-sm border border-edge-subtle bg-surface-raised px-1 py-0.5 text-2xs text-fg-faint uppercase tracking-wider">
-                optional
-              </span>
-            )}
-            {step.complete && (
-              <span className="rounded-sm px-1.5 py-0.5 text-2xs uppercase tracking-wider bg-ok-muted/50 text-ok-foreground border border-ok/25">
-                done
-              </span>
-            )}
+            {/* Wizard cards sit under "Optional: N of M on" or the extras
+                tab's "All optional" guide: no per-card "optional" chip. */}
           </div>
           <p className="mt-1 text-xs text-fg-muted">{step.description}</p>
           {diag && <SdkDiagnostic tone={diag.tone} lines={diag.lines} />}

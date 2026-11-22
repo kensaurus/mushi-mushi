@@ -414,8 +414,12 @@ async function notifyCheckoutCompleted(
   }
 
   await notifyOperator({
+    category: 'payments',
     title: 'New paid customer',
-    body: `*${maskEmail(email)}* completed Checkout for project \`${projectId ?? '?'}\`.`,
+    kind: 'payment.succeeded',
+    dedupeKey: typeof session.id === 'string' ? `stripe:${session.id}` : undefined,
+    ...(amountTotal != null ? { amountMinor: amountTotal, currency } : {}),
+    body: `${maskEmail(email)} paid for ${planLabel}${amountTotal != null ? ` (${(amountTotal / 100).toFixed(2)} ${currency})` : ''}.`,
     level: 'info',
     fields,
     url: customerId ? `${STRIPE_DASHBOARD_ROOT}/customers/${customerId}` : undefined,
@@ -433,7 +437,11 @@ async function notifySubscriptionDeleted(
   const cancelReason = (raw.cancellation_details as { reason?: string } | undefined)?.reason
 
   await notifyOperator({
+    category: 'payments',
     title: 'Customer cancelled',
+    kind: 'subscription.cancelled',
+    dedupeKey: subId ? `stripe:${subId}:deleted` : undefined,
+    threadKey: subId ? `subscription:${subId}` : undefined,
     body: `Subscription \`${subId ?? '?'}\` ended. The team that bought it from app \`${projectName(meta)}\` has dropped to Free.`,
     level: 'warn',
     fields: [
@@ -485,8 +493,12 @@ async function notifyPaymentFailed(
   }
 
   await notifyOperator({
+    category: 'payments',
     title: 'Payment failed',
-    body: `Card declined for *${maskEmail(customerEmail)}*. Subscription will move to \`past_due\`; quota stays enforced until the dunning window expires.`,
+    kind: 'payment.failed',
+    dedupeKey: invoiceId ? `stripe:${invoiceId}:failed:${attempt ?? 0}` : undefined,
+    threadKey: invoiceId ? `invoice:${invoiceId}` : undefined,
+    body: `${maskEmail(customerEmail)}'s card was declined. Stripe will retry; their plan keeps working until the retries run out, so nothing to do yet unless it fails again.`,
     level: 'urgent',
     fields,
     url: invoiceId ? `${STRIPE_DASHBOARD_ROOT}/invoices/${invoiceId}` : undefined,
@@ -523,8 +535,13 @@ async function notifyPaymentRecovered(
   const currency = (invoice.currency as string | undefined)?.toUpperCase() ?? 'USD'
 
   await notifyOperator({
+    category: 'payments',
     title: 'Payment recovered',
-    body: `*${maskEmail(customerEmail)}* paid the open invoice. Subscription is back to \`active\`.`,
+    kind: 'payment.recovered',
+    dedupeKey: typeof invoice.id === 'string' ? `stripe:${invoice.id}:recovered` : undefined,
+    threadKey: typeof invoice.id === 'string' ? `invoice:${invoice.id}` : undefined,
+    ...(amountPaid != null ? { amountMinor: amountPaid, currency } : {}),
+    body: `${maskEmail(customerEmail)} paid the invoice that had failed. Their plan is active again.`,
     level: 'info',
     fields: [
       { label: 'Customer', value: maskEmail(customerEmail) },
@@ -607,7 +624,11 @@ const handler = async (req: Request): Promise<Response> => {
         const isCancellingNow = obj.cancel_at_period_end === true
         if (wasNotCancelling && isCancellingNow) {
           await notifyOperator({
+    category: 'payments',
             title: 'Cancellation scheduled',
+            kind: 'subscription.cancel_scheduled',
+            dedupeKey: `stripe:${event.id}`,
+            threadKey: typeof obj.id === 'string' ? `subscription:${obj.id}` : undefined,
             body: `A customer scheduled cancellation at period end. You have ~30 days to reach out.`,
             level: 'warn',
             fields: [

@@ -30,6 +30,7 @@ import { OnboardingSetupReadout } from '../components/onboarding/OnboardingSetup
 import { SetupGapsSection } from '../components/onboarding/SetupGapsSection'
 import { EMPTY_ONBOARDING_STATS, type OnboardingStats, type OnboardingTabId } from '../components/onboarding/types'
 import { usePublishPageContext } from '../lib/pageContext'
+import { tabbedPageTitle } from '../lib/pageTitle'
 import { useRealtimeReload } from '../lib/realtime'
 import { ContainedBlock } from '../components/report-detail/ReportSurface'
 import { OnboardingSkeleton } from '../components/skeletons/OnboardingSkeleton'
@@ -141,8 +142,6 @@ export function OnboardingPage() {
     loading: legacyStatsLoading,
     error: legacyStatsError,
     reload: legacyReloadStats,
-    lastFetchedAt: legacyStatsFetchedAt,
-    isValidating: legacyStatsValidating,
   } = usePageData<OnboardingStats>(
     activationEnabled ? null : '/v1/admin/onboarding/stats',
   )
@@ -150,8 +149,6 @@ export function OnboardingPage() {
   const statsData = activationEnabled ? activation.stats : legacyStatsData
   const statsLoading = activationEnabled ? activation.loading : legacyStatsLoading
   const statsError = activationEnabled ? activation.error : legacyStatsError
-  const statsFetchedAt = activationEnabled ? activation.lastFetchedAt : legacyStatsFetchedAt
-  const statsValidating = activationEnabled ? activation.isValidating : legacyStatsValidating
   const reloadStats = activationEnabled ? activation.reload : legacyReloadStats
   // Required counts and "ready" follow GET /v1/admin/setup (see withSetupRequiredCounts).
   const stats = withSetupRequiredCounts(statsData ?? EMPTY_ONBOARDING_STATS, legacySetup.activeProject)
@@ -422,11 +419,15 @@ export function OnboardingPage() {
   // left for this project to do. Keeps the page useful as a permanent SDK
   // reference for fully onboarded users.
   const setupComplete = Boolean(project?.done && project.complete >= project.total)
+  // The rail's "Your app is wired up": the server's four required steps.
+  // The tab guide and the footer read this, not setupComplete (which also
+  // waits on the optional extras), so the guide no longer said "The rail
+  // above shows the next step" under a rail with every step done.
+  const wiredUp = Boolean(project && project.required_total > 0 && project.required_complete >= project.required_total)
 
   usePublishPageContext({
     route: '/onboarding',
-    title: `${activeTabMeta.label} · Set up`,
-    summary: activeTabMeta.description,
+    title: tabbedPageTitle('Set up', activeTabMeta.label, activeTabMeta.id === ONBOARDING_TABS[0].id),
     filters: { tab: activeTab, project_id: activeProjectId ?? undefined },
     criticalCount: stats.setupDone ? 0 : stats.requiredTotal - stats.requiredComplete,
   })
@@ -545,7 +546,7 @@ export function OnboardingPage() {
       {!project ? (
         <div className="space-y-4">
           <div>
-            <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">Step 1 of 2</p>
+            <p className="text-3xs font-semibold text-fg-secondary">Step 1 of 2</p>
             <h2 className="mt-0.5 text-base font-semibold text-fg">Name your project</h2>
           </div>
           {/* The field guide says what this step does: the name is the only
@@ -667,15 +668,20 @@ export function OnboardingPage() {
           options={tabOptions}
           ariaLabel="Setup sections"
           size="sm"
+          // Its own width, like the tabs on To-do and Settings, not a full-width bordered strip.
+          className="self-start"
         />
       ) : null}
 
-      {/* One field-guide line for the open tab: what this step is for. */}
-      <Mascot
-        {...onboardingTabGuide(effectiveTab, { hasProject: stats.hasAnyProject, complete: setupComplete })}
-        size="sm"
-        data-testid="onboarding-tab-guide"
-      />
+      {/* One field-guide line for the open tab: what this step is for. On a wired-up Overview the
+          rail's heading already says "Your app is wired up" (round-3 review, 2026-11-19). */}
+      {effectiveTab === 'overview' && wiredUp ? null : (
+        <Mascot
+          {...onboardingTabGuide(effectiveTab, { hasProject: stats.hasAnyProject, complete: wiredUp })}
+          size="sm"
+          data-testid="onboarding-tab-guide"
+        />
+      )}
 
       {effectiveTab === 'overview' && (
         <>
@@ -766,7 +772,7 @@ export function OnboardingPage() {
               <h3 className="text-sm font-semibold text-fg">Ask about this page</h3>
               <p className="mt-0.5 text-xs leading-relaxed text-fg-muted">
                 Press{' '}
-                <kbd className="rounded-sm border border-edge/80 bg-surface-overlay px-1 py-px font-mono text-2xs text-fg-secondary">
+                <kbd className="rounded-sm bg-surface-overlay px-1 py-px font-mono text-2xs text-fg-secondary">
                   Cmd/Ctrl+J
                 </kbd>
                 {' '}or run{' '}
@@ -1031,10 +1037,12 @@ export function OnboardingPage() {
               )}
             </Card>
           )}
-          <SdkInstallCard projectId={project.project_id} projectSlug={project.project_slug} apiKey={createdProject?.apiKey ?? apiKey?.key} showConnectionStatus />
-          <div className="flex gap-2">
-            <Btn variant="ghost" onClick={() => navigate('/dashboard')}>Go to Dashboard</Btn>
-          </div>
+          {/* A "Go to Dashboard" button sat here over the footer's "Skip setup —
+              go to dashboard": one way out, at the foot. */}
+          {/* The backend-reachable check only helps before the app has checked in. Once Setup gaps
+              says "All 6 checks pass", "Not checked yet · Run check" under it was a contradiction
+              (round-3 review, 2026-11-19). */}
+          <SdkInstallCard projectId={project.project_id} projectSlug={project.project_slug} apiKey={createdProject?.apiKey ?? apiKey?.key} showConnectionStatus={!wiredUp} />
         </div>
       )}
         </>
@@ -1042,9 +1050,11 @@ export function OnboardingPage() {
       </>
       )}
 
-      {/* Where reports go: endpoint and host provenance, at the foot. */}
-      {!firstRun ? (
-        <OnboardingSetupReadout stats={stats} statsFetchedAt={statsFetchedAt} statsValidating={statsValidating} />
+      {/* Where reports go: endpoint and host provenance, at the foot. Fix a
+          problem carries its own readout (endpoints, project ref, signals):
+          two "Developer details" bars stacked there. */}
+      {!firstRun && effectiveTab !== 'diagnose' ? (
+        <OnboardingSetupReadout stats={stats} />
       ) : null}
 
       {!ux.hideFooterLinks ? (
@@ -1055,7 +1065,7 @@ export function OnboardingPage() {
           onClick={() => navigate('/dashboard')}
           className="border-0 bg-transparent shadow-none hover:bg-transparent px-0 py-0 text-2xs text-fg-faint hover:text-fg-muted"
         >
-          Skip setup — go to dashboard
+          {wiredUp ? 'Go to Home' : 'Skip setup — go to Home'}
         </Btn>
         <span className="text-2xs text-fg-faint" aria-hidden="true">·</span>
         <Btn
@@ -1080,7 +1090,7 @@ function KeyReveal({ apiKey, copied, onCopy }: { apiKey: ApiKey; copied: boolean
     <div className="space-y-3">
       <Card  className="px-3 py-2">
         <div className="flex items-center justify-between mb-1">
-          <span className="text-2xs text-fg-muted uppercase tracking-wider font-medium">Your API Key</span>
+          <span className="text-2xs text-fg-secondary font-semibold">Your API Key</span>
           <CopyButton
             onCopy={onCopy}
             copied={copied}

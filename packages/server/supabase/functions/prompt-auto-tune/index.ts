@@ -30,14 +30,13 @@ import { z } from 'npm:zod@3'
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log as rootLog } from '../_shared/logger.ts'
 import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts'
-import { resolveLlmKey } from '../_shared/byok.ts'
+import { LlmFailoverError, withAnthropicOrOpenAi } from '../_shared/llm-failover.ts'
 import { LlmBudgetExceededError } from '../_shared/llm-budget.ts'
 import { createTrace } from '../_shared/observability.ts'
-import { PROMPT_TUNE_EFFORT, PROMPT_TUNE_MODEL } from '../_shared/models.ts'
+import { PROMPT_TUNE_EFFORT, PROMPT_TUNE_FALLBACK, PROMPT_TUNE_MODEL } from '../_shared/models.ts'
 import { claudeGenerateObject } from '../_shared/claude-messages.ts'
 import { withLlmUsage } from '../_shared/llm-usage.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
-import { platformAnthropicKey } from '../_shared/ai-provider.ts'
 
 ensureSentry('prompt-auto-tune')
 
@@ -273,19 +272,9 @@ async function proposeCandidate(
   const buckets = bucketize(failures)
   const trace = createTrace('prompt-auto-tune', { projectId, stage, parentVersion: active.version })
 
-  // Over budget rethrows: falling back to the env key would bypass the budget.
-  const resolved = await resolveLlmKey(db, projectId, 'anthropic').catch((err) => {
-    if (err instanceof LlmBudgetExceededError) throw err
-    return null
-  })
-  const apiKey = resolved?.key ?? (await platformAnthropicKey(db, projectId))
-  if (!apiKey) {
-    log.info('skipping — no Anthropic key', { projectId, stage })
-    await trace.end()
-    return null
-  }
-
-  const model = PROMPT_TUNE_MODEL
+  // The app's own keys first, then the platform keys through the
+  // prompt-auto-tune route (provider and model from kenji).
+  let model: string = PROMPT_TUNE_MODEL
 
   const failuresPrompt = failures
     .map((f, i) => `### Failure ${i + 1} (judge_score=${f.judgeScore.toFixed(2)}, bucket=${f.disagreementReason ?? 'low_score'})
@@ -301,30 +290,15 @@ Judge's correction: ${JSON.stringify(f.suggestedCorrection ?? {}).slice(0, 200)}
   // claude-messages.ts uses native structured outputs instead and sends
   // `temperature` only to models that accept it, so no thinking workaround.
   try {
-    const { object, usage } = await withLlmUsage(db, {
-      functionName: 'prompt-auto-tune',
-      stage,
-      projectId,
-      model,
-      keySource: resolved?.key ? resolved.source : 'env',
-      // No promptVersion: `active.version` is the prompt being tuned, not one
-      // that ran, and Prompt Lab sums cost per prompt_version.
-      langfuseTraceId: trace.id,
-    }, () => claudeGenerateObject({
-      apiKey,
-      model,
-      effort: PROMPT_TUNE_EFFORT,
-      schema: candidateSchema,
-      temperature: 0,
-      system: `You are a senior prompt engineer for an automated bug-classification pipeline. You will be shown the current prompt for ${stage} and a sample of recent classifications the LLM judge disagreed with. Propose a revised prompt that addresses the dominant failure modes WITHOUT changing template variables (anything inside {{ ... }}) or breaking the existing output schema.
+    const tuneSystem = `You are a senior prompt engineer for an automated bug-classification pipeline. You will be shown the current prompt for ${stage} and a sample of recent classifications the LLM judge disagreed with. Propose a revised prompt that addresses the dominant failure modes WITHOUT changing template variables (anything inside {{ ... }}) or breaking the existing output schema.
 
 Hard constraints:
 - Keep every {{template_variable}} byte-identical and in the same position.
 - Do NOT introduce new variables — the worker won't substitute them.
 - Do NOT change the output JSON schema the worker expects.
 - Make changes minimal and targeted. If a failure bucket is "wrong_severity", clarify the severity rubric. If "vague_repro", strengthen the repro instructions. If "wrong_component", expand the component rubric or list valid components.
-- Output the FULL revised prompt template, not a diff.`,
-      prompt: `Current active prompt (version ${active.version}):
+- Output the FULL revised prompt template, not a diff.`
+    const tunePrompt = `Current active prompt (version ${active.version}):
 
 \`\`\`
 ${active.prompt_template}
@@ -337,8 +311,44 @@ Sample failures (${failures.length} of the worst-scoring):
 
 ${failuresPrompt}
 
-Propose a revised prompt that fixes the dominant failure modes.`,
-    }))
+Propose a revised prompt that fixes the dominant failure modes.`
+    const usageFor = (m: string, keySource: 'byok' | 'env') => ({
+      functionName: 'prompt-auto-tune',
+      stage,
+      projectId,
+      model: m,
+      keySource,
+      // No promptVersion: `active.version` is the prompt being tuned, not one
+      // that ran, and Prompt Lab sums cost per prompt_version.
+      langfuseTraceId: trace.id,
+    })
+    const { openAiProvider } = await import('../_shared/openai-compat.ts')
+    const { generateObject } = await import('../_shared/ai-sdk.ts')
+    const routed = await withAnthropicOrOpenAi(
+      db,
+      projectId,
+      (key) => withLlmUsage(db, usageFor(key.model ?? PROMPT_TUNE_MODEL, key.source), () => claudeGenerateObject({
+        apiKey: key.key,
+        model: key.model ?? PROMPT_TUNE_MODEL,
+        effort: PROMPT_TUNE_EFFORT,
+        schema: candidateSchema,
+        temperature: 0,
+        system: tuneSystem,
+        prompt: tunePrompt,
+      })).then((r) => ({ object: r.object as z.infer<typeof candidateSchema>, usage: r.usage })),
+      (key) => withLlmUsage(db, usageFor(key.model ?? PROMPT_TUNE_FALLBACK, key.source), () => generateObject({
+        model: openAiProvider({ apiKey: key.key, ...(key.baseUrl ? { baseURL: key.baseUrl } : {}) })(
+          key.model ?? PROMPT_TUNE_FALLBACK,
+          { structuredOutputs: false },
+        ),
+        schema: candidateSchema,
+        system: tuneSystem,
+        prompt: tunePrompt,
+      })).then((r) => ({ object: r.object as z.infer<typeof candidateSchema>, usage: r.usage })),
+      { feature: 'prompt-auto-tune', tier: 'standard' },
+    )
+    const { object, usage } = routed.result
+    model = routed.model ?? (routed.usedProvider === 'openai' ? PROMPT_TUNE_FALLBACK : PROMPT_TUNE_MODEL)
     span.end({ model, inputTokens: usage?.promptTokens, outputTokens: usage?.completionTokens })
     await trace.end()
 
@@ -355,6 +365,12 @@ Propose a revised prompt that fixes the dominant failure modes.`,
   } catch (e) {
     span.end({ error: (e as Error).message })
     await trace.end()
+    // Over budget is the caller's to handle, as it was before the route.
+    if (e instanceof LlmBudgetExceededError) throw e
+    if (e instanceof LlmFailoverError && e.code === 'NO_KEYS_CONFIGURED') {
+      log.info('skipping — no AI key', { projectId, stage })
+      return null
+    }
     log.warn('LLM proposal failed', { projectId, stage, error: String(e) })
     return null
   }

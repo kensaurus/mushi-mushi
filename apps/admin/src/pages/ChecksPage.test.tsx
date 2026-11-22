@@ -12,7 +12,10 @@
  *   - one status sentence and one action: open the failing check;
  *   - a plan-gated check stays visible with an upgrade pill;
  *   - a Lab page the user has not turned on is not offered;
- *   - a nav-meta read that failed is "Status unavailable", never a pass.
+ *   - a nav-meta read that failed is "Status unavailable", never a pass;
+ *   - signals (2026-11-18): alert cards for failed / findings / stale checks with their
+ *     number and change since the last visit, a graded age chip, and the passing
+ *     checks folded into one line.
  */
 
 import { act, createElement } from 'react'
@@ -86,6 +89,7 @@ function render() {
 }
 
 beforeEach(() => {
+  window.localStorage.clear()
   state.slices = slices()
   state.navError = null
   state.recipe = null
@@ -113,7 +117,14 @@ describe('ChecksPage', () => {
     for (const path of CORE_PATHS) {
       const entry = NAV_REGISTRY.find((e) => e.path === path)!
       const li = container.querySelector(`[data-testid="checks-card-${path.slice(1)}"]`)
-      expect(li, path).not.toBeNull()
+      const alert = container.querySelector(`[data-testid="checks-alert-${path.slice(1)}"]`)
+      // Each check shows once: as an alert card when it needs you, otherwise in the grid (2026-11-18).
+      expect(Boolean(li) !== Boolean(alert), path).toBe(true)
+      if (alert) {
+        expect(alert.querySelector(`a[href="${path}"]`), path).not.toBeNull()
+        expect(alert.textContent).toContain(entry.label)
+        continue
+      }
       expect(li!.querySelector(`a[href="${path}"]`)?.textContent).toBe(entry.label)
       expect(li!.textContent).toContain(entry.paletteDescription)
     }
@@ -121,9 +132,9 @@ describe('ChecksPage', () => {
 
   it('gives every card a state and puts the failing check first', () => {
     render()
-    const order = cardOrder()
-    expect(order[0]).toBe('/qa-coverage')
-    expect(container.querySelector('[data-testid="checks-card-qa-coverage"]')?.getAttribute('data-state')).toBe('findings')
+    // The check with findings leads as an alert card and is not repeated in the grid.
+    expect(container.querySelector('[data-testid="checks-alert-qa-coverage"]')).not.toBeNull()
+    expect(cardOrder()).not.toContain('/qa-coverage')
     expect(container.querySelector('[data-testid="checks-card-fullstack-audit"]')?.getAttribute('data-state')).toBe('pass')
     // Every card says something; none is blank once its read is done.
     for (const li of container.querySelectorAll('li[data-testid^="checks-card-"]')) {
@@ -133,13 +144,71 @@ describe('ChecksPage', () => {
     // A card whose read is still running says so instead of leaving its corner blank (2026-10-30).
     const waiting = container.querySelector('[data-testid="checks-card-recipe"]')!
     if (waiting.getAttribute('data-state') === 'loading') expect(waiting.textContent).toContain('Checking…')
+    // Each state is a status pill (colour plus glyph): findings are slow, a pass passes (2026-11-18).
+    const pill = (id: string) => container.querySelector(`[data-testid="checks-card-${id}"] [data-testid="status-pill"]`)?.getAttribute('data-status')
+    expect(pill('fullstack-audit')).toBe('passed')
   })
 
-  it('leads with one sentence and one action to the failing check', () => {
+  it('leads with counts as marks, not a sentence naming the cards below', () => {
     render()
     const status = container.querySelector('[data-testid="checks-status"]')!
-    expect(status.textContent).toContain('1 check needs you: Scheduled tests (1 finding).')
-    expect(status.querySelector('a[href="/qa-coverage"]')?.textContent).toBe('Open Scheduled tests')
+    expect(status.querySelector('[data-testid="checks-count-findings"]')?.textContent).toBe('1with findings')
+    // Passing is counted once, on its fold, not again in the banner (2026-11-18 round 2).
+    expect(status.querySelector('[data-testid="checks-count-pass"]')).toBeNull()
+    expect(status.querySelector('[data-testid="checks-count-watching"]')).toBeNull()
+    // The names and the Open button live on the alert card only.
+    expect(status.textContent).not.toContain('Scheduled tests')
+    expect(status.querySelector('a')).toBeNull()
+  })
+
+  it('counts every state from one source, each count shown once: banner, idle list and fold agree with the cards', () => {
+    render()
+    const shown = (state: string) => container.querySelectorAll(`li[data-state="${state}"]`).length + (state === 'findings' || state === 'failed' ? container.querySelectorAll(`[data-testid^="checks-alert-"][data-severity="${state === 'failed' ? 'critical' : 'serious'}"]`).length : 0)
+    for (const state of ['failed', 'findings', 'unavailable']) {
+      const mark = container.querySelector(`[data-testid="checks-count-${state}"]`)
+      const n = mark ? Number(mark.textContent!.match(/^\d+/)![0]) : 0
+      expect(n, state).toBe(shown(state))
+    }
+    for (const state of ['not_checked', 'not_set_up', 'pass', 'watching']) {
+      expect(container.querySelector(`[data-testid="checks-status"] [data-testid="checks-count-${state}"]`), state).toBeNull()
+    }
+    const idle = shown('not_checked') + shown('not_set_up')
+    expect(idle).toBeGreaterThan(0)
+    expect(container.querySelector('[data-testid="checks-idle-count"]')!.textContent).toBe(`(${idle})`)
+    expect(container.querySelector('[data-testid="checks-passing"] summary')!.textContent).toContain(`${shown('pass')}passing`)
+  })
+
+  it('lists the checks that are not running yet in one compact list, without a group footer per card', () => {
+    render()
+    const list = container.querySelector('[data-testid="checks-idle"]')!
+    const rows = [...list.querySelectorAll('li[data-testid^="checks-card-"]')]
+    expect(rows.length).toBeGreaterThan(0)
+    for (const row of rows) expect(['not_checked', 'not_set_up']).toContain(row.getAttribute('data-state'))
+    // Round 3: each state is named once as a group, not as a pill on every row.
+    expect(list.querySelectorAll('[data-testid="status-pill"]')).toHaveLength(0)
+    // No card in the grid is idle any more; the idle ones live in the list only.
+    const grid = container.querySelector('ul[aria-label="Checks, failing first"]')
+    for (const li of grid?.querySelectorAll('li') ?? []) expect(['not_checked', 'not_set_up']).not.toContain(li.getAttribute('data-state'))
+    expect(container.textContent).not.toContain('App checks')
+  })
+
+  it('never spins: a read with no answer after 20 s reads as not checked, with Retry', () => {
+    vi.useFakeTimers()
+    try {
+      render()
+      expect(container.querySelector('[data-testid="checks-not-checked"]')).toBeNull()
+      act(() => {
+        vi.advanceTimersByTime(20_000)
+      })
+      const row = container.querySelector('[data-testid="checks-not-checked"]')!
+      expect(row.textContent).toContain('not checked')
+      expect(row.querySelector('button')?.textContent).toBe('Retry')
+      // The recipe read never answered: its card is "could not read", not "Checking…".
+      expect(container.querySelector('[data-testid="checks-card-recipe"]')?.getAttribute('data-state')).toBe('unavailable')
+      expect(container.textContent).not.toContain('Checking…')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('keeps a plan-gated check visible with an upgrade pill', () => {
@@ -168,6 +237,77 @@ describe('ChecksPage', () => {
     // Never "nothing needs you" over checks that could not be read.
     expect(container.querySelector('[data-testid="checks-status"]')?.textContent).not.toContain('No check needs you')
     expect(container.querySelector('[data-testid="checks-status"]')?.textContent).toContain('could not read')
+  })
+})
+
+describe('ChecksPage signals (2026-11-18)', () => {
+  const DAYS = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString()
+  const q = (id: string) => container.querySelector(`[data-testid="${id}"]`)
+
+  it('leads with an alert card for the check with findings, with its number', () => {
+    render()
+    const alert = q('checks-alert-qa-coverage')!
+    expect(alert.getAttribute('data-severity')).toBe('serious')
+    expect(alert.textContent).toContain('Scheduled tests')
+    expect(alert.textContent).toContain('1finding')
+    // The number is the metric; the title does not repeat it (2026-11-18 round 2: "2 to fix" beside "2 findings").
+    expect(alert.textContent).not.toContain('to fix')
+    expect(alert.querySelector('a[href="/qa-coverage"]')?.textContent).toBe('Open')
+    // A passing check is not an alert.
+    expect(q('checks-alert-fullstack-audit')).toBeNull()
+  })
+
+  it('shows the change since the last visit against the remembered count, and keeps it while a check is unread', () => {
+    window.localStorage.setItem('mushi:checks-baseline:p1', JSON.stringify({ '/qa-coverage': 0 }))
+    render()
+    expect(q('checks-alert-qa-coverage')!.textContent).toContain('▲ +1')
+    // Shown on the alert card; the grid does not repeat the check.
+    // Several slices are unread in this fixture, so the remembered count is not overwritten.
+    expect(window.localStorage.getItem('mushi:checks-baseline:p1')).toBe(JSON.stringify({ '/qa-coverage': 0 }))
+  })
+
+  it('never shows a change without a remembered count', () => {
+    render()
+    expect(container.querySelector('[data-testid="checks-change"]')).toBeNull()
+  })
+
+  it('grades a 14-day-old run worse than a fresh one, with a shape, and keeps a 4-day age neutral', () => {
+    render()
+    const fresh = q('checks-card-fullstack-audit')!.querySelector('[data-testid="checks-age"]')!
+    expect(fresh.getAttribute('data-tone')).toBe('ok')
+    expect(fresh.className).toContain('ci-cell-0')
+    // An age is not a failure: a 4-day-old pass is not red (2026-11-18).
+    state.slices = slices({ fullstackAudit: { errorCount: 0, warnCount: 0, failedGateCount: 0, lastRunAt: DAYS(4), topPriority: 'healthy' } })
+    render()
+    const mid = q('checks-card-fullstack-audit')!.querySelector('[data-testid="checks-age"]')!
+    expect(mid.className).toContain('ci-cell-0')
+    expect(mid.textContent).toMatch(/^●\dd$/)
+    state.slices = slices({ fullstackAudit: { errorCount: 0, warnCount: 0, failedGateCount: 0, lastRunAt: DAYS(14), topPriority: 'healthy' } })
+    render()
+    const old = q('checks-card-fullstack-audit')!.querySelector('[data-testid="checks-age"]')!
+    expect(old.getAttribute('data-tone')).toBe('danger')
+    expect(old.className).toContain('ci-fail-5')
+    expect(old.textContent).toMatch(/^▲1[34]d$/) // the page clock is set at mount
+  })
+
+  it('raises a stale alert for a pass whose run is over a week old', () => {
+    state.slices = slices({ fullstackAudit: { errorCount: 0, warnCount: 0, failedGateCount: 0, lastRunAt: DAYS(10), topPriority: 'healthy' } })
+    render()
+    const alert = q('checks-alert-fullstack-audit')!
+    expect(alert.textContent).toContain('Stale 10d')
+    expect(alert.textContent).toContain('since last run')
+  })
+
+  it('folds passing checks into one line, keeping the checks that need you open', () => {
+    render()
+    const fold = q('checks-passing') as HTMLDetailsElement
+    expect(fold.tagName).toBe('DETAILS')
+    expect(fold.open).toBe(false)
+    expect(fold.querySelector('summary')!.textContent).toContain('1passing')
+    expect(fold.querySelector('[data-testid="checks-card-fullstack-audit"]')).not.toBeNull()
+    expect(fold.querySelector('[data-testid="checks-card-qa-coverage"]')).toBeNull()
+    // The summary itself never claims a state.
+    expect(fold.querySelector('summary')!.hasAttribute('data-state')).toBe(false)
   })
 })
 

@@ -22,6 +22,7 @@ import {
   type ModelRole,
 } from '../../lib/claudeModels'
 import { Btn, SelectField } from '../ui'
+import { RESET_LINK } from './SettingDefaultActions'
 
 interface LiveModels {
   source: 'live' | 'none' | 'error'
@@ -99,15 +100,15 @@ export function ClaudeModelSelect({
           >
             {current === rec.id ? 'Using the recommended model' : `Use ${modelLabel(rec.id)}`}
           </Btn>
-          <Btn
-            size="sm"
-            variant="ghost"
-            onClick={() => onChange(fallback)}
-            disabled={current === fallback}
-            data-testid={`model-reset-${role}`}
-          >
-            {current === fallback ? `Default (${modelLabel(fallback)})` : `Reset to default (${modelLabel(fallback)})`}
-          </Btn>
+          {current === fallback ? (
+            <span className="text-2xs text-fg-muted" data-testid={`model-reset-${role}`}>
+              Default ({modelLabel(fallback)})
+            </span>
+          ) : (
+            <Btn size="sm" variant="ghost" className={RESET_LINK} onClick={() => onChange(fallback)} data-testid={`model-reset-${role}`}>
+              Reset to {modelLabel(fallback)}
+            </Btn>
+          )}
           {live.data?.source === 'live' && (
             <span className="text-fg-muted">Model list read from your Anthropic key.</span>
           )}

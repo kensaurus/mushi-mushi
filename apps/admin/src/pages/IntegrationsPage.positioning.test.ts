@@ -46,4 +46,18 @@ describe('Integrations positioning', () => {
       }
     }
   })
+
+  // Owner 2026-11-18: GitHub showed three times and Slack twice down the
+  // page. The tile grid is the page now; each tool's settings have one home,
+  // a drawer the tile opens, and old card links open that drawer.
+  it('gives every tool one home, opened from its tile', () => {
+    for (const card of ['<GitHubConnectCard', '<CodebaseIndexCard', '<SlackIntegrationCard', '<DiscordIntegrationCard', '<TeamsIntegrationCard', '<LinearIntegrationCard', '<RoutingProviderCard', '<PlatformIntegrationCard']) {
+      expect(src.split(card).length - 1, card).toBe(1)
+    }
+    expect(src).toContain('<ConnectionGrid')
+    expect(src).toContain('<Drawer')
+    expect(src).toContain('integrationToolForHash(location.hash)')
+    expect(src).toContain('onConnect={connectTool}')
+    expect(src).not.toContain('Set it up below')
+  })
 })

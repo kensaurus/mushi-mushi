@@ -47,6 +47,7 @@ export const ja: MushiLocale = {
     screenshotShareTab: 'このタブを共有して撮影',
     notSentBlocked: '送信できませんでした。送信前の確認で対象外と判断されました。入力内容は残っています。もう少し詳しく書いて、もう一度お試しください。',
     notSentThrottled: '送信できませんでした。短い時間に送信が続いています。入力内容は残っています。1 分ほど待ってから、もう一度お試しください。',
+    screenshotReview: '下のスクリーンショットを確認してから、もう一度「送信」を押してください。',
     screenshotErrors: {
       permission: '画面の取得が許可されていません。許可してから、もう一度お試しください。',
       unsupported: 'このブラウザでは画面を取得できません。文章でお知らせください。',

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ApiResult } from '../cli-shared.js'
-import { assertWorkerKey, createDaemon, createHostReadings, cursorStateFor, infraBackoffMs, machineFailed, modelFor, workerHostId, type DaemonDeps } from './daemon.js'
+import { assertWorkerKey, createDaemon, createHostReadings, cursorStateFor, fairOrder, infraBackoffMs, machineFailed, modelFor, workerHostId, type DaemonDeps } from './daemon.js'
 import type { WorkerConfig } from './protocol.js'
 import type { HostIO } from '../runner/host.js'
 
@@ -215,6 +215,26 @@ describe('lane modes (P3)', () => {
     await daemon.tick()
     await daemon.settle()
     expect(runs).toHaveLength(1)
+  })
+})
+
+describe('lanes take turns for agent spaces (2026-11-16)', () => {
+  const lane = (name: string, servedAt: number) => ({ name, servedAt })
+  it('asks the lane served longest ago first, so the first lanes in worker.json cannot take every freed space', () => {
+    const order = fairOrder([lane('mushi-mushi', 300), lane('solo', 200), lane('glot', 0), lane('tsumagoi', 0), lane('hhtp', 100)])
+    expect(order.map((l) => l.name)).toEqual(['glot', 'tsumagoi', 'hhtp', 'solo', 'mushi-mushi'])
+  })
+  it('keeps worker.json order when no lane has run yet, and never changes the input', () => {
+    const lanes = [lane('a', 0), lane('b', 0), lane('c', 0)]
+    expect(fairOrder(lanes).map((l) => l.name)).toEqual(['a', 'b', 'c'])
+    const mixed = [lane('a', 5), lane('b', 1)]
+    fairOrder(mixed)
+    expect(mixed.map((l) => l.name)).toEqual(['a', 'b'])
+  })
+  it('a lane that just ran goes to the back of the line', () => {
+    const lanes = [lane('a', 0), lane('b', 0)]
+    lanes[0]!.servedAt = 1_000
+    expect(fairOrder(lanes).map((l) => l.name)).toEqual(['b', 'a'])
   })
 })
 

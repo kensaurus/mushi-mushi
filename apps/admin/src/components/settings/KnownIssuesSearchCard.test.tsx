@@ -69,12 +69,15 @@ describe('KnownIssuesSearchCard', () => {
   it('says what is sent and to whom', async () => {
     serve({ ok: true, data: { known_issues_search_enabled: false } })
     await render()
+    // The lead line is visible; the full rule sits behind the (i) (round-3 review 2026-11-19).
     const text = container.textContent ?? ''
     expect(text).toContain('Off by default')
-    expect(text).toContain('error message')
-    expect(text).toContain('IDs, URLs and long numbers removed')
     expect(text).toContain('Firecrawl')
     expect(text).toContain('GitHub and Stack Overflow')
+    const hint = Array.from(container.querySelectorAll('[aria-label]'))
+      .map((el) => el.getAttribute('aria-label') ?? '')
+      .find((label) => label.includes('error message'))
+    expect(hint).toContain('IDs, URLs and long numbers removed')
   })
 
   it('shows the saved OFF state and turns it on with a one-field PATCH', async () => {

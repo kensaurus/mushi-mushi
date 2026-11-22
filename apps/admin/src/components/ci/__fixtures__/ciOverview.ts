@@ -89,7 +89,7 @@ export function ciOverviewFixture(over: Partial<CiOverview> = {}): CiOverview {
     ],
     repos: [
       { projectId: P1, projectName: 'glot.it', repo: GLOT, queued: 2, running: 1, jobs7d: 300, passRate: 0.82, queueP95s: 1800, durationP50s: 420 },
-      { projectId: P1, projectName: 'glot.it', repo: MUSHI, queued: 1, running: 0, jobs7d: 120, passRate: 0.95, queueP95s: 60, durationP50s: 300 },
+      { projectId: P1, projectName: 'mushi-mushi', repo: MUSHI, queued: 1, running: 0, jobs7d: 120, passRate: 0.95, queueP95s: 60, durationP50s: 300 },
     ],
     jobs: FIXTURE_JOBS,
     stats: {

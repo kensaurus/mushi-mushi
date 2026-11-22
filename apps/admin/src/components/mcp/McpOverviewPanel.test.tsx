@@ -74,7 +74,7 @@ describe('McpOverviewPanel', () => {
     host.remove()
   })
 
-  const render = (keys: McpKeyRow[] | null) =>
+  const render = (keys: McpKeyRow[] | null, extra: { hideEmptyEditors?: boolean; keyMixShown?: boolean } = {}) =>
     act(() => {
       root.render(
         createElement(
@@ -83,10 +83,9 @@ describe('McpOverviewPanel', () => {
           createElement(McpOverviewPanel, {
             stats: { ...EMPTY_MCP_STATS, activeKeyCount: 5, mcpReadKeyCount: 3, mcpWriteKeyCount: 1, reportOnlyKeyCount: 1 },
             keys,
-            lastFetchedAt: null,
-            isValidating: false,
             onOpenExamples: () => {},
             onOpenSetup: () => {},
+            ...extra,
           }),
         ),
       )
@@ -97,13 +96,27 @@ describe('McpOverviewPanel', () => {
     const editors = Array.from(host.querySelectorAll('[aria-label="Connected editors"] li')).map((li) => li.textContent)
     expect(editors[0]).toContain('Claude Code')
     expect(editors[0]).toContain('Last call')
-    expect(host.querySelectorAll('[aria-label="Example prompts"] li')).toHaveLength(5)
+    // Three on Summary; the Examples tab has them all (round-3 review 2026-11-19).
+    expect(host.querySelectorAll('[aria-label="Example prompts"] li')).toHaveLength(3)
     expect(host.querySelector('[data-testid="mcp-key-health"]')!.textContent).toContain('5 keys: 3 for editors')
   })
 
-  it('offers Connect an editor when none has called', () => {
+  it('says no editor has called, leaving the one Connect button to the page header', () => {
     render([key({ id: 'x' })])
     expect(host.textContent).toContain('No editor has called Mushi Mushi from this app yet.')
-    expect(Array.from(host.querySelectorAll('a')).some((a) => a.textContent === 'Connect an editor')).toBe(true)
+    expect(Array.from(host.querySelectorAll('a')).some((a) => a.textContent === 'Connect an editor')).toBe(false)
+  })
+
+  it('drops the empty editors card when the page status already says it', () => {
+    render([key({ id: 'x' })], { hideEmptyEditors: true })
+    expect(host.querySelector('[data-testid="mcp-connected-editors"]')).toBeNull()
+    expect(host.textContent).not.toContain('No editor has called')
+  })
+
+  it('keeps only Manage keys when the banner already gives the key mix', () => {
+    render(KEYS, { keyMixShown: true })
+    const line = host.querySelector('[data-testid="mcp-key-health"]')!
+    expect(line.textContent).not.toContain('keys:')
+    expect(line.textContent).toContain('Manage keys')
   })
 })

@@ -39,6 +39,7 @@ import { ActivityCard, ActivitySkeleton } from '../components/home/ActivityCard'
 import { AccessCard, AccessSkeleton } from '../components/home/AccessCard'
 import { HowThisWorks } from '../components/home/HowThisWorks'
 import type { ProjectHome } from '../lib/projectHome'
+import { dedupeHomeSections } from '../lib/homeView'
 import { usePageCopy } from '../lib/copy'
 import { IconDashboard } from '../components/icons'
 
@@ -73,6 +74,8 @@ export function DashboardPage() {
     onFire: onFirstMergedFix,
   })
 
+  // One place per fact: a connect button or a count two sections both carried is kept once.
+  const shown = useMemo(() => (data ? dedupeHomeSections(data) : null), [data])
   const projectName = setup.activeProject?.project_name ?? data?.app.data?.name ?? null
   const needs = data?.needsYou.data ?? []
   const summary = useMemo(() => {
@@ -108,6 +111,23 @@ export function DashboardPage() {
   // the same button and a second count (owner, 2026-10-27: unnecessary
   // information), so the checklist is the one place.
   const openStep = setupIncomplete ? (project?.steps.find((s) => s.required && !s.complete) ?? null) : null
+
+  const needsRow =
+    data && activeProjectId ? (
+      // Needs you takes the full width; beside the taller Release card a
+      // one-line Needs you left ~100 px of empty card (round-3 sweep
+      // 2026-11-19). Release moved into the stacked columns below.
+      <div data-testid="home-needs-row">
+        <NeedsYouCard
+          section={data.needsYou}
+          fixFirst={data.fixFirst}
+          partial={data.partial}
+          hasReports={!!project && project.report_count > 0}
+          // One "do this next" on the page: the setup step wins while it is open.
+          primaryElsewhere={Boolean(openStep && project)}
+        />
+      </div>
+    ) : null
 
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-dashboard">
@@ -169,7 +189,10 @@ export function DashboardPage() {
         <HomeSkeleton />
       ) : (
         <>
-          <div className="grid gap-3 lg:grid-cols-12 [&>*]:min-w-0">
+          {/* Problems first: while something needs the owner, that row leads,
+              above the green health lights (fresh-eyes sweep 2026-11-18). */}
+          {homeNeedsFirst(data) && needsRow}
+          <div className="grid items-start gap-3 lg:grid-cols-12 [&>*]:min-w-0">
             <div className="lg:col-span-5">
               <AppCard section={data.app} projectId={activeProjectId} canEdit={ent.canEditProject} onRefreshed={() => void reload()} />
             </div>
@@ -178,24 +201,21 @@ export function DashboardPage() {
             </div>
           </div>
 
-          <div className="grid gap-3 lg:grid-cols-2 [&>*]:min-w-0">
-            <NeedsYouCard
-              section={data.needsYou}
-              fixFirst={data.fixFirst}
-              partial={data.partial}
-              hasReports={!!project && project.report_count > 0}
-            />
-            <ReleaseCard section={data.release} projectId={activeProjectId} />
-          </div>
+          {!homeNeedsFirst(data) && needsRow}
 
-          <div className="grid gap-3 lg:grid-cols-2 [&>*]:min-w-0">
-            <SitemapCard section={data.sitemap} />
-            <AccessCard section={data.access} auditLog={ent.has('audit_log')} />
-          </div>
-
-          <div className="grid gap-3 lg:grid-cols-2 [&>*]:min-w-0">
-            <WeekCard section={data.week} />
-            <ActivityCard section={data.activity} />
+          {/* Two stacked columns, not rows of pairs: a short card beside a
+              tall one (Pages beside Access) left 100-200 px of empty space
+              (round-3 sweep 2026-11-19). */}
+          <div className="grid items-start gap-3 lg:grid-cols-2 [&>*]:min-w-0" data-testid="home-columns">
+            <div className="flex flex-col gap-3">
+              <ReleaseCard section={data.release} projectId={activeProjectId} />
+              <SitemapCard section={(shown ?? data).sitemap} />
+              <WeekCard section={data.week} />
+            </div>
+            <div className="flex flex-col gap-3">
+              <AccessCard section={data.access} auditLog={ent.has('audit_log')} />
+              <ActivityCard section={(shown ?? data).activity} />
+            </div>
           </div>
 
           <HowThisWorks defaultOpen={!!project && project.report_count === 0} />
@@ -203,6 +223,17 @@ export function DashboardPage() {
       )}
     </div>
   )
+}
+
+/**
+ * @internal Exported for tests.
+ * Something on this app waits on the owner (a Needs you item or a root cause
+ * to fix first), so that row goes above the health lights.
+ */
+export function homeNeedsFirst(data: Pick<ProjectHome, 'needsYou' | 'fixFirst'>): boolean {
+  const needs = data.needsYou.status === 'ok' ? (data.needsYou.data ?? []).length : 0
+  const causes = data.fixFirst?.status === 'ok' ? (data.fixFirst.data ?? []).length : 0
+  return needs + causes > 0
 }
 
 function HomeSkeleton() {

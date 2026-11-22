@@ -10,6 +10,8 @@ robots:
 
 **Route:** `/ci` (sidebar: Checks › CI runners. CI runners is a Lab: switch it on under **Settings → Display & sidebar → Labs** to keep it in the sidebar and on the Checks grid)
 
+<AdminDocHero page="ci" />
+
 Every fix Mushi Mushi opens is tested by your CI before it can merge. This page shows the machines that run those tests, the jobs waiting for one, and why a fix takes as long as it does to land. **This app** follows the app you have open. **All apps** reads every project you can see.
 
 The page reloads every 30 seconds while the tab is visible, and **Refresh** does the same. Each reload asks GitHub for queued and running jobs. The server does that live read at most once a minute per app.
@@ -27,6 +29,39 @@ Mushi Mushi's own fix pull requests run your tests only after a review says they
 ## How it reads your runs
 
 A collector also runs every 10 minutes. It reads GitHub Actions runs updated in the last 2 hours, on every branch of each app's repositories, classifies each job, and deletes job rows and samples older than 30 days.
+
+## Right now
+
+The **Now** view opens with plain answers, in this order:
+
+| Part | What it answers |
+| --- | --- |
+| The top line | Is CI OK? It names a machine that stopped reporting, jobs waiting a long time for a machine, and a job running slower than usual. For waiting jobs it says why: which machine takes jobs with their labels, and which idle machines are not set up for them. |
+| **Machines right now** | Which machine runs what: one card per real machine, by name, with how busy its CPU and memory are. Jobs on GitHub's machines show as **GitHub's cloud**. Idle machines are listed on one line. |
+| **Running now** | Each running job, the machine it is on, how long it usually takes, and about how long is left. A job type needs 3 runs before it has a usual time. **Inspect** shows the live steps and **Cancel run**. |
+| **What broke in the last 2 hours** | One group per pull request. Each job that broke names the step that failed. A summary check such as **gate**, which fails whenever another job fails, is listed under the job that broke. A job that failed in a re-run too is listed once. Draft pull requests that skipped CI on purpose are one line below the list, not failures. |
+| **Where the time goes this week** | Per app: how long jobs can wait for a machine, how long a run usually takes, how often checks pass, and the main delay. The line above the table names the worst one. Two repos of one app show their repo name. |
+
+**Last 7 days** follows: the week's counts and pass rate. It does not repeat what is waiting or running now; that is the board above.
+
+The cards at the top merge one cause seen in several places: a job that keeps failing in three apps is one card with a bar per app, not three cards.
+
+### All apps
+
+With **All apps** and two or more apps, **Running now** and **What broke** become one section per app, worst app first. Each app's header counts what failed, is running and is waiting, and shows its pass rate as a bar. Apps where nothing is wrong start collapsed. A cause seen in several apps, and a card about a machine, are listed once above the apps. **Open →** switches the page to that app.
+
+## Why it failed
+
+Every failed job has a **Why?** button: on the cards at the top (**Why it failed**), in **What broke**, in the finished queue, under **Stopped by the test machine** and in a job's details. It opens a panel with:
+
+| Part | What it shows |
+| --- | --- |
+| The failing step | The first step that failed, with every step and its time below. |
+| **Explain this failure** | A plain-English cause, one next step, and whether it looks like your code, a flaky run or the test machine. A machine stop or a cancel is explained from the job's own result, with no AI call. A code failure is read by OpenAI's small model through your app's AI keys, within its spend limit. The answer is kept for that job attempt, so opening it again costs nothing. |
+| **Log around the failure** | The lines around the errors in the job's log, read from GitHub when you open the panel. Lines that read like instructions to an AI or name a secret are hidden, and links show as `[url]`. Mushi Mushi does not store the log. GitHub's annotations are listed under it. |
+| Actions | **Re-run failed jobs** for that run, **Cancel run** while it is still going, and **Send to CI repair** when the job tested a Mushi Mushi fix: an agent makes CI green without weakening tests. **Open on GitHub** is last. |
+
+Re-run and cancel need **Actions: Read and write** on the GitHub access Mushi Mushi uses. The Mushi Mushi GitHub App asks for it; if your installation has not accepted it yet (GitHub → Settings → Applications → Review request), the panel says so and links the GitHub connection, where a fine-grained token with that permission also works. A missing OpenAI key or a spent AI limit shows its own fix button.
 
 ## Test machine or your code
 
@@ -48,9 +83,11 @@ Above the queue: how many are waiting now, how many are running, the typical wai
 
 **Timeline** is one row per test machine. Gaps are idle time. Striped bars are jobs waiting for a machine.
 
-## Runner map
+## Machines
 
-**Runner map** is your machines, the runners on them, the repositories they serve, and the jobs waiting or running now. Click a card for its health and recent jobs.
+**Machines** shows a card for every machine that runs your checks: what it runs now and how busy it is.
+
+**Runner map (advanced)** is a diagram of your machines, the runners on them, the repositories they serve, and the jobs waiting or running now. Open it from the Machines view. Click a card for its health and recent jobs.
 
 Runners that live for a single job, named as a label plus a number of seconds, are folded into that label. With **Administration: read** on the GitHub token, Mushi Mushi reads the repository runner list, including idle and offline runners. Without it, the page says it only sees runners through jobs. Without **Actions: read**, it cannot see the jobs at all.
 
@@ -60,7 +97,7 @@ Runners that live for a single job, named as a label plus a number of seconds, a
 
 **Slow jobs** is the jobs and steps that take the longest.
 
-**Stopped by the test machine** lists jobs that never finished testing. Re-run them.
+**Stopped by the test machine** lists jobs that never finished testing. **Re-run** them here; with several runs, **Re-run all** re-runs each run once.
 
 ## Your real bill
 

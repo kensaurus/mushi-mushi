@@ -34,10 +34,13 @@ export const CODE_HEALTH_METRIC_DEFINITIONS: CodeHealthMetricDefinition[] = [
 export const CODE_HEALTH_EXPLAINER_SUMMARY =
   'Code Health tracks bundle KB trends and oversized source files pushed from your repo CI. It is read-only here — fixes happen in your codebase, then the next green CI push updates the chart.'
 
+/**
+ * Round 3 (2026-11-19): not open on "no data": the empty state above it carries the one step
+ * (Mint ingest key), and the open explainer restated it in three boxes.
+ */
 export function isCodeHealthGuideExpanded(topPriority: string | undefined): boolean {
   return (
     topPriority === 'no_project' ||
-    topPriority === 'no_data' ||
     topPriority === 'errors' ||
     topPriority === 'warnings'
   )

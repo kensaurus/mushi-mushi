@@ -36,7 +36,7 @@ function RecipeLaneNodeInner({ data }: NodeProps) {
   const lane = data as RecipeLaneNodeData
   return (
     <div className="pointer-events-none flex flex-col gap-0.5 border-b border-edge-subtle pb-1.5">
-      <span className="text-xs font-semibold uppercase tracking-wider text-fg-secondary">{lane.label}</span>
+      <span className="text-xs font-semibold text-fg-secondary">{lane.label}</span>
       <span className="text-2xs text-fg-faint">{lane.hint}</span>
     </div>
   )

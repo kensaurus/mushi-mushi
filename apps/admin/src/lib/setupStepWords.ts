@@ -53,6 +53,7 @@ const WORDS: Record<string, Partial<Pick<SetupStep, 'label' | 'description' | 'c
   },
   slack_connected: {
     description: 'Get a Slack message when a new bug arrives or a check fails.',
+    cta_label: 'Connect Slack',
   },
 }
 
@@ -64,8 +65,13 @@ export function plainSetupSteps(steps: readonly SetupStep[]): SetupStep[] {
     const next: SetupStep = { ...step, ...words }
     if (!step.complete && step.cta_to) {
       const page = step.cta_to.split('#')[0]!.split('?')[0]!
-      if (offered.has(page)) next.cta_label = ''
-      else offered.add(page)
+      // A link to its own card (#anchor) is its own action: Slack and Sentry both live on
+      // Integrations, and "Connect Slack" was the one open row with no button (round-3 review,
+      // 2026-11-19). A plain page link is offered once.
+      const key = step.cta_to.includes('#') ? step.cta_to : page
+      if (offered.has(key)) next.cta_label = ''
+      offered.add(key)
+      offered.add(page)
     }
     return next
   })

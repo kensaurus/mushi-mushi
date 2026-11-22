@@ -58,3 +58,40 @@ export function timelineEmpty(
     description: 'Upgrade the SDK to capture route changes, clicks, logs, and requests in one chronological trail.',
   }
 }
+
+export type CaptureKind = 'vitals' | 'console' | 'network' | 'repro' | 'screenshot' | 'session' | 'breadcrumbs'
+
+/** Short names for the one "Not captured" line. */
+export const CAPTURE_LABEL: Record<CaptureKind, string> = {
+  vitals: 'web vitals',
+  console: 'console',
+  network: 'network',
+  repro: 'repro',
+  screenshot: 'screenshot',
+  session: 'session ID',
+  breadcrumbs: 'breadcrumbs',
+}
+
+/**
+ * Which evidence has nothing in it. Four cards each holding a dashed
+ * "nothing captured" box became one line, "Not captured: web vitals ·
+ * console · network · repro" (fresh-eyes sweep 2026-11-18); a panel with data
+ * keeps its card. The screenshot, session ID and breadcrumbs notes were three
+ * more separate sentences in three cards (R2 sweep 2026-11-18): the same line
+ * lists them.
+ */
+export function missingCaptures(
+  report: Pick<ReportDetail, 'performance_metrics' | 'console_logs' | 'network_logs' | 'backend_spans' | 'repro_timeline'>
+    & Partial<Pick<ReportDetail, 'screenshot_url' | 'session_id' | 'breadcrumbs' | 'custom_metadata'>>,
+): CaptureKind[] {
+  const out: CaptureKind[] = []
+  if (!report.performance_metrics || Object.keys(report.performance_metrics).length === 0) out.push('vitals')
+  if (!report.console_logs || report.console_logs.length === 0) out.push('console')
+  if ((!report.network_logs || report.network_logs.length === 0) && (report.backend_spans?.length ?? 0) === 0) out.push('network')
+  if (!Array.isArray(report.repro_timeline) || report.repro_timeline.length === 0) out.push('repro')
+  if (!report.screenshot_url) out.push('screenshot')
+  if (!report.session_id) out.push('session')
+  const sentryCrumbs = (report.custom_metadata as { sentry?: { breadcrumbs?: unknown[] } } | null | undefined)?.sentry?.breadcrumbs
+  if ((report.breadcrumbs?.length ?? 0) === 0 && (!Array.isArray(sentryCrumbs) || sentryCrumbs.length === 0)) out.push('breadcrumbs')
+  return out
+}

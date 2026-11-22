@@ -199,7 +199,7 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
             <ul className="space-y-0.5">
               {diag.missingVars.map((v) => (
                 <li key={v}>
-                  <code className="font-mono text-2xs text-danger-foreground bg-danger-muted/50 border border-danger/25 rounded px-1 py-0.5">
+                  <code className="font-mono text-2xs text-danger-foreground bg-danger-muted/50 rounded px-1 py-px">
                     {v}
                   </code>
                 </li>

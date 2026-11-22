@@ -47,7 +47,7 @@ export interface McpRateLimitMiss {
  *
  * Included on every successful `tools/call` response so agents and
  * human callers can self-throttle without waiting for a 429.
- * Published limits (mirrors SECURITY.md):
+ * Published limits (mirrors .github/SECURITY.md):
  *   - tools/call: 120 calls per minute per actor key
  *   - nl_query:   60 calls per hour  per actor key
  *

@@ -35,7 +35,7 @@ const SKIP_PARTS = [
   'CHANGELOG.md',
   'docs/audit-',
   'docs/runbooks/region-routing-replication.md',
-  'TRADEMARK.md',
+  'docs/legal/TRADEMARK.md',
   'STOREFRONTS.md',
   'plan-antislop.md',
   'canonical-urls.md',

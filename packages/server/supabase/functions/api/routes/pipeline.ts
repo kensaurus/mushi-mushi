@@ -7,7 +7,9 @@
  *   GET  /v1/admin/pipeline/fix/:id  one fix's group, actions and refused actions (report page)
  *   POST /v1/admin/pipeline/actions  { action, fixIds?, projectId?, reason? } one-click fixes
  *
- * The read returns every stage with its stuck groups (_shared/pipeline-view.ts),
+ * The read returns every stage with its stuck groups (_shared/pipeline-view.ts;
+ * each group carries `ages`, its items' time in stage as [0–3 d, 3–7 d, 7–30 d,
+ * 30 d+] counted before the item list is cut, for the console's age bar),
  * the release trains of the last 7 days per repo, and intake rejects. The
  * actions change only GitHub PRs and merge-queue rows the caller can write;
  * the merge queue's own logic (train.ts, worker.ts) is never changed here:
@@ -57,7 +59,7 @@ import {
   type GithubRepoRef,
 } from '../../_shared/github.ts';
 import { ciJobsForHeads, enqueueReviewFollowup, followupsEnabledForProject } from '../../_shared/review-followup-db.ts';
-import { localCiRepairRequestDedupe, localHandoff, type LocalFollowupKind } from '../../_shared/local-followup.ts';
+import { LOCAL_FIX_AGENT, localCiRepairRequestDedupe, localHandoff, type LocalFollowupKind } from '../../_shared/local-followup.ts';
 import { roundHeadsFor } from './local-followups.ts';
 import { ciHeadState, FOLLOWUP_REASONS, type CiJobForRepair, type PriorFollowup } from '../../_shared/review-followup.ts';
 import { postTeamNote } from '../../_shared/reporter-comms.ts';
@@ -418,7 +420,7 @@ async function readLocalInfra(db: Db, projectIds: string[], now: Date) {
       seen.add(x.report_id);
       return !x.auto_requeued && open.has(x.report_id) && !queuedIds.has(x.report_id) && newest.get(x.report_id) === x.claimed_at;
     });
-    return localInfraGroup(stuck, open, new Map(lanes.map((l) => [l.id, l.name])));
+    return localInfraGroup(stuck, open, new Map(lanes.map((l) => [l.id, l.name])), now);
   } catch (err) {
     plog.warn('local worker runs read failed', { err: err instanceof Error ? err.message : String(err) });
     return null;
@@ -464,7 +466,7 @@ export async function readDispatchers(db: Db, projectIds: string[], projects: Di
   try {
     const [settingsRes, keysRes, ownersRes, jobsRes, attemptsRes] = await Promise.all([
       db.from('project_settings').select('project_id, autofix_enabled').in('project_id', projectIds),
-      db.from('byok_keys').select('project_id, organization_id, owner_user_id, status, spend_down_enabled, exhausted_until').eq('provider_slug', 'cursor').limit(500),
+      db.from('byok_keys').select('project_id, organization_id, owner_user_id, status, spend_down_enabled, exhausted_until, label').eq('provider_slug', 'cursor').limit(500),
       orgIds.length
         ? db.from('organization_members').select('organization_id, user_id').in('organization_id', orgIds).eq('role', 'owner')
         : Promise.resolve({ data: [], error: null }),
@@ -668,7 +670,12 @@ async function sendFollowup(db: Db, a: AttemptForAction, kind: LocalFollowupKind
     }
   }
   const cloud = await cloudReady(db, a.project_id, cache);
-  if (cloud.ready) {
+  // A PR a local mushi work lane opened belongs to the local lanes, cloud agents
+  // or not: their claim gate always takes it (localFollowupAllowedFor), while the
+  // cloud trigger refuses it as not_cloud_agent. Routing it to the cloud first
+  // answered "Only pull requests a Mushi cloud agent opened" (glot.it #1032, 2026-11-16).
+  const localPr = a.agent === LOCAL_FIX_AGENT;
+  if (cloud.ready && !localPr) {
     const res = await enqueueReviewFollowup(db, { review, attempt: a, requireEnabled: true, ci }, now);
     if (res.queued) return { id: a.id, ok: true, message: kind === 'ci_repair' ? 'Queued a cloud CI-repair agent; it starts within 10 minutes.' : 'Queued a cloud follow-up agent; it starts within 10 minutes.' };
     if (res.error) return { id: a.id, ok: false, message: `Not queued: ${res.error}` };
@@ -686,14 +693,15 @@ async function sendFollowup(db: Db, a: AttemptForAction, kind: LocalFollowupKind
     cloudFollowupsOn: cloud.enabled,
     ciCodeRed: kind === 'ci_repair' ? ci?.state === 'code_failure' : undefined,
   });
-  if (!handoff.ok) return { id: a.id, ok: false, message: `${cloud.why}, and the local mushi work lanes cannot take it: ${handoff.message}` };
+  const why = localPr ? 'A local mushi work lane opened this pull request' : (cloud.why ?? 'No cloud agent can run');
+  if (!handoff.ok) return { id: a.id, ok: false, message: localPr ? `The local mushi work lanes cannot take it: ${handoff.message}` : `${why}, and the local mushi work lanes cannot take it: ${handoff.message}` };
   const { error: insErr } = await db.from('fix_events').insert({
     fix_attempt_id: a.id,
     project_id: a.project_id,
     kind: 'followup',
     status: 'pending',
     label: kind === 'ci_repair' ? 'CI repair handed to the local lanes' : 'Follow-up handed to the local lanes',
-    detail: `${by} handed ${handoff.headSha.slice(0, 7)} to the local mushi work lanes (${(cloud.why ?? 'no cloud agent').toLowerCase()}); mushi work --followups takes it on its next run.`,
+    detail: `${by} handed ${handoff.headSha.slice(0, 7)} to the local mushi work lanes (${why.toLowerCase()}); mushi work --followups takes it on its next run.`,
     at: now.toISOString(),
     dedupe_key: kind === 'ci_repair' ? localCiRepairRequestDedupe(a.id, handoff.headSha) : `local-followup-request:${a.id}:${handoff.headSha}`,
     payload: { local: true, kind: `${kind}_request`, headSha: handoff.headSha },
@@ -702,7 +710,7 @@ async function sendFollowup(db: Db, a: AttemptForAction, kind: LocalFollowupKind
   return {
     id: a.id,
     ok: true,
-    message: `Queued for the local mushi work lanes (${cloud.name}): mushi work --followups takes it on its next run. ${cloud.why}.`,
+    message: `Queued for the local mushi work lanes (${cloud.name}): mushi work --followups takes it on its next run. ${why}.`,
   };
 }
 

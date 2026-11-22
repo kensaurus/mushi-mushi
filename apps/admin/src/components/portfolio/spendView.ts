@@ -6,7 +6,8 @@
  */
 
 import type { BadgeTone } from '../ui'
-import type { BillVendor, LedgerApp, LedgerSource } from '../../lib/portfolioTypes'
+import type { BillVendor, LedgerApp, LedgerSource, SpendLedgerResponse } from '../../lib/portfolioTypes'
+import { isPublicDemo } from '../../lib/publicDemo'
 import { formatUsd } from './portfolioView'
 
 export interface LedgerCell {
@@ -26,6 +27,68 @@ export function ledgerCell(source: LedgerSource): LedgerCell {
 export function ledgerTotal(app: Pick<LedgerApp, 'totalUsd' | 'complete'>): { text: string; tone: BadgeTone | null; title: string | undefined } {
   if (!app.complete) return { text: `${formatUsd(app.totalUsd)}+`, tone: 'warnSubtle', title: 'At least this much: a source could not be read and is left out.' }
   return { text: formatUsd(app.totalUsd), tone: null, title: undefined }
+}
+
+/**
+ * The ledger without the public demo app (2026-11-18: keep-but-hide). Its row goes, and its
+ * amounts come off the footer, so "All apps" is still the sum of the rows shown. Matched by
+ * id (the page knows the demo from the portfolio and the project list) or by its name, so the
+ * row stays out even when this read lands first.
+ */
+export function withoutPublicDemo(data: SpendLedgerResponse, demoIds: ReadonlySet<string>): SpendLedgerResponse {
+  const isDemo = (a: LedgerApp) => demoIds.has(a.projectId) || isPublicDemo({ name: a.name, slug: null })
+  const hidden = data.apps.filter(isDemo)
+  if (hidden.length === 0) return data
+  const sum = (pick: (a: LedgerApp) => number | null) => hidden.reduce((n, a) => n + (pick(a) ?? 0), 0)
+  const t = data.totals
+  return {
+    ...data,
+    apps: data.apps.filter((a) => !isDemo(a)),
+    totals: {
+      mushiLlmUsd: t.mushiLlmUsd - sum((a) => a.mushiLlm.usd),
+      providerLlmUsd: t.providerLlmUsd - sum((a) => a.providerLlm.usd),
+      ciUsd: t.ciUsd - sum((a) => a.ci.usd),
+      supabaseUsd: t.supabaseUsd - sum((a) => a.supabase.usd),
+      billsUsd: t.billsUsd - sum((a) => a.bills.usd),
+      totalUsd: t.totalUsd - sum((a) => a.totalUsd),
+    },
+  }
+}
+
+/** Most spend first; an unread total still sorts by what was read. */
+export function sortBySpend<T extends Pick<LedgerApp, 'totalUsd' | 'name'>>(apps: readonly T[]): T[] {
+  return [...apps].sort((a, b) => b.totalUsd - a.totalUsd || a.name.localeCompare(b.name))
+}
+
+export interface SpendPart {
+  key: 'mushi' | 'provider' | 'ci' | 'cloud'
+  label: string
+  usd: number
+}
+
+/** The four kinds of spend, in legend order (the stacked bar's segments). */
+export const SPEND_PARTS: ReadonlyArray<Omit<SpendPart, 'usd'>> = [
+  { key: 'mushi', label: 'Mushi Mushi AI' },
+  { key: 'provider', label: 'AI provider' },
+  { key: 'ci', label: 'CI' },
+  { key: 'cloud', label: 'Cloud bills' },
+]
+
+/** Where an app's money goes: only sources that were read; cloud = Supabase plus imported bills. */
+export function spendSplit(app: Pick<LedgerApp, 'mushiLlm' | 'providerLlm' | 'ci' | 'supabase' | 'bills'>): SpendPart[] {
+  const usd = (s: LedgerSource) => (s.state === 'ok' && s.usd != null ? s.usd : 0)
+  const by: Record<SpendPart['key'], number> = {
+    mushi: usd(app.mushiLlm),
+    provider: usd(app.providerLlm),
+    ci: usd(app.ci),
+    cloud: usd(app.supabase) + usd(app.bills),
+  }
+  return SPEND_PARTS.map((p) => ({ ...p, usd: by[p.key] }))
+}
+
+/** How many apps have nothing connected for a column (its header offers ONE connect action). */
+export function notConnectedCount(apps: ReadonlyArray<Pick<LedgerApp, 'providerLlm' | 'ci' | 'supabase' | 'bills'>>, column: 'providerLlm' | 'ci' | 'supabase' | 'bills'): number {
+  return apps.filter((a) => a[column].state === 'not_connected').length
 }
 
 const VENDOR_LABEL: Record<BillVendor, string> = { vercel: 'Vercel', aws: 'AWS', supabase: 'Supabase', other: 'Other' }

@@ -19,6 +19,7 @@ import {
   getActiveProjectIdFromUrl,
 } from '../lib/activeProject'
 import { knownProjectTeam } from '../lib/crossTeamProject'
+import { checkEnv, type InstanceMode } from '../lib/env'
 import { useCreateOrganization } from '../lib/useCreateOrganization'
 import { headerDropdownPanelClass } from '../lib/appChrome'
 import { HeaderContextChip, HeaderContextChipSkeleton } from './ui/chrome'
@@ -58,8 +59,16 @@ const PLAN_NAMES: Record<string, string> = {
   enterprise: 'Enterprise',
 }
 
-function orgPillLabel(org: OrganizationSummary): string {
-  return org.billing_mode === 'complimentary' ? 'comp' : PLAN_NAMES[org.plan_id] ?? org.plan_id
+/**
+ * A self-hosted install bills nothing and lifts every plan limit (ADR 0063),
+ * so a hosted plan name ("Free") there reads as a paywall; it says
+ * "Self-hosted" instead.
+ * @internal Exported for tests only.
+ */
+export function orgPillLabel(org: OrganizationSummary, mode: InstanceMode = checkEnv().mode): string {
+  if (org.billing_mode === 'complimentary') return 'comp'
+  if (mode === 'self-hosted') return 'Self-hosted'
+  return PLAN_NAMES[org.plan_id] ?? org.plan_id
 }
 
 export function OrgSwitcher() {

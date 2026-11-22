@@ -18,6 +18,38 @@ interface CiAdviceTarget {
   label: string
   /** Full, for the tooltip: `kensaurus/tsumagoi/.github/workflows/ci-pr.yml`. */
   title: string
+  /** For a workflow target: its repo's short name and the file alone, so chips can group by repo. */
+  repoShort?: string
+  file?: string
+}
+
+/** Workflow chips of one repo under one name: `mushi-mushi` once, then `ci.yml` `cla.yml` … */
+export interface CiAdviceTargetRow {
+  repo: string | null
+  targets: Array<CiAdviceTarget & { chip: string }>
+}
+
+/**
+ * Chips grouped by repo when a card spans several repos: "mushi-mushi ·" led 12 chips of one card
+ * (2026-11-18). One repo (or no workflow targets) stays one row with the chips as they are.
+ */
+export function targetRowsByRepo(targets: readonly CiAdviceTarget[]): CiAdviceTargetRow[] {
+  const repos = new Set(targets.map((t) => t.repoShort).filter(Boolean))
+  if (repos.size < 2) return [{ repo: null, targets: targets.map((t) => ({ ...t, chip: t.label })) }]
+  const rows = new Map<string, CiAdviceTargetRow>()
+  const other: CiAdviceTargetRow = { repo: null, targets: [] }
+  for (const t of targets) {
+    if (!t.repoShort || !t.file) {
+      other.targets.push({ ...t, chip: t.label })
+      continue
+    }
+    const row = rows.get(t.repoShort) ?? { repo: t.repoShort, targets: [] }
+    row.targets.push({ ...t, chip: t.file })
+    rows.set(t.repoShort, row)
+  }
+  // Repos with the most places first.
+  const out = [...rows.values()].sort((a, b) => b.targets.length - a.targets.length)
+  return other.targets.length > 0 ? [...out, other] : out
 }
 
 export interface CiAdviceGroup {
@@ -32,6 +64,11 @@ export interface CiAdviceGroup {
   targets: CiAdviceTarget[]
   /** One line per piece of evidence: each item's, split at `; `. */
   evidence: string[]
+  /**
+   * True when every evidence line only names one of the target chips ("…/deploy.yml: a concurrency
+   * group without cancel-in-progress", once per chip): the card shows the chips, not the list again.
+   */
+  evidenceRepeatsTargets: boolean
   /** How many advice items the card stands for. */
   count: number
   /** The places Mushi can fix with a draft PR ("Open fix PR"), one per workflow file. */
@@ -81,7 +118,12 @@ function targetsOf(items: CiAdvice[]): CiAdviceTarget[] {
     if (workflow) {
       const file = workflow.split('/').pop() ?? workflow
       const label = repo && repos.size > 1 ? `${repoShortName(repo)} · ${file}` : file
-      out.set(`wf:${repo}:${workflow}`, { key: `wf:${repo}:${workflow}`, label, title: repo ? `${repo}/${workflow}` : workflow })
+      out.set(`wf:${repo}:${workflow}`, {
+        key: `wf:${repo}:${workflow}`,
+        label,
+        title: repo ? `${repo}/${workflow}` : workflow,
+        ...(repo ? { repoShort: repoShortName(repo), file } : {}),
+      })
     } else if (a.runner) {
       out.set(`runner:${a.runner}`, { key: `runner:${a.runner}`, label: a.runner, title: repo ? `${a.runner} on ${repo}` : a.runner })
     } else if (repo) {
@@ -111,6 +153,17 @@ function fixableOf(items: CiAdvice[]): CiAdviceFixable[] {
   return [...out.values()]
 }
 
+/** Every line names one of two or more targets, and there is no more than one line per target. */
+function evidenceRepeatsTargets(evidence: readonly string[], targets: readonly CiAdviceTarget[]): boolean {
+  if (targets.length < 2 || evidence.length === 0 || evidence.length > targets.length) return false
+  return evidence.every((line) => targets.some((t) => line.includes(t.title)))
+}
+
+/** The evidence line that names a target, for its chip's tooltip; the target's path otherwise. */
+export function targetTitle(target: Pick<CiAdviceTarget, 'title'>, evidence: readonly string[]): string {
+  return evidence.find((line) => line.includes(target.title)) ?? target.title
+}
+
 /**
  * One card per rule and title: severity is the worst of the group, the
  * targets list every workflow / repo / runner it fired on, the evidence keeps
@@ -124,18 +177,23 @@ export function groupCiAdvice(advice: CiAdvice[]): CiAdviceGroup[] {
     if (list) list.push(a)
     else groups.set(key, [a])
   }
-  const out: CiAdviceGroup[] = [...groups.entries()].map(([key, items]) => ({
-    key,
-    ruleId: adviceRuleId(items[0].id),
-    severity: items.reduce<CiAdvice['severity']>((worst, a) => (SEVERITY_RANK[a.severity] < SEVERITY_RANK[worst] ? a.severity : worst), 'low'),
-    title: items[0].title,
-    detail: items[0].detail,
-    fixes: [...new Set(items.map((a) => a.fix))],
-    targets: targetsOf(items),
-    evidence: [...new Set(items.flatMap((a) => splitEvidence(a.evidence)))],
-    count: items.length,
-    fixable: fixableOf(items),
-  }))
+  const out: CiAdviceGroup[] = [...groups.entries()].map(([key, items]) => {
+    const targets = targetsOf(items)
+    const evidence = [...new Set(items.flatMap((a) => splitEvidence(a.evidence)))]
+    return {
+      key,
+      ruleId: adviceRuleId(items[0].id),
+      severity: items.reduce<CiAdvice['severity']>((worst, a) => (SEVERITY_RANK[a.severity] < SEVERITY_RANK[worst] ? a.severity : worst), 'low'),
+      title: items[0].title,
+      detail: items[0].detail,
+      fixes: [...new Set(items.map((a) => a.fix))],
+      targets,
+      evidence,
+      evidenceRepeatsTargets: evidenceRepeatsTargets(evidence, targets),
+      count: items.length,
+      fixable: fixableOf(items),
+    }
+  })
   // Array.prototype.sort is stable: equal severities keep the server's order.
   return out.sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity])
 }

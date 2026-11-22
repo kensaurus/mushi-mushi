@@ -7,7 +7,7 @@
  *          rule is unit-tested.
  */
 
-import type { CiJob, CiOverview } from './ciTypes'
+import type { CiHost, CiJob, CiOverview } from './ciTypes'
 
 // ── Durations ───────────────────────────────────────────────────────────────
 
@@ -250,6 +250,19 @@ export function runnerKey(name: string): string {
 }
 
 /** `owner/name` → `name`, for tables where the owner repeats on every row. */
+/**
+ * The machine a runner runs on: by its `hostId`, else the machine whose heartbeat
+ * lists it. `name` is the runner's key (`runnerKey`: a one-job runner's family).
+ * The runner map and the CI status board place jobs with this one rule.
+ */
+export function hostOfRunner(hosts: CiHost[], name: string, hostId: string | null): CiHost | null {
+  if (hostId) {
+    const byId = hosts.find((h) => h.hostId === hostId)
+    if (byId) return byId
+  }
+  return hosts.find((h) => h.runners.some((r) => runnerKey(r.name) === name)) ?? null
+}
+
 export function repoShortName(repo: string): string {
   return repo.split('/').pop() || repo
 }
@@ -415,6 +428,29 @@ export function buildCiTimeline(jobs: CiJob[], opts: { now: number; windowMs: nu
   return { from, to, lanes: ordered }
 }
 
+/** Below this many lanes nothing is folded: the whole timeline already fits. */
+const QUIET_FOLD_MIN_LANES = 8
+/** Folding one lane behind a button saves nothing. */
+const QUIET_FOLD_MIN_QUIET = 2
+const QUIET_OUTCOMES: ReadonlySet<CiJobOutcome> = new Set(['passed', 'cancelled'])
+
+/**
+ * Splits off "quiet" machines: at most one job in the window, and that job passed or was
+ * cancelled. A lane with a failure, a stopped job, or a job running or waiting is never quiet,
+ * and neither is "No runner yet": those are the lanes the timeline is for. A GitHub-hosted lane
+ * always shows too: a job there is billed minutes, the thing an owner on their own runners
+ * wants to catch. On a busy day 9 of 17 lanes held one green bar each and pushed the busy
+ * runners apart (2026-11-17).
+ * Order is kept; nothing is folded unless it saves at least two rows on a long timeline.
+ */
+export function splitQuietLanes<L extends Pick<CiTimelineLane, 'unassigned' | 'bars' | 'kind'>>(lanes: L[]): { shown: L[]; quiet: L[] } {
+  const isQuiet = (l: L) =>
+    !l.unassigned && l.kind !== 'github' && l.bars.length <= 1 && l.bars.every((b) => QUIET_OUTCOMES.has(b.outcome))
+  const quiet = lanes.filter(isQuiet)
+  if (lanes.length < QUIET_FOLD_MIN_LANES || quiet.length < QUIET_FOLD_MIN_QUIET) return { shown: lanes, quiet: [] }
+  return { shown: lanes.filter((l) => !isQuiet(l)), quiet }
+}
+
 /** Position of `t` in the window as a 0–100 percentage. */
 export function timelinePct(t: number, timeline: Pick<CiTimeline, 'from' | 'to'>): number {
   const span = timeline.to - timeline.from
@@ -550,7 +586,10 @@ export function permissionsNotice(p: CiOverview['permissions']): string | null {
     return 'Mushi Mushi cannot read your GitHub Actions jobs. Give the GitHub token Actions: read so Mushi Mushi can see where tests run and why they wait.'
   }
   if (p.runners === 'missing') {
-    return 'Mushi Mushi sees runners only through jobs. Give the GitHub token Administration: read to see idle and offline runners.'
+    // The machines that report in are listed (their own heartbeat); only GitHub's list of runners
+    // that are idle or offline right now is out of reach (2026-11-18: the old line said "idle
+    // machines are missing" right above two idle machines).
+    return 'GitHub lists a runner to Mushi Mushi only while it runs a job. Machines that report in show below either way; to also see idle or offline runners on GitHub, give the GitHub token “Administration: read”.'
   }
   return null
 }
@@ -571,6 +610,7 @@ export interface CiOutcomeCounts {
  * Outcome counts for the summary bar. `passed` is jobs that finished testing
  * and passed. Machine stops stay in `infra`: they never finished testing, so
  * they are not folded into the pass rate.
+ * @internal Exported for tests.
  */
 export function ciOutcomeCounts(stats: Pick<CiOverview['stats'], 'jobs' | 'passed' | 'infraFailures' | 'codeFailures'>): CiOutcomeCounts {
   const failed = stats.codeFailures + stats.infraFailures
@@ -584,49 +624,181 @@ export function ciOutcomeCounts(stats: Pick<CiOverview['stats'], 'jobs' | 'passe
   }
 }
 
+/**
+ * The window's outcome counts, from ONE source (2026-11-18: the headline said "777 jobs failed on
+ * the code in 7 days" from the whole window while the bar beside it said "Tests failed 67" from
+ * the newest 1,005 jobs read). When the server counted the whole window (stats.windowJobs and
+ * stats.hourly) every number comes from there; otherwise from the jobs read, flagged `sampled`.
+ */
+export function ciWindowCounts(stats: Pick<CiOverview['stats'], 'jobs' | 'passed' | 'infraFailures' | 'codeFailures' | 'hourly' | 'windowJobs'>): CiOutcomeCounts & { sampled: boolean } {
+  const read = ciOutcomeCounts(stats)
+  if (stats.windowJobs == null || !stats.hourly) return { ...read, sampled: false }
+  const sum = (k: 'passed' | 'codeFailures' | 'infraFailures') => stats.hourly!.reduce((n, h) => n + h[k], 0)
+  const codeFailures = sum('codeFailures')
+  const infra = sum('infraFailures')
+  const total = Math.max(stats.windowJobs, codeFailures + infra)
+  const passed = Math.min(sum('passed'), total - codeFailures - infra)
+  return { passed, codeFailures, infra, other: Math.max(0, total - passed - codeFailures - infra), total, sampled: false }
+}
+
 export interface CiVerdict {
   tone: 'ok' | 'warn' | 'danger' | 'neutral'
   headline: string
   detail: string
 }
 
-const LONG_WAIT_S = 10 * 60
-
-/** One plain sentence for the top of /ci: does anything need you, and what. */
-export function ciVerdict(o: Pick<CiOverview, 'jobs' | 'stats' | 'window'>, now: number): CiVerdict {
-  const queue = buildCiQueue(o.jobs, now)
-  const oldestWait = queue.waiting.reduce((m, j) => Math.max(m, jobElapsedSeconds(j, now) ?? 0), 0)
-  const c = ciOutcomeCounts(o.stats)
+/**
+ * One plain sentence for the CI page's "Last 7 days": does the week need you, and what.
+ * The live queue (running, waiting) is the status board's, right above it: repeating
+ * "3 jobs are waiting" here said the same thing twice (2026-11-16).
+ */
+export function ciVerdict(o: Pick<CiOverview, 'stats' | 'window'>): CiVerdict {
+  // The same counts the bar under it draws (ciWindowCounts), so the two never disagree.
+  const c = ciWindowCounts(o.stats)
   const days = `${o.window.days} day${o.window.days === 1 ? '' : 's'}`
-  const live =
-    queue.running.length || queue.waiting.length
-      ? `${queue.running.length} running, ${queue.waiting.length ? `${queue.waiting.length} waiting` : 'none waiting'}. `
-      : ''
 
-  if (queue.waiting.length > 0 && oldestWait >= LONG_WAIT_S) {
-    return {
-      tone: 'warn',
-      headline: `${queue.waiting.length} job${queue.waiting.length === 1 ? ' is' : 's are'} waiting for a test machine, the longest for ${formatSeconds(oldestWait)}.`,
-      detail: `${live}Check that your runners are online, or add a machine (mushi runner add).`,
-    }
-  }
   if (c.infra > 0 && c.infra >= c.codeFailures) {
     return {
       tone: 'warn',
       headline: 'Most failures are the test machine, not your code.',
-      detail: `${live}${c.infra} of ${c.infra + c.codeFailures} failed jobs in ${days} never finished testing. Re-run them; "Speed it up" below says why the machine stops.`,
+      detail: `${c.infra} of ${c.infra + c.codeFailures} failed jobs in ${days} never finished testing. Re-run them; "Speed it up" below says why the machine stops.`,
     }
   }
   if (c.codeFailures > 0) {
     return {
       tone: 'neutral',
       headline: `${c.codeFailures} job${c.codeFailures === 1 ? '' : 's'} failed on the code in ${days}.`,
-      detail: `${live}${c.infra ? `${c.infra} more stopped because of the test machine. ` : ''}Open a failed job's logs, or its fix to send it back.`,
+      detail: `${c.infra ? `${c.infra} more in ${days} stopped because of the test machine. ` : ''}Open a failed job's logs, or its fix to send it back.`,
     }
   }
   return {
     tone: 'ok',
     headline: c.total ? `CI is healthy: every finished job passed in ${days}.` : `No jobs in ${days}.`,
-    detail: `${live}${c.total ? `${c.total} job${c.total === 1 ? '' : 's'}.` : ''}`.trim(),
+    detail: `${c.total ? `${c.total} job${c.total === 1 ? '' : 's'}.` : ''}`.trim(),
+  }
+}
+
+// ── Grouping helpers (fresh-eyes pass, 2026-11-18) ──────────────────────────
+
+/** "Browser gates (2/4)" → "Browser gates": the shard suffix GitHub adds to a matrix job. */
+function shardBase(job: string): string {
+  return job.replace(/\s*\(\d+\s*\/\s*\d+\)\s*$/, '')
+}
+
+/** One slow step, with the matrix shards of one job folded into one row. */
+export interface CiSlowStepGroup {
+  repo: string
+  /** The job without its shard suffix. */
+  job: string
+  step: string
+  /** The slowest shard's typical time. */
+  p50s: number
+  /** Runs across every shard. */
+  runs: number
+  /** How many shards share this row (1 = not a matrix job). */
+  shards: number
+}
+
+/**
+ * Folds the shards of a matrix job ("Browser gates (1/4)" … "(4/4)") that share a step into one
+ * row: the slowest shard's time, every shard's runs. Slowest first.
+ */
+export function groupSlowSteps(steps: ReadonlyArray<{ repo: string; job: string; step: string; p50s: number; runs: number }>): CiSlowStepGroup[] {
+  const out = new Map<string, CiSlowStepGroup>()
+  for (const s of steps) {
+    const job = shardBase(s.job)
+    const key = `${s.repo}|${job}|${s.step}`
+    const cur = out.get(key)
+    if (cur) {
+      cur.p50s = Math.max(cur.p50s, s.p50s)
+      cur.runs += s.runs
+      cur.shards += 1
+    } else out.set(key, { repo: s.repo, job, step: s.step, p50s: s.p50s, runs: s.runs, shards: 1 })
+  }
+  return [...out.values()].sort((a, b) => b.p50s - a.p50s)
+}
+
+/**
+ * GitHub's machines are packed into lanes "GitHub-hosted 1 … 10" that read as near-identical rows.
+ * The first GitHub lane and every one with a failure stay; the other clean ones fold into one
+ * summary row (`rest`) once that saves at least two rows. Order is kept.
+ */
+export function foldGithubLanes<L extends Pick<CiTimelineLane, 'kind' | 'bars'>>(lanes: readonly L[]): { shown: L[]; rest: L[] } {
+  const failed = (l: L) => l.bars.some((b) => b.outcome === 'code_failure' || b.outcome === 'infra')
+  const clean = lanes.filter((l) => l.kind === 'github' && !failed(l))
+  if (clean.length < 3) return { shown: [...lanes], rest: [] }
+  const rest = new Set(clean.slice(1))
+  return { shown: lanes.filter((l) => !rest.has(l)), rest: clean.slice(1) }
+}
+
+/** Where an app's jobs ran in the window: your machines, GitHub's, both, or no job seen. */
+export type CiRunsOn = 'own' | 'github' | 'both' | null
+
+export function appRunsOn(jobs: ReadonlyArray<Pick<CiJob, 'projectId' | 'runnerKind'>>): Map<string, CiRunsOn> {
+  const seen = new Map<string, { own: boolean; github: boolean }>()
+  for (const j of jobs) {
+    if (j.runnerKind === 'unknown') continue
+    const s = seen.get(j.projectId) ?? { own: false, github: false }
+    if (j.runnerKind === 'self_hosted') s.own = true
+    else s.github = true
+    seen.set(j.projectId, s)
+  }
+  const out = new Map<string, CiRunsOn>()
+  for (const [id, s] of seen) out.set(id, s.own && s.github ? 'both' : s.own ? 'own' : 'github')
+  return out
+}
+
+/** Jobs the test machine stopped, grouped by app and PR (or branch), newest group first. */
+export interface CiInfraGroup {
+  key: string
+  repo: string
+  prNumber: number | null
+  jobs: CiJob[]
+}
+
+export function groupInfraFailures(jobs: readonly CiJob[]): CiInfraGroup[] {
+  const out = new Map<string, CiInfraGroup>()
+  for (const j of jobs) {
+    const key = `${j.repo}|${j.prNumber ?? 'none'}`
+    const g = out.get(key)
+    if (g) g.jobs.push(j)
+    else out.set(key, { key, repo: j.repo, prNumber: j.prNumber ?? null, jobs: [j] })
+  }
+  return [...out.values()]
+}
+
+/**
+ * A job name without the workflow expression GitHub left unresolved (round 3, 2026-11-19: "Publish
+ * OTA (${{ (((inputs.track == 'beta') && 'beta') || 'production') }})"). A bracketed expression goes
+ * with its brackets; one inside the name becomes "…". The real name is never lost: an all-expression
+ * name stays as it was.
+ * @internal Exported for tests.
+ */
+export function cleanJobName(name: string): string {
+  if (!name.includes('${{')) return name
+  const out = name
+    .replace(/\s*\(\s*\$\{\{[\s\S]*?\}\}\s*\)/g, '')
+    .replace(/\$\{\{[\s\S]*?\}\}/g, '…')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+  return out || name
+}
+
+/** The overview with every job name cleaned (cleanJobName), once, where the page reads it. */
+export function cleanCiOverview(o: CiOverview): CiOverview {
+  const dirty = (n: string | null | undefined) => typeof n === 'string' && n.includes('${{')
+  const hasDirty =
+    o.jobs.some((j) => dirty(j.jobName)) ||
+    (o.stats.byJob ?? []).some((t) => dirty(t.job)) ||
+    o.stats.slowSteps.some((s) => dirty(s.job))
+  if (!hasDirty) return o
+  return {
+    ...o,
+    jobs: o.jobs.map((j) => (dirty(j.jobName) ? { ...j, jobName: cleanJobName(j.jobName) } : j)),
+    stats: {
+      ...o.stats,
+      slowSteps: o.stats.slowSteps.map((s) => (dirty(s.job) ? { ...s, job: cleanJobName(s.job) } : s)),
+      ...(o.stats.byJob ? { byJob: o.stats.byJob.map((t) => (dirty(t.job) ? { ...t, job: cleanJobName(t.job) } : t)) } : {}),
+    },
   }
 }

@@ -12,6 +12,7 @@ import { Link } from 'react-router-dom'
 import { usePageData } from '../lib/usePageData'
 import { usePageCopy } from '../lib/copy'
 import { useSetupStatus } from '../lib/useSetupStatus'
+import { journeySdkState } from '../lib/journeys'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Btn, Card, FreshnessPill, Section, StatCard, StatGrid } from '../components/ui'
@@ -76,14 +77,14 @@ export function ActivityPage() {
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-activity">
       <PageHeaderBar
-        title={copy?.title ?? 'Activity'}
+        title={copy?.title ?? 'User activity'}
         description={
           copy?.description ??
           'End-user sessions and engagement for this project over the last 30 days.'
         }
         projectScope={projectName ?? undefined}
         icon={<IconHealth />}
-        helpTitle={copy?.help?.title ?? 'About Activity'}
+        helpTitle={copy?.help?.title ?? 'About User activity'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
           'Per-project activity from SDK telemetry — sessions, page views, identified vs. anonymous users, and top routes over the last 30 days.'
@@ -110,8 +111,10 @@ export function ActivityPage() {
         slots={[
           {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
-            show: Boolean(data),
-            children: data ? (
+            // No sessions: four "0" tiles said one fact four times; the empty
+            // state below says it once (round-2 sweep 2026-11-18).
+            show: Boolean(data && data.sessions > 0),
+            children: data && data.sessions > 0 ? (
               <StatGrid>
                 {/* The window in the label: Overview shows 7-day sessions beside this
                     page's 30-day ones, and "Sessions 139" vs "Sessions (7d) 75" read as
@@ -155,21 +158,42 @@ export function ActivityPage() {
           onRetry={reload}
         />
       )}
-      {data && <ActivityDashboard data={data} />}
+      {data && <ActivityDashboard data={data} sdkInstalled={journeySdkState(setup.activeProject?.steps).installed} />}
     </div>
   )
 }
 
 // ─── Dashboard ───────────────────────────────────────────────────────────────
 
-function ActivityDashboard({ data }: { data: ActivityData }) {
+function ActivityDashboard({ data, sdkInstalled }: { data: ActivityData; sdkInstalled: boolean }) {
   const dauValues = (data.dau_series ?? []).map((p) => p.dau)
 
   const split = identitySplit(data.user_split)
   const identifiedPct = split.identifiedPct ?? 0
 
+  const noSessions = data.sessions === 0
+
   return (
     <div className="space-y-4">
+      {noSessions && (
+        <Card className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm" data-testid="activity-empty">
+          {/* An SDK that already sends reports only lacks session tracking;
+              "Check your SDK setup" beside Home's "Sending" read as broken
+              (round-3 sweep 2026-11-19). Same wording as the Journey optimizer. */}
+          <p className="min-w-0">
+            <span className="font-medium text-fg">No sessions recorded yet.</span>{' '}
+            <span className="text-fg-muted">
+              {sdkInstalled
+                ? 'Your SDK is installed: turn on session tracking (trackSessions: true) to record visits.'
+                : 'They appear once people visit pages with the Mushi Mushi SDK.'}
+            </span>
+          </p>
+          <Link to="/connect" className="shrink-0 whitespace-nowrap text-xs text-link hover:underline">
+            {sdkInstalled ? 'Turn on session tracking →' : 'Check your SDK setup →'}
+          </Link>
+        </Card>
+      )}
+
       {/* DAU Sparkline */}
       {dauValues.length > 0 && (
         <Section title={`Daily Active Users — last ${data.window_days}d`}>
@@ -182,7 +206,10 @@ function ActivityDashboard({ data }: { data: ActivityData }) {
       )}
 
       {/* User split + Reports at-a-glance */}
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className={`grid gap-4 ${noSessions ? '' : 'sm:grid-cols-2'}`}>
+        {/* With no visits the split is not drawn: a full grey bar read as a
+            measured 0% (round-2 sweep 2026-11-18). */}
+        {!noSessions && (
         <Section title={split.unit === 'people' ? 'Who uses the app' : 'Sessions by sign-in'}>
           <div className="flex items-center gap-3">
             <div className="h-2 flex-1 overflow-hidden rounded-full bg-edge">
@@ -206,6 +233,7 @@ function ActivityDashboard({ data }: { data: ActivityData }) {
             </span>
           </div>
         </Section>
+        )}
 
         {/* Open reports of any age, each pill opening the list it counts (QA 175, QA 289). */}
         <Section title="Open reports">
@@ -244,17 +272,6 @@ function ActivityDashboard({ data }: { data: ActivityData }) {
         </Section>
       )}
 
-      {data.sessions === 0 && (
-        <Card className="px-4 py-8 text-center text-sm text-fg-faint">
-          <p className="font-medium text-fg-muted">No sessions recorded yet</p>
-          <p className="mt-1 text-xs">
-            Once users visit pages with the Mushi Mushi SDK installed, sessions will appear here.{' '}
-            <Link to="/connect" className="text-brand hover:underline">
-              Check your SDK setup →
-            </Link>
-          </p>
-        </Card>
-      )}
     </div>
   )
 }
@@ -272,7 +289,8 @@ function CountPill({
   tone?: 'danger' | 'warn'
   to: string
 }) {
-  const toneClass = tone === 'danger' ? 'text-danger' : tone === 'warn' ? 'text-warn' : 'text-fg'
+  // A zero is neutral: "Critical 0" in red read as a failure (round-2 sweep 2026-11-18).
+  const toneClass = value > 0 && tone === 'danger' ? 'text-danger-foreground' : value > 0 && tone === 'warn' ? 'text-warn-foreground' : value > 0 ? 'text-fg' : 'text-fg-muted'
   return (
     <Link
       to={to}

@@ -5,6 +5,7 @@
 
 import { Btn, RelativeTime } from '../ui'
 import { StatusBannerShell } from '../StatusBannerShell'
+import { StatusGlyph } from '../signal/StatusGlyph'
 import type { AntiGamingStats, AntiGamingTabId } from './AntiGamingStatsTypes'
 
 interface Props {
@@ -31,15 +32,31 @@ export function AntiGamingStatusBanner({ stats, onTab, onRefresh, refreshing }: 
   }
 
   if (stats.topPriority === 'waiting') {
+    // A setup state, not a failure (2026-11-18 sweep): it was a red banner
+    // that also seemed to contradict "Total reports 4". Reports can arrive
+    // without a device fingerprint; devices are only tracked from SDK reports.
+    const reports = stats.totalReports
     return (
-      <StatusBannerShell
-        tone="brand"
-        title={`Waiting for SDK devices on ${projectLabel}`}
-        subtitle={stats.topPriorityLabel}
-        action={
-          <Btn to="/onboarding?tab=verify" size="sm" variant="ghost">Send test report</Btn>
-        }
-      />
+      <div
+        data-testid="anti-gaming-not-checked"
+        // mushi-mushi-allowlist: one status row (role/aria on the element), not a card in a card; Card takes no role
+        className="flex flex-col gap-2 rounded-md border border-edge-subtle bg-surface-raised px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+      >
+        <div className="flex min-w-0 items-start gap-2">
+          <StatusGlyph tone="off" className="mt-0.5 shrink-0" />
+          <div className="min-w-0 space-y-0.5">
+            <p className="text-xs font-medium text-fg-secondary">Not checked yet</p>
+            <p className="text-2xs text-fg-muted">
+              {reports > 0
+                ? `${reports} report${reports === 1 ? '' : 's'} arrived, but none came from a tracked device. Devices are tracked once reports come through the SDK.`
+                : 'Devices are tracked once reports come through the SDK.'}
+            </p>
+          </div>
+        </div>
+        <div className="shrink-0">
+          <Btn to="/onboarding?tab=verify" size="sm" variant="ghost" className="whitespace-nowrap">Send test report</Btn>
+        </div>
+      </div>
     )
   }
 

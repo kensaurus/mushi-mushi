@@ -27,6 +27,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { usePublishPageContext } from '../lib/pageContext'
+import { tabbedPageTitle } from '../lib/pageTitle'
 import { IconSkills, IconQueue, IconGithub, IconClose } from '../components/icons'
 import { ReactFlow, Background, Controls, useNodesState, useEdgesState } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
@@ -34,7 +35,7 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import { apiFetch } from '../lib/supabase'
-import { Card, SurfacePanel, HelpBanner, SegmentedControl, FreshnessPill, Btn, FilterChip } from '../components/ui'
+import { Card, SurfacePanel, HelpBanner, SegmentedControl, FreshnessPill, Btn, FilterChip, Input } from '../components/ui'
 import { LINK_ACCENT } from '../lib/chipTone'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
@@ -74,6 +75,8 @@ import {
   parseReportIdInput,
   pipelineCancelBody,
   resolveSkillsTab,
+  skillSourcesEmptyLine,
+  skillsIdle,
   type PipelineCancelResult,
   type SkillsTab,
 } from '../lib/skillPipelines'
@@ -203,13 +206,7 @@ export function SkillPipelinesPage() {
 
   usePublishPageContext({
     route: '/skills',
-    title: TAB_META[tab].label,
-    summary:
-      tab === 'catalog'
-        ? 'Browse agent skills from kenji skills by category'
-        : tab === 'pipelines'
-          ? 'Track handoff and cloud pipeline runs'
-          : 'Sync SKILL.md repos into the catalog',
+    title: tabbedPageTitle('Agent skills', TAB_META[tab].label, tab === 'catalog'),
     questions: [
       'Which skill should I run for a UI audit?',
       'How do I attach a skill to a bug report?',
@@ -257,7 +254,8 @@ export function SkillPipelinesPage() {
         ]}
         helpHowToUse="Pick Catalog to browse skills, Pipelines to watch runs, or Sources to sync repos. Start a handoff run from a skill card with a report ID."
       >
-        {projectId ? (
+        {/* The snapshot strip carries the freshness; only show it here when the strip is hidden (fresh-eyes 2026-11-18: "now" twice). */}
+        {projectId && (ux.hideSkillsSnapshot || skillsIdle(skillsStats)) ? (
           <FreshnessPill at={statsFetchedAt} isValidating={statsValidating} />
         ) : null}
       </PageHeaderBar>
@@ -273,7 +271,9 @@ export function SkillPipelinesPage() {
           },
           {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
-            show: Boolean(projectId) && !ux.hideSkillsSnapshot,
+            // Idle it said only "173 skills to choose from", a count the All chip
+            // already gives (round-3 review 2026-11-19): shown once work is going.
+            show: Boolean(projectId) && !ux.hideSkillsSnapshot && !skillsIdle(skillsStats),
             children: (
               <SkillsSnapshotStrip
                 stats={skillsStats}
@@ -287,7 +287,11 @@ export function SkillPipelinesPage() {
 
       {/* First: what is running on this app, and the one way to start more. */}
       {projectId ? (
-        <SkillsRunningNow projectId={projectId} onRunOnBug={() => setTab('catalog', { skill: 'workflow-fix-and-ship' })} />
+        <SkillsRunningNow
+          projectId={projectId}
+          hideWhenEmpty={tab === 'pipelines'}
+          onRunOnBug={() => setTab('catalog', { skill: 'workflow-fix-and-ship' })}
+        />
       ) : null}
 
       {!ux.hideTabs && (
@@ -646,21 +650,22 @@ function CatalogTab({
   // no-match query with nothing to edit (console QA 22).
   const searchBar = (
     <div className="flex gap-2 items-center">
-      <input
-        type="search"
-        placeholder="Search by name, slug, or category…"
-        value={searchInput}
-        onChange={(e) => setSearchInput(e.target.value)}
-        className="input flex-1 max-w-sm"
-        aria-label="Search skills"
-      />
+      <div className="min-w-0 max-w-sm flex-1">
+        <Input
+          type="search"
+          placeholder="Search skills"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          aria-label="Search skills"
+        />
+      </div>
       <span className="text-xs text-fg-muted" aria-live="polite">
         {searching
           ? 'Searching…'
           : !data
             ? null
             : skills.length === catalogTotal
-            ? `${catalogTotal} skills`
+            ? null
             : `${skills.length} of ${catalogTotal} skills`}
       </span>
     </div>
@@ -714,7 +719,11 @@ function CatalogTab({
           </div>
         ) : null}
 
-        {listState === 'list' && visibleCategories.map((cat) => {
+        {/* One card, one row per category (18 cards before, each with its own
+            frame and shadow). Skills inside are rows, not cards in a card. */}
+        {listState === 'list' && (
+        <div className="divide-y divide-edge-subtle overflow-hidden rounded-lg border border-edge-subtle bg-surface-raised" data-testid="skill-categories">
+        {visibleCategories.map((cat) => {
           const meta = getSkillCategoryMeta(cat)
           const catSkills = grouped[cat] ?? []
           // Searching or picking one category opens it; otherwise the user's
@@ -725,8 +734,8 @@ function CatalogTab({
           return (
             <section
               key={cat}
-              // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
-              className={`rounded-lg border border-edge-subtle bg-surface-raised p-3 shadow-card border-l-[3px] ${meta.accentClass}`}
+              className={`border-l-[3px] px-3 py-2 ${meta.accentClass}`}
+              data-testid="skill-category"
             >
               <h3>
                 <button
@@ -735,13 +744,14 @@ function CatalogTab({
                   onClick={() => setOpenOverrides((prev) => ({ ...prev, [cat]: !open }))}
                   className="flex w-full items-center justify-between gap-2 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                 >
-                  <SkillCategoryHeader meta={meta} count={catSkills.length} />
+                  {/* The count sits on the filter chip above; the header repeated it. */}
+                  <SkillCategoryHeader meta={meta} count={allCategories.length > 1 ? null : catSkills.length} />
                   <span className="shrink-0 text-2xs font-normal text-fg-muted">{open ? 'Hide' : 'Show'}</span>
                 </button>
               </h3>
               {open ? (
                 <>
-                  <div className={`mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 ${selected ? 'xl:grid-cols-2' : 'lg:grid-cols-3'}`}>
+                  <div className={`mt-2 grid grid-cols-1 sm:grid-cols-2 gap-1 ${selected ? 'xl:grid-cols-2' : 'lg:grid-cols-3'}`}>
                     {shown.map((skill) => (
                       <Btn
                         key={skill.slug}
@@ -750,10 +760,10 @@ function CatalogTab({
                         size="sm"
                         onClick={() => selectSkill(skill)}
                         className={[
-                          '!justify-start !items-start !text-left !p-3 !rounded-lg !w-full !h-auto transition-opacity',
+                          '!justify-start !items-start !text-left !p-2 !rounded-md !w-full !h-auto transition-opacity',
                           selected?.slug === skill.slug
                             ? '!border-brand !bg-surface-raised ring-1 ring-brand/30'
-                            : '!border-edge-subtle !bg-surface-raised hover:!border-brand/40 hover:!bg-surface-overlay',
+                            : '!border-transparent !bg-transparent hover:!bg-surface-overlay',
                         ].join(' ')}
                       >
                         <div className="flex items-start gap-2">
@@ -790,6 +800,8 @@ function CatalogTab({
             </section>
           )
         })}
+        </div>
+        )}
       </div>
 
       {/* Desktop skill detail panel */}
@@ -1019,18 +1031,15 @@ function PipelinesTab({
           </p>
         )}
         {runs.length === 0 ? (
-          <div className="py-10 text-center flex flex-col items-center gap-4 max-w-md mx-auto">
-            <p className="text-sm font-medium text-fg">No pipeline runs yet</p>
-            <Card  className="text-xs text-fg-muted text-left w-full px-4 py-3 space-y-2">
-              <p className="font-semibold text-fg text-2xs uppercase tracking-wide">How to start your first run</p>
-              <ol className="list-decimal pl-4 space-y-1 text-fg-secondary">
-                <li>Open a report and copy its ID from the URL</li>
-                <li>Go to <Btn type="button" variant="ghost" size="sm" onClick={onGoToCatalog} className={`!px-0 !py-0 !border-0 !bg-transparent hover:!bg-transparent ${LINK_ACCENT}`}>Catalog</Btn> and pick a skill (try <em>workflow-fix-and-ship</em> to close a bug end-to-end)</li>
-                <li>Paste the report ID in the "Apply to a report" field, click <strong>Start pipeline</strong></li>
-                <li>Copy the context packet into your Cursor agent — the skill walks you through each step</li>
-              </ol>
-            </Card>
-            <div className="flex gap-2">
+          // One line, not a second "nothing yet" card: the Skill runs card above
+          // already says nothing has run, and the guide at the page foot has the
+          // steps. Its old steps also said to copy the report ID from the URL,
+          // while the catalog now picks the bug by title (round-2 review).
+          <div className="py-6 flex flex-col items-center gap-3 text-center" data-testid="pipeline-runs-empty">
+            <p className="text-xs text-fg-muted">
+              No pipeline runs on this app. Pick a skill in the catalog, then pick the bug by its title.
+            </p>
+            <div className="flex flex-wrap justify-center gap-2">
               <Btn type="button" variant="primary" size="sm" onClick={onGoToCatalog}>
                 Browse Catalog →
               </Btn>
@@ -1519,35 +1528,39 @@ function SourcesTab({
       <SurfacePanel className="rounded-xl p-4 flex flex-col gap-3">
         <p className="text-sm font-semibold text-fg">Add skill source</p>
         <p className="text-xs text-fg-muted">Any GitHub repo containing <code className="font-mono">skills/*/SKILL.md</code> (skills.sh-compatible).</p>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            placeholder="owner/repo (e.g. kensaurus/skills)"
-            value={repoSlug}
-            onChange={(e) => setRepoSlug(e.target.value)}
-            className="input flex-1 text-sm"
-          />
-          <input
-            type="text"
-            placeholder="main"
-            title="Git branch or tag (default: main)"
-            value={ref}
-            onChange={(e) => setRef(e.target.value)}
-            className="input w-24 text-sm"
-          />
-          <Btn type="button" variant="primary" size="md" onClick={addSource} disabled={adding || !repoSlug}>
+        {/* Wraps at 390: the button spilled out of the card and the page scrolled sideways. */}
+        <div className="flex min-w-0 flex-wrap gap-2">
+          {/* Bordered fields with a placeholder short enough for 390 px
+              ("kensaurus/ski" was cut, round-3 review 2026-11-19). */}
+          <div className="min-w-0 flex-1 basis-48">
+            <Input
+              type="text"
+              aria-label="GitHub repo (owner/repo)"
+              placeholder="owner/repo"
+              value={repoSlug}
+              onChange={(e) => setRepoSlug(e.target.value)}
+            />
+          </div>
+          <div className="w-24 shrink-0">
+            <Input
+              type="text"
+              placeholder="main"
+              title="Git branch or tag (default: main)"
+              aria-label="Git branch or tag"
+              value={ref}
+              onChange={(e) => setRef(e.target.value)}
+            />
+          </div>
+          <Btn type="button" variant="primary" size="md" className="shrink-0 whitespace-nowrap" onClick={addSource} disabled={adding || !repoSlug}>
             {adding ? 'Adding…' : 'Add source'}
           </Btn>
         </div>
       </SurfacePanel>
 
       {sources.length === 0 ? (
-        <div className="text-sm text-fg-muted flex flex-col gap-2">
-          <p>No skill sources yet.</p>
-          <p className="text-xs">
-            Add <code className="font-mono text-brand">kensaurus/skills</code> above, then sync to load 70+ agent skills into the catalog.
-          </p>
-        </div>
+        <p className="text-xs text-fg-muted" data-testid="skill-sources-empty">
+          {skillSourcesEmptyLine(stats.catalogTotal)}
+        </p>
       ) : (
         sources.map((src) => (
           <SurfacePanel key={src.id} className="rounded-xl p-4 flex items-start gap-3">
@@ -1626,18 +1639,18 @@ function SkillCategoryHeader({
   count,
 }: {
   meta: ReturnType<typeof getSkillCategoryMeta>
-  count: number
+  count: number | null
 }) {
   return (
-    <span className="flex items-center gap-2.5">
-      <span className={`flex items-center justify-center w-8 h-8 rounded-lg flex-shrink-0 ${meta.badgeClass}`}>
-        <meta.Icon size={15} />
+    // One line: icon, name, count, then the hint (truncated) — a compact row, not a card header.
+    <span className="flex min-w-0 items-center gap-2">
+      <span className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md ${meta.badgeClass}`}>
+        <meta.Icon size={13} />
       </span>
-      <span className="block min-w-0">
-        <span className="block text-sm font-semibold text-fg">{meta.label}</span>
-        <span className="block text-2xs font-normal text-fg-muted">
-          {count} skill{count === 1 ? '' : 's'} · {meta.hint}
-        </span>
+      <span className="shrink-0 whitespace-nowrap text-sm font-semibold text-fg">{meta.label}</span>
+      {count !== null ? <span className="shrink-0 font-mono text-2xs text-fg-muted tabular-nums">{count}</span> : null}
+      <span className="min-w-0 truncate text-2xs font-normal text-fg-muted" title={meta.hint}>
+        {meta.hint}
       </span>
     </span>
   )
@@ -1685,7 +1698,7 @@ function EmptySkills({ onGoToSources }: { onGoToSources: () => void }) {
       <p className="text-sm text-fg-muted">Your skill catalog is empty.</p>
       <p className="text-xs text-fg-muted max-w-sm">
         Add a GitHub source and sync it to load skills.{' '}
-        <code className="font-mono text-brand">kensaurus/skills</code> brings in 70+ workflows instantly.
+        <code className="font-mono text-brand">kensaurus/skills</code> is a good first one.
       </p>
       <Btn type="button" variant="primary" size="sm" onClick={onGoToSources}>
         Go to Sources

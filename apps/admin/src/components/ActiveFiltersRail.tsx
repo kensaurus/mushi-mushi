@@ -84,7 +84,7 @@ function FilterChipRemovable({ filter }: { filter: ActiveFilter }) {
   const tone = filter.tone ?? 'neutral'
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-2xs ${TONE_CLASS[tone]}`}
+      className={`inline-flex items-center gap-1 rounded-sm px-2 py-px text-2xs ${TONE_CLASS[tone]}`}
     >
       <span className="text-fg-faint">{filter.label}:</span>
       <span className="font-mono tabular-nums">{filter.value}</span>

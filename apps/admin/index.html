@@ -52,10 +52,13 @@
     <meta name="twitter:title" content="Mushi Mushi — one place to improve your AI-built app" />
     <meta name="twitter:description" content="Your AI built it. Mushi Mushi makes it better: it finds what breaks, where people get stuck and what the code needs, then hands your editor the fix. Open source." />
 
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- ?v= busts the year-long cache the old icon was served with (new mark, 2026-11-17). -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20261117" />
   </head>
   <body>
     <div id="root"></div>
+    <!-- Self-hosted images write this at start (backend URL and public key); empty on the hosted build. -->
+    <script src="/runtime-config.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

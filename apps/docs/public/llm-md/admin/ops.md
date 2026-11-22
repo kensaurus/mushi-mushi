@@ -1,0 +1,33 @@
+# Ops
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/ops
+
+---
+title: Ops
+description: The Ops page in Mushi Mushi shows every app's payments, releases and alerts in one feed, which app is not reporting, and what is still open.
+---
+
+# Ops
+
+**Route:** `/ops` (sidebar: **Ops**, under Ship & watch; add it to the sidebar from Settings → Display & sidebar)
+
+One team's operational events, from every app, worst first:
+
+1. **Today**: payments per currency, releases, and how many alerts are still open.
+2. **Is every app reporting?** One row per app, one cell per kind of event (payments,
+   releases, alerts, bug reports). Darker and ● means it reported recently; ◐ this week;
+   ○ longer ago; a hatched cell has never reported. Apps that never sent an event come
+   first, with a link to connect them.
+3. **Feed**: newest first. Each row shows the app, the headline, facts, time, the
+   severity (■ urgent, ▲ warning, ● info, ✓ resolved) and whether it reached Slack
+   (✓ in Slack, ✕ not posted with the reason on hover, – stored only or muted). Follow-ups
+   sit under the event that opened their thread. Filter by app, kind, severity, or only
+   what nobody acknowledged.
+
+**Acknowledge** marks an event as seen here and in Slack (a ✅ reaction and a "Seen by"
+reply in its thread). Viewers can read the page but not acknowledge.
+
+A link from Slack's **Open in Mushi Mushi** button opens the page with that event outlined.
+
+Setup (the team's Slack bot, the per-app ops key, the event format) is in
+[Ops hub](/integrations/ops-hub).

@@ -88,7 +88,8 @@ export function slackAlertStatus(input: SlackAlertInput): RowStatusValue {
     }
   }
   if (!canPost && !channel && !webhook && !bot) {
-    return { state: 'not_connected', detail: 'Add a channel ID below to get bug alerts in Slack.' }
+    // The pill says it; the Channel ID field below is the action (round-3 review 2026-11-19).
+    return { state: 'not_connected' }
   }
   if (!canPost && channel && !webhook) {
     return {

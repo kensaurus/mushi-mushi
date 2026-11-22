@@ -1,7 +1,7 @@
 import React, { useState, useEffect, forwardRef } from 'react';
 import type { ReactNode, SelectHTMLAttributes, ButtonHTMLAttributes, TextareaHTMLAttributes } from 'react';
 import { Link } from 'react-router-dom';
-import { Card, LabelHelp } from './layout';
+import { LabelHelp } from './layout';
 import { CHIP_TONE } from '../../lib/chipTone'
 
 
@@ -117,14 +117,14 @@ export function SegmentedControl<T extends string>({
             // tabs at 390px, 2026-10-25).
             className={`${SEGMENT_SIZE[size]} ${scrollable ? 'shrink-0 ' : ''}whitespace-nowrap rounded-sm motion-safe:transition-[transform,opacity] motion-safe:duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 motion-safe:active:scale-[0.97] ${
               active
-                ? 'bg-brand-subtle text-brand-foreground font-medium ring-1 ring-inset ring-brand/40'
+                ? 'bg-accent-muted text-accent-foreground font-medium ring-1 ring-inset ring-accent/40'
                 : 'text-fg-secondary hover:text-fg hover:bg-surface-overlay/50 hover:-translate-y-px'
             }`}
           >
             {opt.label}
             {opt.count !== undefined && (
               // Full token: brand-foreground/80 on brand-subtle is 3.8:1 in light mode.
-              <span className={`ml-1 font-mono ${active ? 'text-brand-foreground' : 'text-fg-faint'}`}>
+              <span className={`ml-1 font-mono ${active ? 'text-accent-foreground' : 'text-fg-faint'}`}>
                 {opt.count}
               </span>
             )}
@@ -146,7 +146,7 @@ export function SegmentedControl<T extends string>({
   }
   return (
     <div className={`inline-flex max-w-full items-center gap-1.5 ${scrollable ? 'overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]' : ''}`}>
-      <span className="shrink-0 text-3xs uppercase tracking-wider text-fg-faint">{label}</span>
+      <span className="shrink-0 text-3xs text-fg-secondary font-semibold">{label}</span>
       {track}
     </div>
   )
@@ -372,7 +372,7 @@ const FIELD_FOCUS =
 
 const FIELD_BASE =
   'w-full bg-surface-raised border border-edge-subtle rounded-sm px-2.5 py-1.5 text-sm text-fg ' +
-  'placeholder:text-fg-faint hover:border-edge ' +
+  'placeholder:text-fg-faint/60 hover:border-edge ' +
   `${FIELD_FOCUS} ` +
   'aria-[invalid=true]:border-danger aria-[invalid=true]:ring-danger/40 ' +
   'disabled:opacity-50 disabled:cursor-not-allowed ' +
@@ -639,7 +639,7 @@ export function Toggle({ label, ariaLabel, checked, onChange, disabled, tooltip,
         aria-label={ariaLabel}
         onClick={() => onChange?.(!checked)}
         disabled={disabled}
-        className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border motion-safe:transition-[transform,opacity] motion-safe:duration-[var(--duration-fast)] motion-safe:ease-stamp motion-safe:active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface ${checked ? 'bg-brand border-brand/60 shadow-brand-glow-sm' : 'bg-surface-raised border-edge hover:border-edge'}`}
+        className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border motion-safe:transition-[transform,opacity] motion-safe:duration-[var(--duration-fast)] motion-safe:ease-stamp motion-safe:active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface ${checked ? 'bg-accent border-accent/60' : 'bg-surface-raised border-edge hover:border-edge'}`}
       >
         <span
           // On: the brand's own foreground on the brand track. A dark knob on
@@ -745,7 +745,7 @@ interface EmptyStateProps {
  */
 function EditorialEmptyState({ title, description, action, hints, icon }: EmptyStateProps) {
   return (
-    <Card className="p-6 text-left border-dashed">
+    <div className="py-3 text-left" data-testid="empty-state">
       {icon && (
         <div
           aria-hidden="true"
@@ -754,24 +754,21 @@ function EditorialEmptyState({ title, description, action, hints, icon }: EmptyS
           {icon}
         </div>
       )}
-      <p className="font-serif text-xl leading-tight tracking-[-0.03em] text-fg">{title}</p>
+      <p className="text-sm font-semibold leading-snug text-fg">{title}</p>
       {description && (
         <p className="text-fg-muted text-xs mt-2 max-w-prose leading-relaxed text-pretty wrap-break-word">
           {description}
         </p>
       )}
       {hints && hints.length > 0 && (
-        <ul className="mt-3 inline-block text-left font-mono text-2xs text-fg-faint space-y-0.5">
+        <ul className="mt-2 list-disc space-y-0.5 pl-4 text-left text-xs text-fg-secondary">
           {hints.map((hint) => (
-            <li key={hint} className="flex items-start gap-1.5">
-              <span aria-hidden="true" className="text-brand">/</span>
-              <span>{hint}</span>
-            </li>
+            <li key={hint}>{hint}</li>
           ))}
         </ul>
       )}
       {action && <div className="mt-3">{action}</div>}
-    </Card>
+    </div>
   )
 }
 
@@ -784,7 +781,7 @@ function EditorialEmptyState({ title, description, action, hints, icon }: EmptyS
  */
 function CompactEmptyState({ title, description, action, hints }: EmptyStateProps) {
   return (
-    <Card className="p-6 text-left border-dashed">
+    <div className="py-3 text-left" data-testid="empty-state">
       <p className="text-fg-muted text-sm">{title}</p>
       {description && (
         <p className="text-fg-muted text-xs mt-2 max-w-prose leading-relaxed text-pretty wrap-break-word">
@@ -792,17 +789,14 @@ function CompactEmptyState({ title, description, action, hints }: EmptyStateProp
         </p>
       )}
       {hints && hints.length > 0 && (
-        <ul className="mt-3 inline-block text-left font-mono text-2xs text-fg-faint space-y-0.5">
+        <ul className="mt-2 list-disc space-y-0.5 pl-4 text-left text-xs text-fg-secondary">
           {hints.map((hint) => (
-            <li key={hint} className="flex items-start gap-1.5">
-              <span aria-hidden="true" className="text-brand">/</span>
-              <span>{hint}</span>
-            </li>
+            <li key={hint}>{hint}</li>
           ))}
         </ul>
       )}
       {action && <div className="mt-3">{action}</div>}
-    </Card>
+    </div>
   )
 }
 

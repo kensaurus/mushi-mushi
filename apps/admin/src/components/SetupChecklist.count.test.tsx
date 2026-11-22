@@ -23,7 +23,7 @@ vi.mock('../lib/mode', () => ({ useAdminMode: () => ({ isQuickstart: true, isBeg
 vi.mock('./ProjectSwitcher', () => ({ useActiveProjectId: () => 'p1' }))
 vi.mock('../lib/useSendTestReport', () => ({ useSendTestReport: () => vi.fn() }))
 
-import { SetupChecklist } from './SetupChecklist'
+import { SetupChecklist, optionalLabel } from './SetupChecklist'
 import { setupCountLabel } from '../lib/setupProgress'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -131,5 +131,26 @@ describe('setup count', () => {
     const items = container.querySelectorAll('[data-testid="setup-extras"] li')
     expect(items).toHaveLength(6)
     expect(container.textContent).not.toContain('sdk_installed')
+  })
+
+  // Round-2 review: "optional" on all six cards under "All optional", and done
+  // rows said it three ways (✓, a "done" chip, a green fill).
+  it('says optional and done once on the Set up extras', () => {
+    act(() => {
+      root.render(createElement(MemoryRouter, null, createElement(SetupChecklist, { project: DEMO, mode: 'wizard', extrasOnly: true })))
+    })
+    const extras = container.querySelector('[data-testid="setup-extras"]')!
+    expect(extras.textContent).not.toMatch(/optional/i)
+    expect(extras.textContent).not.toMatch(/\bdone\b/)
+    for (const card of extras.querySelectorAll('[data-step-done="true"]')) {
+      expect(card.className).not.toContain('bg-ok')
+    }
+  })
+
+  // Owner's walkthrough, 2026-11-17: "6 optional extras, not counted above (2 on)" was unclear.
+  it('names the optional steps as "Optional: N of M on"', () => {
+    const steps = DEMO.steps.filter((st) => !st.required)
+    const on = steps.filter((st) => st.complete).length
+    expect(optionalLabel(DEMO)).toBe(`Optional: ${on} of ${steps.length} on`)
   })
 })

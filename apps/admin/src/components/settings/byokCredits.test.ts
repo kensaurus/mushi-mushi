@@ -29,16 +29,16 @@ describe('creditsLine', () => {
 describe('spendLine', () => {
   it('summarises recorded spend', () => {
     expect(spendLine({ provider: 'anthropic', calls: 43, costUsd: 0.6135, inputTokens: 100000, outputTokens: 2345, byokCalls: 40 })).toBe(
-      'Last 30 days: $0.61 across 43 calls (102,345 tokens), 40 on your keys.',
+      'This app, last 30 days: $0.61 across 43 calls (102,345 tokens), 40 on your keys.',
     )
-    expect(spendLine(undefined)).toBe('No AI calls recorded through this service in the last 30 days.')
+    expect(spendLine(undefined)).toBe('No AI calls from this app through this service in the last 30 days.')
   })
 })
 
 describe('spendLine grammar', () => {
   it('says "1 call", not "1 calls"', () => {
     expect(spendLine({ provider: 'openrouter', calls: 1, costUsd: 0, inputTokens: 8, outputTokens: 0, byokCalls: 1 })).toBe(
-      'Last 30 days: $0.00 across 1 call (8 tokens), 1 on your keys.',
+      'This app, last 30 days: $0.00 across 1 call (8 tokens), 1 on your keys.',
     )
   })
 })

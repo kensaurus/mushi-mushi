@@ -44,7 +44,7 @@ Building in Lovable or Bolt with no terminal? A script tag works too: [Mushi Mus
 | **Privacy** | A built-in PII scrubber, selector masking for screenshots, and opt-in session replay. |
 | **Stays out of the way** | Zero-size host with `pointer-events: none`, keyboard-first, respects reduced motion. |
 | **Runtime config** | Change the widget from the console without a deploy. Values you set in code win. |
-| **Size** | CI caps the core bundle at 90.5 KB gzipped (105 KB uncompressed). Screenshot markup and the Your reports views load only when used. |
+| **Size** | CI caps the core bundle at 89.2 KB gzipped (105 KB uncompressed). Screenshot capture, screenshot markup and the Your reports views load only when used. |
 
 ## Recipes
 

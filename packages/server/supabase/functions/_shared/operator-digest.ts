@@ -16,6 +16,7 @@ import type { getServiceClient } from './db.ts'
 import { mapWithConcurrency } from './concurrency.ts'
 import { PagedReadError, readAllPages, type PageCount, type PageResult } from './paged-read.ts'
 import { mapBounded } from './portfolio.ts'
+import { isAutomatedReportSource } from './report-sources.ts'
 
 /**
  * Report statuses that still wait on a decision. Same list as
@@ -31,6 +32,14 @@ export interface DigestProjectLine {
   name: string
   newReports24h: number
   openReports: number
+  /**
+   * ADR 0063: `openReports` split. From people and production (widget, sdk,
+   * api, sentry…) vs Mushi's own checks (code audit, site audit…), so 550
+   * code-audit findings never read as 550 bugs people hit. Optional for
+   * callers that build a line by hand; missing means all from people.
+   */
+  openFromPeople?: number
+  openAutomated?: number
   /**
    * checked: a latest hole-check run finished without a failed check.
    * failed: a latest run, or a check inside it, failed to run.
@@ -87,7 +96,7 @@ function lineFor(p: DigestProjectLine): { text: string; weight: number } | null 
     weight += 100 * p.radar.error
   }
   if (p.newReports24h > 0) {
-    parts.push(`${p.newReports24h} new report${p.newReports24h === 1 ? '' : 's'} (${p.openReports} open)`)
+    parts.push(`${p.newReports24h} new report${p.newReports24h === 1 ? '' : 's'} (${openText(p)})`)
     weight += 10 * p.newReports24h
   }
   if (p.radar.warn > 0) {
@@ -97,11 +106,18 @@ function lineFor(p: DigestProjectLine): { text: string; weight: number } | null 
   if (p.publishedReleases24h > 0) parts.push(`${p.publishedReleases24h} release${p.publishedReleases24h === 1 ? '' : 's'} shipped`)
   if (p.draftReleases > 0) parts.push(`${p.draftReleases} release${p.draftReleases === 1 ? '' : 's'} in draft`)
   if (spendJumped(p.spend)) {
-    parts.push(`Mushi AI spend $${p.spend.last24hUsd.toFixed(2)} today vs about $${p.spend.avgPrior7dUsd.toFixed(2)} a day before`)
+    parts.push(`Mushi Mushi AI spend $${p.spend.last24hUsd.toFixed(2)} today vs about $${p.spend.avgPrior7dUsd.toFixed(2)} a day before`)
     weight += 5
   }
   if (parts.length === 0) return null
   return { text: `${p.name}: ${parts.join(' · ')}`, weight }
+}
+
+/** "12 open" when every open report is from people; otherwise "3 open from people, 40 automated". */
+export function openText(p: Pick<DigestProjectLine, 'openReports' | 'openFromPeople' | 'openAutomated'>): string {
+  const automated = p.openAutomated ?? 0
+  if (automated === 0) return `${p.openReports} open`
+  return `${p.openFromPeople ?? p.openReports - automated} open from people, ${automated} automated`
 }
 
 /** The weekly funnel line for one app, or null when it has none. */
@@ -129,7 +145,7 @@ export function composeDigest(data: DigestData, consoleUrl: string): ComposedDig
   // A read cut short is said out loud: its counts are at least what is shown, never exact.
   if (data.truncated.length > 0) lines.push(`Some numbers are lower bounds: there were more ${data.truncated.join(', ')} than the digest reads.`)
   const org = data.organizationName ?? 'your apps'
-  const title = `Mushi daily digest for ${org}`
+  const title = `Mushi Mushi daily digest for ${org}`
   const body = lines.length ? lines.map((l) => `• ${l}`).join('\n') : 'Nothing new across your apps today.'
   return {
     title,
@@ -240,7 +256,7 @@ export async function collectDigest(db: Db, organizationId: string, now: Date, o
   const day = new Date(now.getTime() - 86400_000).toISOString()
   const week = new Date(now.getTime() - 8 * 86400_000).toISOString()
 
-  type ProjectRef = { project_id: string }
+  type ProjectRef = { project_id: string; source?: string | null }
   type SpendRow = { project_id: string; cost_usd: number | string | null; created_at: string }
   // The newest run of each hole-check gate, one row per app and gate. A window
   // read over every app's runs could be cut short at its row ceiling and drop
@@ -257,7 +273,7 @@ export async function collectDigest(db: Db, organizationId: string, now: Date, o
       readAllOrThrow<ProjectRef>('reports', truncated, (from, to, count) =>
         db.from('reports').select('id, project_id', { count }).in('project_id', ids).gte('created_at', day).order('id', { ascending: true }).range(from, to)),
       readAllOrThrow<ProjectRef>('open reports', truncated, (from, to, count) =>
-        db.from('reports').select('id, project_id', { count }).in('project_id', ids).in('status', [...DIGEST_OPEN_STATUSES]).order('id', { ascending: true }).range(from, to)),
+        db.from('reports').select('id, project_id, source', { count }).in('project_id', ids).in('status', [...DIGEST_OPEN_STATUSES]).order('id', { ascending: true }).range(from, to)),
       newestRuns(),
       readAllOrThrow<ProjectRef>('draft releases', truncated, (from, to, count) =>
         db.from('releases').select('id, project_id', { count }).in('project_id', ids).eq('status', 'draft').order('id', { ascending: true }).range(from, to)),
@@ -296,6 +312,8 @@ export async function collectDigest(db: Db, organizationId: string, now: Date, o
         name: p.name ?? p.slug ?? p.id.slice(0, 8),
         newReports24h: countFor(reports, p.id),
         openReports: countFor(openReports, p.id),
+        openAutomated: openReports.filter((r) => r.project_id === p.id && isAutomatedReportSource(r.source)).length,
+        openFromPeople: openReports.filter((r) => r.project_id === p.id && !isAutomatedReportSource(r.source)).length,
         radar: {
           error: f.filter((x) => x.severity === 'error').length,
           warn: f.filter((x) => x.severity === 'warn').length,

@@ -10,7 +10,7 @@
 
 import { useState } from 'react'
 import { CodePanel } from '../CodePanel'
-import { Card, SegmentedControl } from '../ui'
+import { SegmentedControl } from '../ui'
 import { HOST_LABEL, HOSTS, hostGuide, type Host } from '../../lib/hostingEnvHint'
 
 interface Props {
@@ -42,14 +42,12 @@ export function HostingGuide({ projectId, apiKey, bundler, askSetup = false, onU
   }
 
   return (
-    <Card className="space-y-2 p-3" data-testid="hosting-guide">
-      <div>
-        <p className="text-xs font-semibold text-fg">Where does your app run?</p>
-        <p className="text-2xs text-fg-muted">
-          The report button only reaches your users once it is in the live app. Pick your host to see where the
-          key goes.
-        </p>
-      </div>
+    // A divider and a heading, not a bordered card holding a bordered chip group inside the
+    // install card: three frames narrowed it to 300 px on a phone (round-3 review, 2026-11-19).
+    <div className="space-y-2 border-t border-edge-subtle pt-3" data-testid="hosting-guide">
+      <p className="text-xs text-fg-muted">
+        <span className="font-semibold text-fg">Where does your app run?</span> Pick your host to see where the key goes.
+      </p>
       <SegmentedControl<Host>
         value={host ?? ('' as Host)}
         options={HOSTS.map((h) => ({ id: h, label: HOST_LABEL[h] }))}
@@ -93,6 +91,6 @@ export function HostingGuide({ projectId, apiKey, bundler, askSetup = false, onU
           )}
         </div>
       )}
-    </Card>
+    </div>
   )
 }

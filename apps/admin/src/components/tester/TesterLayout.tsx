@@ -7,7 +7,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { MUSHI_CANONICAL_URLS } from '@mushi-mushi/brand'
-import brandMark from '../../assets/brand/kenji-mark.webp'
+import brandMark from '../../assets/brand/mushi-mark.webp'
 import { Btn, Loading } from '../ui'
 import { Drawer } from '../Drawer'
 import { useAuth } from '../../lib/auth'
@@ -124,7 +124,7 @@ function renderSidebarNav(compact: boolean) {
   return (
     <nav aria-label="Tester portal" className={`flex-1 overflow-y-auto py-2 ${compact ? 'px-1' : 'px-2'}`}>
       {!compact && (
-        <p className="px-2 pb-1.5 text-3xs font-semibold uppercase tracking-wider text-nav-section-label">
+        <p className="px-2 pb-1.5 text-3xs font-semibold text-nav-section-label">
           Earn
         </p>
       )}

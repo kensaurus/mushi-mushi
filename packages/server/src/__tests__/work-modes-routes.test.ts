@@ -12,6 +12,11 @@
  *              a finding is filed once (open or dismissed blocks a refile, a
  *              fixed one may be filed again), goes to a fix lane on the same
  *              machine, and a finding that reads as an instruction is refused;
+ *            - audit patterns (ADR 0063): a new screen of an open pattern joins
+ *              its report, a fixed pattern that comes back reopens it, a person's
+ *              dismissal holds, past the app's open cap a finding waits in
+ *              code_audit_deferred, a low-confidence finding is refused, and the
+ *              lane's daily recheck closes what no longer reproduces;
  *            - skill (ADR 0042 amendment): only skill-run rounds from its own
  *              queue; a fix lane leaves a report queued for another lane;
  *            - the console sets the new modes and the audit's veto model.
@@ -92,7 +97,11 @@ function setup(seed: Record<string, Array<Record<string, unknown>>> = {}) {
       autoId: true,
       uniques: { work_queue: ['lane_id', 'report_id'], work_lanes: ['host_id', 'name'], code_audit_keys: ['project_id', 'audit_key'] },
       // One active claim per report, and one per merge-queue row; NULLs are distinct, as in Postgres.
-      partialUniques: { work_claims: { keys: ['report_id', 'merge_queue_id'], where: (r) => r.status === 'active' && (r.report_id != null || r.merge_queue_id != null) } },
+      partialUniques: {
+        work_claims: { keys: ['report_id', 'merge_queue_id'], where: (r) => r.status === 'active' && (r.report_id != null || r.merge_queue_id != null) },
+        // reports_code_audit_open_pattern_uniq (20261121120000).
+        reports: { keys: ['project_id', 'pattern_key'], where: (r) => r.source === 'code_audit' && r.pattern_key != null && r.parent_report_id == null && ['new', 'classified', 'triaged', 'reopened', 'fixing'].includes(String(r.status)) },
+      },
       rpc: () => null,
     },
   )
@@ -319,18 +328,20 @@ describe('audit mode (ADR 0050)', () => {
     expect(s.db.table('reports')).toHaveLength(1)
   })
 
-  it('a dismissed report is never filed again; a fixed one is, when the evidence is still there', async () => {
+  it('a dismissed report is never filed again; a fixed one that comes back reopens as a regression (ADR 0063)', async () => {
     const s = await auditLane()
     const first = await s.app.call('POST', '/v1/worker/claims/:id/findings', { params: { id: s.claim.id }, body: finding() })
     const rep = s.db.table('reports')[0]!
     rep.status = 'dismissed'
     expect((await s.app.call('POST', '/v1/worker/claims/:id/findings', { params: { id: s.claim.id }, body: finding() })).status).toBe(409)
     rep.status = 'fixed'
-    const refiled = await s.app.call('POST', '/v1/worker/claims/:id/findings', { params: { id: s.claim.id }, body: finding() })
-    expect(refiled.status).toBe(201)
-    expect(refiled.body.data.reportId).not.toBe(first.body.data.reportId)
+    const back = await s.app.call('POST', '/v1/worker/claims/:id/findings', { params: { id: s.claim.id }, body: finding() })
+    // Sentry's model: the same issue regresses, it is not a new one.
+    expect([back.status, back.body.data.outcome, back.body.data.reportId]).toEqual([200, 'regressed', first.body.data.reportId])
+    expect(s.db.table('reports')).toHaveLength(1)
+    expect(rep).toMatchObject({ status: 'reopened', custom_metadata: { regressed: { from_status: 'fixed', file: 'src/app/settings/page.tsx' }, occurrences: 2 } })
     expect(s.db.table('code_audit_keys')).toHaveLength(1)
-    expect(s.db.table('code_audit_keys')[0]!.report_id).toBe(refiled.body.data.reportId)
+    expect(s.db.table('code_audit_keys')[0]!.report_id).toBe(first.body.data.reportId)
   })
 
   it('runs one pass per lane at a time, whatever its concurrency', async () => {
@@ -343,11 +354,16 @@ describe('audit mode (ADR 0050)', () => {
     expect(third.body.data.claim).toMatchObject({ kind: 'audit' })
   })
 
-  it('stops claiming and filing at the hourly cap', async () => {
-    const keys = Array.from({ length: 12 }, (_, i) => ({ id: `k${i}`, project_id: P1, audit_key: `f:${i}`, file: 'f', rule: 'r', line: 1, filed_at: '2026-10-27T11:30:00Z' }))
+  it('stops claiming and filing at the hourly cap; a due recheck still gets a pass that proposes nothing', async () => {
+    const keys = Array.from({ length: 12 }, (_, i) => ({ id: `k${i}`, project_id: P1, audit_key: `f:${i}`, file: 'f', rule: 'r', line: 1, merged: false, filed_at: '2026-10-27T11:30:00Z' }))
     const s = await lanes({ code_audit_keys: keys }, [{ name: 'glot-audit', mode: 'audit' }])
+    const lane = s.db.table('work_lanes').find((l) => l.name === 'glot-audit')!
+    lane.audit_rechecked_at = '2026-10-27T06:00:00Z'
     const res = await s.app.call('POST', '/v1/worker/claim', { body: { laneId: s.ids['glot-audit'] } })
     expect(res.body.data).toEqual({ claim: null, reason: expect.stringMatching(/already filed 12 code-audit findings/) })
+    lane.audit_rechecked_at = null
+    const due = await s.app.call('POST', '/v1/worker/claim', { body: { laneId: s.ids['glot-audit'] } })
+    expect(due.body.data.claim.audit).toMatchObject({ recheck: true, propose: false, findingsLeft: 0 })
   })
 
   it('refuses a finding that reads as an instruction, a path out of the repo, and a finding on a fix claim', async () => {
@@ -441,5 +457,282 @@ describe('console: the new modes and the veto model', () => {
     expect(byName.a.recent[0]).toMatchObject({ kind: 'audit', title: 'Code-read audit pass', outcome: 'filed' })
     expect(byName.a.counts7d.filed).toBe(1)
     expect(byName.c.repo).toBe(REPO)
+  })
+})
+
+describe('audit patterns, the open cap and the recheck (ADR 0063)', () => {
+  async function auditLane(seed: Record<string, Array<Record<string, unknown>>> = {}) {
+    const s = await lanes(seed, [{ name: 'glot-audit', mode: 'audit' }])
+    s.db.table('work_lanes').find((l) => l.name === 'glot-audit')!.audit_rechecked_at = '2026-10-27T11:00:00Z'
+    const claim = (await s.app.call('POST', '/v1/worker/claim', { body: { laneId: s.ids['glot-audit'] } })).body.data.claim
+    return { ...s, claim }
+  }
+  const loading = (page: string, over: Record<string, unknown> = {}) =>
+    finding({
+      title: `Screen reader hears nothing while ${page} loads`,
+      file: `app/${page}/loading.tsx`,
+      screen: `app/${page}/loading.tsx`,
+      line: 7,
+      rule: 'loading-status-missing',
+      evidenceLine: `<div className="flex"> {/* ${page} */}`,
+      userImpact: `A screen reader user hears nothing while ${page} loads.`,
+      check: { kind: 'pattern', summary: `/aria-live/ is absent in app/${page}/loading.tsx near line 7` },
+      confidence: 0.8,
+      rootFile: 'app/**/loading.tsx',
+      ...over,
+    })
+  const post = (s: Awaited<ReturnType<typeof auditLane>>, body: unknown) => s.app.call('POST', '/v1/worker/claims/:id/findings', { params: { id: s.claim.id }, body })
+
+  it('a new screen of an open pattern joins its report instead of filing a new one, and does not count toward the hourly cap', async () => {
+    const s = await auditLane()
+    const a = await post(s, loading('pricing'))
+    expect([a.status, a.body.data.outcome]).toEqual([201, 'filed'])
+    const parent = s.db.table('reports')[0]!
+    expect(parent).toMatchObject({ pattern_key: 'a11y-loading-silent:app/**/loading.tsx', custom_metadata: { category: 'a11y-loading-silent', confidence: 0.8, root: 'app/**/loading.tsx' } })
+    const b = await post(s, loading('chat'))
+    expect([b.status, b.body.data.outcome, b.body.data.reportId]).toEqual([200, 'merged', a.body.data.reportId])
+    expect(s.db.table('reports')).toHaveLength(1)
+    expect((parent.affected_screens as Array<{ file: string }>).map((x) => x.file)).toEqual(['app/pricing/loading.tsx', 'app/chat/loading.tsx'])
+    expect(s.db.table('code_audit_keys').map((k) => k.merged)).toEqual([false, true])
+    // The exact replay of the merged screen is a duplicate.
+    expect((await post(s, loading('chat'))).status).toBe(409)
+    expect(s.claim.audit.findingsLeft).toBe(12)
+    const next = await s.app.call('POST', '/v1/worker/claims/:id/done', { params: { id: s.claim.id }, body: { outcome: 'filed' } })
+    expect(next.status).toBe(200)
+    const again = (await s.app.call('POST', '/v1/worker/claim', { body: { laneId: s.ids['glot-audit'] } })).body.data.claim
+    expect(again.audit.findingsLeft).toBe(11)
+  })
+
+  it('refuses a finding its model rated under the confidence floor, and a root outside the repository', async () => {
+    const s = await auditLane()
+    const low = await post(s, loading('pricing', { confidence: 0.4 }))
+    expect([low.status, low.body.error?.code]).toEqual([422, 'REFUSED'])
+    expect((await post(s, loading('pricing', { rootFile: '../x/**/loading.tsx' }))).status).toBe(400)
+    expect((await post(s, loading('pricing', { confidence: 2 }))).status).toBe(400)
+    expect(s.db.table('reports') ?? []).toHaveLength(0)
+  })
+
+  it('past the open cap a finding waits in code_audit_deferred, outside every count; the lane then only rechecks once a day', async () => {
+    const open = { id: R(5), project_id: P1, source: 'code_audit', status: 'classified', pattern_key: 'other:x:app/x.tsx', parent_report_id: null, created_at: '2026-10-26T00:00:00Z' }
+    const base = await lanes({ reports: [open], project_settings: [{ project_id: P1, code_audit_open_cap: 1 }] }, [{ name: 'glot-audit', mode: 'audit' }])
+    // Never rechecked: the pass is given, to recheck only.
+    const claim = (await base.app.call('POST', '/v1/worker/claim', { body: { laneId: base.ids['glot-audit'] } })).body.data.claim
+    expect(claim.audit).toMatchObject({ recheck: true, propose: false, backlog: { open: 1, cap: 1 } })
+    const s = { ...base, claim }
+    const res = await post(s, loading('pricing', { severity: 'high' }))
+    expect([res.status, res.body.data.outcome, res.body.data.reportId]).toEqual([202, 'deferred', null])
+    expect(s.db.table('reports')).toHaveLength(1)
+    expect(s.db.table('code_audit_deferred')).toEqual([expect.objectContaining({ pattern_key: 'a11y-loading-silent:app/**/loading.tsx', score: 2.4 })])
+    await post(s, loading('pricing', { severity: 'high' }))
+    expect(s.db.table('code_audit_deferred')[0]).toMatchObject({ seen_count: 2 })
+    await s.app.call('POST', '/v1/worker/claims/:id/done', { params: { id: s.claim.id }, body: { outcome: 'no_change' } })
+    // A worker that never posts the recheck (older than ADR 0063) still gets one pass per 20 h, not one per claim.
+    expect(s.db.table('work_lanes').find((l) => l.name === 'glot-audit')!.audit_rechecked_at).toBe(NOW.toISOString())
+    const none = await s.app.call('POST', '/v1/worker/claim', { body: { laneId: s.ids['glot-audit'] } })
+    expect(none.body.data).toEqual({ claim: null, reason: expect.stringMatching(/1 open code-audit reports \(its cap is 1\)/) })
+  })
+
+  it('the daily recheck closes what no longer reproduces with the commit seen, queues a rejected fix that still reproduces once, and hands back deferred findings that fit', async () => {
+    const base = { project_id: P1, source: 'code_audit', parent_report_id: null, severity: 'medium', title: 't', description: 'd', created_at: '2026-10-29T00:00:00Z' }
+    const s = await auditLane({
+      reports: [
+        { ...base, id: R(1), status: 'classified', pattern_key: 'a11y-loading-silent:app/**/loading.tsx', custom_metadata: { rule: 'loading-status-missing' } },
+        { ...base, id: R(2), status: 'triaged', pattern_key: 'other:a:b', custom_metadata: { fix_rejected: { count: 1, pr_url: 'https://github.com/x/y/pull/1', at: '2026-11-01T00:00:00Z' } } },
+        { ...base, id: R(3), status: 'fixing', pattern_key: 'other:c:d' },
+        { ...base, id: R(4), status: 'classified', source: 'widget' },
+      ],
+      code_audit_deferred: [{ id: 'd0000000-0000-4000-8000-000000000001', project_id: P1, pattern_key: 'contrast:app/x.tsx', audit_key: 'k', finding: { title: 'x' }, score: 2, deferred_at: '2026-11-01T00:00:00Z' }],
+    })
+    const read = await s.app.call('GET', '/v1/worker/claims/:id/recheck', { params: { id: s.claim.id } })
+    expect(read.status).toBe(200)
+    // A fix in flight and a person's report are not the audit's to recheck.
+    expect(read.body.data.reports.map((r: { id: string }) => r.id)).toEqual([R(1), R(2)])
+    expect(read.body.data.backlog).toEqual({ open: 3, cap: 25 })
+    expect(read.body.data.deferred.map((d: { id: string }) => d.id)).toEqual(['d0000000-0000-4000-8000-000000000001'])
+
+    const write = await s.app.call('POST', '/v1/worker/claims/:id/recheck', {
+      params: { id: s.claim.id },
+      body: {
+        sha: 'abc1234def',
+        base: 'main',
+        results: [
+          { reportId: R(1), gone: true, reason: 'its own check no longer reproduces: /aria-live/ is not absent in app/a/loading.tsx near line 7' },
+          { reportId: R(2), gone: false, reason: '' },
+          { reportId: R(3), gone: true, reason: 'not mine to close' },
+          { reportId: R(4), gone: true, reason: 'a person reported it' },
+        ],
+        deferredGone: ['d0000000-0000-4000-8000-000000000001'],
+      },
+    })
+    expect(write.body.data).toEqual({ closed: 1, requeued: 1, deferredDropped: 1 })
+    const byId = (id: string) => s.db.table('reports').find((r) => r.id === id)!
+    expect(byId(R(1))).toMatchObject({ status: 'fixed', custom_metadata: { resolution: { kind: 'recheck_not_reproduced', sha: 'abc1234def', base: 'main' } } })
+    expect(byId(R(2))).toMatchObject({ status: 'classified', custom_metadata: { fix_rejected: { count: 1, rechecked: { sha: 'abc1234def' } } } })
+    expect([byId(R(3)).status, byId(R(4)).status]).toEqual(['fixing', 'classified'])
+    expect(s.db.table('work_lanes').find((l) => l.name === 'glot-audit')!.audit_rechecked_at).toBe(NOW.toISOString())
+
+    // The closed pattern comes back: a regression of the same report, not a new one.
+    const back = await post(s, loading('events'))
+    expect([back.body.data.outcome, back.body.data.reportId]).toEqual(['regressed', R(1)])
+    expect(byId(R(1)).status).toBe('reopened')
+  })
+
+  it('refuses a recheck body it cannot trust', async () => {
+    const s = await auditLane()
+    const bad = (body: unknown) => s.app.call('POST', '/v1/worker/claims/:id/recheck', { params: { id: s.claim.id }, body })
+    expect((await bad({ sha: 'not a sha', base: 'main', results: [] })).status).toBe(400)
+    expect((await bad({ sha: 'abc1234', base: 'main; rm -rf', results: [] })).status).toBe(400)
+    expect((await bad({ sha: 'abc1234', base: 'main', results: [{ reportId: R(1), gone: true, reason: '' }] })).status).toBe(400)
+  })
+})
+
+describe('mushi work --collapse-backlog routes (ADR 0065)', () => {
+  const base = { project_id: P1, source: 'code_audit', parent_report_id: null, severity: 'medium', description: 'd', created_at: '2026-10-29T00:00:00Z', closed_reason: null }
+  const seed = () => ({
+    reports: [
+      { ...base, id: R(1), status: 'classified', title: 'Pricing loading is silent', custom_metadata: { rule: 'r' } },
+      { ...base, id: R(2), status: 'triaged', title: 'Learn loading is silent', custom_metadata: { rule: 'r' } },
+      { ...base, id: R(3), status: 'fixing', title: 'Chat loading is silent', custom_metadata: { rule: 'r' } },
+      { ...base, id: R(4), status: 'classified', title: 'A person wrote this', source: 'widget' },
+      { ...base, id: R(5), status: 'classified', title: 'Another app', project_id: '1000000b-0000-4000-8000-000000000000' },
+    ],
+  })
+  const group = { parentId: R(1), patternKey: 'a11y-loading-silent:components/route-loading-shell.tsx', title: 'Screen readers hear nothing while it loads in components/route-loading-shell.tsx (5 screens)', screens: [{ screen: 'app/learn/loading.tsx', file: 'app/learn/loading.tsx', line: 5, title: 't', at: '2026-10-29T00:00:00Z' }], childIds: [R(2), R(3), R(4), R(5)] }
+  const post = (s: ReturnType<typeof setup>, body: Record<string, unknown>) => s.app.call('POST', '/v1/admin/work/code-audit/collapse', { body: { projectId: P1, tag: 'collapse_2026_11_21', groups: [group], ...body } })
+
+  it('lists the open code-audit reports of the app with their metadata', async () => {
+    const s = setup(seed())
+    const res = await s.app.call('GET', '/v1/admin/work/code-audit/backlog', { query: { projectId: P1 } })
+    expect(res.body.data.reports.map((r: { id: string }) => r.id)).toEqual([R(1), R(2), R(3)])
+    expect(res.body.data.reports[0]).toHaveProperty('custom_metadata')
+  })
+
+  it('without apply only counts; nothing changes', async () => {
+    const s = setup(seed())
+    const res = await post(s, {})
+    // R(3) has a live PR, R(4) is a person's report, R(5) is another app's: none of them is closed.
+    expect(res.body.data).toMatchObject({ applied: false, before: 3, after: 2, groups: 1, children: 1, skipped: 3 })
+    expect(s.db.table('reports').filter((r) => r.status === 'dismissed')).toHaveLength(0)
+  })
+
+  it('with apply closes the children as duplicates, tags every row with what it was, and running it again changes nothing', async () => {
+    const s = setup(seed())
+    const res = await post(s, { apply: true })
+    expect(res.body.data).toMatchObject({ applied: true, before: 3, after: 2, groups: 1, children: 1 })
+    const byId = (id: string) => s.db.table('reports').find((r) => r.id === id)!
+    expect(byId(R(2))).toMatchObject({ status: 'dismissed', closed_reason: 'duplicate', parent_report_id: R(1), custom_metadata: { rule: 'r', collapse: { tag: 'collapse_2026_11_21', role: 'child', from_status: 'triaged', from_closed_reason: null, parent: R(1) } } })
+    expect(byId(R(1))).toMatchObject({
+      status: 'classified',
+      pattern_key: group.patternKey,
+      title: group.title,
+      affected_screens: [expect.objectContaining({ file: 'app/learn/loading.tsx' })],
+      custom_metadata: { collapse: { tag: 'collapse_2026_11_21', role: 'parent', children: 1, prev_title: 'Pricing loading is silent', prev_pattern_key: null, prev_affected_screens: null } },
+    })
+    expect([byId(R(3)).status, byId(R(4)).status, byId(R(5)).status]).toEqual(['fixing', 'classified', 'classified'])
+    const again = await post(s, { apply: true })
+    expect(again.body.data).toMatchObject({ before: 2, after: 2, children: 0 })
+    // The parent keeps what it was before the first run.
+    expect(byId(R(1)).custom_metadata).toMatchObject({ collapse: { prev_title: 'Pricing loading is silent', children: 1 } })
+  })
+
+  it('refuses a bad tag, a bad parent id and a group with no children', async () => {
+    const s = setup(seed())
+    expect((await post(s, { tag: 'collapse; drop' })).status).toBe(400)
+    expect((await post(s, { groups: [{ ...group, parentId: 'x' }] })).status).toBe(400)
+    expect((await post(s, { groups: [{ ...group, childIds: [] }] })).status).toBe(400)
+  })
+})
+
+describe('mushi work --collapse-backlog --apply-cap (ADR 0065)', () => {
+  const base = { project_id: P1, source: 'code_audit', parent_report_id: null, description: 'd', closed_reason: null, pattern_key: null }
+  const rep = (n: number, over: Record<string, unknown> = {}) => ({ ...base, id: R(n), status: 'classified', severity: 'medium', title: `Report ${n}`, created_at: `2026-10-29T0${n}:00:00Z`, custom_metadata: { rule: 'r' }, ...over })
+  // The finding each would wait as, as capCandidates rebuilds it.
+  const findingOf = (n: number, severity = 'medium', confidence: number | null = null) =>
+    finding({ title: `Screen reader hears nothing while page ${n} loads`, severity, file: `app/p${n}/loading.tsx`, screen: `app/p${n}/loading.tsx`, line: 7, rule: 'loading-status-missing', evidenceLine: `<div className="p${n}">`, userImpact: `A screen reader user hears nothing while page ${n} loads.`, check: { kind: 'pattern', summary: `/aria-live/ is absent in app/p${n}/loading.tsx near line 7` }, confidence, rootFile: `app/p${n}/loading.tsx` })
+  const seed = () => ({
+    project_settings: [{ project_id: P1, code_audit_open_cap: 2 }],
+    reports: [
+      rep(1, { severity: 'low' }),
+      rep(2, { severity: 'high' }),
+      rep(3),
+      rep(4, { status: 'fixing' }),
+      rep(5),
+      rep(6, { source: 'widget' }),
+    ],
+    // Report 5 is classified but its PR is open: never set aside.
+    fix_attempts: [{ id: 'fa5', report_id: R(5), project_id: P1, status: 'completed', pr_url: 'https://github.com/x/y/pull/5', pr_state: 'open', merged_at: null }],
+  })
+  const candidates = [
+    { reportId: R(1), finding: findingOf(1, 'low') },
+    { reportId: R(2), finding: findingOf(2, 'high') },
+    { reportId: R(3), finding: findingOf(3, 'medium', 0.9) },
+    { reportId: R(4), finding: findingOf(4) },
+    { reportId: R(5), finding: findingOf(5) },
+    { reportId: R(6), finding: findingOf(6) },
+  ]
+  const post = (s: ReturnType<typeof setup>, apply: boolean) =>
+    s.app.call('POST', '/v1/admin/work/code-audit/collapse', { body: { projectId: P1, tag: 'collapse_2026_11_21', apply, groups: [], cap: { candidates } } })
+
+  it('the dry run counts what the cap keeps and sets aside, and changes nothing', async () => {
+    const s = setup(seed())
+    const res = await post(s, false)
+    // 5 open code_audit reports; 2 have a live PR (4 fixing, 5 open PR), so 0 of the cap's 2 slots are left for 1, 2 and 3.
+    expect(res.body.data.cap).toEqual({ cap: 2, openBefore: 5, openAfter: 2, deferred: 3, keptLivePr: 2, keptNoFinding: 0 })
+    expect(s.db.table('code_audit_deferred') ?? []).toHaveLength(0)
+    expect(s.db.table('reports').filter((r) => r.status === 'dismissed')).toHaveLength(0)
+  })
+
+  it('with apply the best keep their slots, the rest wait dismissed as deferred_over_cap with what they were', async () => {
+    const s = setup({ ...seed(), project_settings: [{ project_id: P1, code_audit_open_cap: 4 }] })
+    const res = await post(s, true)
+    // 4 slots: 4 and 5 keep theirs (live PR); 2 (high) and 3 (medium × 0.9) beat 1 (low).
+    expect(res.body.data.cap).toMatchObject({ openBefore: 5, openAfter: 4, deferred: 1, keptLivePr: 2 })
+    const byId = (id: string) => s.db.table('reports').find((r) => r.id === id)!
+    expect(byId(R(1))).toMatchObject({
+      status: 'dismissed',
+      closed_reason: 'deferred_over_cap',
+      pattern_key: 'a11y-loading-silent:app/p1/loading.tsx',
+      custom_metadata: { rule: 'r', cap: { tag: 'collapse_2026_11_21', from_status: 'classified', from_closed_reason: null, prev_pattern_key: null } },
+    })
+    expect([byId(R(2)).status, byId(R(3)).status, byId(R(4)).status, byId(R(5)).status, byId(R(6)).status]).toEqual(['classified', 'classified', 'fixing', 'classified', 'classified'])
+    expect(s.db.table('code_audit_deferred')).toEqual([
+      expect.objectContaining({ pattern_key: 'a11y-loading-silent:app/p1/loading.tsx', finding: expect.objectContaining({ collapse_report_id: R(1), collapse_tag: 'collapse_2026_11_21', file: 'app/p1/loading.tsx' }) }),
+    ])
+  })
+
+  async function auditClaim(s: ReturnType<typeof setup>) {
+    const hbRes = await s.app.call('POST', '/v1/worker/heartbeat', { body: hb([{ name: 'glot-audit', projectId: P1, status: {}, initial: { mode: 'audit' }, repo: REPO }]) })
+    const laneId = (hbRes.body.data.lanes as Array<{ id: string }>)[0]!.id
+    s.db.table('work_lanes').find((l) => l.id === laneId)!.audit_rechecked_at = null
+    return (await s.app.call('POST', '/v1/worker/claim', { body: { laneId } })).body.data.claim
+  }
+
+  it('re-filing a set-aside finding restores its report when a slot is free, and keeps it waiting when not', async () => {
+    const s = setup({ ...seed(), project_settings: [{ project_id: P1, code_audit_open_cap: 4 }] })
+    await post(s, true)
+    const claim = await auditClaim(s)
+    const waiting = s.db.table('code_audit_deferred')[0]!.finding
+    // Still 4 open: the cap is full, so it keeps waiting.
+    const full = await s.app.call('POST', '/v1/worker/claims/:id/findings', { params: { id: claim.id }, body: waiting })
+    expect([full.status, full.body.data.outcome]).toEqual([202, 'deferred'])
+    expect(s.db.table('code_audit_deferred')[0]).toMatchObject({ seen_count: 2, finding: expect.objectContaining({ collapse_report_id: R(1) }) })
+    // A slot frees.
+    s.db.table('reports').find((r) => r.id === R(2))!.status = 'fixed'
+    const back = await s.app.call('POST', '/v1/worker/claims/:id/findings', { params: { id: claim.id }, body: waiting })
+    expect([back.status, back.body.data.outcome, back.body.data.reportId]).toEqual([200, 'restored', R(1)])
+    const r1 = s.db.table('reports').find((r) => r.id === R(1))!
+    expect(r1).toMatchObject({ status: 'classified', closed_reason: null, custom_metadata: { cap_restored: { tag: 'collapse_2026_11_21' } } })
+    expect((r1.custom_metadata as Record<string, unknown>).cap).toBeUndefined()
+    expect(s.db.table('code_audit_deferred')).toHaveLength(0)
+  })
+
+  it('a set-aside finding the recheck finds gone closes its report as fixed', async () => {
+    const s = setup({ ...seed(), project_settings: [{ project_id: P1, code_audit_open_cap: 4 }] })
+    await post(s, true)
+    const claim = await auditClaim(s)
+    const row = s.db.table('code_audit_deferred')[0]!
+    const res = await s.app.call('POST', '/v1/worker/claims/:id/recheck', { params: { id: claim.id }, body: { sha: 'abc1234', base: 'main', results: [], deferredGone: [row.id] } })
+    expect(res.body.data).toMatchObject({ closed: 1, deferredDropped: 1 })
+    expect(s.db.table('reports').find((r) => r.id === R(1))).toMatchObject({ status: 'fixed', closed_reason: null, custom_metadata: { resolution: { kind: 'recheck_not_reproduced', sha: 'abc1234' } } })
   })
 })

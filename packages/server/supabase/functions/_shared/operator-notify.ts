@@ -9,7 +9,15 @@
  *   - A paid customer opened a support ticket
  *
  * TRANSPORTS:
- *   - Slack incoming webhook  (Block Kit, https://hooks.slack.com/...)
+ *   - The Ops hub (2026-11-18), when MUSHI_OPS_KEY is set: one POST /v1/ops/events with the
+ *     Mushi Mushi app's ops:write key. The team's Slack bot then posts it with threads and
+ *     buttons, and the console's Ops page keeps the record. When the hub takes the event, the
+ *     Slack webhook below is skipped; when it does not (no key, 4xx/5xx, timeout), the webhook
+ *     posts as before. Discord is unaffected.
+ *   - Slack incoming webhook  (Block Kit, https://hooks.slack.com/...). Routed by `category`
+ *     to the Kensaurus Bot channels (2026-11-17): SLACK_PAYMENTS_WEBHOOK_URL (#payments) or
+ *     SLACK_ALERTS_WEBHOOK_URL (#alerts); OPERATOR_SLACK_WEBHOOK_URL stays as the fallback.
+ *     Every Slack message starts with the app name, then one plain line, then the facts.
  *   - Discord incoming webhook (rich embeds, https://discord.com/api/webhooks/...)
  *   - Both auto-detected by URL host. Ship to whichever (or both) are set.
  *
@@ -40,6 +48,11 @@ const SLACK_HOST = 'hooks.slack.com'
 const DISCORD_HOSTS = new Set(['discord.com', 'ptb.discord.com', 'canary.discord.com', 'discordapp.com'])
 
 export type NotifyLevel = 'info' | 'warn' | 'urgent'
+/** Which Slack channel: money in or out (#payments), or something broken (#alerts). */
+export type NotifyCategory = 'payments' | 'alerts'
+
+/** The app name every Slack message starts with. */
+const APP_NAME = 'Mushi Mushi'
 
 export interface NotifyField {
   label: string
@@ -61,6 +74,24 @@ export interface NotifyArgs {
   url?: string
   /** Free-form footer (e.g. environment, region). */
   footer?: string
+  /** Slack channel. Without it, only OPERATOR_SLACK_WEBHOOK_URL is used. */
+  category?: NotifyCategory
+  /**
+   * What Slack shows instead of `body` / `fields`, when those carry personal data (a support
+   * ticket's text and sender). Slack keeps 90 days of history in a shared workspace; Discord
+   * keeps the full version.
+   */
+  slack?: { body: string; fields?: NotifyField[] }
+  /** Ops hub: a machine name such as `payment.succeeded` (default `<category>.notice`). */
+  kind?: string
+  /** Ops hub: a retried notice with the same key posts once (for example `stripe:evt_123`). */
+  dedupeKey?: string
+  /** Ops hub: groups a notice with its follow-ups in one Slack thread (for example `invoice:in_123`). */
+  threadKey?: string
+  /** Ops hub: money in (or out, for a `kind` with `refund`) in the currency's smallest unit. */
+  amountMinor?: number
+  /** Ops hub: ISO 4217 code, required with `amountMinor`. */
+  currency?: string
 }
 
 const COLORS: Record<NotifyLevel, { slackBar: string; discordInt: number }> = {
@@ -75,17 +106,106 @@ const COLORS: Record<NotifyLevel, { slackBar: string; discordInt: number }> = {
  * forget is fine for webhook-driven notifications.
  */
 export async function notifyOperator(args: NotifyArgs): Promise<number> {
-  const slackUrl = (Deno.env.get('OPERATOR_SLACK_WEBHOOK_URL') ?? '').trim()
+  const viaOps = await postOpsHub(args)
+  const slackUrl = viaOps ? '' : slackUrlFor(args.category)
   const discordUrl = (Deno.env.get('OPERATOR_DISCORD_WEBHOOK_URL') ?? '').trim()
 
-  if (!slackUrl && !discordUrl) return 0
+  if (!slackUrl && !discordUrl) return viaOps ? 1 : 0
 
   const targets: Promise<boolean>[] = []
+  if (viaOps) targets.push(Promise.resolve(true))
   if (slackUrl) targets.push(postSlack(slackUrl, args))
   if (discordUrl) targets.push(postDiscord(discordUrl, args))
 
   const results = await Promise.allSettled(targets)
   return results.filter((r) => r.status === 'fulfilled' && r.value).length
+}
+
+const OPS_KIND_RE = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*){0,3}$/
+/** A masked address like `ab…@acme.com` still reads as an email to the hub's PII check: keep the domain only. */
+const toDomain = (t: string) => t.replace(/[^\s@<>()|,;:"']+@([A-Za-z0-9.-]+\.[A-Za-z]{2,})/g, '@$1')
+
+/** @internal Exported for tests. The Ops hub event for a notice: the Slack-safe text, never the Discord-only detail. */
+export function opsEventFor(args: NotifyArgs): Record<string, unknown> {
+  const category = args.category ?? 'alerts'
+  const body = toDomain(args.slack?.body ?? args.body).slice(0, 600)
+  const fields = (args.slack ? args.slack.fields ?? [] : args.fields ?? []).slice(0, 8)
+  const kind = args.kind && OPS_KIND_RE.test(args.kind) && args.kind.length <= 60 ? args.kind : `${category}.notice`
+  const money = typeof args.amountMinor === 'number' && Number.isFinite(args.amountMinor) && /^[A-Z]{3}$/.test(args.currency ?? '')
+  return {
+    category,
+    severity: args.level,
+    kind,
+    title: toDomain(args.title).slice(0, 150),
+    ...(body ? { body } : {}),
+    facts: fields.map((f) => ({ label: f.label.slice(0, 40), value: toDomain(f.value).slice(0, 200) })),
+    ...(args.url?.startsWith('https://') ? { url: args.url.slice(0, 2000) } : {}),
+    ...(money ? { amount_minor: Math.round(args.amountMinor as number), currency: args.currency } : {}),
+    ...(args.threadKey ? { thread_key: args.threadKey.slice(0, 200) } : {}),
+    ...(args.dedupeKey ? { dedupe_key: args.dedupeKey.slice(0, 200) } : {}),
+  }
+}
+
+/** The Ops events URL: MUSHI_OPS_API_URL, else this project's own api. */
+function opsEventsUrl(): string | null {
+  const explicit = (Deno.env.get('MUSHI_OPS_API_URL') ?? '').trim().replace(/\/+$/, '')
+  const own = (Deno.env.get('SUPABASE_URL') ?? '').trim().replace(/\/+$/, '')
+  const base = explicit || (own ? `${own}/functions/v1/api` : '')
+  return base.startsWith('https://') ? `${base}/v1/ops/events` : null
+}
+
+/** True when the Ops hub stored the notice (202, or 200 for a duplicate). Never throws. */
+async function postOpsHub(args: NotifyArgs): Promise<boolean> {
+  const key = (Deno.env.get('MUSHI_OPS_KEY') ?? '').trim()
+  const url = key ? opsEventsUrl() : null
+  if (!key || !url) return false
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Mushi-Api-Key': key },
+      body: JSON.stringify(opsEventFor(args)),
+      signal: AbortSignal.timeout(5_000),
+    })
+    if (res.ok) return true
+    opLog.warn('ops_hub_rejected', { status: res.status })
+    return false
+  } catch (err) {
+    opLog.warn('ops_hub_unreachable', { err: err instanceof Error ? err.name : 'error' })
+    return false
+  }
+}
+
+/** The channel's webhook, else the single operator webhook from before 2026-11-17. */
+function slackUrlFor(category: NotifyCategory | undefined): string {
+  const byCategory = category === 'payments' ? 'SLACK_PAYMENTS_WEBHOOK_URL' : category === 'alerts' ? 'SLACK_ALERTS_WEBHOOK_URL' : null
+  const specific = byCategory ? (Deno.env.get(byCategory) ?? '').trim() : ''
+  return specific || (Deno.env.get('OPERATOR_SLACK_WEBHOOK_URL') ?? '').trim()
+}
+
+/** A glanceable mark: money (💳), needs a look (⚠️), broken (🔴), fine again (✅). */
+function emojiFor(args: Pick<NotifyArgs, 'level' | 'category'>): string {
+  if (args.level === 'urgent') return '🔴'
+  if (args.level === 'warn') return '⚠️'
+  return args.category === 'payments' ? '💳' : '✅'
+}
+
+/** @internal Exported for tests. The Slack payload: app name and headline, one plain paragraph, the facts on one line, one button. */
+export function slackPayload(args: NotifyArgs): Record<string, unknown> {
+  const body = args.slack?.body ?? args.body
+  const fields = args.slack ? args.slack.fields ?? [] : args.fields ?? []
+  const headline = `${APP_NAME} · ${emojiFor(args)} ${args.title}`
+  const blocks: unknown[] = [{ type: 'section', text: { type: 'mrkdwn', text: `*${headline}*
+${body}` } }]
+  const facts = fields.map((f) => `*${f.label}:* ${f.value}`)
+  if (args.footer) facts.push(args.footer)
+  if (facts.length) blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: facts.join('  ·  ').slice(0, 2900) }] })
+  if (args.url) {
+    blocks.push({
+      type: 'actions',
+      elements: [{ type: 'button', text: { type: 'plain_text', text: 'Open' }, url: args.url, ...(args.level === 'urgent' ? { style: 'danger' } : {}) }],
+    })
+  }
+  return { text: headline, attachments: [{ color: COLORS[args.level].slackBar, blocks }] }
 }
 
 async function postSlack(url: string, args: NotifyArgs): Promise<boolean> {
@@ -98,52 +218,7 @@ async function postSlack(url: string, args: NotifyArgs): Promise<boolean> {
     return false
   }
 
-  const blocks: unknown[] = [
-    {
-      type: 'header',
-      text: { type: 'plain_text', text: prefixForLevel(args.level) + args.title, emoji: true },
-    },
-    {
-      type: 'section',
-      text: { type: 'mrkdwn', text: args.body },
-    },
-  ]
-
-  if (args.fields?.length) {
-    blocks.push({
-      type: 'section',
-      fields: args.fields.map((f) => ({
-        type: 'mrkdwn',
-        text: `*${f.label}*\n${f.value}`,
-      })),
-    })
-  }
-
-  if (args.url) {
-    blocks.push({
-      type: 'actions',
-      elements: [
-        {
-          type: 'button',
-          text: { type: 'plain_text', text: 'Open' },
-          url: args.url,
-          style: args.level === 'urgent' ? 'danger' : 'primary',
-        },
-      ],
-    })
-  }
-
-  if (args.footer) {
-    blocks.push({
-      type: 'context',
-      elements: [{ type: 'mrkdwn', text: args.footer }],
-    })
-  }
-
-  const payload = {
-    text: prefixForLevel(args.level) + args.title,
-    attachments: [{ color: COLORS[args.level].slackBar, blocks }],
-  }
+  const payload = slackPayload(args)
 
   return await post(url, payload, 'slack')
 }
@@ -187,6 +262,8 @@ async function post(url: string, payload: unknown, transport: 'slack' | 'discord
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
+      // A slow chat service must never hold up a Stripe webhook or a cron.
+      signal: AbortSignal.timeout(5_000),
     })
     // Slack returns "ok" plain text on success (200). Discord returns 204.
     if (!res.ok) {

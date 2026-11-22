@@ -25,7 +25,7 @@ export function RecipeElementList({ elements, selectedKey, onSelect }: RecipeEle
         if (inLane.length === 0) return null
         return (
           <section key={lane.id} aria-labelledby={`recipe-lane-${lane.id}`} className="flex flex-col gap-2">
-            <h2 id={`recipe-lane-${lane.id}`} className="text-2xs font-semibold uppercase tracking-wider text-fg-muted">
+            <h2 id={`recipe-lane-${lane.id}`} className="text-2xs font-semibold text-fg-secondary">
               {lane.label}
               <span className="ml-2 font-normal normal-case tracking-normal text-fg-faint">{lane.hint}</span>
             </h2>

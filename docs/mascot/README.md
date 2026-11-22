@@ -116,7 +116,7 @@ Mushi Mushi style sheet and `mushi-happy.png` as references, then background
 removal with `fal-ai/birefnet/v2`, trimmed and padded to a common baseline.
 The pipeline, prompts and spend log live in the glot.it repo
 (`scripts/kensaurus-mascot/`). Like Mushi-chan, the art is all rights reserved
-(see [`TRADEMARK.md`](../../TRADEMARK.md)).
+(see [`docs/legal/TRADEMARK.md`](../legal/TRADEMARK.md)).
 
 ### Icon
 

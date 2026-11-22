@@ -105,6 +105,116 @@ describe('screenshot submission', { timeout: 15_000 }, () => {
     for (const secret of SECRETS) expect(JSON.stringify(report)).not.toContain(secret);
   });
 
+  describe('a screenshot the reporter did not take is shown before it is sent', () => {
+    let captures: number;
+
+    beforeEach(() => {
+      captures = 0;
+      vi.spyOn(HTMLImageElement.prototype, 'src', 'set').mockImplementation(function (this: HTMLImageElement, v: string) {
+        if (!v.startsWith('data:image/svg+xml')) return;
+        setTimeout(() => this.onload?.(new Event('load')), 0);
+      });
+      vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+        scale: vi.fn(),
+        drawImage: vi.fn(),
+        getImageData: () => ({ data: [0, 0, 0, 255] }),
+      } as never);
+      vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockImplementation(() => {
+        captures++;
+        return MASKED_JPEG;
+      });
+    });
+
+    const reports = () => posts.filter((p) => p.url.endsWith('/v1/reports'));
+    const send = () => (shadow().querySelector('[data-action="submit"]') as HTMLButtonElement).click();
+    async function describeBug(): Promise<void> {
+      await vi.waitFor(() => expect(shadow().querySelector('textarea.mushi-textarea')).not.toBeNull(), WAIT);
+      const ta = shadow().querySelector('textarea.mushi-textarea') as HTMLTextAreaElement;
+      ta.value = 'Checkout button does nothing on submit';
+      ta.dispatchEvent(new Event('input'));
+    }
+
+    it('on-report: the first Send captures and shows it, only the second Send sends it', async () => {
+      const sdk = Mushi.init(CONFIG);
+      sdk.report();
+      await describeBug();
+      send();
+
+      await vi.waitFor(() => expect(shadow().querySelector('[data-role="screenshot-review"]')).not.toBeNull(), WAIT);
+      expect(shadow().querySelector('.mushi-screenshot-preview.open img')).not.toBeNull();
+      expect(captures).toBe(1);
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      expect(reports()).toHaveLength(0);
+
+      send();
+      await vi.waitFor(() => expect(reports()).toHaveLength(1), WAIT);
+      expect(reports()[0]!.body.screenshotDataUrl).toBe(MASKED_JPEG);
+      expect(captures).toBe(1);
+    });
+
+    it('on-report: Remove during review sends no screenshot and takes no new one', async () => {
+      const sdk = Mushi.init(CONFIG);
+      sdk.report();
+      await describeBug();
+      send();
+      await vi.waitFor(() => expect(shadow().querySelector('[data-action="remove-screenshot"]')).not.toBeNull(), WAIT);
+
+      (shadow().querySelector('[data-action="remove-screenshot"]') as HTMLButtonElement).click();
+      expect(shadow().querySelector('[data-role="screenshot-review"]')).toBeNull();
+      send();
+
+      await vi.waitFor(() => expect(reports()).toHaveLength(1), WAIT);
+      expect(reports()[0]!.body.screenshotDataUrl).toBeUndefined();
+      expect(captures).toBe(1);
+    });
+
+    it('auto: a screenshot removed after the open capture is not taken again at Send', async () => {
+      const sdk = Mushi.init({ ...CONFIG, capture: { screenshot: 'auto' } });
+      sdk.report();
+      await vi.waitFor(() => expect(shadow().querySelector('[data-action="remove-screenshot"]')).not.toBeNull(), WAIT);
+      expect(captures).toBe(1);
+
+      (shadow().querySelector('[data-action="remove-screenshot"]') as HTMLButtonElement).click();
+      await describeBug();
+      send();
+
+      await vi.waitFor(() => expect(reports()).toHaveLength(1), WAIT);
+      expect(reports()[0]!.body.screenshotDataUrl).toBeUndefined();
+      expect(captures).toBe(1);
+    });
+
+    it('auto: a screenshot shown since open is sent on the first Send', async () => {
+      const sdk = Mushi.init({ ...CONFIG, capture: { screenshot: 'auto' } });
+      sdk.report();
+      await vi.waitFor(() => expect(shadow().querySelector('.mushi-screenshot-preview img')).not.toBeNull(), WAIT);
+      await describeBug();
+      send();
+
+      await vi.waitFor(() => expect(reports()).toHaveLength(1), WAIT);
+      expect(reports()[0]!.body.screenshotDataUrl).toBe(MASKED_JPEG);
+      expect(shadow().querySelector('[data-role="screenshot-review"]')).toBeNull();
+      expect(captures).toBe(1);
+    });
+
+    it('the next report starts fresh after one sent without a screenshot', async () => {
+      const sdk = Mushi.init(CONFIG);
+      sdk.report();
+      await describeBug();
+      send();
+      await vi.waitFor(() => expect(shadow().querySelector('[data-action="remove-screenshot"]')).not.toBeNull(), WAIT);
+      (shadow().querySelector('[data-action="remove-screenshot"]') as HTMLButtonElement).click();
+      send();
+      await vi.waitFor(() => expect(reports()).toHaveLength(1), WAIT);
+
+      sdk.close();
+      sdk.report();
+      await describeBug();
+      send();
+      await vi.waitFor(() => expect(shadow().querySelector('[data-role="screenshot-review"]')).not.toBeNull(), WAIT);
+      expect(captures).toBe(2);
+    });
+  });
+
   it('tab share calls getDisplayMedia synchronously inside the click', async () => {
     const getDisplayMedia = vi.fn().mockReturnValue(new Promise(() => {}));
     Object.defineProperty(navigator, 'mediaDevices', { value: { getDisplayMedia }, configurable: true });

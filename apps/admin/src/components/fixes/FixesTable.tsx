@@ -103,7 +103,7 @@ export function FixesTable({
             <col className={FIXES_TABLE_COL.started} />
             <col className={FIXES_TABLE_COL.action} />
           </colgroup>
-          <thead className="bg-surface-raised text-2xs uppercase tracking-wider text-fg-faint sticky top-0 z-10">
+          <thead className="bg-surface-raised text-2xs text-fg-secondary sticky top-0 z-10 font-semibold">
             <tr>
               <th scope="col" className={`${FIXES_TABLE_COL.stripe} p-0`} aria-label="Status stripe" />
               <th scope="col" className={`${FIXES_TABLE_COL.status} ${TABLE_CELL.pxMeta} py-2 text-left font-medium`}>Status</th>

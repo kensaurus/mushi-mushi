@@ -60,4 +60,14 @@ describe('AntiGamingStatusBanner actions', () => {
     await clickButton(stats({ topPriority: 'velocity', velocityEvents24h: 3, topPriorityTo: '/anti-gaming?tab=events' }), /Open events/, onTab)
     expect(onTab).toHaveBeenCalledWith('events')
   })
+
+  it('waiting for devices is a neutral "not checked yet" state, not a red banner', async () => {
+    await act(async () => {
+      root.render(createElement(MemoryRouter, null, createElement(AntiGamingStatusBanner, { stats: stats({ topPriority: 'waiting', totalReports: 4 }) })))
+    })
+    const row = container.querySelector('[data-testid="anti-gaming-not-checked"]')
+    expect(row?.textContent).toContain('Not checked yet')
+    expect(row?.textContent).toContain('4 reports arrived')
+    expect(row?.innerHTML).not.toMatch(/text-danger|text-brand|bg-brand/)
+  })
 })

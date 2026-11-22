@@ -5,7 +5,7 @@
  *
  * Scans:
  *   - apps/docs/content/self-hosting/edge-functions.mdx
- *   - SELF_HOSTED.md
+ *   - docs/SELF_HOSTED.md
  *
  *   pnpm check:edge-fn-deploy-docs
  */
@@ -20,7 +20,7 @@ const FUNCTIONS_DIR = path.join(ROOT, 'packages/server/supabase/functions')
 
 const DOC_FILES = [
   'apps/docs/content/self-hosting/edge-functions.mdx',
-  'SELF_HOSTED.md',
+  'docs/SELF_HOSTED.md',
 ]
 
 const DEPLOY_RE = /supabase\s+functions\s+deploy\s+([a-z0-9][a-z0-9_-]*)/gi

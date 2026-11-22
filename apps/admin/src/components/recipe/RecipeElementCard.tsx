@@ -17,7 +17,19 @@ import { formatRelative } from '../ui'
 import type { RecipeElementKey, RecipeElementSummary } from '../../lib/recipeTypes'
 import { RecipeStateChip } from './RecipeStateChip'
 import { RecipeLinkList } from './RecipeLinks'
-import { describeLastChecked, ELEMENT_CHECKED_BY, elementStateMeta, factLabel, formatFactValue, problemCountText } from './recipeState'
+import { StatusGlyph } from '../signal/StatusGlyph'
+import {
+  cardReason,
+  cardStatusLines,
+  describeLastChecked,
+  ELEMENT_CHECKED_BY,
+  elementStateMeta,
+  factLabel,
+  formatFactValue,
+  problemCountText,
+  reasonAfterState,
+  uncheckedFact,
+} from './recipeState'
 
 const MAX_FACTS = 3
 
@@ -33,7 +45,15 @@ export function RecipeElementCard({ element, selected = false, onSelect, layout 
   const meta = elementStateMeta(element.state, element.lastCheckedAt)
   const checked = describeLastChecked(element.lastCheckedAt, formatRelative, element.state)
   const canvas = layout === 'canvas'
-  const facts = canvas ? [] : Object.entries(element.facts ?? {}).slice(0, MAX_FACTS)
+  const allFacts = canvas ? [] : Object.entries(element.facts ?? {}).slice(0, MAX_FACTS)
+  // A never-judged card's zero facts are not measurements: one muted line names them instead of a
+  // hatched "not checked" pill per row (8 on one page, 2026-11-18).
+  const facts = allFacts.filter(([, v]) => !uncheckedFact(meta.state, v))
+  const notChecked = allFacts.filter(([, v]) => uncheckedFact(meta.state, v)).map(([k]) => factLabel(k))
+  // Say the state once: the chip names it; these lines add only what it does not.
+  const lines = cardStatusLines(meta.state, element.lastCheckedAt, element.findingsCount)
+  const reason = cardReason(reasonAfterState(element.reason, meta.label), element.findingsCount)
+  const problemText = problemCountText(meta.state, element.findingsCount)
 
   return (
     <div
@@ -45,18 +65,34 @@ export function RecipeElementCard({ element, selected = false, onSelect, layout 
         aria-pressed={selected}
         data-element={element.key}
         data-state={meta.state}
+        // How it is checked, on hover and in the side panel: the same sentence on every card was noise.
+        title={`How it is checked: ${ELEMENT_CHECKED_BY[element.key]}`}
         className={`flex w-full flex-col gap-2 rounded-md p-3 text-left motion-safe:transition-colors hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 ${canvas ? 'focus-visible:ring-inset' : ''}`}
       >
         <span className="flex items-start justify-between gap-2">
           <span className="text-sm font-semibold text-fg">{element.label}</span>
           <RecipeStateChip state={element.state} lastCheckedAt={element.lastCheckedAt} className="shrink-0" />
         </span>
-        <span className={`text-xs leading-snug text-fg-secondary ${canvas ? 'line-clamp-2' : ''}`} title={canvas ? element.reason : undefined}>{element.reason}</span>
-        <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-muted">
-          <span title={checked.title}>{checked.text}</span>
-          <span>{problemCountText(meta.state, element.findingsCount)}</span>
-        </span>
-        {!canvas && <span className="text-2xs leading-snug text-fg-faint">How it is checked: {ELEMENT_CHECKED_BY[element.key]}</span>}
+        {/* Three lines on the canvas: two cut "Run the checks from…" mid-sentence (2026-11-18). */}
+        {reason && (
+          <span className={`text-xs leading-snug text-fg-secondary ${canvas ? 'line-clamp-3' : ''}`} title={canvas ? reason : undefined}>{reason}</span>
+        )}
+        {(lines.checked || lines.problems) && (
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-muted">
+            {lines.checked && <span title={checked.title}>{checked.text}</span>}
+            {lines.problems &&
+              (element.findingsCount > 0 ? (
+                // A mark and the number: the header's next step says it in words (round 3).
+                <span className="inline-flex items-center gap-1 font-semibold text-fg tabular-nums" title={problemText} data-testid="recipe-card-problems">
+                  <StatusGlyph tone={meta.state === 'error' ? 'danger' : 'warn'} />
+                  {element.findingsCount.toLocaleString()}
+                  <span className="sr-only"> {element.findingsCount === 1 ? 'problem' : 'problems'} to fix</span>
+                </span>
+              ) : (
+                <span>{problemText}</span>
+              ))}
+          </span>
+        )}
         {facts.length > 0 && (
           <span className="flex flex-col gap-0.5 border-t border-edge-subtle pt-2">
             {facts.map(([k, v]) => (
@@ -65,6 +101,11 @@ export function RecipeElementCard({ element, selected = false, onSelect, layout 
                 <span className="min-w-0 truncate font-mono text-fg-secondary">{formatFactValue(v)}</span>
               </span>
             ))}
+          </span>
+        )}
+        {notChecked.length > 0 && (
+          <span className="text-2xs text-fg-faint" data-testid="facts-not-checked">
+            Not checked: {notChecked.join(', ')}
           </span>
         )}
       </button>

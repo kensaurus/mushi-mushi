@@ -188,20 +188,16 @@ export const ActivationResponseSchema = z
 // shape so the overlay can render dots regardless of source. The UI
 // treats any unknown kind as a no-op decoration; schema passthrough keeps
 // the server free to extend later (e.g. `incident`, `runbook`).
-const ChartEventKindSchema = z.enum(['deploy', 'cron', 'byok'])
-
-/** @internal Exported for tests only. */
-export const ChartEventSchema = z
-  .object({
-    occurred_at: z.string(),
-    kind: ChartEventKindSchema,
-    label: z.string(),
-    href: z.string().nullable().optional(),
-    project_id: z.string().nullable().optional(),
-  })
-  .passthrough()
-
-export type ChartEvent = z.infer<typeof ChartEventSchema>
+// Only the type is used (no runtime parse), so it is written as a type: a schema kept just
+// for `z.infer` was an unused export (knip) or a value used only as a type (lint).
+export interface ChartEvent {
+  occurred_at: string
+  kind: 'deploy' | 'cron' | 'byok'
+  label: string
+  href?: string | null
+  project_id?: string | null
+  [extra: string]: unknown
+}
 
 // ─── /v1/admin/migrations/progress ──────────────────────────────────────────
 // Migration Hub Phase 2 — DB-backed checklist progress for the docs hub.

@@ -385,9 +385,9 @@ main :not(pre) > code {
   vertical-align: 1px;
 }
 
-/* The mark before the navbar wordmark (owner, 2026-11-14): Field Kenji's
-   face with Mushi-chan under his magnifier, so it shows the bug-finding job.
-   No border-radius: it would clip the magnifier handle. */
+/* The mark before the navbar wordmark (owner, 2026-11-14; redrawn 2026-11-17):
+   a magnifier over a ladybug, a small Mushi-chan face peeking in, so it shows
+   the bug-finding job. No border-radius: the tile has its own corners. */
 .docs-logo-face {
   display: inline-block;
   width: 1.5rem;

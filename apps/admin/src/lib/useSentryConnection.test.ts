@@ -114,7 +114,7 @@ describe('sentryRowStatus', () => {
     expect(
       settingsBannerPriority(
         { ...EMPTY_SETTINGS_STATS, projectId: 'p1', sdkConfigEnabled: true, byokAnthropicConfigured: true },
-        { working: 1, attention: 0, replaced: 0, expiring: 0, checking: 0, off: 0, total: 1 },
+        { working: 1, attention: 0, replaced: 0, expiring: 0, checking: 0, off: 0, duplicate: 0, total: 1 },
         true,
         shared,
       ),

@@ -848,7 +848,7 @@ export async function suggestGrouping(
   reportId: string,
   projectId: string,
   threshold?: number,
-): Promise<{ groupId?: string; similarCount: number }> {
+): Promise<{ groupId?: string; similarCount: number; similar?: SimilarReport[]; threshold?: number }> {
   const db = getServiceClient()
   // The project's Settings → General "Dedup threshold" (it was saved but never
   // read, so grouping always used the default).
@@ -866,7 +866,7 @@ export async function suggestGrouping(
       .update({ report_count: similar.length + 1, updated_at: new Date().toISOString() })
       .eq('id', existingGroupId)
 
-    return { groupId: existingGroupId, similarCount: similar.length }
+    return { groupId: existingGroupId, similarCount: similar.length, similar, threshold: effective }
   }
 
   const { data: newGroup } = await db.from('report_groups').insert({
@@ -883,5 +883,5 @@ export async function suggestGrouping(
     }
   }
 
-  return { groupId: newGroup?.id, similarCount: similar.length }
+  return { groupId: newGroup?.id, similarCount: similar.length, similar, threshold: effective }
 }

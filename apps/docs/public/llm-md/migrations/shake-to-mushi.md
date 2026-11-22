@@ -27,7 +27,7 @@ trigger on mobile.
   MIT on npm; its backend is a hosted service.)
 - **Self-host.** Mushi Mushi runs on your own Supabase / Postgres.
 - **AI triage.** Mushi Mushi's two-stage classifier and judge loop ship in the box.
-- **Pricing.** Self-hosting is free. The cloud is free for one app and 100
+- **Pricing.** Self-hosting is free. The cloud is free for three apps and 300
   diagnoses a month; paid plans are priced by number of apps (see
   [pricing](/pricing)).
 

@@ -6,16 +6,25 @@
  *
  * Writing CI secrets revokes the older CI key once GitHub accepts the new
  * one, so it is confirmed first (QA bug 30), alone or as part of Fix all.
+ *
+ * A filed task says what really happens next, from the app's Autofix and
+ * GitHub state (lib/fixReadiness.ts). A secrets write that did not fully work
+ * says why and gives the `gh` command with the new key in it; once Check
+ * again shows every name set, the warning goes (owner, 2026-11-17).
  */
 
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Btn, Callout, Card, CopyButton } from './ui'
 import { ConfirmDialog } from './ConfirmDialog'
+import { StatusGlyph } from './signal/StatusGlyph'
 import { IconCheck, IconExternalLink, IconRefresh } from './icons'
 import { usePageData } from '../lib/usePageData'
 import { LINK_ACCENT } from '../lib/chipTone'
 import { detectWebBundler } from '../lib/sdkInstallDefaults'
+import { ciSecretsManualStep } from '../lib/sdkCiSecrets'
+import { useFixReadiness, type FixReadiness } from '../lib/fixReadiness'
+import { useTurnOnAutofix } from '../lib/useTurnOnAutofix'
 import {
   FIX_ACTION_TEXT,
   fixAllPlan,
@@ -29,6 +38,9 @@ import {
   type SdkHealthPayload,
   type SdkHealthProblem,
 } from '../lib/sdkHealth'
+
+// JSX text does not decode \u escapes, so the glyph is a constant.
+const WARNING_SIGN = '⚠'
 
 /** Problems that only mean setup is not finished yet. */
 const SETUP_STEPS = new Set<SdkHealthProblem['id']>(['not_installed', 'no_repo', 'no_sdk_key', 'ci_secrets_missing', 'never_seen'])
@@ -80,6 +92,12 @@ export function SdkHealthPanel({ projectId, bare, nativeApp = false }: SdkHealth
   // After every fix SDK health is read again, so a fixed problem leaves the list.
   const fixes = useSdkHealthFixes(projectId, reload)
   const [confirm, setConfirm] = useState<SdkHealthFixKind[] | null>(null)
+  // A filed task reads what happens next from the app's Autofix and GitHub state.
+  const taskFiled = Object.values(fixes.tasks).some((t) => t.status === 'filed')
+  const fixReadiness = useFixReadiness(projectId, taskFiled)
+  const autofix = useTurnOnAutofix(projectId, fixReadiness.reload)
+  // Check again pressed after a secrets write: the result then follows the re-read.
+  const [recheckedCi, setRecheckedCi] = useState(false)
 
   // The upgrade PR opens a little after the click: read again once it is open.
   const upgradeOpened = fixes.ran.includes('upgrade_pr') && fixes.upgrade.status === 'completed'
@@ -100,6 +118,15 @@ export function SdkHealthPanel({ projectId, bare, nativeApp = false }: SdkHealth
   const busy = fixes.runningAll || fixes.running !== null
   // Results of fixes whose problem is gone after the re-read.
   const done = FIX_KINDS.filter((k) => fixStarted(fixes, k) && !problems.some((p) => p.fix?.kind === k))
+  // After Check again: every CI name set, still missing, or not checkable.
+  const ciCheck: CiRecheck = !recheckedCi
+    ? 'not_rechecked'
+    : notes.some((n) => n.check === 'ci_secrets' || n.check === 'repo')
+      ? 'unverifiable'
+      : rawProblems.some((p) => p.id === 'ci_secrets_missing')
+        ? 'still_missing'
+        : 'all_set'
+  const resultProps: ResultProps = { fixes, readiness: fixReadiness.readiness, autofix, ciCheck }
 
   const start = (kinds: SdkHealthFixKind[]) => {
     // A single task or upgrade PR touches nothing live; writing secrets and Fix all are confirmed.
@@ -117,15 +144,34 @@ export function SdkHealthPanel({ projectId, bare, nativeApp = false }: SdkHealth
               ? !health.data
                 ? ''
                 : notes.length > 0
-                  ? // Never "all good" while a check could not run.
-                    `No problems in the checks that ran, but ${notes.length} ${notes.length === 1 ? 'check' : 'checks'} could not run (below).`
+                  ? // Never "all good" while a check could not run: unknown is ○, not a pass.
+                    (
+                      // No green mark beside "0 problems" while a check did not run
+                      // (round-2 review 2026-11-18): the not-checked mark leads.
+                      <span className="inline-flex flex-wrap items-center gap-x-1.5" data-testid="sdk-health-tally">
+                        <StatusGlyph tone="off" />
+                        <span className="font-medium text-fg-secondary">{notes.length} not checked</span>
+                        <span aria-hidden="true">·</span>
+                        <span>0 problems in the checks that ran</span>
+                      </span>
+                    )
                   : 'No SDK problems found.'
               : settingUp
                 ? `${problems.length} ${problems.length === 1 ? 'step' : 'steps'} left before this app sends bug reports.`
                 : `${problems.length} ${problems.length === 1 ? 'problem' : 'problems'} found.`}
         </p>
         <div className="flex items-center gap-2">
-          <Btn size="sm" variant="ghost" className="gap-1.5" onClick={() => health.reload()} loading={health.isValidating && !health.loading}>
+          <Btn
+            size="sm"
+            variant="ghost"
+            className="gap-1.5"
+            onClick={() => {
+              if (fixes.ci.status !== 'idle') setRecheckedCi(true)
+              health.reload()
+              fixReadiness.reload()
+            }}
+            loading={health.isValidating && !health.loading}
+          >
             <IconRefresh className="h-3.5 w-3.5" aria-hidden />
             Check again
           </Btn>
@@ -146,27 +192,28 @@ export function SdkHealthPanel({ projectId, bare, nativeApp = false }: SdkHealth
       {problems.length > 0 && (
         <ul className="divide-y divide-edge-subtle/60 rounded-md border border-edge-subtle">
           {problems.map((p) => (
-            <ProblemRow key={p.id} problem={p} fixes={fixes} busy={busy} settingUp={settingUp} onFix={(k) => start([k])} />
+            <ProblemRow key={p.id} problem={p} result={resultProps} busy={busy} settingUp={settingUp} onFix={(k) => start([k])} />
           ))}
         </ul>
       )}
 
       {done.length > 0 && (
         <div className="space-y-1 rounded-md border border-ok/25 px-3 py-2" data-testid="sdk-health-done">
-          <p className="text-3xs font-semibold uppercase tracking-wider text-fg-faint">Done</p>
+          <p className="text-3xs font-semibold text-fg-secondary">Done</p>
           {done.map((k) => (
             <div key={k}>
               <p className="text-xs font-medium text-fg-secondary">{DONE_LABEL[k]}</p>
-              <FixResult kind={k} fixes={fixes} />
+              <FixResult kind={k} {...resultProps} />
             </div>
           ))}
         </div>
       )}
 
+      {/* The tally above already says "1 not checked": the list follows it with no heading of
+          its own ("not checked" three times, round-3 review 2026-11-19). */}
       {notes.length > 0 && (
         <div className="space-y-1">
-          <p className="text-3xs font-semibold uppercase tracking-wider text-fg-faint">Not checked</p>
-          <ul className="space-y-0.5 text-2xs text-fg-muted">
+          <ul className="space-y-0.5 text-2xs text-fg-muted" aria-label="Checks that did not run">
             {notes.map((n) => (
               <li key={n.check}>
                 <span className="font-medium text-fg-secondary">{NOTE_LABEL[n.check]}:</span> {n.detail}
@@ -209,27 +256,37 @@ export function SdkHealthPanel({ projectId, bare, nativeApp = false }: SdkHealth
   return bare ? body : <Card className="p-3">{body}</Card>
 }
 
+type CiRecheck = 'not_rechecked' | 'all_set' | 'still_missing' | 'unverifiable'
+
+interface ResultProps {
+  fixes: SdkHealthFixes
+  readiness: FixReadiness
+  autofix: ReturnType<typeof useTurnOnAutofix>
+  ciCheck: CiRecheck
+}
+
 function ProblemRow({
   problem,
-  fixes,
+  result,
   busy,
   settingUp,
   onFix,
 }: {
   problem: SdkHealthProblem
-  fixes: SdkHealthFixes
+  result: ResultProps
   busy: boolean
   settingUp: boolean
   onFix: (k: SdkHealthFixKind) => void
 }) {
   const kind = problem.fix?.kind ?? null
+  const fixes = result.fixes
   return (
     <li className="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-start" data-testid={`sdk-health-problem-${problem.id}`}>
       <span aria-hidden className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${settingUp ? SEVERITY_DOT.info : SEVERITY_DOT[problem.severity]}`} />
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-fg">{problem.title}</p>
         <p className="mt-0.5 text-xs text-fg-muted">{problem.detail}</p>
-        {kind && fixStarted(fixes, kind) && <FixResult kind={kind} fixes={fixes} />}
+        {kind && fixStarted(fixes, kind) && <FixResult kind={kind} {...result} />}
       </div>
       {kind && problem.fix && !fixStarted(fixes, kind) && (
         <Btn
@@ -288,22 +345,75 @@ function Line({ tone, children }: { tone: 'ok' | 'warn' | 'muted'; children: Rea
   return <p className={`mt-1.5 flex items-center gap-1.5 text-xs ${cls}`}>{children}</p>
 }
 
-function FixResult({ kind, fixes }: { kind: SdkHealthFixKind; fixes: SdkHealthFixes }) {
-  const task = taskStateFor(fixes, kind)
-  if (task) {
-    if (task.status === 'running') return <Line tone="muted">Filing the task…</Line>
-    if (task.status === 'failed') return <Line tone="warn">{task.error}</Line>
+/** What happens to a filed task next, from the app's Autofix and GitHub state. */
+function TaskFiled({ reportId, existing, readiness, autofix }: { reportId: string; existing: boolean } & Pick<ResultProps, 'readiness' | 'autofix'>) {
+  const filed = existing ? 'Already filed' : 'Task filed'
+  const open = `/reports/${reportId}`
+  const prompt = `${open}#fix-prompt`
+  if (readiness.kind === 'ready') {
     return (
       <Line tone="ok">
         <IconCheck className="h-3.5 w-3.5" aria-hidden />
         <span>
-          {task.existing ? 'Already filed' : 'Task filed'}: your fix agent picks it up and opens the PR.{' '}
-          <Link to={`/reports/${task.reportId}`} className={LINK_ACCENT}>
+          {filed}: Mushi Mushi starts the fix and opens it as a draft PR for you to review.{' '}
+          <Link to={open} className={LINK_ACCENT}>
             Open the task
           </Link>
         </span>
       </Line>
     )
+  }
+  if (readiness.kind === 'autofix_off' || readiness.kind === 'blocked') {
+    const sentence =
+      readiness.kind === 'autofix_off'
+        ? `${filed}. Autofix is off for this app: turn it on, or copy the fix prompt into your editor.`
+        : `${filed}. Mushi Mushi can't start the fix yet (${readiness.label.toLowerCase()} is not done): finish that step, or copy the fix prompt into your editor.`
+    return (
+      <div className="mt-1.5 space-y-1.5" data-testid={`sdk-health-task-${readiness.kind}`}>
+        <p className="flex items-start gap-1.5 text-xs text-fg-secondary">
+          <IconCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ok" aria-hidden />
+          <span>{sentence}</span>
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          {readiness.kind === 'blocked' ? (
+            <Btn size="sm" variant="ghost" to={readiness.href}>
+              Finish setup
+            </Btn>
+          ) : readiness.githubReady ? (
+            <Btn size="sm" variant="ghost" onClick={() => void autofix.turnOn()} loading={autofix.saving} data-testid="sdk-health-turn-on-autofix">
+              Turn on Autofix
+            </Btn>
+          ) : (
+            <Btn size="sm" variant="ghost" to={readiness.githubHref}>
+              Connect GitHub first
+            </Btn>
+          )}
+          <Btn size="sm" variant="ghost" to={prompt}>
+            Copy the fix prompt
+          </Btn>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <Line tone="ok">
+      <IconCheck className="h-3.5 w-3.5" aria-hidden />
+      <span>
+        {filed}. Open it for the fix prompt to paste into your editor.{' '}
+        <Link to={prompt} className={LINK_ACCENT}>
+          Open the task
+        </Link>
+      </span>
+    </Line>
+  )
+}
+
+function FixResult({ kind, fixes, readiness, autofix, ciCheck }: { kind: SdkHealthFixKind } & ResultProps) {
+  const task = taskStateFor(fixes, kind)
+  if (task) {
+    if (task.status === 'running') return <Line tone="muted">Filing the task…</Line>
+    if (task.status === 'failed') return <Line tone="warn">{task.error}</Line>
+    return <TaskFiled reportId={task.reportId ?? ''} existing={Boolean(task.existing)} readiness={readiness} autofix={autofix} />
   }
 
   if (kind === 'upgrade_pr') {
@@ -341,32 +451,66 @@ function FixResult({ kind, fixes }: { kind: SdkHealthFixKind; fixes: SdkHealthFi
       </div>
     )
   }
-  const manual = s.status === 'forbidden' || s.status === 'no-repo' || s.status === 'partial' || s.status === 'failed'
-  return (
-    <div className="mt-1.5 space-y-1.5">
-      <Line tone="warn">
-        {s.status === 'forbidden'
-          ? "GitHub didn't let Mushi Mushi write secrets (the token lacks Secrets: write). Run these commands instead."
-          : s.status === 'no-repo'
-            ? 'No GitHub repo or token is connected. Run these commands instead.'
-            : s.status === 'partial'
-              ? `Some names were not written: ${s.failed?.map((f) => f.name).join(', ')}.`
-              : (s.errorMessage ?? 'The secrets were not written.')}
+  if (s.status !== 'partial' && s.status !== 'forbidden' && s.status !== 'no-repo' && s.status !== 'failed') return null
+  // Set by hand since: Check again found every name in GitHub.
+  if (ciCheck === 'all_set') {
+    return (
+      <Line tone="ok">
+        <IconCheck className="h-3.5 w-3.5" aria-hidden />
+        <span>Every CI name is set in GitHub now. Ship a new build so the app picks them up.</span>
       </Line>
-      {manual && s.rawKey && (
-        <div className="flex items-center gap-2">
-          <code className="min-w-0 flex-1 truncate rounded bg-surface-overlay px-2 py-1 font-mono text-2xs text-fg">{s.rawKey}</code>
-          <CopyButton value={s.rawKey} label="Copy API key" copiedLabel="Copied" size="sm" />
+    )
+  }
+  const step = ciSecretsManualStep({
+    status: s.status,
+    failed: s.failed,
+    commands: s.fallback?.commands,
+    rawKey: s.rawKey,
+    errorMessage: s.errorMessage,
+  })
+  const commands = (
+    <>
+      {step.commands.map((cmd) => (
+        <div key={cmd} className="flex items-center gap-2">
+          <code className="min-w-0 flex-1 truncate rounded bg-surface-overlay px-2 py-1 font-mono text-2xs text-fg">{cmd}</code>
+          <CopyButton value={cmd} label="Copy command" copiedLabel="Copied" size="sm" />
         </div>
-      )}
-      {manual && s.rawKey && <p className="text-2xs text-fg-faint">This is the only time the full key is shown.</p>}
-      {manual &&
-        s.fallback?.commands.map((cmd) => (
-          <div key={cmd} className="flex items-center gap-2">
-            <code className="min-w-0 flex-1 truncate rounded bg-surface-overlay px-2 py-1 font-mono text-2xs text-fg">{cmd}</code>
-            <CopyButton value={cmd} label="Copy command" copiedLabel="Copied" size="sm" />
+      ))}
+      {s.rawKey && <p className="text-2xs text-fg-faint">The command holds the new key. This is the only time it is shown.</p>}
+    </>
+  )
+  // Mushi Mushi cannot read the repo's secrets, so it cannot confirm them. After
+  // Check again the warning goes; the command stays under a fold.
+  if (ciCheck === 'unverifiable') {
+    const names = s.failed?.map((f) => f.name).join(', ') || 'the secret'
+    return (
+      <div className="mt-1.5 space-y-1.5" data-testid="sdk-health-ci-unverifiable">
+        <Line tone="muted">
+          Mushi Mushi can&apos;t read your GitHub secrets, so it can&apos;t confirm {names}. If you ran the command, you&apos;re done: the next build&apos;s first report confirms it.
+        </Line>
+        <details className="text-2xs text-fg-muted">
+          <summary className="cursor-pointer">Show the command again</summary>
+          <div className="mt-1 space-y-1">{commands}</div>
+        </details>
+      </div>
+    )
+  }
+  return (
+    <div className="mt-1.5 space-y-1.5" data-testid="sdk-health-ci-manual">
+      <Line tone="warn">
+        <span aria-hidden>{WARNING_SIGN}</span>
+        <span>{step.reason}</span>
+      </Line>
+      {commands}
+      {s.rawKey && (
+        <details className="text-2xs text-fg-muted">
+          <summary className="cursor-pointer">Builds on a host too (Vercel, Netlify, EAS)? Copy the key alone</summary>
+          <div className="mt-1 flex items-center gap-2">
+            <code className="min-w-0 flex-1 truncate rounded bg-surface-overlay px-2 py-1 font-mono text-2xs text-fg">{s.rawKey}</code>
+            <CopyButton value={s.rawKey} label="Copy API key" copiedLabel="Copied" size="sm" />
           </div>
-        ))}
+        </details>
+      )}
     </div>
   )
 }

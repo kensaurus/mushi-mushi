@@ -18,12 +18,14 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { JourneyCanvas } from '../components/journeys/JourneyCanvas'
 import { RecordingCard, ScanBar } from '../components/journeys/JourneyControls'
 import { FindingsSection, FlowsSection } from '../components/journeys/JourneyFindings'
-import { Btn, Callout, EmptyState, ErrorAlert, Section, SegmentedControl, Skeleton, StatCard } from '../components/ui'
+import { Btn, Callout, Card, EmptyState, ErrorAlert, Section, SegmentedControl, Skeleton, StatCard } from '../components/ui'
+import { useSetupStatus } from '../lib/useSetupStatus'
 import { usePageData } from '../lib/usePageData'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
-import { JOURNEY_DAYS, journeysPath, percent, scoreTone, type JourneyDays, type JourneysData } from '../lib/journeys'
+import { JOURNEY_DAYS, journeyScoreStat, journeySdkState, journeyStartHints, journeysPath, percent, type JourneyDays, type JourneysData } from '../lib/journeys'
 
 const SCAN_POLL_MS = 4_000
+const SCORE_ACCENT = { ok: 'text-ok', warn: 'text-warn', danger: 'text-danger', off: 'text-fg-secondary' } as const
 /** Keep checking a scan this long after starting it, even if a refresh fails. */
 const SCAN_WATCH_MS = 25 * 60_000
 
@@ -53,6 +55,9 @@ function JourneysBody({ projectId }: { projectId: string }) {
   const [days, setDays] = useState<JourneyDays>('30')
   const { data, loading, error, reload } = usePageData<JourneysData>(journeysPath(projectId, days), { deps: [days] })
   const [selected, setSelected] = useState<string | null>(null)
+  // Whether the SDK is installed, and where it checks in from (shared /setup read).
+  const setup = useSetupStatus(projectId)
+  const sdk = journeySdkState(setup.data?.projects.find((p) => p.project_id === projectId)?.steps)
   const scanRunning = data?.scan?.status === 'running'
   // When this tab started a scan: polling continues until a scan created
   // after that time has finished, so one failed refresh (which keeps the old
@@ -86,69 +91,92 @@ function JourneysBody({ projectId }: { projectId: string }) {
   const hasVisits = map.stats.sessions > 0
   const hasScan = data.mapScan != null
   const hasAnything = map.nodes.length > 0
+  const score = journeyScoreStat(map.score, map.findings.length, hasScan)
 
   return (
     <>
-      <div className="grid gap-3 lg:grid-cols-2">
-        <ScanBar data={data} projectId={projectId} onStarted={onScanStarted} />
+      {/* grid-cols-1 + min-w-0 cards: at 390 the one-line hints sized the
+          implicit column to their full width and the page scrolled sideways.
+          items-start: the collapsed recording card kept its own height instead
+          of stretching to the scan card's (round-3 sweep 2026-11-19). */}
+      <div className="grid min-w-0 grid-cols-1 items-start gap-3 lg:grid-cols-2">
+        <ScanBar data={data} projectId={projectId} onStarted={onScanStarted} fallbackUrl={sdk.origin} />
         <RecordingCard data={data} projectId={projectId} onChanged={reload} />
       </div>
       {!hasAnything ? (
-        <GettingStarted hasVisits={hasVisits} hasScan={hasScan} />
+        <GettingStarted hasVisits={hasVisits} hasScan={hasScan} sdkInstalled={sdk.installed} />
       ) : (
         <>
           <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
-            <StatCard label="Journey score" value={`${map.score}`} detail={map.findings.length === 0 ? 'no problems found' : `${map.findings.length} to look at`} accent={scoreTone(map.score) === 'ok' ? 'text-ok' : scoreTone(map.score) === 'warn' ? 'text-warn' : 'text-danger'} hint="100 means no problems found. Each problem lowers it: fix-first ones the most." />
+            <StatCard label="Journey score" value={score.value} detail={score.detail} accent={SCORE_ACCENT[score.tone]} hint="100 means no problems found. Each problem lowers it: fix-first ones the most. It needs a site scan first." />
             <StatCard label="Visits" value={map.stats.sessions} detail={hasVisits ? `last ${data.days} days${map.stats.sampled ? ' (latest 20,000 page views)' : ''}` : 'SDK not sending visits'} />
             <StatCard label="Pages per visit" value={map.stats.avgPagesPerSession ?? '—'} detail={`${map.stats.pageViews} page views`} />
             <StatCard label="Leave after one page" value={percent(map.stats.bounceRate)} detail="visits that saw one page" />
-            <StatCard label="Pages" value={map.stats.pages} detail={hasScan ? `${data.mapScan!.pageCount} scanned` : 'not scanned yet'} />
+            <StatCard label="Pages" value={map.stats.pages} detail={hasScan ? `${data.mapScan!.pageCount} scanned` : 'from visits only'} />
           </div>
 
           {!hasVisits && (
             <Callout tone="info" label="Map from the site scan only">
-              Without visits the map shows your links, not what people do. Install the SDK with session tracking on to see real paths, dead ends and pages people leave from. <Link className="text-brand underline" to="/connect">Set up the SDK</Link>
+              {sdk.installed ? (
+                <>Without visits the map shows your links, not what people do. Your SDK is installed: turn on session tracking (trackSessions: true) to see real paths, dead ends and pages people leave from.</>
+              ) : (
+                <>
+                  Without visits the map shows your links, not what people do. Install the SDK with session tracking on to see real paths, dead ends and pages people leave from.{' '}
+                  <Link className="text-brand underline" to="/connect">Set up the SDK</Link>
+                </>
+              )}
             </Callout>
           )}
-          {!hasScan && (
-            <Callout tone="info" label="Not scanned yet">
-              A site scan finds duplicate pages, pages nothing links to and pages buried too deep. Press Scan my site above.
-            </Callout>
-          )}
+          {/* "Not scanned yet" is said by the score tile and by What to improve; no third banner (fresh-eyes 2026-11-18). */}
 
-          <Section
-            title="Flow map"
-            action={<SegmentedControl<JourneyDays> size="sm" value={days} onChange={setDays} ariaLabel="Period" options={JOURNEY_DAYS.map((d) => ({ id: d, label: `${d} days` }))} />}
-          >
-            <JourneyCanvas map={map} hasScan={hasScan} findings={map.findings} selected={selected} onSelect={setSelected} />
-            <MapLegend hasScan={hasScan} />
-          </Section>
-
-          <div className="grid gap-3 lg:grid-cols-3">
-            <div className="min-w-0 lg:col-span-2">
-              <FindingsSection findings={map.findings} selected={selected} onClear={() => setSelected(null)} appUrl={data.liveUrl} />
-            </div>
-            <div className="min-w-0">
-              <FlowsSection flows={map.flows} />
+          {/* The map's labels are small at normal width, so the top paths sit
+              beside it as a ranked list (owner, 2026-11-18). */}
+          <div className="@container">
+            <div className="grid grid-cols-1 gap-3 @4xl:grid-cols-3">
+              <div className="min-w-0 @4xl:col-span-2">
+                <Section
+                  title="Flow map"
+                  action={<SegmentedControl<JourneyDays> size="sm" value={days} onChange={setDays} ariaLabel="Period" options={JOURNEY_DAYS.map((d) => ({ id: d, label: `${d} days` }))} />}
+                >
+                  <JourneyCanvas map={map} hasScan={hasScan} findings={map.findings} selected={selected} onSelect={setSelected} />
+                  <MapLegend hasScan={hasScan} />
+                </Section>
+              </div>
+              <div className="min-w-0">
+                <FlowsSection flows={map.flows} totalSessions={map.stats.sessions} />
+              </div>
             </div>
           </div>
+
+          <FindingsSection findings={map.findings} selected={selected} onClear={() => setSelected(null)} appUrl={data.liveUrl} hasScan={hasScan} />
         </>
       )}
     </>
   )
 }
 
-function GettingStarted({ hasVisits, hasScan }: { hasVisits: boolean; hasScan: boolean }) {
+/**
+ * One plain card (round-2 review): the editorial EmptyState drew a dashed box
+ * with a monospace "/"-slash list, and told an app whose SDK was installed to
+ * install it.
+ */
+function GettingStarted({ hasVisits, hasScan, sdkInstalled }: { hasVisits: boolean; hasScan: boolean; sdkInstalled: boolean }) {
+  const hints = journeyStartHints({ hasScan, hasVisits, sdkInstalled })
   return (
-    <EmptyState
-      title="No journeys to show yet"
-      description="The map needs real visits, a site scan, or both."
-      hints={[
-        hasScan ? 'Site scan: done.' : 'Press Scan my site above to map your public pages (needs a Firecrawl key in Settings → AI keys).',
-        hasVisits ? 'Visits: arriving.' : 'Install the Mushi Mushi SDK with session tracking on (trackSessions: true, the default) to see where real people go.',
-      ]}
-      action={<Btn variant="ghost" to="/connect">Set up the SDK</Btn>}
-    />
+    <Card className="min-w-0 p-4" data-testid="journeys-getting-started">
+      <h2 className="text-sm font-semibold text-fg">No journeys to show yet</h2>
+      <p className="mt-0.5 text-xs text-fg-muted">The map needs real visits, a site scan, or both.</p>
+      <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs text-fg-secondary">
+        {hints.map((h) => (
+          <li key={h}>{h}</li>
+        ))}
+      </ol>
+      {!sdkInstalled && !hasVisits && (
+        <Btn variant="ghost" size="sm" className="mt-3" to="/connect">
+          Set up the SDK
+        </Btn>
+      )}
+    </Card>
   )
 }
 

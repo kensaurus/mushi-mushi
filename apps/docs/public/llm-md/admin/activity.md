@@ -61,7 +61,7 @@ opened with `?mushi_journeys=1`.
 - [Tester rewards](/admin/rewards) — points and tiers that depend on identified users
 - [Bugs](/admin/reports) — triage the bugs counted under “Open reports”
 - Session tracking shipped in `@mushi-mushi/web` / `@mushi-mushi/core` **1.25.0**
-  (see root `CHANGELOG.md`)
+  (see `docs/CHANGELOG.md`)
 
   Anonymous traffic still produces sessions and page views. Rewards and
   cross-app “My Reports” need `identify()` so users land in the identified split.

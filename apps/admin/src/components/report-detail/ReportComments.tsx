@@ -55,10 +55,17 @@ function feedbackSignalToneClass(signal: FeedbackSignal): string {
 export function ReportComments({
   thread,
   onPosted,
+  canReachReporter = true,
 }: {
   thread: ReportCommentsThread
   /** Called after a successful post; `true` when the reporter can see it. */
   onPosted?: (visibleToReporter: boolean) => void
+  /**
+   * False for a report no person filed (a Sentry import, an alarm, a check):
+   * "Message reporter" and "Reply to reporter" sat under "Reporter: No user"
+   * (R2 sweep 2026-11-18). The thread is then internal notes only.
+   */
+  canReachReporter?: boolean
 }) {
   const toast = useToast()
   const { comments, loading, currentUserId, postComment, deleteComment } = thread
@@ -99,7 +106,7 @@ export function ReportComments({
   }
 
   return (
-    <Section title={`Triage thread (${comments.length})`} icon={<IconChat />}>
+    <Section title={comments.length > 0 ? `Triage thread (${comments.length})` : 'Triage thread'} icon={<IconChat />}>
       {/* Scrolls once the thread grows; focusable so keyboard users can
           scroll it too (axe scrollable-region-focusable, REPORT A14). */}
       <div
@@ -160,6 +167,7 @@ export function ReportComments({
         ))}
       </div>
       <form onSubmit={onSubmit} className="space-y-1.5">
+        {canReachReporter && (
         <div className="flex items-center gap-2 flex-wrap">
           <button
             type="button"
@@ -172,6 +180,7 @@ export function ReportComments({
             <span className="text-2xs text-accent">Reply will be visible in their inbox</span>
           )}
         </div>
+        )}
         <label htmlFor="report-triage-note" className="sr-only">
           {visibleToReporter ? 'Reply to the reporter' : 'Triage note'}
         </label>
@@ -184,6 +193,7 @@ export function ReportComments({
           maxLength={10000}
         />
         <div className="flex items-center justify-between gap-2 flex-wrap">
+          {canReachReporter ? (
           <label className="text-xs flex items-center gap-1.5 text-fg-muted cursor-pointer">
             <input
               type="checkbox"
@@ -193,7 +203,11 @@ export function ReportComments({
             Reply to reporter
             <InfoHint content="If checked, the reporter will receive a notification with this message in the SDK widget." />
           </label>
-          <Btn type="submit" variant="accent" size="sm" loading={submitting} disabled={!body.trim()}>
+          ) : (
+            <span className="text-2xs text-fg-muted">Internal note: no person filed this report.</span>
+          )}
+          {/* Ink primary: violet is for selection, not the main action (R2 sweep 2026-11-18). */}
+          <Btn type="submit" variant="primary" size="sm" loading={submitting} disabled={!body.trim()}>
             Post
           </Btn>
         </div>

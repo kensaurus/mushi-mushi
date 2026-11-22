@@ -34,6 +34,7 @@ import {
   ensureClientId,
   loadConfig,
   maybeShowTelemetryNotice,
+  peekConfig,
   resolveProfileName,
   saveConfig,
   savedSdkKeyFor,
@@ -43,6 +44,7 @@ import {
   CLI_KEY_LABEL,
   CLI_KEY_SCOPES,
   describeUnsafeSdkKey,
+  editorKeyCommand,
   probeKeyScope,
   SDK_KEY_LABEL,
   SDK_KEY_SCOPES,
@@ -76,6 +78,7 @@ import {
   TEST_REPORT_FETCH_TIMEOUT_MS,
 } from './endpoint.js';
 import { checkFreshness } from './freshness.js';
+import { ENTRY_CANDIDATES, injectSnippet, MUSHI_MARKER_START } from './snippet-inject.js';
 import { detectWorkspaceHint, type WorkspaceHint } from './monorepo.js';
 import { MUSHI_CLI_VERSION } from './version.js';
 import { printAuthBanner } from './auth-ui.js';
@@ -92,7 +95,29 @@ export interface InitOptions {
   sendTestReport?: boolean;
   /** Audit an existing install (doctor checks) instead of running the wizard. */
   audit?: boolean;
+  /** Print what the wizard would do and stop: no files, no install, no sign-in. */
+  dryRun?: boolean;
+  /**
+   * Which package to check for a newer version. The `mushi-mushi` and
+   * `create-mushi-mushi` bins pass their own; `mushi init` defaults to the CLI.
+   */
+  freshness?: FreshnessSource;
 }
+
+/** A package and the version of it that is running, for the "newer version" hint. */
+export interface FreshnessSource {
+  packageName: string;
+  version: string;
+  /** What to run to get the newest version. */
+  upgradeCommand: string;
+}
+
+/** `mushi init` run straight from the CLI: compare the CLI with the CLI. */
+export const CLI_FRESHNESS_SOURCE: FreshnessSource = {
+  packageName: '@mushi-mushi/cli',
+  version: MUSHI_CLI_VERSION,
+  upgradeCommand: 'mushi upgrade --self',
+};
 
 /**
  * The keys the wizard ends up with, one per destination. `sdkKey` goes into
@@ -132,6 +157,13 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
     return;
   }
 
+  // Before the non-interactive guard: a dry run asks nothing, so it works in
+  // any terminal without --yes.
+  if (options.dryRun) {
+    await runInitDryRun(cwd, options);
+    return;
+  }
+
   ensureInteractiveOrBailOut(options);
   // Past the guard, a non-interactive run has either --yes or the full flag
   // set; both mean "take the defaults". Without this, the env-overwrite,
@@ -141,7 +173,7 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
 
   p.intro('Mushi setup');
 
-  await printFreshnessHint();
+  await printFreshnessHint(options.freshness);
   warnIfWorkspaceRoot(cwd);
 
   const pkg = readPackageJson(cwd);
@@ -213,13 +245,18 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
   persistCliConfig(credentials, endpoint);
   emitWizardFunnelEvent(credentials, endpoint, 'wizard_env_written', { framework: framework.id });
 
+  await ensureEditorKey(credentials, options, endpoint);
+
   const enableRewards = await maybeEnableRewards(options);
 
-  await maybeInjectSnippet(cwd, framework, options);
+  const snippet = await maybeInjectSnippet(cwd, framework, options);
 
-  printNextSteps(framework, consoleBase, enableRewards);
+  printNextSteps(framework, consoleBase, enableRewards, snippet);
 
   await maybeSendTestReport(credentials, { ...options, endpoint, consoleBase });
+
+  p.note(sampleBugSnippet(framework.id), 'Send a sample bug from your app:');
+  p.log.info('No code change: `npx mushi-mushi test` sends one from this terminal.');
 
   await maybeOfferConnect(credentials, options, consoleBase);
 
@@ -638,16 +675,15 @@ async function runBrowserSignIn(
 
     if (!isInteractive()) {
       const cwd = options.cwd ?? process.cwd();
-      const choice = chooseProjectNonInteractive(
-        projects,
-        defaultProjectName(readPackageJson(cwd)?.name, cwd),
-      );
+      const name = defaultProjectName(readPackageJson(cwd)?.name, cwd);
+      // init runs in the app's folder, so the chooser never answers 'ask' here.
+      const choice = chooseProjectNonInteractive(projects, name);
       if (choice.kind === 'existing') {
         p.log.info(`Using project "${choice.name}" (matches this app — pass --project-id to pick another).`);
         target = { kind: 'existing', projectId: choice.id };
       } else {
-        p.log.info(`Creating project "${choice.name}" (no project matches this app — pass --project-id to use an existing one).`);
-        target = { kind: 'new', name: choice.name };
+        p.log.info(`Creating project "${name}" (no project matches this app — pass --project-id to use an existing one).`);
+        target = { kind: 'new', name };
       }
     } else {
       const NEW = '__new__';
@@ -1146,50 +1182,141 @@ function emitWizardFunnelEvent(
 }
 
 /**
- * Offer idempotent marker-block injection of the init snippet for
- * frameworks where it is a plain top-of-file import (see ENTRY_CANDIDATES).
- * JSX-provider frameworks are never auto-edited — the snippet must wrap the
- * user's render tree, and rewriting that is riskier than a copy-paste.
- * Declining (or non-interactive runs) falls through to the printed snippet;
- * `mushi doctor` verifies either way via its "SDK init snippet wired" check.
+ * Where the init snippet goes for a framework: the injectable entry file that
+ * exists, or the file named in the snippet's first comment for a human to
+ * edit. Read-only; the caller decides whether to write `next`.
  */
-async function maybeInjectSnippet(
-  cwd: string,
-  framework: Framework,
-  options: InitOptions,
-): Promise<void> {
-  if (options.yes || !process.stdin.isTTY) return;
-  const { ENTRY_CANDIDATES, injectSnippet, MUSHI_MARKER_START } = await import('./snippet-inject.js');
-  const candidates = ENTRY_CANDIDATES[framework.id];
-  if (!candidates) return;
+export type SnippetPlan =
+  | {
+      kind: 'inject';
+      /** Path relative to the app root, e.g. `src/main.ts`. */
+      file: string;
+      abs: string;
+      /** The file's content with the marker block added or refreshed. */
+      next: string;
+      alreadyInjected: boolean;
+      /** The block is already there and up to date: nothing to write. */
+      unchanged: boolean;
+    }
+  | {
+      kind: 'manual';
+      /** Where to paste the snippet, from its first comment line. */
+      target: string;
+    };
 
-  const { readFile, writeFile } = await import('node:fs/promises');
-  const nodePath = await import('node:path');
+/**
+ * The file a framework's snippet says it belongs in ("src/main.tsx",
+ * "app/providers.tsx (or pages/_app.tsx …)"), from its first `//` comment.
+ * @internal Exported for tests only.
+ */
+export function snippetTarget(framework: Framework): string {
+  const comment = framework
+    .snippet()
+    .split('\n')
+    .map((l) => l.trim())
+    .find((l) => l.startsWith('//'));
+  const text = comment?.replace(/^\/\/\s*/, '').trim();
+  return text && text.length > 0 ? text : 'your app entry file';
+}
+
+/**
+ * Plan the snippet edit with the same idempotent marker injection for every
+ * mode. Only frameworks in ENTRY_CANDIDATES (a plain top-of-file import) are
+ * ever edited; JSX providers have to wrap the render tree, which stays a
+ * human edit.
+ */
+export async function planSnippetInjection(cwd: string, framework: Framework): Promise<SnippetPlan> {
+  const candidates = ENTRY_CANDIDATES[framework.id] ?? [];
+  const { readFile } = await import('node:fs/promises');
   for (const rel of candidates) {
-    const abs = nodePath.join(cwd, rel);
+    const abs = join(cwd, rel);
     let source: string;
     try {
       source = await readFile(abs, 'utf8');
     } catch {
       continue;
     }
-
-    const alreadyInjected = source.includes(MUSHI_MARKER_START);
-    const confirmed = await p.confirm({
-      message: alreadyInjected
-        ? `Refresh the Mushi init block in ${rel}?`
-        : `Add the Mushi init snippet to ${rel}? (wrapped in markers; re-runs update in place)`,
-    });
-    if (p.isCancel(confirmed) || !confirmed) return;
-
-    await writeFile(abs, injectSnippet(source, framework.snippet()), 'utf8');
-    p.log.success(`${alreadyInjected ? 'Updated' : 'Added'} Mushi init block in ${rel}`);
-    return;
+    const next = injectSnippet(source, framework.snippet());
+    return {
+      kind: 'inject',
+      file: rel,
+      abs,
+      next,
+      alreadyInjected: source.includes(MUSHI_MARKER_START),
+      unchanged: next === source,
+    };
   }
+  return { kind: 'manual', target: snippetTarget(framework) };
 }
 
-function printNextSteps(framework: Framework, consoleBase: string, enableRewards = false): void {
-  p.note(framework.snippet(), 'Add this to your app:');
+/** What happened to the init snippet, for the next-steps checklist. */
+export type SnippetOutcome =
+  | { kind: 'written'; file: string }
+  | { kind: 'manual'; target: string };
+
+/**
+ * Put the init snippet in the entry file when that is safe (see
+ * planSnippetInjection). Interactive runs ask first; `--yes` runs apply it
+ * without asking, since the edit is a marker block a re-run replaces. When
+ * nothing can be edited, say exactly which file to paste into.
+ * @internal Exported for tests only.
+ */
+export async function applySnippetPlan(
+  plan: SnippetPlan,
+  opts: { yes: boolean; confirm: (message: string) => Promise<boolean> },
+): Promise<SnippetOutcome> {
+  if (plan.kind === 'manual') return plan;
+  if (plan.unchanged) {
+    p.log.info(`The Mushi Mushi init block in ${plan.file} is already up to date.`);
+    return { kind: 'written', file: plan.file };
+  }
+  if (!opts.yes) {
+    const ok = await opts.confirm(
+      plan.alreadyInjected
+        ? `Refresh the Mushi Mushi init block in ${plan.file}?`
+        : `Add the Mushi Mushi init snippet to ${plan.file}? (wrapped in markers; re-runs update in place)`,
+    );
+    if (!ok) return { kind: 'manual', target: plan.file };
+  }
+  const { writeFile } = await import('node:fs/promises');
+  await writeFile(plan.abs, plan.next, 'utf8');
+  p.log.success(`${plan.alreadyInjected ? 'Updated' : 'Added'} the Mushi Mushi init block in ${plan.file}`);
+  return { kind: 'written', file: plan.file };
+}
+
+/**
+ * Offer (or, with `--yes`, make) the snippet edit. JSX-provider frameworks
+ * are never auto-edited: the snippet must wrap the user's render tree, and
+ * rewriting that is riskier than a copy-paste. `mushi doctor` verifies
+ * either way via its "SDK init snippet wired" check.
+ */
+async function maybeInjectSnippet(
+  cwd: string,
+  framework: Framework,
+  options: InitOptions,
+): Promise<SnippetOutcome> {
+  const plan = await planSnippetInjection(cwd, framework);
+  const outcome = await applySnippetPlan(plan, {
+    yes: Boolean(options.yes) || !isInteractive(),
+    confirm: async (message) => {
+      const answer = await p.confirm({ message });
+      return !p.isCancel(answer) && Boolean(answer);
+    },
+  });
+  if (outcome.kind === 'manual' && (options.yes || !isInteractive())) {
+    // The one edit left for a human (or the AI editor that ran --yes).
+    p.log.info(`One edit left: paste the "Add this to your app" snippet below (${outcome.target}).`);
+  }
+  return outcome;
+}
+
+function printNextSteps(
+  framework: Framework,
+  consoleBase: string,
+  enableRewards = false,
+  snippet: SnippetOutcome = { kind: 'manual', target: snippetTarget(framework) },
+): void {
+  p.note(framework.snippet(), snippet.kind === 'written' ? `Added to ${snippet.file}:` : 'Add this to your app:');
 
   if (enableRewards) {
     const badgeSnippet =
@@ -1203,7 +1330,9 @@ function printNextSteps(framework: Framework, consoleBase: string, enableRewards
 
   p.note(
     [
-      '  [ ] 1. Paste the init snippet above into your app entry file',
+      snippet.kind === 'written'
+        ? `  [x] 1. Init snippet added to ${snippet.file}`
+        : `  [ ] 1. Paste the init snippet above (${snippet.target})`,
       '  [ ] 2. Start your dev server',
       '  [ ] 3. Wire your editor: npx mushi-mushi setup --ide cursor   (or --ide claude)',
       `  [ ] 4. Open the Test it tab to send a test report: ${consoleUrl(consoleBase, '/onboarding?tab=verify')}`,
@@ -1357,13 +1486,277 @@ async function maybeSendTestReport(
   }
 }
 
-async function printFreshnessHint(): Promise<void> {
-  const result = await checkFreshness('mushi-mushi', MUSHI_CLI_VERSION);
-  if (!result || !result.isOutdated) return;
-  p.log.info(
-    `A newer version of mushi-mushi is available: ${result.current} → ${result.latest}. ` +
-      'Run `npx mushi-mushi@latest` to get the freshest wizard.',
+/**
+ * The "newer version" line, or null. Compares a package with its own latest
+ * on npm: the launcher with the launcher, the CLI with the CLI. (Comparing
+ * the CLI's 0.x with the launcher's 1.x warned on every run, even @latest.)
+ * A dev build has no published version to compare, so it never warns.
+ * @internal Exported for tests only.
+ */
+export async function freshnessHint(
+  source: FreshnessSource,
+  check: typeof checkFreshness = checkFreshness,
+): Promise<string | null> {
+  if (!source.version || source.version === '0.0.0-dev') return null;
+  const result = await check(source.packageName, source.version);
+  if (!result || !result.isOutdated) return null;
+  return (
+    `A newer version of ${source.packageName} is available: ${result.current} → ${result.latest}. ` +
+    `Run \`${source.upgradeCommand}\` to get the newest wizard.`
   );
+}
+
+async function printFreshnessHint(source: FreshnessSource = CLI_FRESHNESS_SOURCE): Promise<void> {
+  const hint = await freshnessHint(source);
+  if (hint) p.log.info(hint);
+}
+
+/**
+ * True when the CLI config will hold only the app's ingest key, so the
+ * stdio MCP server (which reads that config) would start in setup mode.
+ * A key kept from an earlier sign-in is assumed to be the login key.
+ * @internal Exported for tests only.
+ */
+export function needsEditorKey(saved: Pick<CliConfig, 'apiKey'>, credentials: WizardCredentials): boolean {
+  if (credentials.cliKey) return false;
+  return !saved.apiKey || saved.apiKey === credentials.sdkKey;
+}
+
+/**
+ * Browser sign-in usually mints the editor key in the same approval
+ * (mintWizardKeys). A pasted or flag key, a reused ingest key, or a failed
+ * CLI mint leaves the CLI config with the ingest key only, and the MCP
+ * server then serves 3 docs tools. Interactive runs offer to fix it now with
+ * one more approval; `--yes` runs never wait on a second approval and print
+ * the one command instead.
+ */
+async function ensureEditorKey(
+  credentials: WizardCredentials,
+  options: InitOptions,
+  endpoint: string,
+): Promise<void> {
+  const saved = loadConfig();
+  if (!needsEditorKey(saved, credentials)) return;
+  const command = editorKeyCommand(credentials.projectId);
+  const why = "Your editor's MCP server needs a key that can read reports; the app's key can only send them.";
+
+  if (options.yes || !isInteractive()) {
+    p.log.info(`${why} To get one, run: ${command}`);
+    return;
+  }
+  const answer = await p.confirm({
+    message: `${why} Approve one more browser sign-in to make it now?`,
+    initialValue: true,
+  });
+  if (p.isCancel(answer) || !answer) {
+    p.log.info(`Later: ${command}`);
+    return;
+  }
+  const key = await mintEditorKey(endpoint, credentials.projectId);
+  if (!key) {
+    p.log.warn(`No editor key was made. Run it yourself: ${command}`);
+    return;
+  }
+  saveConfig({ ...loadConfig(), apiKey: key });
+  trySaveKeyToKeychain(key, resolveProfileName());
+  credentials.cliKey = key;
+  p.log.success('Editor key saved to the CLI config (report:write + mcp:read). Restart your editor to use it.');
+}
+
+/** Device sign-in, then one report:write + mcp:read key for `projectId`. Null on any failure. */
+async function mintEditorKey(endpoint: string, projectId: string): Promise<string | null> {
+  let session;
+  try {
+    session = await startDeviceAuth(endpoint, ensureClientId());
+  } catch (err) {
+    p.log.warn(err instanceof Error ? err.message : String(err));
+    return null;
+  }
+  try {
+    await openInBrowser(session.verification_uri);
+  } catch {
+    /* best-effort — URL is shown in the banner below */
+  }
+  printAuthBanner(session.user_code, session.verification_uri);
+  const spin = p.spinner();
+  spin.start('Waiting for you to approve in the browser…');
+  try {
+    const cliToken = await waitForCliToken(endpoint, session);
+    const key = await mintProjectKey(endpoint, cliToken, projectId, {
+      scopes: CLI_KEY_SCOPES,
+      label: CLI_KEY_LABEL,
+    });
+    spin.stop('Approved.');
+    return key;
+  } catch (err) {
+    spin.stop("Browser sign-in didn't complete.");
+    p.log.warn(err instanceof Error ? err.message : String(err));
+    return null;
+  }
+}
+
+const WEB_SAMPLE_BUG = `// In any click handler (every web adapter shares this one SDK instance):
+import { Mushi } from 'mushi-mushi'
+
+Mushi.getInstance()?.captureException(new Error('Sample bug from Mushi Mushi setup'))`;
+
+const NODE_SAMPLE_BUG = `// Anywhere in your server code, e.g. a test route:
+import { mushi } from './instrument'
+
+await mushi.captureException(new Error('Sample bug from Mushi Mushi setup'))`;
+
+const NATIVE_SAMPLE_BUG = `// In any component inside <MushiProvider>, e.g. a button's onPress:
+import { useMushi } from '@mushi-mushi/react-native'
+
+const mushi = useMushi()
+mushi.submitReport({ description: 'Sample bug from Mushi Mushi setup', category: 'bug' })`;
+
+const CAPACITOR_SAMPLE_BUG = `// Anywhere after Mushi.configure(...):
+import { Mushi } from '@mushi-mushi/capacitor'
+
+await Mushi.report({ description: 'Sample bug from Mushi Mushi setup', category: 'bug' })`;
+
+/** One sample-bug call per framework, using the API that framework's snippet sets up. */
+const SAMPLE_BUG_SNIPPETS: Record<FrameworkId, string> = {
+  next: WEB_SAMPLE_BUG,
+  react: WEB_SAMPLE_BUG,
+  cra: WEB_SAMPLE_BUG,
+  remix: WEB_SAMPLE_BUG,
+  astro: WEB_SAMPLE_BUG,
+  solid: WEB_SAMPLE_BUG,
+  vue: WEB_SAMPLE_BUG,
+  nuxt: WEB_SAMPLE_BUG,
+  svelte: WEB_SAMPLE_BUG,
+  sveltekit: WEB_SAMPLE_BUG,
+  angular: WEB_SAMPLE_BUG,
+  vanilla: WEB_SAMPLE_BUG,
+  expo: NATIVE_SAMPLE_BUG,
+  'react-native': NATIVE_SAMPLE_BUG,
+  capacitor: CAPACITOR_SAMPLE_BUG,
+  express: NODE_SAMPLE_BUG,
+  fastify: NODE_SAMPLE_BUG,
+  hono: NODE_SAMPLE_BUG,
+};
+
+/**
+ * The smallest code that sends a real bug report from the user's own app,
+ * so the first report they see came from their app, not from this terminal.
+ * Printed only: the wizard never adds a page or button to the app.
+ */
+export function sampleBugSnippet(framework: FrameworkId): string {
+  return SAMPLE_BUG_SNIPPETS[framework];
+}
+
+/** Inputs for planInitDryRun, gathered with read-only checks. */
+export interface DryRunInput {
+  cwd: string;
+  framework: Framework;
+  /** How the framework was chosen. */
+  frameworkSource: 'flag' | 'detected';
+  pm: PackageManager;
+  hasPackageJson: boolean;
+  endpoint: string;
+  options: Pick<InitOptions, 'projectId' | 'apiKey' | 'skipInstall' | 'sendTestReport' | 'yes'>;
+  /** What a previous sign-in saved. Only presence and the project id are used. */
+  saved: { projectId?: string; hasKey: boolean };
+  snippet: SnippetPlan;
+}
+
+/**
+ * What a real run would do, line by line. Reads the env file to tell "add"
+ * from "update", and writes nothing.
+ * @internal Exported for tests only.
+ */
+export function planInitDryRun(input: DryRunInput): string[] {
+  const { framework, options } = input;
+  const lines: string[] = [];
+  if (!input.hasPackageJson) {
+    lines.push('No package.json here: a real run stops (or asks first). Run from your app folder, or pass --cwd.');
+  }
+  lines.push(
+    `Framework: ${framework.label}${input.frameworkSource === 'flag' ? ' (from --framework)' : ' (detected)'}`,
+  );
+
+  if (options.projectId && options.apiKey) {
+    lines.push('Credentials: use --project-id and --api-key (checked first: the key must be ingest-only).');
+  } else if (input.saved.projectId && input.saved.hasKey) {
+    lines.push(
+      `Credentials: reuse your saved sign-in (project ${input.saved.projectId.slice(0, 8)}…), ` +
+        'or open a browser sign-in if those keys no longer work.',
+    );
+  } else {
+    lines.push(
+      'Credentials: open a browser sign-in. You approve once; it picks or creates the project and makes ' +
+        "two keys: an ingest-only key for the app and a read key for your editor's MCP server.",
+    );
+  }
+
+  const packages = framework.needsWebPackage ? [framework.packageName, 'mushi-mushi'] : [framework.packageName];
+  const command = installCommand(input.pm, packages);
+  lines.push(options.skipInstall ? `Install: skipped (--skip-install); you run \`${command}\`` : `Install: ${command}`);
+
+  const envFile = ENV_FILES.find((f) => existsSync(join(input.cwd, f))) ?? ENV_FILES[0];
+  const names = envVarsToWrite('<key>', '<id>', framework, input.endpoint)
+    .split('\n')
+    .map((l) => l.split('=')[0])
+    .filter(Boolean);
+  let existingEnv = '';
+  try {
+    existingEnv = readFileSync(join(input.cwd, envFile), 'utf-8');
+  } catch {
+    existingEnv = '';
+  }
+  lines.push(
+    existingEnv.includes('MUSHI_PROJECT_ID')
+      ? `Env: update the MUSHI_* lines in ${envFile} (${names.join(', ')})${options.yes ? '' : ', after asking'}`
+      : `Env: add ${names.join(', ')} to ${envFile}`,
+  );
+
+  lines.push("CLI config: save the keys to your private CLI config, outside the repo.");
+
+  if (input.snippet.kind === 'inject') {
+    lines.push(
+      input.snippet.unchanged
+        ? `Snippet: ${input.snippet.file} already has the init block; no change.`
+        : `Snippet: ${input.snippet.alreadyInjected ? 'refresh' : 'add'} the init block in ${input.snippet.file}` +
+            (options.yes ? '' : ', after asking'),
+    );
+  } else {
+    lines.push(`Snippet: not edited automatically; you paste it in (${input.snippet.target}).`);
+  }
+
+  if (options.sendTestReport !== false) lines.push('Test report: send one test report to check the pipeline.');
+  lines.push('Sample bug: print the one call that sends a bug from your own app.');
+  return lines;
+}
+
+/** `--dry-run`: read-only checks, then the plan. No sign-in, no install, no file writes. */
+async function runInitDryRun(cwd: string, options: InitOptions): Promise<void> {
+  p.intro('Mushi Mushi setup (dry run)');
+  await printFreshnessHint(options.freshness);
+  warnIfWorkspaceRoot(cwd);
+
+  const pkg = readPackageJson(cwd);
+  const framework = options.framework ? FRAMEWORKS[options.framework] : detectFramework(cwd, pkg);
+  // peekConfig, not loadConfig: loadConfig can fix file modes or migrate an
+  // old config file, and a dry run must not change anything.
+  const config = peekConfig();
+  const endpoint = resolveCloudEndpoint(
+    firstEndpoint(options.endpoint, process.env.MUSHI_API_ENDPOINT, config.endpoint),
+  );
+  const lines = planInitDryRun({
+    cwd,
+    framework,
+    frameworkSource: options.framework ? 'flag' : 'detected',
+    pm: detectPackageManager(cwd),
+    hasPackageJson: Boolean(pkg),
+    endpoint,
+    options,
+    saved: { projectId: config.projectId, hasKey: Boolean(config.apiKey) },
+    snippet: await planSnippetInjection(cwd, framework),
+  });
+  p.note(lines.map((l) => `• ${l}`).join('\n'), 'A real run would:');
+  p.outro('Dry run: nothing was changed. Run again without --dry-run to set up.');
 }
 
 function warnIfWorkspaceRoot(cwd: string): void {

@@ -762,14 +762,14 @@ describe('a review runs on OpenAI when the app has no Claude key (owner, 2026-10
 
   it('pickOpenAiReviewModel keeps a GPT id the project chose, else GPT-6.1 Sol', () => {
     expect(pickOpenAiReviewModel('gpt-6-astra')).toBe('gpt-6-astra')
-    expect(pickOpenAiReviewModel('claude-opus-5-5')).toBe('gpt-6.1-sol')
-    expect(pickOpenAiReviewModel(null)).toBe('gpt-6.1-sol')
-    expect(reviewerName('gpt-6.1-sol')).toBe('GPT')
-    expect(reviewerName('openai/gpt-6.1-sol')).toBe('GPT')
+    expect(pickOpenAiReviewModel('claude-opus-5-5')).toBe('gpt-6.2-sol')
+    expect(pickOpenAiReviewModel(null)).toBe('gpt-6.2-sol')
+    expect(reviewerName('gpt-6.2-sol')).toBe('GPT')
+    expect(reviewerName('openai/gpt-6.2-sol')).toBe('GPT')
     expect(reviewerName('claude-opus-5-5')).toBe('Opus')
   })
 
-  it('completes the review on gpt-6.1-sol and names GPT as the reviewer', async () => {
+  it('completes the review on gpt-6.2-sol and names GPT as the reviewer', async () => {
     const { db, queries } = scripted()
     let sent: { model: string; provider?: string } | null = null
     const d = deps({
@@ -782,7 +782,7 @@ describe('a review runs on OpenAI when the app has no Claude key (owner, 2026-10
     })
     const summary = await runAgentPrReview(db, {}, d)
     expect(summary.results[0]).toMatchObject({ outcome: 'completed' })
-    expect(sent).toEqual({ model: 'gpt-6.1-sol', provider: 'openai' })
+    expect(sent).toEqual({ model: 'gpt-6.2-sol', provider: 'openai' })
     const labels = findQueries(queries, 'fix_events', 'insert').map((q) => (q.payload as { label?: string }).label)
     expect(labels).toContain('GPT review: hold')
   })

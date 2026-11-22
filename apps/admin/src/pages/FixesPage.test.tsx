@@ -45,6 +45,7 @@ function fix(over: Partial<FixAttempt>): FixAttempt {
 
 const mocks = vi.hoisted(() => ({
   apiFetch: vi.fn(),
+  projectId: 'p1',
   fixes: [] as unknown[],
   total: 0,
   dispatches: [] as unknown[],
@@ -78,7 +79,7 @@ vi.mock('../lib/pageContext', () => ({
 }))
 vi.mock('../lib/usePlatformIntegrations', () => ({ usePlatformIntegrations: () => ({ traceUrl: () => null }) }))
 vi.mock('../lib/useSetupStatus', () => ({ useSetupStatus: () => ({ activeProject: { project_name: 'App' } }) }))
-vi.mock('../components/ProjectSwitcher', () => ({ useActiveProjectId: () => 'p1' }))
+vi.mock('../components/ProjectSwitcher', () => ({ useActiveProjectId: () => mocks.projectId }))
 vi.mock('../lib/copy', () => ({ usePageCopy: () => null }))
 vi.mock('../lib/track', () => ({ trackSelf: vi.fn() }))
 vi.mock('../lib/fixesModeUx', () => ({
@@ -138,6 +139,7 @@ beforeEach(() => {
     disconnect() {}
   })
   window.matchMedia = ((q: string) => ({ matches: false, media: q, addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {} })) as unknown as typeof window.matchMedia
+  mocks.projectId = 'p1'
   mocks.apiFetch.mockReset()
   mocks.apiFetch.mockImplementation(async (path: string) => {
     if (path.startsWith('/v1/admin/fixes?')) {
@@ -187,7 +189,7 @@ async function render(url: string) {
 /** The numeral on the quick-mode "In flight" card. */
 function inFlightCardValue(): string | undefined {
   const label = [...document.querySelectorAll('div')].find(
-    (el) => el.className.includes('uppercase') && el.textContent === 'In flight',
+    (el) => el.children.length === 0 && el.textContent === 'In flight',
   )
   return label?.parentElement?.parentElement?.parentElement?.querySelector('.tabular-nums')?.textContent?.trim()
 }
@@ -210,6 +212,23 @@ function click(el: Element | undefined | null) {
   if (!el) throw new Error('element not found')
   act(() => el.dispatchEvent(new MouseEvent('click', { bubbles: true })))
 }
+
+describe('FixesPage — switching apps (2026-11-16, live)', () => {
+  it("drops the old app's attempts and loads the new app's", async () => {
+    mocks.fixes = [fix({ id: 'a1', report_title: 'Old app bug' })]
+    mocks.total = 1
+    await render('/fixes')
+    expect(document.body.textContent).toContain('Old app bug')
+    const loadsBefore = mocks.apiFetch.mock.calls.filter(([p]) => String(p).startsWith('/v1/admin/fixes?')).length
+    mocks.projectId = 'p2'
+    mocks.fixes = [fix({ id: 'b1', report_id: 'r2', report_title: 'New app bug' })]
+    await render('/fixes')
+    const loadsAfter = mocks.apiFetch.mock.calls.filter(([p]) => String(p).startsWith('/v1/admin/fixes?')).length
+    expect(loadsAfter).toBeGreaterThan(loadsBefore)
+    expect(document.body.textContent).toContain('New app bug')
+    expect(document.body.textContent).not.toContain('Old app bug')
+  })
+})
 
 describe('FixesPage', () => {
   it('QA 94: a status link opens the failed list on Attempts', async () => {
@@ -266,6 +285,15 @@ describe('FixesPage', () => {
     await act(async () => { release(null) })
     await flush()
     expect(box().disabled).toBe(false)
+  })
+
+  it('the tab title counts every attempt, not the loaded page (2026-11-20)', async () => {
+    // It read "200 fixes · 228 failed": 200 loaded of 639 attempts, beside a count of stopped reports.
+    mocks.fixes = [fix({ id: 'a', status: 'pending', report_fix_state: 'in_flight', retryable: false })]
+    mocks.total = 639
+    mocks.summary = { ...EMPTY_SUMMARY, inProgress: 1 }
+    await render('/fixes')
+    expect(mocks.pageSummary).toMatch(/^639 attempts · 1 in flight · \d+ stopped$/)
   })
 
   it('a pending attempt is in flight in the tab title, the card and the filter', async () => {
@@ -456,6 +484,34 @@ describe('FixesPage', () => {
       expect(JSON.parse((call?.[1] as RequestInit).body as string)).toEqual({ fixIds: ['pr1'] })
     })
 
+    it('draws the merge queue as a stage train, with a held reason as a plain-word chip (2026-11-18)', async () => {
+      mocks.fixes = [open(1)]
+      mocks.total = 1
+      const base = mocks.apiFetch.getMockImplementation()!
+      mocks.apiFetch.mockImplementation(async (path: string, init?: RequestInit) => {
+        if (path.startsWith('/v1/admin/merge-queue?')) {
+          return {
+            ok: true,
+            data: {
+              rows: [
+                { id: 'q1', fix_attempt_id: 'pr1', project_id: 'p1', repo: 'o/r', pr_number: 1, state: 'blocked', detail: 'The follow-up Cursor key cannot be used here (key_used_up).', head_sha: null, queued_at: '2026-11-18T00:00:00Z', updated_at: '2026-11-18T00:00:00Z', merged_at: null, conflict_agents: 0 },
+                { id: 'q2', fix_attempt_id: 'pr2', project_id: 'p1', repo: 'o/r', pr_number: 2, state: 'queued', detail: null, head_sha: null, queued_at: '2026-11-18T00:00:00Z', updated_at: '2026-11-18T00:00:00Z', merged_at: null, conflict_agents: 0 },
+              ],
+              trains: [],
+              release: [],
+            },
+          }
+        }
+        return base(path, init)
+      })
+      await render('/fixes')
+      const train = document.querySelector('[data-testid="merge-queue-train"]')!
+      expect(train.querySelector('figcaption')!.textContent).toContain('Queued 1')
+      expect(train.querySelector('[data-testid="train-stage-held"]')!.getAttribute('data-tone')).toBe('warn')
+      expect(document.querySelector('[data-testid="merge-queue-row-q1-why"]')!.textContent).toBe('key used up')
+      expect(document.querySelector('section[aria-label="Merge queue"]')!.textContent).not.toContain('(key_used_up)')
+    })
+
     it('groups stopped reports by reason, with Retry beside a reason a retry can clear', async () => {
       mocks.fixes = [
         fix({ id: 'a', report_id: 'r1', failure_category: 'sandbox_timeout' } as Partial<FixAttempt>),
@@ -467,7 +523,8 @@ describe('FixesPage', () => {
       const timeout = document.querySelector('[data-testid="fixes-stopped-sandbox_timeout"]')!
       expect(timeout.textContent).toContain('Ran out of time')
       expect(document.querySelector('[data-testid="fixes-stopped-needs_human-retry"]')).toBeNull()
-      expect(document.querySelector('[data-testid="fixes-stopped-needs_human-no-retry"]')!.textContent).toContain('would stop the same way')
+      // Each cause says what to do instead, in its own words (not one shared "not a code change").
+      expect(document.querySelector('[data-testid="fixes-stopped-needs_human-no-retry"]')!.textContent).toContain('a person must decide')
       click(document.querySelector('[data-testid="fixes-stopped-sandbox_timeout-retry"]'))
       expect(document.body.textContent).toContain('stopped by "Ran out of time"')
       expect(mocks.apiFetch.mock.calls.some(([p]) => p === '/v1/admin/fixes/dispatch')).toBe(false)

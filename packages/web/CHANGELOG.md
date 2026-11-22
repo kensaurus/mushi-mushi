@@ -1,5 +1,42 @@
 # @mushi-mushi/web
 
+## 1.38.0
+
+### Minor Changes
+
+- c98879e: - **A screenshot is never sent without the reporter seeing it.** With `capture.screenshot: 'on-report'`, pressing Send took the screenshot and sent it in the same moment, so the reporter never saw it. Send now takes it, shows it with Mark up and Remove and the line "Check the screenshot below, then press Send again", and the second Send sends it.
+  - **A removed screenshot stays removed.** With `'auto'` or `'on-report'`, pressing Remove and then Send took a new screenshot and sent it. Remove now holds until that report is sent or closed.
+  - **The selected element's text follows the privacy rules.** Pointing at an element sent up to 200 characters of its text unscrubbed, even inside `data-private`. Text from inside (or around) a redacted, masked or blocked area is now left out, and the rest goes through the PII scrubber.
+
+## 1.37.3
+
+### Patch Changes
+
+- 3f060d3: Reports now keep the error that caused a bug. Uncaught errors and unhandled promise rejections are recorded in the console log: an exception thrown in an event handler never passes through `console.*`, so it was missing. An `Error` passed to `console.error` (for example `console.error("save failed", err)`) is recorded as its name and message with its stack, where it used to be stored as `{}`.
+- 56dd276: Screenshots attached to reports now show what the user was looking at.
+
+  - **Scroll position** — the capture shows the part of the page the user had scrolled to, including pages that scroll inside an app shell (`<main>`) and sticky headers. It used to always show the top of the page.
+  - **Layout** — sections above the viewport keep their live size, so the visible part no longer drifts out of frame on long pages. Each stylesheet's own text is used, in document order. Chrome's CSSOM dropped `font: … var()` shorthands, and the old order broke `@layer` cascades. CSS-in-JS rules added with `insertRule` are kept.
+  - **Images and canvases** — they are embedded at their natural size and keep transparency, so pixel sprites no longer turn into black boxes. CSS background images (sprites, hero art, icons) are embedded too. Running animations keep their current frame. Unreadable media becomes a grey box of the same size.
+  - **Hidden stays hidden** — what the page hides (display, visibility, opacity) stays hidden, so hover-only buttons no longer show up.
+  - **Pages that failed outright** — pages with a `--` comment, framework attribute names (`@click`, `:href`) or control characters in text no longer fail with reason `error`.
+  - **Speed and size** — off-screen media is never read. The capture code is a separate chunk that loads with the first screenshot, so the core bundle is smaller (88.5 KB budget).
+
+## 1.37.0
+
+### Minor Changes
+
+- fd05f9a: **`setDiagnosticsProvider()`** attaches your app's own diagnostics (load timings, recent errors, connection) at the moment the reporter presses Send. The function gets 300 ms, its strings are scrubbed for personal data, and the result is size-capped. A slow or throwing provider never blocks or drops the report. Its keys merge into the report's metadata, and triage now reads `screenLoading` / `timings` lines as evidence.
+
+  React Native also gets:
+  - **App version.** `reports.app_version` now comes from the new `appVersion` option, then `expo-application` (version and build) or `react-native-device-info`. It never falls back to the OS version, which made Expo apps report Android's `36`.
+  - **`loadMyReports()`.** It resolves `null` when the list could not be loaded, so the report sheet shows an error with Retry instead of "no reports". `listMyReports()` keeps returning `[]` on failure.
+
+### Patch Changes
+
+- Updated dependencies [fd05f9a]
+  - @mushi-mushi/core@1.37.0
+
 ## 1.35.0
 
 ### Patch Changes

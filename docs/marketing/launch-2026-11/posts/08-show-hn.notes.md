@@ -131,9 +131,10 @@ Re-run every number on the day.
   `reviews` 1,803 and `reviewsHold` 596.
 - **"Made 1,803 reviews"**, not "reviewed every fix": 44 of the 523 merged
   fixes in the window had no `fix_reviews` row (2026-11-11).
-- **"I pay for the model", 100 diagnoses, one app:** the live pricing page
-  (https://kensaur.us/mushi-mushi/docs/pricing, 2026-11-14): Free is "$0", one
-  app, "Up to 100 bugs explained a month", "No card, no AI key".
+- **"I pay for the model", 300 diagnoses, three apps:** the pricing page after
+  the 2026-11-19 change (https://kensaur.us/mushi-mushi/docs/pricing): Free is
+  "$0", up to 3 apps, "Up to 300 bugs explained a month", "No card, no AI key".
+  Check the live page says so before posting.
 - **The keyed features** (hourly site watch, code audits) match ADR 0056 §1,
   which 0058 keeps. The text makes no other free promise.
 - **The journeys pillar** is in the console for builders (`/journeys` is in

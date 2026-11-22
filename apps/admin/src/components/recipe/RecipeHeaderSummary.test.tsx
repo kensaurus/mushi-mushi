@@ -75,6 +75,27 @@ describe('RecipeHeaderSummary next step', () => {
   })
 })
 
+describe('RecipeHeaderSummary recipe file', () => {
+  it('says a missing recipe file once, not again as a file problem', () => {
+    const elements = [el('ci', 'ok')]
+    const r = recipe(elements)
+    r.manifest = {
+      present: false,
+      path: null,
+      commitSha: null,
+      capturedAt: null,
+      validationErrors: [
+        { severity: 'info', code: 'MANIFEST_MISSING', message: 'No mushi.recipe.json at the repo root.' },
+        { severity: 'warn', code: 'OTHER', message: 'Something else.' },
+      ],
+    }
+    act(() => root.render(createElement(MemoryRouter, null, createElement(RecipeHeaderSummary, { recipe: r, elements }))))
+    expect(host.textContent).not.toContain('No mushi.recipe.json at the repo root.')
+    expect(host.textContent).toContain('Your recipe file has 1 problem.')
+    expect(host.textContent).toContain('Something else.')
+  })
+})
+
 describe('box edges', () => {
   it('read red, amber or green at a glance', () => {
     expect(elementStateMeta('error').cardEdge).toContain('border-danger')
@@ -82,5 +103,35 @@ describe('box edges', () => {
     expect(elementStateMeta('ok').cardEdge).toContain('border-ok')
     // Not checked is never green.
     expect(elementStateMeta('unknown').cardEdge).not.toContain('border-ok')
+  })
+})
+
+// Round 3 (2026-11-19): Overall read amber "Needs attention" above a red risk-check "Error".
+describe('RecipeHeaderSummary overall with risk checks', () => {
+  const draw = (risk: { tone: 'danger' | 'warn'; label: string } | null) => {
+    const elements = [el('gates', 'drift', { label: 'Automated checks' }), el('ci', 'ok')]
+    act(() => root.render(createElement(MemoryRouter, null, createElement(RecipeHeaderSummary, { recipe: recipe(elements), elements, risk }))))
+  }
+
+  it('takes the red of a risk check over an amber box, and names Risk checks', () => {
+    draw({ tone: 'danger', label: 'Error' })
+    const mark = host.querySelector('[data-testid="recipe-overall-risk"]')!
+    expect(mark.textContent).toBe('Error')
+    expect(mark.className).toContain('text-danger-foreground')
+    expect(host.textContent).toContain('Risk checks')
+    expect(host.textContent).not.toContain('Needs attention')
+  })
+
+  it('keeps the box chip when the risk checks are no worse, and names both', () => {
+    draw({ tone: 'warn', label: 'Warning' })
+    expect(host.querySelector('[data-testid="recipe-overall-risk"]')).toBeNull()
+    expect(host.textContent).toContain('Needs attention')
+    expect(host.textContent).toContain('Risk checks, Automated checks')
+  })
+
+  it('reads the boxes alone without risk findings', () => {
+    draw(null)
+    expect(host.textContent).not.toContain('Risk checks')
+    expect(host.textContent).toContain('Automated checks')
   })
 })

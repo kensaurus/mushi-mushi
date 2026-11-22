@@ -21,6 +21,34 @@ Mushi Mushi only **reads** your apps here. The page builds on each app's [Recipe
 
 ## What you see
 
+The page has five tabs. Each has its own address (`/portfolio?tab=spend`), so you can link to one.
+
+| Tab | What is on it |
+|-----|---------------|
+| **Apps** | The apps table or cards, and **Fix once** |
+| **Releases** | Releases, the funnel across apps and the CI runners summary |
+| **Payments** | Payments across apps |
+| **Spend & accounts** | Spend per app, accounts and resilience, shared resources and connected sources |
+| **Digest** | The daily digest |
+
+**Apps that need you** stays above the tabs: one short card per problem, worst first, each
+with one number and one action. Point at a card to light the same app everywhere on the
+page. Click to pin it; Escape clears it.
+
+On the **Apps** tab, switch between **Table** and **Cards**, and sort **Worst first** or
+**A to Z**. The table has one row per app and one column per signal. A darker cell is worse.
+
+| Column | What it shows |
+|--------|---------------|
+| **Open bugs** | Open bug reports. A count cut short ends in `+`. |
+| **Risks** | Open risks from the daily checks. |
+| **SDK** | The Mushi Mushi SDK against its latest release. |
+| **Release age** | Days since the latest release shipped. Darkest at 60 days. |
+| **CI fails today** | CI job failures since midnight UTC. A lost machine or an expired queue is not counted. |
+| **Last check-in** | When the SDK last called Mushi Mushi: live under 1 hour, quiet up to 7 days, then silent. |
+
+A hatched cell means no data. It never means 0.
+
 | Section | What it means |
 |---------|---------------|
 | **Cards** | One per app: the worst recipe state, open reports, the latest release, the Mushi Mushi SDK against the latest version, and the hole checks. |

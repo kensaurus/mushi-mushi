@@ -17,7 +17,7 @@
  */
 
 import { Btn } from './forms'
-import { CHIP_TONE } from '../../lib/chipTone'
+import { StatusPill, type RunStatus } from '../signal/StatusMark'
 
 export type ConnectionState = 'working' | 'attention' | 'expiring' | 'not_connected' | 'checking'
 
@@ -60,7 +60,8 @@ function daysUntil(iso: string | null | undefined, now: number = Date.now()): nu
  * - the last check failed          → attention
  * - the credential already expired → attention
  * - expires within EXPIRY_WARNING_DAYS → expiring
- * - never verified                 → checking ("Not checked yet")
+ * - never verified                 → checking ("Connected · not checked yet":
+ *                                    configured, so it reads connected, never unknown)
  * - verified longer ago than fresh → attention (re-test)
  * - otherwise                      → working
  */
@@ -87,20 +88,16 @@ export function connectionStateFrom(input: {
   return 'working'
 }
 
-const TONE: Record<ConnectionState, string> = {
-  working: CHIP_TONE.okSubtle,
-  attention: CHIP_TONE.warnSubtle,
-  expiring: CHIP_TONE.warnSubtle,
-  not_connected: CHIP_TONE.neutral,
-  checking: CHIP_TONE.neutral,
-}
-
-const DOT: Record<ConnectionState, string> = {
-  working: 'bg-ok',
-  attention: 'bg-warn',
-  expiring: 'bg-warn',
-  not_connected: 'bg-fg-faint',
-  checking: 'bg-fg-faint',
+/**
+ * The console's status mark per state (2026-11-18): ✓ working, ✕ needs
+ * attention, ⧗ expiring, ◷ a check still to come, ○ not connected.
+ */
+const STATUS: Record<ConnectionState, RunStatus> = {
+  working: 'passed',
+  attention: 'failed',
+  expiring: 'slow',
+  not_connected: 'idle',
+  checking: 'waiting',
 }
 
 function defaultLabel(state: ConnectionState, expiresAt: string | null | undefined): string {
@@ -116,20 +113,28 @@ function defaultLabel(state: ConnectionState, expiresAt: string | null | undefin
     case 'not_connected':
       return 'Not connected'
     case 'checking':
-      return 'Not checked yet'
+      // Configured but never verified (connectionStateFrom), so it reads connected, the same
+      // words as its Integrations tile (connectionGridModel NEVER_CHECKED_LABEL), 2026-11-18.
+      return 'Connected · not checked yet'
   }
+}
+
+/**
+ * "checking" with the default words is a configured connection nobody tested yet: a hollow ○,
+ * never a passed ✓ (DESIGN-SYSTEM "Not checked yet. Never shown as working"; fresh-eyes
+ * 2026-11-18 caught a green ✓ beside "NOT CHECKED"). With a caller's label ("Testing…") a
+ * check is in flight: running.
+ */
+function pillStatus(state: ConnectionState, label: string | undefined): RunStatus {
+  if (state === 'checking') return label ? 'running' : 'idle'
+  return STATUS[state]
 }
 
 export function ConnectionStatus({ state, label, detail, expiresAt, action, className = '' }: ConnectionStatusProps) {
   const text = label ?? defaultLabel(state, expiresAt)
   return (
     <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0 ${className}`} data-connection-state={state}>
-      <span
-        className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${TONE[state]}`}
-      >
-        <span className={`h-1.5 w-1.5 rounded-full ${DOT[state]}`} aria-hidden />
-        {text}
-      </span>
+      <StatusPill status={pillStatus(state, label)} label={text} className="shrink-0" />
       {detail ? <span className="text-xs text-fg-secondary leading-snug min-w-0">{detail}</span> : null}
       {action ? (
         <Btn

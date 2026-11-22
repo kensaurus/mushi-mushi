@@ -295,7 +295,7 @@ export function FirstRunTour() {
           <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-brand/12 text-brand border border-brand/28 text-2xs font-bold">
             {stopIdx + 1}
           </span>
-          <span className="text-2xs text-fg-muted font-medium uppercase tracking-wider">
+          <span className="text-2xs text-fg-secondary font-semibold">
             Tour · {stopIdx + 1} of {visibleStops.length}
           </span>
           <button

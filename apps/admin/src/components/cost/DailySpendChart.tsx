@@ -1,6 +1,6 @@
 /**
  * FILE: apps/admin/src/components/cost/DailySpendChart.tsx
- * PURPOSE: LLM daily spend chart — headline stat + activity strip + framed bars.
+ * PURPOSE: LLM daily spend chart — headline stat + framed bars.
  *          Tuned for sparse projects (one active day in a 14d window).
  */
 
@@ -20,11 +20,16 @@ export function DailySpendChart({ series, barTitles, fmtSpend }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      {/* The "Activity · last 14 days" dot strip is gone: it drew the bars
+          below a second time, and at 390 the peak label sat on it
+          (review 2026-11-18). Each bar has its day and amount as a title. */}
+      <div>
+        {/* Today's spend is the summary's "24h spend": the chart heads with its own window's
+            total, labelled, so it never reads as a second "total logged" (2026-11-19). */}
         <div className="min-w-0">
-          <p className="text-2xs uppercase tracking-wider text-fg-muted">Today (UTC)</p>
+          <p className="text-2xs text-fg-secondary font-semibold">{series.days.length}-day total</p>
           <p className="mt-0.5 text-2xl font-semibold tabular-nums text-brand">
-            {fmtSpend(series.todayUsd)}
+            {fmtSpend(series.totalUsd)}
           </p>
           <p className="mt-1 text-2xs text-fg-muted">
             {series.activeDays === 1 ? (
@@ -39,37 +44,10 @@ export function DailySpendChart({ series, barTitles, fmtSpend }: Props) {
                   {series.activeDays} active days
                 </span>
                 <span aria-hidden="true" className="mx-1">·</span>
-                {fmtSpend(series.totalUsd)} total
+                {idleDays} idle
               </>
             )}
           </p>
-        </div>
-
-        <div className="min-w-0 sm:max-w-[55%]">
-          <p className="mb-1.5 text-3xs uppercase tracking-wider text-fg-faint">
-            Activity · last {series.days.length} days
-          </p>
-          <div
-            className="flex items-center gap-1"
-            role="img"
-            aria-label={`${series.activeDays} days with LLM spend in the last ${series.days.length} days`}
-          >
-            {series.values.map((v, i) => {
-              const isToday = i === series.values.length - 1
-              const active = v > 0
-              return (
-                <span
-                  key={series.days[i]}
-                  title={`${xLabels[i]}: ${active ? fmtSpend(v) : 'no spend'}`}
-                  className={`h-2 flex-1 max-w-[14px] rounded-sm motion-safe:transition-opacity ${
-                    active
-                      ? 'bg-brand/90'
-                      : 'bg-fg-faint/15'
-                  } ${isToday ? 'ring-1 ring-brand/50' : ''}`}
-                />
-              )
-            })}
-          </div>
         </div>
       </div>
 

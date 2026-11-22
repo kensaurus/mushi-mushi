@@ -30,7 +30,7 @@ still 0; the gate is struck by decision, not met.
       public surface. The drift test gains one clarification: *a hole found
       before a user hits it is a bug fixed in zero minutes*. A check that
       prevents or explains a bug in at least one app passes; cost and CI
-      minutes on their own still do not. The VISION.md / AGENTS.md diff from
+      minutes on their own still do not. The docs/VISION.md / AGENTS.md diff from
       §9.2 is applied with this ADR.
    2. **S-1: store listings live as code** in the host repo (fastlane
       `metadata/` layout, pointed at by the `store` block of

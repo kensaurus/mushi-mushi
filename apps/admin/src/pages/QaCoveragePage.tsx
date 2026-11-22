@@ -34,11 +34,15 @@ import { apiFetch } from '../lib/supabase'
 import {
   Card,
   Btn,
+  CodeValue,
   ErrorAlert,
   EmptyState,
   Input,
   RelativeTime,
 } from '../components/ui'
+import { PageStatus, toMetrics } from '../components/ui/page-status'
+import { StatusMark, StatusPill } from '../components/signal/StatusMark'
+import { cliRunCommand, cloudCanRunScript, providerWords, qaPageStatus, skipReason, storyRunStatus } from '../lib/qaSkipReason'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { url as urlValidator } from '../lib/validators'
 import {
@@ -52,19 +56,15 @@ import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { Drawer } from '../components/Drawer'
 import { CreateStoryModal } from '../components/qa-coverage/CreateStoryModal'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
-import { IconPlay, IconHealth, IconExternalLink, IconClock, IconChevronDown, IconChevronUp, IconQaCoverage } from '../components/icons'
-import {
-  QaCoverageStatusBanner,
-} from '../components/qa-coverage/QaCoverageStatusBanner'
+import { IconPlay, IconExternalLink, IconClock, IconChevronDown, IconChevronUp, IconQaCoverage } from '../components/icons'
 import {
   EMPTY_QA_COVERAGE_STATS,
   type QaCoverageStats,
 } from '../components/qa-coverage/QaCoverageStatsTypes'
 import { QaProviderGuideCard } from '../components/qa-coverage/QaProviderGuideCard'
-import { QaCoverageSnapshotStrip } from '../components/qa-coverage/QaCoverageSnapshotStrip'
-import { useQaCoverageUx } from '../lib/qaCoverageModeUx'
 import { useEntitlements } from '../lib/useEntitlements'
 import { CHIP_TONE, runStatusChipTone } from '../lib/chipTone'
+import { qaCoverageLinks } from '../lib/statCardLinks'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -136,26 +136,10 @@ interface QaEvidence {
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
-const PROVIDER_BADGE: Record<string, string> = {
-  local:             CHIP_TONE.neutral,
-  browserbase:       CHIP_TONE.brandSubtle,
-  firecrawl_actions: CHIP_TONE.okSubtle,
-}
-
 const PROVIDER_LABEL: Record<string, string> = {
   local:             'Local',
   browserbase:       'Browserbase',
   firecrawl_actions: 'Firecrawl',
-}
-
-const STATUS_TONE: Record<string, string> = {
-  passed:  'text-ok-foreground',
-  failed:  'text-danger-foreground',
-  error:   'text-danger-foreground',
-  timeout: 'text-warn-foreground',
-  skipped: 'text-fg-faint',
-  running: 'text-brand',
-  pending: 'text-fg-secondary',
 }
 
 /** Chip chrome per run status — routed through the shared console tone util. */
@@ -172,13 +156,15 @@ const ACTIVE_STATUSES = new Set(['pending', 'running'])
 
 // ── Story card ─────────────────────────────────────────────────────────────
 
-/** @internal Exported for the nested-control test. */
+/** Exported for the nested-control test. */
 export function StoryCard({
   coverage,
   isQueued,
   onRunNow,
   onSelect,
   highlighted,
+  onRunInCloud,
+  switching = false,
 }: {
   coverage: QaStoryCoverage
   isQueued: boolean
@@ -186,14 +172,21 @@ export function StoryCard({
   onRunNow?: (id: string) => void
   onSelect: (id: string) => void
   highlighted: boolean
+  /** Switch this story to the cloud runner (Firecrawl). Absent for viewers. */
+  onRunInCloud?: (id: string) => void
+  switching?: boolean
 }) {
   const passRate = coverage.pass_rate_pct
+  // Nothing finished and the newest run was a skip: the attempts were skips, not runs.
+  const allSkipped = passRate === null && coverage.runs_24h > 0 && coverage.last_run_status === 'skipped'
   const barTone = passRate === null ? 'bg-fg-faint/40' : passRate >= 80 ? 'bg-ok' : passRate >= 50 ? 'bg-warn' : 'bg-danger'
   const disabled = isQueued || !coverage.enabled
+  const mark = isQueued ? { status: 'waiting' as const, label: 'Queued' } : storyRunStatus(coverage)
+  const why = skipReason(coverage)
 
   return (
     <Card
-      className={`group relative p-4 cursor-pointer transition-[transform,opacity] hover:shadow-md ${highlighted ? 'ring-2 ring-brand' : ''}`}
+      className={`group relative cursor-pointer p-3 transition-[transform,opacity] hover:shadow-md ${highlighted ? 'ring-2 ring-brand' : ''} ${why ? 'border-st-cancelled/60' : ''}`}
     >
       {/* Sibling of Run and Replay. Card onClick would set role=button and nest those controls. */}
       <button
@@ -202,104 +195,105 @@ export function StoryCard({
         aria-label={`Open ${coverage.name}`}
         onClick={() => onSelect(coverage.story_id)}
       />
-      <div className="pointer-events-none relative z-10 flex flex-col gap-3">
-      {/* Header row */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex-1 min-w-0 space-y-1">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-sm font-medium text-fg truncate leading-snug">{coverage.name}</span>
-            {isQueued && (
-              <span className="inline-flex items-center gap-1 text-3xs px-1.5 py-0.5 rounded-full font-medium bg-brand/12 text-brand border border-brand/28">
-                <span className="inline-block h-1.5 w-1.5 rounded-full bg-brand motion-safe:animate-pulse" />
-                queued
-              </span>
-            )}
-            {!coverage.enabled && !isQueued && (
-              <span className="text-3xs text-fg-faint bg-surface-overlay border border-edge-subtle px-1.5 py-0.5 rounded-full">
-                disabled
-              </span>
-            )}
+      <div className="pointer-events-none relative z-10 flex flex-col gap-2">
+        {/* Header: name, state as a mark, where it runs, Run */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1 space-y-1">
+            <span className="block truncate text-sm leading-snug font-bold text-fg">{coverage.name}</span>
+            <span className="flex flex-wrap items-center gap-1.5">
+              <StatusPill status={mark.status} label={mark.label} />
+              <span className="text-2xs text-fg-secondary" data-testid="qa-story-runner">{providerWords(coverage.browser_provider)}</span>
+            </span>
           </div>
-          <span
-            className={`inline-block text-3xs border px-1.5 py-0.5 rounded-sm font-medium ${PROVIDER_BADGE[coverage.browser_provider] ?? 'bg-surface-overlay text-fg-secondary border-edge-subtle'}`}
-          >
-            {PROVIDER_LABEL[coverage.browser_provider] ?? coverage.browser_provider}
-          </span>
+
+          {onRunNow ? (
+            <Btn
+              size="sm"
+              variant="ghost"
+              className="pointer-events-auto"
+              loading={isQueued}
+              disabled={disabled}
+              type="button"
+              onClick={(e: React.MouseEvent) => { e.stopPropagation(); onRunNow(coverage.story_id) }}
+              aria-label={isQueued ? 'Run queued…' : `Run ${coverage.name} now`}
+              title={isQueued ? 'A run is already queued or in progress' : coverage.enabled ? 'Run it now' : 'Turn the test on first'}
+            >
+              {!isQueued && <IconPlay className="h-3 w-3" />}
+            </Btn>
+          ) : null}
         </div>
 
-        {onRunNow ? (
-        <Btn
-          size="sm"
-          variant="ghost"
-          className="pointer-events-auto"
-          loading={isQueued}
-          disabled={disabled}
-          type="button"
-          onClick={(e: React.MouseEvent) => { e.stopPropagation(); onRunNow(coverage.story_id) }}
-          aria-label={isQueued ? 'Run queued…' : `Run ${coverage.name} now`}
-          title={isQueued ? 'A run is already queued or in progress' : coverage.enabled ? 'Trigger manual run' : 'Story is disabled'}
-        >
-          {!isQueued && <IconPlay className="h-3 w-3" />}
-        </Btn>
+        {/* Why it did not run, and the fix, in the card itself (console-first). */}
+        {why ? (
+          <div className="pointer-events-auto flex flex-col gap-1.5 rounded-sm border border-st-cancelled/45 bg-st-cancelled-soft px-2 py-1.5" data-testid="qa-skip-reason">
+            <p className="text-2xs leading-snug text-fg">{why.text}</p>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {why.cloudFixes && onRunInCloud ? (
+                <Btn
+                  size="sm"
+                  variant="primary"
+                  loading={switching}
+                  disabled={switching}
+                  onClick={(e: React.MouseEvent) => { e.stopPropagation(); onRunInCloud(coverage.story_id) }}
+                  title="Switch this test to the Firecrawl cloud runner, so its schedule runs it"
+                >
+                  Run in the cloud
+                </Btn>
+              ) : null}
+              {why.kind !== 'busy' ? <CodeValue inline value={cliRunCommand(coverage.story_id)} /> : null}
+            </div>
+          </div>
         ) : null}
-      </div>
 
-      {/* Pass rate bar + stats */}
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between text-2xs">
-          <span className="text-fg-muted tabular-nums">
-            {coverage.runs_24h === 0 ? 'No runs in 24h' : `${coverage.runs_24h} run${coverage.runs_24h === 1 ? '' : 's'} · 24h`}
-          </span>
-          <div className="flex items-center gap-1.5">
-            {/* Live status badge from qa_stories — immediate, not MV-lagged */}
-            {coverage.last_run_status && (
-              <span className={`text-3xs border px-1.5 py-0.5 rounded-sm font-medium ${STATUS_BG[coverage.last_run_status] ?? 'bg-surface-overlay border-edge-subtle text-fg-secondary'}`}>
-                {coverage.last_run_status}
-              </span>
-            )}
+        {/* Pass rate over finished runs; skipped runs are counted apart, never as failures. */}
+        <div className="space-y-1">
+          <div className="flex items-center justify-between text-2xs">
+            <span className="text-fg-secondary tabular-nums">
+              {/* Every attempt skipped: say so, so the card agrees with the lead's "never ran" (local check 2026-11-19). */}
+              {coverage.runs_24h === 0 ? 'No runs in 24h' : allSkipped ? `${coverage.runs_24h} skipped · 24h` : `${coverage.runs_24h} run${coverage.runs_24h === 1 ? '' : 's'} · 24h`}
+            </span>
             {passRate !== null ? (
-              <span className={`font-medium tabular-nums ${passRate >= 80 ? 'text-ok' : passRate >= 50 ? 'text-warn' : 'text-danger'}`}>
+              <span className={`font-mono font-bold tabular-nums ${passRate >= 80 ? 'text-ok-foreground' : passRate >= 50 ? 'text-warn-foreground' : 'text-danger-foreground'}`}>
                 {passRate}%
               </span>
             ) : (
-              <span className="text-fg-faint">—</span>
+              <span className="text-fg-secondary">{coverage.runs_24h > 0 && !allSkipped ? 'nothing checked' : '—'}</span>
             )}
           </div>
-        </div>
-        <div className="h-1 w-full rounded-full bg-surface-overlay overflow-hidden">
-          <div
-            className={`h-full rounded-full transition-[transform,opacity] ${barTone}`}
-            style={{ width: passRate !== null ? `${Math.max(2, Math.min(100, passRate))}%` : '0%' }}
-          />
-        </div>
-      </div>
-
-      {coverage.last_7d ? <RunStrip days={coverage.last_7d} /> : null}
-
-      {/* Footer row: last run time + failure link */}
-      <div className="flex items-center justify-between gap-2">
-        {coverage.last_run_at ? (
-          <div className="flex items-center gap-1 text-2xs text-fg-faint">
-            <IconClock className="h-2.5 w-2.5 shrink-0" />
-            <RelativeTime value={coverage.last_run_at} />
+          <div className="h-1 w-full overflow-hidden rounded-full bg-surface-overlay">
+            <div
+              className={`ci-grow-x h-full rounded-full ${barTone}`}
+              style={{ width: passRate !== null ? `${Math.max(2, Math.min(100, passRate))}%` : '0%' }}
+            />
           </div>
-        ) : (
-          <span className="text-2xs text-fg-faint italic">never run</span>
-        )}
+        </div>
 
-        {coverage.last_failure_url && (
-          <a
-            href={coverage.last_failure_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="pointer-events-auto relative z-10 flex items-center gap-0.5 text-2xs text-danger hover:underline"
-          >
-            <IconExternalLink className="h-2.5 w-2.5" />
-            Replay
-          </a>
-        )}
-      </div>
+        {coverage.last_7d ? <RunStrip days={coverage.last_7d} /> : null}
+
+        {/* Footer row: last run time + failure link */}
+        <div className="flex items-center justify-between gap-2">
+          {coverage.last_run_at ? (
+            <div className="flex items-center gap-1 text-2xs text-fg-secondary">
+              <IconClock className="h-2.5 w-2.5 shrink-0" />
+              <RelativeTime value={coverage.last_run_at} />
+            </div>
+          ) : (
+            <span className="text-2xs text-fg-secondary">never run</span>
+          )}
+
+          {coverage.last_failure_url && (
+            <a
+              href={coverage.last_failure_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="pointer-events-auto relative z-10 flex items-center gap-0.5 text-2xs text-danger hover:underline"
+            >
+              <IconExternalLink className="h-2.5 w-2.5" />
+              Replay
+            </a>
+          )}
+        </div>
       </div>
     </Card>
   )
@@ -388,7 +382,7 @@ function RunDetail({
       {/* Assertion failures */}
       {run.assertion_failures?.length > 0 && (
         <div>
-          <div className="text-3xs font-semibold text-fg-muted uppercase tracking-wider mb-1.5">
+          <div className="text-3xs font-semibold text-fg-secondary mb-1.5">
             Assertion failures ({run.assertion_failures.length})
           </div>
           <div className="rounded-sm border border-edge-subtle overflow-hidden">
@@ -426,7 +420,7 @@ function RunDetail({
       )}
       {!evLoading && evidence.length > 0 && (
         <div>
-          <div className="text-3xs font-semibold text-fg-muted uppercase tracking-wider mb-1.5">
+          <div className="text-3xs font-semibold text-fg-secondary mb-1.5">
             Evidence ({evidence.length})
           </div>
           <div className="space-y-2">
@@ -434,7 +428,7 @@ function RunDetail({
               <div key={ev.id} className="rounded-sm border border-edge-subtle overflow-hidden">
                 {/* Evidence header */}
                 <div className="flex items-center gap-2 px-2.5 py-1.5 bg-surface-raised border-b border-edge-subtle">
-                  <span className={`text-3xs border px-1.5 py-0.5 rounded-sm font-medium ${EVIDENCE_BADGE[ev.kind] ?? 'bg-surface-overlay text-fg-secondary border-edge-subtle'}`}>
+                  <span className={`text-3xs px-1.5 py-px rounded-sm font-medium ${EVIDENCE_BADGE[ev.kind] ?? 'bg-surface-overlay text-fg-secondary border-edge-subtle'}`}>
                     {ev.kind}
                   </span>
                   {ev.step_label && (
@@ -584,11 +578,7 @@ function StoryDrawer({
       <div className="text-sm font-semibold text-fg leading-snug truncate">{story?.name ?? 'Story details'}</div>
       {story && (
         <div className="flex items-center gap-2 flex-wrap">
-          <span
-            className={`text-3xs border px-1.5 py-0.5 rounded-sm font-medium ${PROVIDER_BADGE[story.browser_provider] ?? 'bg-surface-overlay text-fg-secondary border-edge-subtle'}`}
-          >
-            {PROVIDER_LABEL[story.browser_provider] ?? story.browser_provider}
-          </span>
+          <span className="text-2xs text-fg-secondary">{providerWords(story.browser_provider)}</span>
           {story.schedule_cron && (
             <span className="inline-flex items-center gap-1 text-3xs font-mono text-fg-faint">
               <IconClock className="h-2.5 w-2.5" />
@@ -596,7 +586,7 @@ function StoryDrawer({
             </span>
           )}
           {!story.enabled && (
-            <span className="text-3xs text-fg-faint bg-surface-overlay border border-edge-subtle px-1.5 py-0.5 rounded-sm">
+            <span className="text-3xs text-fg-faint bg-surface-overlay px-1.5 py-px rounded-sm">
               disabled
             </span>
           )}
@@ -606,7 +596,7 @@ function StoryDrawer({
   )
 
   const [targetDraft, setTargetDraft] = useState<string | null>(null)
-  const [savingField, setSavingField] = useState<'target' | 'enabled' | null>(null)
+  const [savingField, setSavingField] = useState<'target' | 'enabled' | 'provider' | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const targetValue = targetDraft ?? story?.target_url ?? ''
@@ -614,7 +604,7 @@ function StoryDrawer({
   const targetError = targetDraft?.trim() ? urlValidator({ optional: true })(targetDraft.trim()) : null
 
   const patchStory = useCallback(
-    async (patch: Record<string, unknown>, field: 'target' | 'enabled', okMessage: string) => {
+    async (patch: Record<string, unknown>, field: 'target' | 'enabled' | 'provider', okMessage: string) => {
       setSavingField(field)
       const res = await apiFetch(`/v1/admin/projects/${projectId}/qa-stories/${storyId}`, {
         method: 'PATCH',
@@ -694,6 +684,24 @@ function StoryDrawer({
                   {story.enabled ? 'Turn off' : 'Turn on'}
                 </Btn>
               </div>
+              {/* Where it runs: a test on your computer is skipped by the schedule, so the switch sits here too. */}
+              <div className="flex flex-wrap items-center justify-between gap-2" data-testid="qa-drawer-runner">
+                <p className="text-2xs text-fg-secondary">
+                  Runs: <span className="font-bold text-fg">{providerWords(story.browser_provider)}</span>
+                  {story.browser_provider === 'local' ? ' (the schedule skips it; run it with the command below)' : ''}
+                </p>
+                {story.browser_provider !== 'firecrawl_actions' && cloudCanRunScript(story.script) ? (
+                  <Btn
+                    size="sm"
+                    variant="primary"
+                    loading={savingField === 'provider'}
+                    onClick={() => void patchStory({ browser_provider: 'firecrawl_actions' }, 'provider', 'It now runs in the cloud on its schedule')}
+                  >
+                    Run in the cloud
+                  </Btn>
+                ) : null}
+              </div>
+              {story.browser_provider !== 'firecrawl_actions' ? <CodeValue value={cliRunCommand(story.id)} /> : null}
               <div className="flex flex-wrap items-end gap-2">
                 <div className="min-w-0 flex-1">
                   <Input
@@ -736,7 +744,7 @@ function StoryDrawer({
 
           {story?.prompt && (
             <div className="space-y-1">
-              <span className="text-2xs font-semibold text-fg-muted uppercase tracking-wider">Prompt</span>
+              <span className="text-2xs font-semibold text-fg-secondary">Prompt</span>
               <p className="text-sm text-fg-secondary leading-relaxed">{story.prompt}</p>
             </div>
           )}
@@ -755,7 +763,7 @@ function StoryDrawer({
           {/* Run history */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-2xs font-semibold text-fg-muted uppercase tracking-wider">
+              <span className="text-2xs font-semibold text-fg-secondary">
                 Run history
               </span>
               {hasActiveRun && (
@@ -768,9 +776,7 @@ function StoryDrawer({
 
             {isQueued && recentRuns.length === 0 && (
               <Card  className="px-3 py-2.5 text-2xs text-fg-secondary leading-relaxed">
-                Run is <strong className="text-brand">queued</strong> in{' '}
-                <code className="text-3xs font-mono bg-surface-overlay px-1 rounded">qa_story_runs</code>.
-                The runner picks it up within seconds. Polling…
+                Queued. The runner picks it up within seconds, and this list updates by itself.
               </Card>
             )}
 
@@ -780,7 +786,6 @@ function StoryDrawer({
 
             <div className="space-y-1.5">
               {recentRuns.map((run) => {
-                const isActive = ACTIVE_STATUSES.has(run.status)
                 const isExpanded = expandedRunId === run.id
 
                 return (
@@ -796,11 +801,9 @@ function StoryDrawer({
                       onClick={() => setExpandedRunId(isExpanded ? null : run.id)}
                       aria-expanded={isExpanded}
                     >
-                      {isActive && (
-                        <span className={`inline-block h-1.5 w-1.5 rounded-full shrink-0 ${run.status === 'running' ? 'bg-brand motion-safe:animate-pulse' : 'bg-fg-faint motion-safe:animate-pulse'}`} />
-                      )}
-                      <span className={`text-2xs font-semibold uppercase shrink-0 ${STATUS_TONE[run.status] ?? 'text-fg-muted'}`}>
-                        {run.status}
+                      <span className="inline-flex shrink-0 items-center gap-1 text-2xs font-bold text-fg">
+                        <StatusMark status={storyRunStatus({ enabled: true, last_run_status: run.status }).status} />
+                        {storyRunStatus({ enabled: true, last_run_status: run.status }).label}
                       </span>
                       {run.latency_ms && (
                         <span className="text-3xs text-fg-faint tabular-nums shrink-0">
@@ -867,7 +870,6 @@ export function QaCoveragePage() {
   const projectId = useActiveProjectId()
   const { has, canEditProject } = useEntitlements()
   const inventoryEnabled = has('inventory_v2')
-  const qaUx = useQaCoverageUx()
   const { success: toastSuccess, error: toastError } = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
   const highlightId = searchParams.get('highlight') ?? searchParams.get('story') ?? ''
@@ -907,7 +909,6 @@ export function QaCoveragePage() {
 
   const {
     data: qaStatsData,
-    loading: qaStatsLoading,
     reload: reloadQaStats,
     isValidating: qaStatsValidating,
     lastFetchedAt: qaStatsFetchedAt,
@@ -933,7 +934,12 @@ export function QaCoveragePage() {
   const pendingReview = (pendingData?.stories ?? []).filter((s) => !optimisticHiddenIds.has(s.id))
 
   const coverage = data?.coverage ?? []
+  // No tests at all: the page is one empty state with one "+ New story"
+  // (2026-11-18 sweep: banner, a snapshot of zeros and the empty card said
+  // it three times, with three buttons).
+  const noStories = !loading && !error && data != null && coverage.length === 0 && pendingReview.length === 0
   const visibleCoverage = coverage.filter((c) => matchesQaCoverageFilter(c, filter))
+  const lead = qaPageStatus(coverage, { pendingRuns: qaStats.pendingRuns, canEdit: canEditProject })
 
   // A highlighted card (stat link, banner, dashboard tile) can be far below
   // the fold; bring it into view once the grid has rendered.
@@ -963,6 +969,45 @@ export function QaCoveragePage() {
       toastError(res.error?.message ?? 'Failed to queue run')
     }
   }, [projectId, queuedIds, reload, toastSuccess, toastError])
+
+  // "Run in the cloud": the story moves to the Firecrawl runner, so its schedule runs it
+  // (a story set to run on your computer is skipped by every tick, qa-story-runner).
+  const [switchingIds, setSwitchingIds] = useState<Set<string>>(new Set())
+  const handleRunInCloud = useCallback(async (storyIds: readonly string[]) => {
+    if (storyIds.length === 0) return
+    setSwitchingIds((prev) => new Set([...prev, ...storyIds]))
+    // Read each story first: one holding a Playwright script stays on your computer, because the
+    // cloud runner would ignore the script and could pass without running the test.
+    const stories = await Promise.all(
+      storyIds.map((sid) => apiFetch<QaStoryFull>(`/v1/admin/projects/${projectId}/qa-stories/${sid}`)),
+    )
+    const switchable = storyIds.filter((_, i) => stories[i]!.ok && cloudCanRunScript(stories[i]!.data?.script))
+    const scripted = storyIds.filter((_, i) => stories[i]!.ok && !cloudCanRunScript(stories[i]!.data?.script))
+    const unread = storyIds.length - switchable.length - scripted.length
+    const results = await Promise.all(
+      switchable.map((sid) =>
+        apiFetch(`/v1/admin/projects/${projectId}/qa-stories/${sid}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ browser_provider: 'firecrawl_actions' }),
+        }),
+      ),
+    )
+    setSwitchingIds((prev) => { const n = new Set(prev); for (const sid of storyIds) n.delete(sid); return n })
+    const failed = results.filter((r) => !r.ok)
+    const moved = switchable.length - failed.length
+    if (moved > 0) toastSuccess(moved === 1 ? 'It now runs in the cloud on its schedule' : `${moved} tests now run in the cloud on their schedule`)
+    if (scripted.length > 0) {
+      toastError(
+        scripted.length === 1 && storyIds.length === 1
+          ? 'This test is a Playwright script, which only runs on your computer. Copy its command and run it there.'
+          : `${scripted.length} of these are Playwright scripts, which only run on your computer. Copy each one's command from its card.`,
+      )
+    }
+    if (failed.length > 0 || unread > 0) {
+      toastError(failed[0]?.error?.message ?? `${failed.length + unread} of ${storyIds.length} could not be switched. Try again.`)
+    }
+    reloadAll()
+  }, [projectId, reloadAll, toastSuccess, toastError])
 
   const handleClearQueued = useCallback((storyId: string) => {
     setQueuedIds((prev) => { const n = new Set(prev); n.delete(storyId); return n })
@@ -1002,43 +1047,77 @@ export function QaCoveragePage() {
           'Run a test on demand after a deploy to verify the fix landed',
           'Use Browserbase for CI-like confidence without managing infrastructure',
         ]}
-        helpHowToUse="Click + New story to add a test. Click a story card to open the run history drawer. Click Run now to trigger an immediate run."
+        helpHowToUse="Click + New test to add a test. Click a story card to open the run history drawer. Click Run now to trigger an immediate run."
       >
-        <Btn size="sm" disabled={!canEditProject} title={canEditProject ? undefined : 'Viewers have read-only access. Ask a team owner or admin.'} onClick={() => setShowCreate(true)}>
-          + New story
+        {!noStories && (
+        <Btn size="sm" className="whitespace-nowrap" disabled={!canEditProject} title={canEditProject ? undefined : 'Viewers have read-only access. Ask a team owner or admin.'} onClick={() => setShowCreate(true)}>
+          + New test
         </Btn>
+        )}
       </PageHeaderBar>
 
-      {!qaStatsLoading && (
+      {/* The lead: what is wrong, why, and the one button that fixes it (2026-11-19). It is read
+          from the story list itself, so it names the same stories the cards below show. */}
+      {data != null && !noStories && (
         <PagePosture
           slots={[
             {
               priority: POSTURE_PRIORITY.status,
               children: (
-                <QaCoverageStatusBanner
-                  stats={qaStats}
-                  onRefresh={reloadAll}
-                  refreshing={qaStatsValidating || loading}
-                  onCreateStory={() => setShowCreate(true)}
+                <PageStatus
+                  ariaLabel="Scheduled tests status"
+                  tone={lead.tone}
+                  sentence={lead.sentence}
+                  freshness={{ at: qaStatsFetchedAt, isValidating: qaStatsValidating || loading }}
+                  metrics={toMetrics([
+                    { label: 'Passing', value: lead.passing, tone: 'ok', to: qaCoverageLinks.passing, hint: 'Tests whose finished runs passed at least 80% of the time in the last 24 hours.' },
+                    { label: 'Failing', value: lead.failing, tone: lead.failing > 0 ? 'danger' : 'neutral', to: qaCoverageLinks.failing, hint: 'Tests whose finished runs passed less than 80% of the time in the last 24 hours.' },
+                    {
+                      label: 'Never ran',
+                      value: lead.neverRan,
+                      tone: lead.neverRan > 0 ? 'warn' : 'neutral',
+                      hint: 'Turned-on tests the schedule skipped all day, so nothing was checked. One mark per test; each card says why.',
+                      // One skipped mark per test, its name and reason on hover (2026-11-19).
+                      visual:
+                        lead.neverRanTests.length > 0 ? (
+                          <span className="flex flex-wrap items-center gap-1" data-testid="qa-never-ran-marks">
+                            {lead.neverRanTests.slice(0, 12).map((t) => (
+                              <span key={t.id} title={`${t.name}: ${t.why}`}>
+                                <StatusMark status="cancelled" label={`${t.name}: never ran`} />
+                              </span>
+                            ))}
+                            {lead.neverRanTests.length > 12 && <span className="font-mono text-2xs font-bold text-fg-secondary">+{lead.neverRanTests.length - 12}</span>}
+                          </span>
+                        ) : undefined,
+                    },
+                  ])}
+                  action={
+                    lead.action.kind === 'open_failing' ? (
+                      <Btn size="sm" variant="primary" onClick={() => setSelectedStoryId((lead.action as { storyId: string }).storyId)}>
+                        Open {lead.action.name}
+                      </Btn>
+                    ) : lead.action.kind === 'run_in_cloud' ? (
+                      <Btn
+                        size="sm"
+                        variant="primary"
+                        loading={lead.action.storyIds.some((sid) => switchingIds.has(sid))}
+                        onClick={() => void handleRunInCloud((lead.action as { storyIds: string[] }).storyIds)}
+                        title="Switch these tests to the Firecrawl cloud runner, so their schedule runs them"
+                        data-testid="qa-run-all-in-cloud"
+                      >
+                        {lead.action.storyIds.length === 1 ? 'Run it in the cloud' : `Run all ${lead.action.storyIds.length} in the cloud`}
+                      </Btn>
+                    ) : lead.action.kind === 'copy_cli' ? (
+                      <CodeValue inline value={cliRunCommand(lead.action.storyId)} />
+                    ) : (
+                      <Btn size="sm" variant="ghost" onClick={reloadAll} loading={qaStatsValidating || loading}>
+                        Refresh
+                      </Btn>
+                    )
+                  }
+                  data-testid="qa-status"
                 />
               ),
-            },
-            {
-              priority: POSTURE_PRIORITY.heroOrSnapshot,
-              show: !qaUx.hideQaSnapshot,
-              children: (
-                <QaCoverageSnapshotStrip
-                  stats={qaStats}
-                  statsFetchedAt={qaStatsFetchedAt}
-                  statsValidating={qaStatsValidating}
-                  hideLinks={qaUx.hideSnapshotLinks}
-                />
-              ),
-            },
-            {
-              priority: POSTURE_PRIORITY.guide,
-              show: (data?.coverage?.length ?? 0) === 0,
-              children: <QaProviderGuideCard topPriority={qaStats.topPriority} stats={qaStats} />,
             },
           ]}
         />
@@ -1100,21 +1179,25 @@ export function QaCoveragePage() {
 
       {/* Story grid */}
       {loading && (
-        <PanelSkeleton rows={4} label="Loading QA stories" inCard={false} />
+        <PanelSkeleton rows={4} label="Loading scheduled tests" inCard={false} />
       )}
 
       {!loading && !error && coverage.length === 0 && (
         <EmptyState
-          icon={<IconHealth className="h-8 w-8 text-fg-faint" />}
-          title="No QA stories yet"
-          description="Create your first automated user-story test. Start with a Firecrawl story — no setup needed."
+          title="No scheduled tests yet"
+          description="A scheduled test walks through one user flow on a timer and sends screenshots when it fails. Start with a Firecrawl story: no setup needed."
           action={
-            <Btn size="sm" disabled={!canEditProject} title={canEditProject ? undefined : 'Viewers have read-only access. Ask a team owner or admin.'} onClick={() => setShowCreate(true)}>
-              + New story
+            <Btn size="sm" className="whitespace-nowrap" disabled={!canEditProject} title={canEditProject ? undefined : 'Viewers have read-only access. Ask a team owner or admin.'} onClick={() => setShowCreate(true)}>
+              + New test
             </Btn>
           }
         />
       )}
+
+      {/* The runner guide sits under the call to action, collapsed: it answers
+          "which runner?" once someone is about to add a story, and never pushes
+          "+ New story" below the fold (round-2 sweep 2026-11-18). */}
+      {!loading && !error && coverage.length === 0 && <QaProviderGuideCard />}
 
       {!loading && coverage.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter stories">
@@ -1155,6 +1238,8 @@ export function QaCoveragePage() {
                 onRunNow={canEditProject ? handleRunNow : undefined}
                 onSelect={setSelectedStoryId}
                 highlighted={c.story_id === highlightId}
+                onRunInCloud={canEditProject ? (sid) => void handleRunInCloud([sid]) : undefined}
+                switching={switchingIds.has(c.story_id)}
               />
             </div>
           ))}

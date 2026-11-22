@@ -210,7 +210,7 @@ function DetailColumn({
 }) {
   return (
     <section>
-      <h4 className="text-2xs uppercase tracking-wider text-fg-faint mb-1.5">
+      <h4 className="text-2xs text-fg-secondary mb-1.5 font-semibold">
         {heading} <span className="text-fg-muted tabular-nums">{items.length}</span>
       </h4>
       {items.length === 0 ? (

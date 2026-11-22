@@ -338,7 +338,7 @@ export function VoiceIntakePanel() {
           status={
             githubConfigured
               ? { state: 'checking', detail: 'Saved. It is checked the first time a fix goes to GitHub.' }
-              : { state: 'not_connected', detail: 'Paste a fine-grained token with Agent tasks, Contents and Pull requests access.' }
+              : { state: 'not_connected' }
           }
         >
           <SecretInput
@@ -354,12 +354,10 @@ export function VoiceIntakePanel() {
         </SettingsRow>
       </SettingsList>
 
-      <SettingsList title="Notifications" description="Get told on this device when a voice request needs you.">
-        <SettingsRow
-          icon={<IconBell size={16} />}
-          title="Push to this device"
-          purpose="A notification when a transcript is ready to confirm or a fix finishes."
-        >
+      {/* The push card below says what it sends; a row purpose and a list
+          intro said it twice more (round-3 review 2026-11-19). */}
+      <SettingsList title="Notifications">
+        <SettingsRow icon={<IconBell size={16} />} title="Push to this device">
           <PushNotifyCard compact />
         </SettingsRow>
       </SettingsList>

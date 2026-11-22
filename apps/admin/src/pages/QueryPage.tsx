@@ -5,12 +5,13 @@ import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { usePageCopy } from '../lib/copy'
 import { usePublishPageContext } from '../lib/pageContext'
+import { tabbedPageTitle } from '../lib/pageTitle'
 import { useRealtimeReload } from '../lib/realtime'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { QueryStatusBanner } from '../components/query/QueryStatusBanner'
 import { QuerySnapshotStrip } from '../components/query/QuerySnapshotStrip'
 import { QueryReadout } from '../components/query/QueryReadout'
-import { QUERY_TABS, resolveQueryTab } from '../components/query/queryTabs'
+import { QUERY_TABS, collapseRepeats, defaultLibraryTab, resolveQueryTab, type QueryLibraryTab } from '../components/query/queryTabs'
 import { QueryCopyButton } from '../components/query/QueryCopyButton'
 import { QueryResultsTable } from '../components/query/QueryResultsTable'
 import { HistoryItem, TeamItem } from '../components/query/QueryHistoryPanel'
@@ -68,7 +69,7 @@ interface RunItem {
   latencyMs?: number
 }
 
-type SidebarTab = 'saved' | 'recent' | 'team'
+type SidebarTab = QueryLibraryTab
 
 // Approved tables for raw SQL mode — mirrors the backend APPROVED_TABLES set.
 // Shown in the schema reference panel so users know what to query.
@@ -156,7 +157,8 @@ export function QueryPage() {
   const [runs, setRuns] = useState<RunItem[]>([])
   const [pendingDeleteHistory, setPendingDeleteHistory] = useState<HistoryRow | null>(null)
   const [deletingHistory, setDeletingHistory] = useState(false)
-  const [sidebarTab, setSidebarTab] = useState<SidebarTab>('saved')
+  // null until the user picks a list; until then the Library opens where the rows are.
+  const [sidebarChoice, setSidebarTab] = useState<SidebarTab | null>(null)
   const rawTextareaRef = useRef<HTMLTextAreaElement>(null)
 
   const {
@@ -299,12 +301,12 @@ export function QueryPage() {
   }
 
   const saved = useMemo(() => history.filter((h) => h.is_saved), [history])
-  const recent = useMemo(() => history.filter((h) => !h.is_saved), [history])
+  const recent = useMemo(() => collapseRepeats(history.filter((h) => !h.is_saved)), [history])
+  const sidebarTab: SidebarTab = sidebarChoice ?? defaultLibraryTab(saved.length, recent.length)
 
   usePublishPageContext({
     route: '/query',
-    title: `${activeTabMeta.label} · SQL query`,
-    summary: activeTabMeta.description,
+    title: tabbedPageTitle('SQL query', activeTabMeta.label, activeTabMeta.id === QUERY_TABS[0].id),
     filters: { tab: activeTab, project_id: activeProjectId ?? undefined },
     criticalCount: stats.errors24h,
   })
@@ -322,7 +324,6 @@ export function QueryPage() {
         count: saved.length + recent.length > 0 ? saved.length + recent.length : undefined,
       },
       { id: 'schema' as const, label: 'Schema' },
-      { id: 'overview' as const, label: 'Overview' },
     ],
     [stats.runs24h, saved.length, recent.length],
   )
@@ -426,35 +427,26 @@ export function QueryPage() {
         size="sm"
       />
 
-      {activeTab === 'overview' && (
-        <QueryReadout
-          stats={stats}
-          fetchedAt={statsFetchedAt}
-          isValidating={statsValidating}
-        />
-      )}
-
       {activeTab === 'schema' && (
         <Card className="p-3">
-          <div className="mb-2 text-xs font-medium uppercase tracking-wider">Approved tables</div>
+          <div className="mb-2 text-xs font-semibold">Approved tables</div>
           <ContainedBlock tone="muted" className="mb-3">
             <p className="text-2xs leading-relaxed text-fg-muted">
               Raw SQL mode accepts SELECT-only statements. Bind your project with <code className="text-brand">$1</code> — max 100 rows returned.
             </p>
           </ContainedBlock>
-          <div className="divide-y divide-edge-subtle/30 rounded-sm border border-edge-subtle overflow-hidden">
-            {SCHEMA_REFERENCE.map((t) => (
-              // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
-              <div key={t.table} className="px-3 py-2 grid grid-cols-[7rem_1fr] gap-2 items-start bg-surface-raised border-b border-edge-subtle/30 last:border-b-0">
-                <code className="text-2xs font-mono text-brand shrink-0">{t.table}</code>
-                <span className="text-2xs text-fg-faint font-mono leading-relaxed">
-                  {t.columns}
-                  {t.note ? <span className="block text-info/80 not-italic mt-0.5">{t.note}</span> : null}
-                </span>
-              </div>
-            ))}
-          </div>
+          <SchemaTableList className="rounded-sm border border-edge-subtle overflow-hidden" />
         </Card>
+      )}
+
+      {/* Developer details (endpoints, schema-cache health) used to be the only thing on an
+          Overview tab; they belong with the schema they describe (round-2 review, 2026-11-18). */}
+      {activeTab === 'schema' && (
+        <QueryReadout
+          stats={stats}
+          fetchedAt={statsFetchedAt}
+          isValidating={statsValidating}
+        />
       )}
 
       {(activeTab === 'ask' || activeTab === 'history') && (
@@ -497,18 +489,7 @@ export function QueryPage() {
               <span className="text-2xs font-medium text-fg-secondary">Approved tables · <code className="text-brand">$1</code> = your project_id</span>
               <span className="text-2xs text-fg-faint">severity: critical=P0 high=P1 medium=P2 low=P3</span>
             </div>
-            <div className="divide-y divide-edge-subtle/30 max-h-48 overflow-y-auto">
-              {SCHEMA_REFERENCE.map((t) => (
-                // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
-                <div key={t.table} className="px-3 py-1.5 grid grid-cols-[7rem_1fr] gap-2 items-start">
-                  <code className="text-2xs font-mono text-brand shrink-0">{t.table}</code>
-                  <span className="text-2xs text-fg-faint font-mono leading-relaxed">
-                    {t.columns}
-                    {t.note && <span className="block text-info/80 not-italic mt-0.5">{t.note}</span>}
-                  </span>
-                </div>
-              ))}
-            </div>
+            <SchemaTableList className="max-h-48 overflow-y-auto" />
           </div>
         )}
 
@@ -518,7 +499,9 @@ export function QueryPage() {
               <label htmlFor="query-composer" className="block text-xs font-medium text-fg-muted">
                 Ask a question about your bug data
               </label>
-              <div className="flex gap-2 items-stretch">
+              {/* Phone (2026-11-18): two rows beside the button clipped the placeholder behind
+                  an inner scrollbar. Three rows, and the button drops under the field. */}
+              <div className="flex flex-col gap-2 items-stretch sm:flex-row">
                 <textarea
                   id="query-composer"
                   value={question}
@@ -528,7 +511,7 @@ export function QueryPage() {
                   }}
                   placeholder="e.g. How many P0/P1 reports landed this week vs last week?"
                   disabled={loading}
-                  rows={2}
+                  rows={3}
                   className="flex-1 min-w-0 bg-surface-raised border border-edge-subtle rounded-sm px-3 py-2.5 text-sm text-fg placeholder:text-fg-faint hover:border-edge focus-visible:outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/40 disabled:opacity-50 disabled:cursor-not-allowed motion-safe:transition-opacity resize-y"
                   aria-label="Question composer"
                 />
@@ -632,7 +615,9 @@ export function QueryPage() {
       </>
       )}
 
-      <div className={`grid gap-3 ${activeTab === 'history' ? '' : 'md:grid-cols-[1fr_18rem]'}`}>
+      {/* The Library lives on History only: on Ask it was a second copy of the History tab beside an
+          empty page (round 3). */}
+      <div className="grid gap-3">
         {activeTab === 'ask' && (
         <div className="space-y-3 min-w-0">
           {/* Run results — live results push down, prompt library hides when runs exist */}
@@ -763,19 +748,22 @@ export function QueryPage() {
         </div>
         )}
 
-        <div className={`space-y-3 ${activeTab === 'history' ? '' : 'self-start'}`}>
+        {activeTab === 'history' && (
+        <div className="space-y-3">
           <Section title="Library">
+            {/* Only the lists that hold something, and the one open; packed left, not spread across 1440 (round 3). */}
             <SegmentedControl<SidebarTab>
               value={sidebarTab}
               onChange={setSidebarTab}
               ariaLabel="Switch between saved, recent, and team queries"
               size="sm"
-              options={[
-                { id: 'saved', label: 'Saved', count: saved.length },
-                { id: 'recent', label: 'Recent', count: recent.length },
-                { id: 'team', label: 'Team', count: team.length },
-              ]}
-              className="w-full justify-between"
+              options={(
+                [
+                  { id: 'saved', label: 'Saved', count: saved.length },
+                  { id: 'recent', label: 'Recent', count: recent.length },
+                  { id: 'team', label: 'Team', count: team.length },
+                ] as Array<{ id: SidebarTab; label: string; count: number }>
+              ).filter((o) => o.count > 0 || o.id === sidebarTab)}
             />
 
             <div className="mt-2">
@@ -790,7 +778,7 @@ export function QueryPage() {
                       ))}
                     </ul>
                   ) : saved.length === 0 ? (
-                    <EmptySectionMessage
+                    <LibraryEmpty
                       text="No saved queries yet"
                       hint="Pin a query (☆) and it shows up here for quick rerun."
                     />
@@ -817,13 +805,13 @@ export function QueryPage() {
                   ) : historyError ? (
                     <PageLoadError error={historyError} code={historyErrorCode} resource="query history" onRetry={loadHistory} />
                   ) : recent.length === 0 ? (
-                    <EmptySectionMessage
+                    <LibraryEmpty
                       text="No recent queries"
                       hint="Ask a question — the prompt + row count land here."
                     />
                   ) : (
-                    // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
-                    <ul className="space-y-1.5 max-h-[28rem] overflow-y-auto -mr-1 pr-1" data-dav-anchor="query:verify">
+                    // The page scrolls, not a box (round 3).
+                    <ul className="space-y-1.5" data-dav-anchor="query:verify">
                       {recent.map((h) => (
                         <HistoryItem key={h.id} row={h} onRerun={() => rerunFromLibrary(h.prompt, h.mode ?? 'nl')} onToggleSave={() => toggleSaved(h)} onDelete={() => setPendingDeleteHistory(h)} />
                       ))}
@@ -845,13 +833,12 @@ export function QueryPage() {
                   ) : teamError ? (
                     <PageLoadError error={teamError} code={teamErrorCode} resource="team queries" onRetry={loadTeam} />
                   ) : team.length === 0 ? (
-                    <EmptySectionMessage
+                    <LibraryEmpty
                       text="No team queries shared"
                       hint="When a teammate pins a query in their console it shows up here."
                     />
                   ) : (
-                    // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
-                    <ul className="space-y-1.5 max-h-[28rem] overflow-y-auto -mr-1 pr-1">
+                    <ul className="space-y-1.5">
                       {team.map((row) => (
                         <TeamItem key={row.id} row={row} onRerun={() => rerunFromLibrary(row.prompt, row.mode ?? 'nl')} />
                       ))}
@@ -862,6 +849,7 @@ export function QueryPage() {
             </div>
           </Section>
         </div>
+        )}
       </div>
       </>
       )}
@@ -885,5 +873,37 @@ export function QueryPage() {
         />
       )}
     </div>
+  )
+}
+
+/**
+ * The approved tables. A fixed 7rem name column let "classification_evaluations" print over
+ * its own column list (round-2 review, 2026-11-18): the name now gets its own line on a phone
+ * and a column sized to the longest name from `sm` up, and long names wrap instead of
+ * overflowing.
+ */
+function SchemaTableList({ className = '' }: { className?: string }) {
+  return (
+    <ul className={`divide-y divide-edge-subtle/30 ${className}`} data-testid="query-schema-tables">
+      {SCHEMA_REFERENCE.map((t) => (
+        // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
+        <li key={t.table} className="grid grid-cols-1 gap-x-4 gap-y-0.5 px-3 py-2 sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] items-start bg-surface-raised">
+          <code className="min-w-0 break-all text-2xs font-mono font-medium text-brand">{t.table}</code>
+          <span className="min-w-0 break-words text-2xs text-fg-faint font-mono leading-relaxed">
+            {t.columns}
+            {t.note ? <span className="block font-sans text-info-foreground mt-0.5">{t.note}</span> : null}
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/** The Library's empty line: plain text, not a dashed card inside the Library card (2026-11-18). */
+function LibraryEmpty({ text, hint }: { text: string; hint: string }) {
+  return (
+    <p className="py-1 text-xs text-fg-muted" data-testid="query-library-empty">
+      {text}. <span className="text-fg-faint">{hint}</span>
+    </p>
   )
 }

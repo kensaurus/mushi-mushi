@@ -112,6 +112,8 @@ export interface CiJob {
   completedAt: string | null
   htmlUrl: string | null
   memPeakMb: number | null
+  /** The first step that failed ("Dead code (production)"); older servers omit it. */
+  failedStep?: string | null
 }
 
 export interface CiAdvice {
@@ -155,8 +157,25 @@ interface CiStats {
   byRunner: Array<{ runner: string; jobs: number; busySeconds: number; infraFailures: number; queueP95s: number | null }>
   byWorkflow: Array<{ repo: string; workflow: string; jobs: number; durationP50s: number | null; durationP95s: number | null; failRate: number | null }>
   slowSteps: Array<{ repo: string; job: string; step: string; p50s: number; runs: number }>
+  /** Jobs started per UTC hour over the window, oldest first, zeros included. Optional: older servers do not send it. */
+  hourly?: CiHourly[]
+  /** The first hour `hourly` fully covers; earlier hours are partial. */
+  hourlyFrom?: string
+  /** Every job in the window, counted in the database; `jobs` above is the newest jobs read (at most 1,000 finished). */
+  windowJobs?: number
+  /** The window's pass rate over every job (passed ÷ passed + code failures). */
+  windowPassRate?: number | null
   /** Per job type, slowest p90 first. Optional: older servers do not send it. */
   byJob?: CiJobType[]
+}
+
+/** Jobs started in one UTC hour (`stats.hourly`). */
+export interface CiHourly {
+  at: string
+  jobs: number
+  passed: number
+  codeFailures: number
+  infraFailures: number
 }
 
 /** One job type (repo + workflow + job name) over the window. Skipped runs are left out. */
@@ -199,4 +218,69 @@ export interface CiOverview {
 export interface CiRerunResult {
   rerun: Array<{ runId: number }>
   headSha: string
+}
+
+// ── Job debug panel (`api/routes/ci-job-debug.ts`, `_shared/ci-job-debug.ts`) ──────────────────
+
+type CiExplanationKind = 'code' | 'flaky' | 'infra' | 'cancelled'
+
+/** A failed job in plain English: from its verdict (`rule`) or the model reading the log (`ai`). */
+export interface CiJobExplanation {
+  cause: string
+  nextStep: string
+  kind: CiExplanationKind
+  source: 'rule' | 'ai'
+  model: string | null
+  createdAt: string
+}
+
+export type CiJobLogStatus = 'ok' | 'running' | 'no_token' | 'not_bound' | 'forbidden' | 'unavailable'
+
+/** `GET /v1/admin/ci/jobs/:id/debug` (`id` = the overview's `jobs[].id`). */
+export interface CiJobDebug {
+  job: {
+    id: string
+    projectId: string
+    repo: string
+    runId: number
+    runAttempt: number
+    jobId: number
+    jobName: string
+    workflowName: string | null
+    prNumber: number | null
+    headBranch: string | null
+    status: string
+    conclusion: string | null
+    ciKind: string
+    infra: boolean
+    infraDetail: string | null
+    htmlUrl: string | null
+    runUrl: string
+    completedAt: string | null
+    durationSeconds: number | null
+  }
+  steps: Array<{ name: string; conclusion: string | null; seconds: number | null }>
+  failedStep: string | null
+  /** The screened excerpt around the failure (never stored server-side). */
+  log: { status: CiJobLogStatus; excerpt: string | null; linesDropped: number }
+  annotations: string[]
+  explanation: CiJobExplanation | null
+  actions: {
+    rerun: boolean
+    cancel: boolean
+    explain: boolean
+    ciRepair: { fixId: string; reportId: string | null } | null
+  }
+}
+
+/** `POST /v1/admin/ci/jobs/:id/explain` body (`data`). */
+export interface CiExplainResult {
+  explanation: CiJobExplanation
+  cached: boolean
+}
+
+/** `POST /v1/admin/ci/jobs/:id/rerun` and `/cancel` body (`data`). */
+export interface CiRunActionResult {
+  runId: number
+  action: 'rerun' | 'cancel'
 }

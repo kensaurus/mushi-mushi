@@ -81,3 +81,25 @@ export function windowsTaskArgs(o: { node: string; cli: string; configPath?: str
   const run = [o.node, o.cli, 'work', '--daemon', ...(o.configPath ? ['--worker-config', o.configPath] : [])].map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(' ')
   return ['/Create', '/TN', WINDOWS_TASK_NAME, '/SC', 'ONLOGON', '/RL', 'LIMITED', '/F', '/TR', run]
 }
+
+/** The launcher left in the user's Startup folder when a logon task cannot be created. */
+export const WINDOWS_STARTUP_FILE = 'Mushi worker.vbs'
+
+/** Where a Windows worker started from the Startup folder writes its output. */
+export function windowsWorkerLogPath(home: string): string {
+  return join(home, '.cache', 'mushi-work', 'logs', 'worker.log')
+}
+
+/**
+ * A VBScript for the Startup folder that starts the daemon hidden at logon,
+ * appending its output to `log`. `schtasks /Create /SC ONLOGON` needs an
+ * administrator on most machines ("Access is denied"), so an ordinary account
+ * was left with no service at all; the Startup folder needs no rights.
+ */
+export function windowsStartupScript(o: { node: string; cli: string; log: string; configPath?: string }): string {
+  const run = [o.node, o.cli, 'work', '--daemon', ...(o.configPath ? ['--worker-config', o.configPath] : [])].map((a) => `"${a}"`).join(' ')
+  // cmd /c "<line>": with more than two quotes, cmd drops the first and last.
+  const line = `cmd /c "${run} >> "${o.log}" 2>&1"`
+  // A VBScript string literal doubles each quote; 0 = hidden window, False = do not wait.
+  return `' Mushi local worker (mushi work --daemon), started hidden at logon.\r\nCreateObject("WScript.Shell").Run "${line.replace(/"/g, '""')}", 0, False\r\n`
+}

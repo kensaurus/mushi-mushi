@@ -253,6 +253,40 @@ pnpm db:push                    # Run migrations
 pnpm deploy                     # Deploy all Edge Functions
 ```
 
+### Migration rule: no primary key on `organization_id` + `project_id`
+
+Give such a table an `id` primary key and make the pair `UNIQUE`:
+
+```sql
+CREATE TABLE public.example (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL REFERENCES public.organizations (id),
+  project_id uuid REFERENCES public.projects (id),
+  UNIQUE (organization_id, project_id)
+);
+```
+
+Why: `projects` already points at `organizations`. A table whose primary key
+is those two foreign keys looks like a many-to-many link between them, so the
+REST layer (PostgREST) finds two ways to join the tables. Every
+`projects?select=…,organizations(…)` read then fails with `PGRST201`. On
+2026-11-17 `ops_mutes` did this. For a day the organization's **Run AI on:
+OpenAI** setting read as Claude and billing reads failed. An upsert with
+`onConflict: 'organization_id,project_id'` still works on the `UNIQUE` pair.
+
+`src/__tests__/migration-no-org-project-junction.test.ts` replays every
+migration and fails when a table is left with that key. To check a deployed
+database, run this with the publishable key:
+
+```bash
+curl "$SUPABASE_URL/rest/v1/projects?select=id,organizations(id)&limit=1" \
+  -H "apikey: $SUPABASE_PUBLISHABLE_KEY"
+```
+
+A `42501` permission error means the join is fine. `PGRST201` means it is
+ambiguous. In code, pin the join so a second relationship can't break it:
+`organizations!projects_organization_id_fkey(...)`.
+
 ### Environment Variables
 
 Set these as Supabase secrets:
@@ -495,4 +529,4 @@ Admin pages subscribe to these tables via Supabase Realtime (`apps/admin/src/lib
 
 ## License
 
-[AGPLv3](./LICENSE) — true OSI open source: self-host it, fork it, modify it for your own org. If you offer a modified server as a hosted service, publish your changes (§13) or obtain a [commercial license](../../COMMERCIAL-LICENSE.md). A small enterprise-edition boundary ([`./ee/`](./ee/README.md)) is source-available but commercial for production use.
+[AGPLv3](./LICENSE) — true OSI open source: self-host it, fork it, modify it for your own org. If you offer a modified server as a hosted service, publish your changes (§13) or obtain a [commercial license](../../docs/legal/COMMERCIAL-LICENSE.md). A small enterprise-edition boundary ([`./ee/`](./ee/README.md)) is source-available but commercial for production use.

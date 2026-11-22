@@ -99,6 +99,45 @@ describe('SdkInstallKeyPanel rotation', () => {
     expect(onRotatedKeyChange).toHaveBeenLastCalledWith('mushi_newkey0000')
   })
 
+  // At 390px the key chip broke one character per line and the legend was a
+  // paragraph (fresh-eyes 2026-11-18).
+  it('keeps each key chip on one line and the legend behind an (i)', async () => {
+    await mount()
+    const chips = Array.from(container.querySelectorAll('[data-testid="sdk-key-row"] code'))
+    expect(chips).toHaveLength(2)
+    for (const c of chips) {
+      expect(c.className).toContain('whitespace-nowrap')
+      expect(c.className).toContain('truncate')
+      expect(c.className).not.toContain('break-all')
+    }
+    const legend = container.querySelector('[data-testid="sdk-key-legend"]')!
+    expect(legend.textContent).not.toContain('Cold: nothing')
+  })
+
+  // Round-2 review (2026-11-18): the key used an hour ago read amber "Stale"
+  // and three rows each said "Never used".
+  it('draws a quiet key grey "Quiet" and groups never-used keys under one heading', async () => {
+    const hourAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+    const quiet = { ...SDK_KEY, last_seen_at: hourAgo }
+    const never = (n: number) => ({ ...SDK_KEY, id: `5555555${n}-5555-4555-8555-555555555555`, key_prefix: `mushi_nev00${n}`, last_seen_at: null })
+    api.apiFetch.mockImplementation(async (path: string) => {
+      if (path === '/v1/admin/projects') return { ok: true, data: { projects: [{ id: PROJECT, api_keys: [never(1), quiet, never(2), never(3)] }] } }
+      return { ok: true, data: {} }
+    })
+    act(() => {
+      root.render(createElement(MemoryRouter, null, createElement(SdkInstallKeyPanel, { projectId: PROJECT, onRotatedKeyChange: () => {}, onError: () => {} })))
+    })
+    await flush()
+    const quietMark = container.querySelector('[data-key-status="stale"] [data-testid="status-pill"]')!
+    expect(quietMark.textContent).toContain('Quiet')
+    expect(quietMark.getAttribute('data-status')).toBe('idle')
+    expect(container.textContent).not.toContain('Stale')
+    const neverMarks = container.querySelectorAll('[data-key-status="never"]')
+    expect(neverMarks).toHaveLength(1)
+    expect(neverMarks[0].textContent).toContain('Never used · 3')
+    expect(container.querySelectorAll('[data-testid="sdk-key-row"]')).toHaveLength(4)
+  })
+
   it('has no project-wide "Rotate key" button, only one Rotate per key', async () => {
     await mount()
     expect(buttons().some((b) => b.textContent === 'Rotate key')).toBe(false)
@@ -118,6 +157,60 @@ describe('SdkInstallKeyPanel rotation', () => {
     await flush()
     const call = api.apiFetch.mock.calls.find(([p]) => String(p).endsWith('/keys/rotate'))!
     expect(JSON.parse(call[1].body)).toEqual({ keyId: SDK_KEY.id })
+  })
+})
+
+// Owner 2026-11-18: long-lived apps pile up old e2e/test keys. One action
+// revokes the stale ones (unused for over 7 days) behind a confirm that lists
+// them, one per-key revoke each; the key the app runs on is never on the list.
+describe('SdkInstallKeyPanel stale keys', () => {
+  let container: HTMLDivElement
+  let root: Root
+  const LIVE = { ...SDK_KEY, id: '55555555-5555-4555-8555-555555555555', key_prefix: 'mushi_live01', last_seen_at: new Date().toISOString() }
+  const NEVER = { ...SDK_KEY, id: '66666666-6666-4666-8666-666666666666', key_prefix: 'mushi_never1', last_seen_at: null, created_at: '2026-01-01T00:00:00Z' }
+
+  beforeEach(() => {
+    api.apiFetch.mockReset()
+    api.invalidateApiCache.mockReset()
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+  afterEach(() => {
+    act(() => root.unmount())
+    container.remove()
+  })
+
+  it('revokes only the stale SDK keys, after a confirm that lists them', async () => {
+    api.apiFetch.mockImplementation(async (path: string) => {
+      if (path === '/v1/admin/projects') return { ok: true, data: { projects: [{ id: PROJECT, api_keys: [LIVE, SDK_KEY, NEVER, MCP_KEY] }] } }
+      return { ok: true, data: null }
+    })
+    act(() => {
+      root.render(createElement(MemoryRouter, null, createElement(SdkInstallKeyPanel, { projectId: PROJECT, onRotatedKeyChange: () => {}, onError: () => {} })))
+    })
+    await flush()
+    const action = document.body.querySelector<HTMLButtonElement>('[data-testid="revoke-stale-keys"]')!
+    expect(action.textContent).toBe('Revoke 2 stale keys')
+    // Each key's health is a status pill (2026-11-18): a live key passes, a never-used one is idle.
+    const keyStatus = (s: string) => document.body.querySelector(`[data-key-status="${s}"] [data-testid="status-pill"]`)?.getAttribute('data-status')
+    expect(keyStatus('healthy')).toBe('passed')
+    expect(keyStatus('never')).toBe('idle')
+    act(() => action.click())
+    // Nothing is revoked before the confirm.
+    expect(api.apiFetch.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(false)
+    const list = document.body.querySelector('[aria-label="Keys to revoke"]')!.textContent ?? ''
+    expect(list).toContain('mushi_sdk001')
+    expect(list).toContain('mushi_never1')
+    expect(list).not.toContain('mushi_live01')
+    expect(list).not.toContain('mushi_mcp001')
+
+    act(() => buttons().find((b) => b.textContent === 'Revoke 2')!.click())
+    await flush()
+    const deleted = api.apiFetch.mock.calls.filter(([, init]) => init?.method === 'DELETE').map(([p]) => p)
+    expect(deleted).toEqual([`/v1/admin/projects/${PROJECT}/keys/${SDK_KEY.id}`, `/v1/admin/projects/${PROJECT}/keys/${NEVER.id}`])
+    expect(api.invalidateApiCache).toHaveBeenCalledWith('/v1/admin/projects')
+    expect(document.body.querySelector('[data-testid="revoke-stale-keys"]')).toBeNull()
   })
 })
 

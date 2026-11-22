@@ -2,7 +2,7 @@
 
 > **This is Bucket C — the platform depth for teams and operators.** It used to
 > live in the top of the README; it was re-shelved here per
-> [`/VISION.md`](../../VISION.md) §2.1 so the front door stays on the wedge (a
+> [`docs/VISION.md`](../VISION.md) §2.1 so the front door stays on the wedge (a
 > solo builder understanding and fixing one bug). Nothing here was deleted — it
 > moved. If you're a solo vibe coder, you can ignore this whole file until you
 > graduate to a team.

@@ -128,3 +128,12 @@ a6079623f9b4b675b1a4489b183d23a516ef3d55:packages/server/src/__tests__/byok-univ
 6321c26ccb26f6b61b907d7fef97a928a4a81d80:packages/cli/src/worker/protocol.test.ts:generic-api-key:207
 6321c26ccb26f6b61b907d7fef97a928a4a81d80:packages/ux/src/fresh-eyes-request.test.ts:generic-api-key:22
 c58e89f903931ec25561b40b46d5bc2bcca16300:packages/ux/src/fresh-eyes-live-run.test.ts:generic-api-key:142
+# Ops hub (PR 1161): a shaped Slack bot-token test fixture, not a credential.
+# The tree no longer holds it (b4a2bf7cf builds it at run time); these commits on feat/ops-hub still do.
+b89da203e6a632a57d29436939846c7303546b4d:packages/server/src/__tests__/ops-routes.test.ts:generic-api-key:283
+290163f777c69be6731fe4d0839169ea27b98ed7:packages/server/src/__tests__/ops-routes.test.ts:generic-api-key:285
+
+# Spam & abuse page test fixture (console UX audit 2026-11-21): the mock
+# `reporter_token_hash` "abcdef0123456789" is a hand-typed hex run, not a
+# token; the working tree now says `device-hash-1`. Pins the commit that added it.
+8883f1a52a93f86d36f9810fe0b08fe0c5f3dbba:apps/admin/src/pages/AntiGamingPage.empty.test.tsx:generic-api-key:104

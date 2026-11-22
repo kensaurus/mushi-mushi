@@ -157,7 +157,7 @@ export function Callout({ children, tone = 'neutral', label, icon, action, class
       {(label || action) && (
         <div className="mb-1.5 flex items-center justify-between gap-2">
           {label && (
-            <div className="flex items-center gap-1.5 text-3xs font-semibold uppercase tracking-wider text-fg-muted min-w-0">
+            <div className="flex items-center gap-1.5 text-3xs font-semibold text-fg-secondary min-w-0">
               {icon && <span className="text-fg-muted shrink-0 [&>svg]:h-3.5 [&>svg]:w-3.5">{icon}</span>}
               <span className="truncate">{label}</span>
             </div>
@@ -211,7 +211,7 @@ export function DefinitionChips({ items, className = '', columns = 2, dense }: D
   // tight tracking reads as a compact inline caption instead of a header.
   const labelCls = dense
     ? 'text-3xs font-medium tracking-normal text-fg-faint'
-    : 'text-3xs font-medium uppercase tracking-wider text-fg-faint'
+    : 'text-3xs font-semibold text-fg-secondary'
   const valueCls = dense ? 'mt-0.5 text-xs' : 'mt-0.5 text-sm'
   return (
     <ul
@@ -319,7 +319,7 @@ export function DetailRows({ items, className = '', dense }: DetailRowsProps) {
             className={`${padCls} ${item.wrap ? 'flex flex-col gap-0.5' : 'flex items-start justify-between gap-3'}`}
           >
             <dt
-              className="text-3xs font-medium uppercase tracking-wider text-fg-faint shrink-0"
+              className="text-3xs font-semibold text-fg-secondary shrink-0"
               title={item.hint}
             >
               {item.label}
@@ -429,7 +429,13 @@ export function CopyButton(props: CopyButtonProps) {
       props.onCopy()
     }
   }
-  const dims = size === 'md' ? { box: 'h-7 w-7', glyph: 14 } : { box: 'h-5 w-5', glyph: 11 }
+  // Same hit-area floor as Btn / SegmentedControl (WCAG 2.5.8): 24px on
+  // mouse layouts, 32px on coarse pointers. sm was 20px with an 11px glyph,
+  // too small to hit or see (report 44ac4ce2).
+  const dims =
+    size === 'md'
+      ? { box: 'h-7 w-7 pointer-coarse:h-8 pointer-coarse:w-8', glyph: 14 }
+      : { box: 'h-6 w-6 pointer-coarse:h-8 pointer-coarse:w-8', glyph: 13 }
   return (
     <Tooltip content={copied ? copiedLabel : label}>
       <button
@@ -550,13 +556,15 @@ export function CodeValue({ value, tone = 'neutral', copyable = true, className 
     )
   }
   return (
-    <div className={`group/code inline-flex max-w-full items-start gap-1.5 ${className}`}>
+    // The copy button sits inside the block, top-right, as in the multiline block (round-3
+    // review 2026-11-19: beside the block it floated outside the card edge).
+    <div className={`group/code relative inline-flex max-w-full ${className}`}>
       <code
-        className={`${CODE_BLOCK_SHELL} ${CODE_BLOCK_BODY} block w-full px-2 py-1 ${toneClass}`}
+        className={`${CODE_BLOCK_SHELL} ${CODE_BLOCK_BODY} block w-full px-2 py-1 ${copyable ? 'pr-8' : ''} ${toneClass}`}
       >
         {value}
       </code>
-      {copyable && <CopyButton value={value} className="mt-0.5 shrink-0" />}
+      {copyable && <CopyButton value={value} className="absolute right-1 top-0.5" />}
     </div>
   )
 }
@@ -619,7 +627,7 @@ export function LogBlock({
       {(label || action || copyable) && (
         <div className="mb-1 flex items-center justify-between gap-2">
           {label ? (
-            <span className="text-3xs font-semibold uppercase tracking-wider text-fg-faint">{label}</span>
+            <span className="text-3xs font-semibold text-fg-secondary">{label}</span>
           ) : (
             <span />
           )}

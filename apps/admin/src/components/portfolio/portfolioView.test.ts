@@ -8,7 +8,6 @@ import {
   kindLabel,
   needsALook,
   openReportsText,
-  portfolioStatusSentence,
   radarLabel,
   groupRadarDetectors,
   radarErrorSentence,
@@ -17,6 +16,7 @@ import {
   sdkLabel,
   sortPortfolioCards,
   spendText,
+  splitPublicDemo,
 } from './portfolioView'
 
 const card = (over: Partial<PortfolioCard>): PortfolioCard => ({
@@ -226,15 +226,44 @@ describe('appUrgency', () => {
   })
 })
 
-describe('portfolioStatusSentence', () => {
-  it('says how many apps need you and which one first', () => {
-    const cards = sortPortfolioCards([card({ name: 'calm', needsLook: [SETUP_CHORE] }), card({ name: 'yen-yen', openReports: 29, needsLook: [] })])
-    expect(portfolioStatusSentence(cards)).toMatchObject({ sentence: '1 of 2 apps need you. Start with yen-yen: 29 open bugs.', tone: 'warn' })
+describe('splitPublicDemo', () => {
+  // Owner, 2026-11-17: "All 10 apps need you" counted the docs demo.
+  it('keeps the public demo out of the cards and the "need you" count', () => {
+    const demo = card({ projectId: 'demo', name: 'Mushi demo (sample data)', slug: 'mushi-demo', openReports: 6, needsLook: [] })
+    const mine = card({ projectId: 'mine', name: 'yen-yen', slug: 'yen-yen', openReports: 29, needsLook: [] })
+    const lookalike = card({ projectId: 'demo-app', name: 'demo-app', slug: 'demo-app', openReports: 1, needsLook: [] })
+    const { apps, demo: demos } = splitPublicDemo([demo, mine, lookalike])
+    expect(demos.map((c) => c.projectId)).toEqual(['demo'])
+    expect(apps.map((c) => c.projectId)).toEqual(['mine', 'demo-app'])
+    expect(apps.filter(needsALook)).toHaveLength(2)
   })
 
-  it('never says an app needs you when only chores are left', () => {
-    const out = portfolioStatusSentence([card({ name: 'a', needsLook: [SETUP_CHORE] }), card({ name: 'b', needsLook: [] })])
-    expect(out.first).toBeNull()
-    expect(out.sentence).toMatch(/^No app needs you right now\./)
+  it('matches the demo by its "(sample data)" name when the slug differs', () => {
+    expect(splitPublicDemo([card({ name: 'Mushi demo (sample data)', slug: 'renamed' })]).demo).toHaveLength(1)
+  })
+})
+
+describe('sortPortfolioCards order toggle', () => {
+  // Owner's walkthrough, 2026-11-17: "which app is worst" needed one look.
+  const apps = [
+    card({ projectId: 'b', name: 'beta', openReports: 0, needsLook: [] }),
+    card({ projectId: 'a', name: 'alpha', openReports: 3, needsLook: [] }),
+    card({ projectId: 'c', name: 'gamma', openReports: 40, needsLook: [] }),
+  ]
+  it('worst first by default: the most open bugs lead', () => {
+    expect(sortPortfolioCards(apps).map((c) => c.name)).toEqual(['gamma', 'alpha', 'beta'])
+  })
+  it('or by name', () => {
+    expect(sortPortfolioCards(apps, 'name').map((c) => c.name)).toEqual(['alpha', 'beta', 'gamma'])
+  })
+})
+
+describe('radarBadge (2026-11-18)', () => {
+  it('a serious finding is red Error, like Full-stack audit; the rest amber Warning', async () => {
+    const { radarBadge } = await import('./portfolioView')
+    expect(radarBadge({ state: 'finding', findings: [{ severity: 'error' }] })).toEqual({ label: 'Error', tone: 'dangerSubtle' })
+    expect(radarBadge({ state: 'finding', findings: [{ severity: 'warn' }, { severity: 'info' }] })).toEqual({ label: 'Warning', tone: 'warnSubtle' })
+    expect(radarBadge({ state: 'error', findings: [] }).label).toBe('Check failed')
+    expect(radarBadge({ state: 'unknown', findings: [] }).label).toBe('Not checked')
   })
 })

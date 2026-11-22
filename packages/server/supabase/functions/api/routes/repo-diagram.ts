@@ -444,12 +444,12 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
     let inputTokens: number | undefined
     let outputTokens: number | undefined
     try {
-      const { result, usedProvider } = await withAnthropicOrOpenAi(
+      const routed = await withAnthropicOrOpenAi(
         db,
         projectId,
         (key) => claudeGenerateObject({
           apiKey: key.key,
-          model: ASSIST_MODEL,
+          model: key.model ?? ASSIST_MODEL,
           schema: DiagramLlmSchema,
           effort: ASSIST_EFFORT,
           system: DIAGRAM_SYSTEM_PROMPT,
@@ -458,19 +458,20 @@ export function registerRepoDiagramRoutes(app: Hono<{ Variables: Variables }>): 
           timeoutMs: DIAGRAM_LLM_TIMEOUT_MS,
         }),
         async (key) => {
-          usedModel = ASSIST_FALLBACK
-          fallbackUsed = true
           const { openAiProvider } = await import('../../_shared/openai-compat.ts')
           const openai = openAiProvider({ apiKey: key.key, baseURL: key.baseUrl })
           return generateValidatedObject(DiagramLlmSchema, {
-            model: openai(ASSIST_FALLBACK),
+            model: openai(key.model ?? ASSIST_FALLBACK),
             system: DIAGRAM_SYSTEM_PROMPT,
             messages: [{ role: 'user', content: userPrompt }],
             maxTokens: DIAGRAM_MAX_OUTPUT_TOKENS,
           })
         },
+        { feature: 'repo-diagram', tier: 'fast' },
       )
-      if (usedProvider === 'openai') { usedModel = ASSIST_FALLBACK; fallbackUsed = true }
+      const { result, usedProvider } = routed
+      usedModel = routed.model ?? (usedProvider === 'openai' ? ASSIST_FALLBACK : ASSIST_MODEL)
+      fallbackUsed = routed.fallbackUsed
       raw = result.object as z.infer<typeof DiagramLlmSchema>
       inputTokens = result.usage?.promptTokens
       outputTokens = result.usage?.completionTokens

@@ -219,9 +219,13 @@ export async function probeIntegration(
       }
 
     } else if (kind === 'anthropic') {
-      // 1-token probe, costs < $0.0001.
-      const key = Deno.env.get('ANTHROPIC_API_KEY') ?? ''
-      if (!key) {
+      // 1-token probe, costs < $0.0001. The platform key follows the
+      // organization's AI provider (ADR 0039 amendment): none on OpenAI.
+      const onOpenAi = !!projectId && (await aiProviderForProject(db, projectId)) === 'openai'
+      const key = onOpenAi ? '' : Deno.env.get('ANTHROPIC_API_KEY') ?? ''
+      if (onOpenAi) {
+        detail = 'This organization runs AI on OpenAI, so the platform Claude key is not used.'
+      } else if (!key) {
         detail = 'ANTHROPIC_API_KEY is not set on the server.'
       } else {
         const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -585,7 +589,7 @@ export async function probeIntegration(
     const resolved = await resolveLlmKey(db, projectId, 'openai', { purpose: 'probe' }).catch(() => null)
     if (!resolved?.key) {
       status = 'unknown'
-      detail = 'Your organization runs AI on OpenAI, and no OpenAI key is set. Add one under Settings → API Keys.'
+      detail = 'Your organization runs AI on OpenAI, and no OpenAI key is set. Add one under Settings → AI keys.'
     } else {
       try {
         const base = (resolved.baseUrl ?? 'https://api.openai.com/v1').replace(/\/$/, '')
@@ -599,7 +603,7 @@ export async function probeIntegration(
           detail = 'Your organization runs AI on OpenAI: fixes are written with OpenAI models, and the OpenAI key works.'
         } else if (res.status === 401 || res.status === 403) {
           status = 'down'
-          detail = 'Your organization runs AI on OpenAI, and the OpenAI key was rejected. Replace it under Settings → API Keys.'
+          detail = 'Your organization runs AI on OpenAI, and the OpenAI key was rejected. Replace it under Settings → AI keys.'
         } else {
           status = 'degraded'
           detail = `HTTP ${res.status}`
@@ -618,7 +622,7 @@ export async function probeIntegration(
       ''
     if (!apiKey) {
       status = 'unknown'
-      detail = 'No Anthropic API key configured. Add ANTHROPIC_API_KEY to your environment or under Settings → API Keys.'
+      detail = 'No Anthropic API key configured. Add ANTHROPIC_API_KEY to your environment or under Settings → AI keys.'
     } else {
       try {
         // Minimal models list call — cheapest probe with no tokens consumed

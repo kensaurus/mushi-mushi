@@ -227,14 +227,14 @@ export function registerSdkAssistantRoutes(app: Hono<{ Variables: Variables }>):
     const llmSpan = trace.span('generate')
 
     try {
-      const { result, usedProvider } = await withAnthropicOrOpenAi(
+      const routed = await withAnthropicOrOpenAi(
         db,
         projectId,
         (key) => {
           keySource = key.source
           return claudeGenerateObject({
             apiKey: key.key,
-            model: ASSIST_MODEL,
+            model: key.model ?? ASSIST_MODEL,
             schema: ReplyLlmSchema,
             effort: ASSIST_EFFORT,
             system: systemPrompt,
@@ -244,19 +244,20 @@ export function registerSdkAssistantRoutes(app: Hono<{ Variables: Variables }>):
         },
         async (key) => {
           keySource = key.source
-          usedModel = ASSIST_FALLBACK
-          fallbackUsed = true
           const { openAiProvider } = await import('../../_shared/openai-compat.ts')
           const openai = openAiProvider({ apiKey: key.key, baseURL: key.baseUrl })
           return generateValidatedObject(ReplyLlmSchema, {
-            model: openai(ASSIST_FALLBACK),
+            model: openai(key.model ?? ASSIST_FALLBACK),
             system: systemPrompt,
             messages: [{ role: 'user', content: message }],
             maxTokens,
           })
         },
+        { feature: 'sdk-assistant', tier: 'fast' },
       )
-      if (usedProvider === 'openai') { usedModel = ASSIST_FALLBACK; fallbackUsed = true }
+      const { result, usedProvider } = routed
+      usedModel = routed.model ?? (usedProvider === 'openai' ? ASSIST_FALLBACK : ASSIST_MODEL)
+      fallbackUsed = routed.fallbackUsed
 
       const reply = normalizeReply(result.object as z.infer<typeof ReplyLlmSchema>)
       const inputTokens = result.usage?.promptTokens
