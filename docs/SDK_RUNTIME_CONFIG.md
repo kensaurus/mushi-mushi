@@ -129,7 +129,10 @@ for `brandFooter`.
 turns into `Mushi.init` options. It is judged against the *bootstrap* config
 (the third argument of `mergeRuntimeConfig(active, runtime, host)`), so a cached
 runtime payload applied on an earlier merge never counts as a host value.
-To let the console decide a key, remove it from the code.
+To let the console decide a key, remove it from the code. The web snippets the
+console prints leave every console-served key out unless the person ticks
+**Lock these settings in my code** (`renderSnippet(…, { lockInCode })`), so a
+copied snippet never pins the look.
 
 Runtime values apply only when defined and non-null. `betaMode` from host is
 never dropped. Capture flags are not widget appearance keys and keep their own

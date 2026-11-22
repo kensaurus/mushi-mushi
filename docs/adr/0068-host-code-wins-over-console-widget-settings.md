@@ -53,11 +53,17 @@ then the SDK default.**
 - The console, MCP and CLI say so next to these fields ("If your app's code
   sets this, your code's value wins."), and the script-tag snippet says that its
   `data-*` settings win over the console.
-- The framework snippets the console generates still bake position, theme and
-  trigger text into code when they differ from the defaults, so a pasted
-  snippet pins them. The accent is never baked into a framework snippet.
-  Whether the snippets should leave every runtime-served key to the console is
-  open (follow-up).
+- **Snippets default to console-controlled** (decided by the team lead the same
+  day). Under this rule a snippet that bakes in the look would pin it for every
+  app that copied it, and the console would stop working for them. So the web
+  snippets the console prints (script tag, React, Vue, Svelte, vanilla) carry
+  only the project id and key, plus one line: "Look and position come from the
+  Mushi console (Connect → Bug capture SDK); set them here only to lock them."
+  The configurator's **Lock these settings in my code** toggle (off by default)
+  bakes the chosen values in, with the note "If your app's code sets this, your
+  code's value wins." (`renderSnippet(…, { lockInCode })` in
+  `apps/admin/src/lib/sdkSnippets.ts`). Mobile and server snippets keep their
+  options, because those SDKs do not read the console's runtime config.
 - The React Native SDK has its own merge and is not changed here.
 
 ## Alternatives rejected

@@ -18,7 +18,8 @@
  *
  *            3. INSTALL SNIPPETS — framework tabs (React / Vue / Svelte /
  *               Vanilla) with the matching `npm install` command and the
- *               init code, with the configured options baked in.
+ *               init code. Web snippets leave the look to the console
+ *               unless "Lock these settings in my code" is on (ADR 0068).
  *
  *          Used in four places — Onboarding Card 4, ProjectsPage per-project,
  *          Settings → Health, and McpPage — so the snippet content lives in
@@ -87,6 +88,8 @@ export function SdkInstallCard({
   const [framework, setFramework] = useState<Framework>(() => detectedFramework)
   const autoFrameworkApplied = useRef(false)
   const [config, setConfig] = useState<SdkPreviewConfig>(DEFAULT_SDK_CONFIG)
+  // Off by default: the web snippet leaves the look to the console (ADR 0068).
+  const [lockInCode, setLockInCode] = useState(false)
   const [savedConfig, setSavedConfig] = useState<SdkPreviewConfig>(DEFAULT_SDK_CONFIG)
   const [enabled, setEnabled] = useState(true)
   const [savedEnabled, setSavedEnabled] = useState(true)
@@ -111,8 +114,8 @@ export function SdkInstallCard({
   const bundler = snippetBundler(framework, reactSetup)
   const askSetup = framework === 'react' && reactSetup === null
   const code = useMemo(
-    () => renderSnippet(framework, projectId, snippetKey, config, projectSlug, bundler),
-    [framework, projectId, snippetKey, config, projectSlug, bundler],
+    () => renderSnippet(framework, projectId, snippetKey, config, projectSlug, bundler, { lockInCode }),
+    [framework, projectId, snippetKey, config, projectSlug, bundler, lockInCode],
   )
   const install = installCommand(framework)
   const isDirty = enabled !== savedEnabled || JSON.stringify(config) !== JSON.stringify(savedConfig)
@@ -271,7 +274,7 @@ export function SdkInstallCard({
         <div>
           <h3 className="text-sm font-semibold text-fg">Configure & install the SDK</h3>
           <p className="text-xs text-fg-muted mt-1">
-            Tune the widget on the left, then copy the snippet on the right into your app.
+            Copy the snippet on the right into your app once. Save the widget settings on the left and your app picks them up at startup, no redeploy.
           </p>
         </div>
       )}
@@ -359,6 +362,8 @@ export function SdkInstallCard({
             framework={framework}
             onEnabledChange={setEnabled}
             onChange={setConfig}
+            lockInCode={lockInCode}
+            onLockInCodeChange={setLockInCode}
           />
           <div className="flex items-center justify-between gap-2">
             <p className="text-2xs text-fg-faint">
