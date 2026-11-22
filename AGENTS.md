@@ -908,7 +908,7 @@ Reporter opens widget (capture.screenshot on-report/auto)
 | ConfigHelp | `sdk-install.screenshot_sensitive_hint` in `configDocs.ts` | Operator docs + link to deep-dive |
 
 **Introduced in:** `@mushi-mushi/core` / `@mushi-mushi/web` **1.19.0** (current: **1.39.0** — see `docs/CHANGELOG.md`).
-`@mushi-mushi/react-native` **0.19.0** (current: **0.25.0**). Full doc:
+`@mushi-mushi/react-native` **0.19.0** (current: **0.26.0**). Full doc:
 [`docs/SDK_SCREENSHOT_PREVIEW.md`](docs/SDK_SCREENSHOT_PREVIEW.md).
 
 ---
