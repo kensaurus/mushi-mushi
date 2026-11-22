@@ -20,6 +20,8 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useToast } from '../lib/toast'
 import { useMilestoneCelebration } from '../lib/useMilestoneCelebration'
 import { useEntitlements } from '../lib/useEntitlements'
+import { useAuth } from '../lib/auth'
+import { firstMergedFixMilestone, firstMergedFixSignal } from '../components/dashboard/firstMergedFix'
 import { Confetti } from '../components/Confetti'
 import { EmptySectionMessage, FreshnessPill, RefreshIconButton } from '../components/ui'
 import { PageLoadError } from '../components/PageLoadError'
@@ -53,6 +55,7 @@ export function DashboardPage() {
   const toast = useToast()
   const navigate = useNavigate()
   const copy = usePageCopy('/dashboard')
+  const { user } = useAuth()
 
   // A report or fix on this app changes Home. One /home read is several
   // seconds of queries, and a busy pipeline writes fix events every few
@@ -63,16 +66,21 @@ export function DashboardPage() {
     { debounceMs: 5000, maxWaitMs: 15_000, projectId: activeProjectId, enabled: !loading && !error && !!data },
   )
 
-  // The first merged fix is the proof the loop closed on this app.
+  // The first merged fix is the proof the loop closed. Only while the
+  // account's merges across its apps total exactly 1, once per account
+  // (components/dashboard/firstMergedFix.ts).
   const onFirstMergedFix = useCallback(() => {
     toast.success('Your first auto-fix was merged 🎉', 'Mushi Mushi fixed a bug end to end. Want to see the merged PR?', {
       label: 'View merged fixes',
       onClick: () => navigate('/fixes'),
     })
   }, [toast, navigate])
-  const { triggerKey: confettiKey } = useMilestoneCelebration('first-merged-fix', setup.activeProject?.merged_fix_count ?? null, {
-    onFire: onFirstMergedFix,
-  })
+  const firstFixMilestone = firstMergedFixMilestone(user?.id)
+  const { triggerKey: confettiKey } = useMilestoneCelebration(
+    firstFixMilestone ?? 'first-merged-fix',
+    firstFixMilestone ? firstMergedFixSignal(setup.data?.projects) : null,
+    { onFire: onFirstMergedFix },
+  )
 
   // One place per fact: a connect button or a count two sections both carried is kept once.
   const shown = useMemo(() => (data ? dedupeHomeSections(data) : null), [data])

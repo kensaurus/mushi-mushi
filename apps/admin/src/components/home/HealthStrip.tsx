@@ -20,8 +20,8 @@ export function HealthStrip({ section }: { section: HomeSection<HealthSignal[]> 
       <HomeSectionBody section={section} what="the app's health" notConnectedText="No health signals yet.">
         {(signals) => (
           <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 [&>*]:min-w-0">
-            {signals.map((s) => (
-              <li key={s.id}>
+            {signals.map((s, i) => (
+              <li key={s.id} className={healthTileSpansRow(signals.length, i) ? 'sm:col-span-2' : undefined}>
                 <HealthTile signal={s} />
               </li>
             ))}
@@ -30,6 +30,34 @@ export function HealthStrip({ section }: { section: HomeSection<HealthSignal[]> 
       </HomeSectionBody>
     </section>
   )
+}
+
+/**
+ * @internal Exported for tests.
+ * Two columns from `sm` up: with an odd count (five lights once the
+ * first-time setup light exists) the last tile left an empty cell beside it
+ * (UX review 2026-11-22). The last tile of an odd count takes the full row;
+ * one column on phones never has a hole.
+ */
+export function healthTileSpansRow(count: number, index: number): boolean {
+  return count > 1 && count % 2 === 1 && index === count - 1
+}
+
+/**
+ * What each light's time is: "Up · yesterday" read as if the site was up
+ * yesterday, when it was the last check (UX review 2026-11-22).
+ */
+const AT_LABEL: Record<string, string> = {
+  site: 'Checked',
+  errors: 'Last report',
+  sdk: 'Last check-in',
+  ci: 'Last run',
+  setup: 'Last test',
+}
+
+/** @internal Exported for tests. */
+export function healthAtLabel(id: string): string {
+  return AT_LABEL[id] ?? 'Updated'
 }
 
 /**
@@ -92,7 +120,7 @@ function HealthTile({ signal: server }: { signal: HealthSignal }) {
       <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-1">
         {s.at ? (
           <span className="text-2xs text-fg-faint">
-            <RelativeTime value={s.at} />
+            {healthAtLabel(s.id)} <RelativeTime value={s.at} />
           </span>
         ) : (
           <span />

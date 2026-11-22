@@ -85,6 +85,13 @@ describe('ProjectNextStepsPanel', () => {
 })
 
 describe('projectsSnapshotFigures', () => {
+  it("links each app's name to that app's Home, leaving All apps (2026-11-22)", () => {
+    const host = render([project({ id: 'lets', name: 'lets-talk' })])
+    const link = host.querySelector('[data-testid="project-needs-open-lets"]') as HTMLAnchorElement
+    expect(link.textContent).toBe('lets-talk')
+    expect(link.getAttribute('href')).toBe('/dashboard?project=lets')
+  })
+
   it('holds only numbers: no "Viewing" tile', () => {
     const labels = projectsSnapshotFigures(EMPTY_PROJECTS_STATS).map((f) => f.label)
     expect(labels).toEqual(['Apps', 'Ingesting', 'SDK connected', 'Active keys', 'Reports · 24h'])
