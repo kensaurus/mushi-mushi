@@ -48,6 +48,7 @@ import { registerRepoCommands } from './commands/repo.js'
 import { registerAccountsCommands } from './commands/accounts.js'
 import { registerSpendCommands } from './commands/spend.js'
 import { registerDesignCommands } from './commands/design.js'
+import { registerWidgetCommands } from './commands/widget.js'
 import { registerUxCommands } from './commands/ux.js'
 import { registerUxRunsCommands } from './commands/ux-runs.js'
 import { registerRunnerCommands } from './commands/runner.js'
@@ -148,6 +149,7 @@ registerRepoCommands(program)
 registerAccountsCommands(program)
 registerSpendCommands(program)
 registerDesignCommands(program)
+registerWidgetCommands(program)
 registerUxCommands(program)
 registerUxRunsCommands(program)
 registerRunnerCommands(program)

@@ -681,6 +681,24 @@ export const TOOL_CATALOG: ToolSpec[] = [
     useCase: 'Is this project on the current Mushi SDK?',
   },
   {
+    name: 'get_widget_settings',
+    title: 'Bug widget look',
+    description:
+      'Return how the in-app bug widget looks for one project, as the console sets it (served to installed SDKs at startup, no redeploy): { projectId, enabled (false: SDKs ignore console settings), canEdit, widget: { position, theme (auto | light | dark | inherit), triggerText (null = the default bug icon), accent (a #rrggbb brand colour, or "auto" to match the site), accentText (the black or white text Mushi checked against the accent, null when auto), launcher (auto | banner | edge-tab | attach | manual | hidden) } }. A value the app\'s own code sets in Mushi.init / data-* attributes wins over these. Optional projectId. Read-only.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'What colour and corner is the bug button in this app?',
+  },
+  {
+    name: 'set_widget_settings',
+    title: 'Change the bug widget look',
+    description:
+      'Change how the in-app bug widget looks for one project; installed SDKs pick it up at their next start, with no redeploy. Send any of accent (a hex colour like #3b5bdb, or "auto" to match the site; Mushi picks black or white text with at least 3:1 contrast), position (top-left | top-right | bottom-left | bottom-right), theme (auto | light | dark | inherit), triggerText (up to 24 characters; "" restores the default icon) and launcher (auto | banner | edge-tab | attach | manual | hidden). A value the app\'s own code sets wins over the console, so if nothing changes in the app, check Mushi.init. Project owners and admins only (403 otherwise); 60 changes an hour per app. Optional projectId. Returns { before, after, changed }. Write.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
+    useCase: 'Make the bug button our brand blue and move it to the bottom left.',
+  },
+  {
     name: 'search_mushi_docs',
     title: 'Search Mushi documentation',
     description:
@@ -1565,6 +1583,8 @@ export const USE_MUSHI_INTENTS: Record<string, UseMushiIntent> = {
       'add_byok_key',
       'test_byok_key',
       'remove_byok_key',
+      'get_widget_settings',
+      'set_widget_settings',
     ],
     hint: 'Call diagnose_setup first — it diagnoses setup gaps and returns the next action to take.',
   },

@@ -71,6 +71,15 @@ and is omitted so the client cannot clobber host init.
 | `sdk_capture_console = true` | Only if set to `false` |
 | `sdk_capture_element_selector = false` | Only if set to `true` |
 | `sdk_screenshot_sensitive_hint = NULL` | Only when non-null (`''` → hide caption) |
+| `sdk_widget_accent = NULL` (auto: match the site) | Only when set to a `#rrggbb` colour, as `widget.accent` plus `widget.accentText` |
+
+`widget.accentText` is black or white, whichever reads better on the accent; the
+server never serves a pair under 3:1 (`accentInk`). The column accepts only one
+exact hex colour (check constraint, migration
+`20261122120000_sdk_widget_accent.sql`), which is what lets the server promise
+that contrast. Until that migration is applied, both config routes re-read
+without the column (`isMissingAccentColumn`), so deploying `api` first does not
+break any installed widget; saving a colour answers 503 `MIGRATION_PENDING`.
 
 `reporterNotificationsEnabled` and the `assistant` block are always emitted with
 resolved booleans so console toggles match live SDK behavior.
@@ -94,14 +103,44 @@ Implementation: `packages/web/src/runtime-merge.ts` (`mergeRuntimeConfig`)
 Runtime `launcher: 'auto'` or `widget.trigger: 'auto'` does **not** override a
 host non-auto trigger.
 
-### Other widget keys
+### Widget appearance keys: code wins (ADR 0068)
 
-Non-trigger widget keys from runtime apply only when defined and non-null.
-`betaMode` from host is never dropped.
+One rule for every widget key except the launcher (below): **an explicit value
+set in the host's code wins; the console's runtime value fills only what the
+code left unset; then the SDK default.** Decided by the owner on 2026-11-22
+([ADR 0068](./adr/0068-host-code-wins-over-console-widget-settings.md)); before
+it, the console won for position, theme and trigger text and the host won only
+for `brandFooter`.
+
+| Key | Set in code | Console sends | Effective |
+| --- | --- | --- | --- |
+| `position` | `'top-left'` | `'bottom-left'` | `'top-left'` |
+| `position` | unset | `'bottom-left'` | `'bottom-left'` |
+| `position` | unset | omitted | `'bottom-right'` (default) |
+| `theme` | `'light'` | `'dark'` | `'light'` |
+| `theme` | unset | `'inherit'` | `'inherit'` |
+| `triggerText` | `'Feedback'` | `'Report a bug'` | `'Feedback'` |
+| `accent` (+ `accentText`) | `'#e03c2c'` | `'#3b5bdb'` + `'#ffffff'` | `'#e03c2c'`, the widget computes its text colour |
+| `accent` (+ `accentText`) | unset | `'#3b5bdb'` + `'#ffffff'` | `'#3b5bdb'` with `'#ffffff'` text (the pair always travels together) |
+| `screenshotSensitiveHint`, `attachToSelector`, `brandFooter`, … | any explicit value | anything | the code's value |
+| any of them | unset | omitted | the SDK default |
+
+"Set in code" includes `data-*` attributes on the script tag, which the loader
+turns into `Mushi.init` options. It is judged against the *bootstrap* config
+(the third argument of `mergeRuntimeConfig(active, runtime, host)`), so a cached
+runtime payload applied on an earlier merge never counts as a host value.
+To let the console decide a key, remove it from the code. The web snippets the
+console prints leave every console-served key out unless the person ticks
+**Lock these settings in my code** (`renderSnippet(…, { lockInCode })`), so a
+copied snippet never pins the look.
+
+Runtime values apply only when defined and non-null. `betaMode` from host is
+never dropped. Capture flags are not widget appearance keys and keep their own
+rule ([Capture merge](#capture-merge)).
 
 ### `widget.brandFooter` (the "Bug reports by Mushi" mark)
 
-Host wins, then runtime, then the default `false`:
+The same rule as every appearance key: host wins, then runtime, then the default `false`:
 
 | Host `widget.brandFooter` | Runtime sends | Effective |
 | --- | --- | --- |
@@ -123,8 +162,10 @@ through `Mushi.track()`; both are silent under DNT/GPC, denied consent or
 
 ### Banner copy
 
-When runtime sends any banner field (`bannerMessage`, `bannerVariant`, etc.),
-fields merge into host `bannerConfig` without resetting unspecified host keys.
+The same rule, field by field: each runtime banner field (`bannerMessage`,
+`bannerVariant`, `bannerPosition`, `bannerLabel`, `bannerBugCta`,
+`bannerFeatureCta`) fills the matching `bannerConfig` field only when the host's
+`bannerConfig` left it unset.
 
 ---
 
@@ -175,8 +216,8 @@ when unavailable; `setElementError()` surfaces inline failure copy.
 | Method | Path | Auth | Role |
 | --- | --- | --- | --- |
 | GET | `/v1/sdk/config` | `apiKeyAuth` | Runtime payload for SDK merge |
-| GET | `/v1/admin/projects/:id/sdk-config` | JWT / admin | Console read (same normalizer) |
-| PUT | `/v1/admin/projects/:id/sdk-config` | JWT / admin | Persists via `coerceSdkConfigUpdate()` |
+| GET | `/v1/admin/projects/:id/sdk-config` | `adminOrApiKey(mcp:read)`, any member | Console read (same normalizer) plus `canEdit`; MCP `get_widget_settings`, `mushi widget show` |
+| PUT | `/v1/admin/projects/:id/sdk-config` | `adminOrApiKey(mcp:write)`, owners and admins | Validates with `sdkConfigUpdateErrors()` (400 naming the field), 60 saves an hour per app, persists via `coerceSdkConfigUpdate()`, audit row with the actor type; MCP `set_widget_settings`, `mushi widget set` |
 
 ---
 
@@ -184,10 +225,11 @@ when unavailable; `setElementError()` surfaces inline failure copy.
 
 | File | Role |
 | --- | --- |
-| `_shared/sdk-config.ts` | `normalizeSdkConfig`, `coerceSdkConfigUpdate` |
+| `_shared/sdk-config.ts` | `normalizeSdkConfig`, `coerceSdkConfigUpdate`, `sdkConfigUpdateErrors`, accent parsing and contrast |
+| `_shared/widget-settings.ts` / `packages/mcp/src/widget-settings.ts` | The MCP widget tools' body and view (kept identical) |
 | `_shared/sdk-config.test.ts` | Explicit-only emission regressions |
 | `packages/web/src/runtime-merge.ts` | Client merge precedence |
-| `packages/web/src/runtime-merge.test.ts` | Banner trigger regression |
+| `packages/web/src/runtime-merge.test.ts` | Banner trigger regression; code-wins matrix per key |
 | `packages/web/src/mushi.ts` | Fetches config, calls merge, wires capture availability |
 | `packages/web/src/widget.ts` | Draft capture/restore, capture UI |
 | `api/routes/public.ts` | Public config route (imports shared normalizer) |

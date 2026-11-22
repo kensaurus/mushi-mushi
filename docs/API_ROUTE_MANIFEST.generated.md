@@ -2,15 +2,15 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-11-21 · **842** routes.
+> Generated: 2026-11-22 · **842** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 236 |
+| `adminOrApiKey` | 238 |
 | `apiKeyAuth` | 60 |
-| `jwtAuth` | 423 |
+| `jwtAuth` | 421 |
 | `jwtOrApiKey` | 1 |
 | `public` | 69 |
 | `unknown` | 53 |
@@ -438,8 +438,8 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | PUT | `/v1/admin/projects/:id/reporter-settings` | `jwtAuth` | `packages/server/supabase/functions/api/routes/reporter-admin.ts` |
 | POST | `/v1/admin/projects/:id/reports` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/report-file.ts` |
 | POST | `/v1/admin/projects/:id/runner-key` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci.ts` |
-| GET | `/v1/admin/projects/:id/sdk-config` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
-| PUT | `/v1/admin/projects/:id/sdk-config` | `jwtAuth` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
+| GET | `/v1/admin/projects/:id/sdk-config` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
+| PUT | `/v1/admin/projects/:id/sdk-config` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | GET | `/v1/admin/projects/:id/sdk-diagnostics` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-ci-secrets.ts` |
 | GET | `/v1/admin/projects/:id/sdk-health` | `jwtAuth` | `packages/server/supabase/functions/api/routes/sdk-health.ts` |
 | POST | `/v1/admin/projects/:id/sdk-health/tasks` | `jwtAuth` | `packages/server/supabase/functions/api/routes/sdk-health.ts` |

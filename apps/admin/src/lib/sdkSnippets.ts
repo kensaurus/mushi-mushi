@@ -15,12 +15,18 @@
 
 import type { ProjectMushiEnvVars } from './projectMushiEnv'
 import { mushiEnvVarsForProjectSlug } from './projectMushiEnv'
+import { parseAccentColour } from './widgetAccent'
+
+/** Escape text for a double-quoted HTML attribute in a pasted snippet. */
+function escapeHtmlAttr(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
 
 /** Mirror of `MushiWidgetConfig.position` from packages/core. */
 export type WidgetPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 
-/** Mirror of `MushiWidgetConfig.theme`. */
-export type WidgetTheme = 'auto' | 'light' | 'dark'
+/** Mirror of `MushiWidgetConfig.theme`. `inherit` follows the host page's own light/dark marker. */
+export type WidgetTheme = 'auto' | 'light' | 'dark' | 'inherit'
 
 /** Mirror of `MushiWidgetConfig.trigger`. */
 export type WidgetTrigger = 'auto' | 'banner' | 'edge-tab' | 'attach' | 'manual' | 'hidden'
@@ -41,6 +47,13 @@ export interface SdkPreviewConfig {
   theme: WidgetTheme
   trigger: WidgetTrigger
   triggerText: string
+  /**
+   * Brand colour of the widget's one filled action (Send), focus rings and
+   * the launcher underline, as `#rrggbb`. '' = auto: the widget matches the
+   * host site. Served at runtime (`widget.accent`), never baked into the
+   * framework snippets (code would win over the console, ADR 0068).
+   */
+  accent: string
   /** CSS selector used when trigger === 'attach'. Only emitted in the
    *  snippet when non-empty. Defaults to '' so omitted = pick at runtime. */
   attachToSelector: string
@@ -77,6 +90,7 @@ export const DEFAULT_SDK_CONFIG: SdkPreviewConfig = {
   theme: 'auto',
   trigger: 'auto',
   triggerText: '\u{1F41B}',
+  accent: '',
   attachToSelector: '',
   bannerVariant: 'brand',
   bannerPosition: 'top',
@@ -285,6 +299,9 @@ function widgetLines(cfg: SdkPreviewConfig, indent: string): string {
   if (cfg.triggerText.trim() && cfg.triggerText !== d.triggerText) {
     lines.push(`${indent}  triggerText: ${JSON.stringify(cfg.triggerText)},`)
   }
+  // Only reached when the person locks the look in code (ADR 0068).
+  const accent = parseAccentColour(cfg.accent)
+  if (accent) lines.push(`${indent}  accent: '${accent}',`)
   // Screenshot privacy caption. Default (`true`) is omitted; `false` hides the
   // caption and a string supplies custom copy.
   if (cfg.screenshotSensitiveHint !== d.screenshotSensitiveHint) {
@@ -314,9 +331,29 @@ function widgetLines(cfg: SdkPreviewConfig, indent: string): string {
   return `${indent}widget: {\n${lines.join('\n')}\n${indent}},\n`
 }
 
-/** Build the per-framework init snippet with the chosen config baked in.
- *  Pass `cfg = DEFAULT_SDK_CONFIG` (or omit) to get the minimal one-liner
- *  shape; pass any tweaks and they appear inline in the generated code. */
+/**
+ * The line a web snippet carries instead of the look settings. The web SDK
+ * reads them from the console at startup (GET /v1/sdk/config), and a value in
+ * code would win over the console for good (ADR 0068), so by default the
+ * snippets leave them out.
+ */
+const LOOK_FROM_CONSOLE_NOTE =
+  'Look and position come from the Mushi console (Connect → Bug capture SDK); set them here only to lock them.'
+
+export interface RenderSnippetOptions {
+  /**
+   * Bake the configurator's look, launcher and capture choices into the web
+   * snippets ("Lock these settings in my code"). Off by default: the console
+   * serves them at runtime, and code values would pin them (ADR 0068).
+   * Mobile and server snippets always carry their options: those SDKs do not
+   * read the console's runtime config.
+   */
+  lockInCode?: boolean
+}
+
+/** Build the per-framework init snippet. Web snippets carry only the project
+ *  id and key unless `options.lockInCode` bakes the chosen config in; mobile
+ *  snippets always carry their native options. */
 export function renderSnippet(
   fw: Framework,
   projectId: string,
@@ -330,9 +367,14 @@ export function renderSnippet(
    * Unknown keeps the inline snippet: it is never guessed to be Vite.
    */
   bundler?: 'vite' | 'next' | null,
+  options: RenderSnippetOptions = {},
 ): string {
   const key = apiKey || API_KEY_PLACEHOLDER
   const env = mushiEnvVarsForProjectSlug(projectSlug)
+  const lock = options.lockInCode === true
+  /** Web config lines: the chosen settings when locked, else the console note. */
+  const webExtras = (indent: string) =>
+    lock ? `${widgetLines(cfg, indent)}${captureLines(cfg.capture, indent)}` : `${indent}  // ${LOOK_FROM_CONSOLE_NOTE}\n`
 
   // ── Universal loader (no build step) ────────────────────────────────────
   // Emits a single async <script> tag. Optional widget/capture tuning rides
@@ -344,6 +386,13 @@ export function renderSnippet(
       `  data-project="${projectId}"`,
       `  data-key="${key}"`,
     ]
+    if (!lock) {
+      return `<!-- Paste into your <head>. No build step, no npm install. -->
+<!-- ${LOOK_FROM_CONSOLE_NOTE.replace('set them here', 'add data-* attributes')} -->
+<script async
+${attrs.join('\n')}
+></script>`
+    }
     if (cfg.trigger !== DEFAULT_SDK_CONFIG.trigger) attrs.push(`  data-trigger="${cfg.trigger}"`)
     if (cfg.theme !== DEFAULT_SDK_CONFIG.theme) attrs.push(`  data-theme="${cfg.theme}"`)
     if (cfg.position !== DEFAULT_SDK_CONFIG.position) attrs.push(`  data-position="${cfg.position}"`)
@@ -351,7 +400,18 @@ export function renderSnippet(
       if (cfg.bannerVariant !== DEFAULT_SDK_CONFIG.bannerVariant) attrs.push(`  data-banner-variant="${cfg.bannerVariant}"`)
       if (cfg.bannerPosition !== DEFAULT_SDK_CONFIG.bannerPosition) attrs.push(`  data-banner-position="${cfg.bannerPosition}"`)
     }
-    return `<!-- Paste into your <head>. No build step, no npm install. -->
+    // Same trim-then-default rule as widgetLines: blank means the default icon.
+    if (cfg.triggerText.trim() && cfg.triggerText !== DEFAULT_SDK_CONFIG.triggerText) {
+      attrs.push(`  data-trigger-text="${escapeHtmlAttr(cfg.triggerText)}"`)
+    }
+    const accent = parseAccentColour(cfg.accent)
+    if (accent) attrs.push(`  data-accent="${accent}"`)
+    // Attributes are code: they win over the console's widget settings (ADR 0068).
+    const pinNote =
+      attrs.length > 3
+        ? `\n<!-- These data-* settings win over the console. Delete one to let the console decide it. -->`
+        : ''
+    return `<!-- Paste into your <head>. No build step, no npm install. -->${pinNote}
 <script async
 ${attrs.join('\n')}
 ></script>`
@@ -359,9 +419,7 @@ ${attrs.join('\n')}
 
   if (fw === 'react') {
     const innerIndent = '      '
-    const widget = widgetLines(cfg, innerIndent)
-    const capture = captureLines(cfg.capture, innerIndent)
-    const extras = `${widget}${capture}`
+    const extras = webExtras(innerIndent)
     const isHeadless = cfg.trigger === 'manual' || cfg.trigger === 'hidden'
     const isAttach = cfg.trigger === 'attach'
     const triggerImport = isHeadless
@@ -443,10 +501,7 @@ ${extras}    }}>${triggerUsage}
 
   // Vanilla — single Mushi.init() call carries the entire config.
   if (fw === 'vanilla') {
-    const innerIndent = '  '
-    const widget = widgetLines(cfg, innerIndent)
-    const capture = captureLines(cfg.capture, innerIndent)
-    const extras = `${widget}${capture}`
+    const extras = webExtras('  ')
     return `import { Mushi } from 'mushi-mushi'
 
 Mushi.init({
@@ -478,8 +533,8 @@ ${extras}})`
    *  exact thing that caused the original bug. Better to be a few lines
    *  longer and unambiguous. */
   const innerIndent = '  '
-  const widget = widgetLines(cfg, innerIndent)
-  const capture = captureLines(cfg.capture, innerIndent)
+  const widget = lock ? widgetLines(cfg, innerIndent) : ''
+  const capture = lock ? captureLines(cfg.capture, innerIndent) : ''
   const hasExtras = widget.length > 0 || capture.length > 0
   const extras = `${widget}${capture}`
 
@@ -501,7 +556,7 @@ const credentials = { projectId: '${projectId}', apiKey: '${key}' }
 app.use(MushiPlugin, credentials)
 
 // The mushi-mushi root export mounts the visual bug-capture widget (floating button + modal).
-// All widget/capture options go here — the Vue plugin doesn't render UI.
+// ${lock ? "All widget/capture options go here — the Vue plugin doesn't render UI." : LOOK_FROM_CONSOLE_NOTE}
 Mushi.init(${mushiInitBody})`
   }
 
@@ -515,7 +570,7 @@ const credentials = { projectId: '${projectId}', apiKey: '${key}' }
 initMushi(credentials)
 
 // The mushi-mushi root export mounts the visual bug-capture widget (floating button + modal).
-// All widget/capture options go here — the Svelte adapter doesn't render UI.
+// ${lock ? "All widget/capture options go here — the Svelte adapter doesn't render UI." : LOOK_FROM_CONSOLE_NOTE}
 Mushi.init(${mushiInitBody})`
   }
 

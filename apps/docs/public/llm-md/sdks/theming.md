@@ -73,17 +73,26 @@ provider or plugin.
 
 ### 3. In the console
 
-Open your app in the console, then the SDK install settings. Position,
-theme, launcher style, launcher label and the banner look can change there
-without a redeploy ([runtime config](/concepts/runtime-config)). Accent
-colour, language and hidden pages are set in the tag or in code.
+Open your app in the console, then **Connect → Bug capture SDK**. Accent
+colour, position, theme, launcher style, launcher label and the banner look
+can change there without a redeploy ([runtime config](/concepts/runtime-config)).
+For a colour, Mushi picks black or white text with at least 3:1 contrast. The
+same settings are in your editor: the MCP tool `set_widget_settings`, or
+`mushi widget set --accent '#3b5bdb'`. Language and hidden pages are set in
+the tag or in code.
+
+If your app's code (or a `data-*` attribute) sets one of these, your code's
+value wins and the console fills only what the code left out
+([ADR 0068](https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0068-host-code-wins-over-console-widget-settings.md)).
+The console's install snippets leave them out unless you tick **Lock these
+settings in my code**.
 
 ## What can be set where
 
 | Setting | Script tag | Code (`widget.*`) | Console | CSS token |
 | --- | --- | --- | --- | --- |
-| Accent colour | `data-accent` | `accent` | | `--mushi-accent` |
-| Text on the accent | `data-accent-text` | `accentText` | | `--mushi-accent-fg` |
+| Accent colour | `data-accent` | `accent` | yes | `--mushi-accent` |
+| Text on the accent | `data-accent-text` | `accentText` | picked with the colour | `--mushi-accent-fg` |
 | Light / dark | `data-theme` | `theme` | yes | |
 | Corner | `data-position` | `position` | yes | |
 | Language | `data-locale` | `locale` | | |

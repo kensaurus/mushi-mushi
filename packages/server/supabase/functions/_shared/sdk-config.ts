@@ -23,7 +23,7 @@
  */
 
 const SDK_WIDGET_POSITIONS = ['top-left', 'top-right', 'bottom-left', 'bottom-right'] as const;
-const SDK_WIDGET_THEMES = ['auto', 'light', 'dark'] as const;
+const SDK_WIDGET_THEMES = ['auto', 'light', 'dark', 'inherit'] as const;
 const SDK_SCREENSHOT_MODES = ['on-report', 'auto', 'off'] as const;
 const SDK_NATIVE_TRIGGER_MODES = ['shake', 'button', 'both', 'none'] as const;
 const SDK_WIDGET_LAUNCHERS = ['auto', 'banner', 'edge-tab', 'attach', 'manual', 'hidden'] as const;
@@ -39,6 +39,11 @@ export interface SdkConfigRow {
   sdk_widget_position?: string | null;
   sdk_widget_theme?: string | null;
   sdk_widget_trigger_text?: string | null;
+  /**
+   * Widget accent (brand colour), lowercase `#rrggbb`; NULL = auto (match the
+   * host site). Migration 20261122120000_sdk_widget_accent.sql.
+   */
+  sdk_widget_accent?: string | null;
   /** Launcher mode: 'auto' (FAB), 'banner', 'edge-tab', 'attach', 'manual', 'hidden'. */
   sdk_widget_launcher?: string | null;
   /** CSS selector of the host button when the launcher is 'attach' (20261004120000). */
@@ -100,6 +105,7 @@ export const SDK_CONFIG_CONSOLE_COLUMNS = [
   'sdk_widget_position',
   'sdk_widget_theme',
   'sdk_widget_trigger_text',
+  'sdk_widget_accent',
   'sdk_widget_launcher',
   'sdk_widget_attach_selector',
   'sdk_banner_variant',
@@ -122,6 +128,81 @@ export const SDK_CONFIG_CONSOLE_COLUMNS = [
 
 /** {@link SDK_CONFIG_CONSOLE_COLUMNS} as a PostgREST `select` string. */
 export const SDK_CONFIG_CONSOLE_SELECT = SDK_CONFIG_CONSOLE_COLUMNS.join(', ');
+
+/** The newest column; reads fall back without it while its migration is pending. */
+export const SDK_WIDGET_ACCENT_COLUMN = 'sdk_widget_accent';
+
+/**
+ * True when a PostgREST/Postgres error says `sdk_widget_accent` does not
+ * exist yet (migration 20261122120000 not applied). The SDK config routes
+ * then re-read without it, so deploying `api` first never 500s
+ * GET /v1/sdk/config for every installed widget.
+ */
+export function isMissingAccentColumn(
+  error: { code?: string | null; message?: string | null } | null | undefined,
+): boolean {
+  if (!error) return false;
+  const msg = String(error.message ?? '');
+  return (
+    (error.code === '42703' || error.code === 'PGRST204' || /does not exist|could not find/i.test(msg)) &&
+    msg.includes(SDK_WIDGET_ACCENT_COLUMN)
+  );
+}
+
+/** A select list without the accent column (see {@link isMissingAccentColumn}). */
+export function withoutAccentColumn(select: string): string {
+  return select
+    .split(',')
+    .map((c) => c.trim())
+    .filter((c) => c && c !== SDK_WIDGET_ACCENT_COLUMN)
+    .join(', ');
+}
+
+/**
+ * A colour the console, MCP or CLI may store as the widget accent, as
+ * lowercase `#rrggbb`: `#rgb` or `#rrggbb`, with or without the `#`. Anything
+ * else (names, rgb(), alpha) is null: the column holds one exact colour so
+ * the server can promise the contrast of the text drawn on it.
+ */
+export function parseAccentColour(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const raw = value.trim().replace(/^#/, '').toLowerCase();
+  if (/^[0-9a-f]{6}$/.test(raw)) return `#${raw}`;
+  if (/^[0-9a-f]{3}$/.test(raw)) return `#${raw[0]}${raw[0]}${raw[1]}${raw[1]}${raw[2]}${raw[2]}`;
+  return null;
+}
+
+function relativeLuminance(hex: string): number {
+  const channel = (i: number) => {
+    const v = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
+}
+
+/** WCAG 2 contrast ratio of two `#rrggbb` colours (1 to 21). */
+export function contrastRatio(a: string, b: string): number {
+  const la = relativeLuminance(a);
+  const lb = relativeLuminance(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+
+/** The lowest text-on-accent contrast the server serves (WCAG large text / UI). */
+export const MIN_ACCENT_TEXT_CONTRAST = 3;
+
+/**
+ * Text colour for a button filled with `accent`: black or white, whichever
+ * reads better. The better of the two is never under about 4.6:1 for any
+ * colour, so the {@link MIN_ACCENT_TEXT_CONTRAST} floor always holds; `ok`
+ * says so explicitly for callers that show the number.
+ */
+export function accentInk(accent: string): { ink: '#000000' | '#ffffff'; ratio: number; ok: boolean } {
+  const onBlack = contrastRatio(accent, '#000000');
+  const onWhite = contrastRatio(accent, '#ffffff');
+  const ink = onBlack >= onWhite ? '#000000' : '#ffffff';
+  const ratio = Math.round(Math.max(onBlack, onWhite) * 100) / 100;
+  return { ink, ratio, ok: ratio >= MIN_ACCENT_TEXT_CONTRAST };
+}
 
 function oneOf<T extends readonly string[]>(
   value: unknown,
@@ -186,6 +267,10 @@ export function normalizeSdkConfig(row?: SdkConfigRow | null, opts: NormalizeSdk
         ? { theme: row.sdk_widget_theme }
         : {}),
       ...(row?.sdk_widget_trigger_text ? { triggerText: row.sdk_widget_trigger_text } : {}),
+      // Brand colour: only when the console set one (NULL = the widget keeps
+      // matching the host page), always with the text colour the server
+      // checked against it, so the Send label never drops under 3:1.
+      ...accentFields(row?.sdk_widget_accent),
       ...(isOneOf(row?.sdk_widget_launcher, SDK_WIDGET_LAUNCHERS) &&
       row?.sdk_widget_launcher !== 'auto'
         ? { launcher: row.sdk_widget_launcher }
@@ -268,6 +353,44 @@ export function normalizeSdkConfig(row?: SdkConfigRow | null, opts: NormalizeSdk
   };
 }
 
+function accentFields(value: unknown): { accent?: string; accentText?: string } {
+  const accent = parseAccentColour(value);
+  if (!accent) return {};
+  const { ink, ok } = accentInk(accent);
+  return ok ? { accent, accentText: ink } : {};
+}
+
+/**
+ * Values in an SDK config update that coerceSdkConfigUpdate would otherwise
+ * drop silently, as plain sentences. The console only sends valid values;
+ * MCP and CLI callers get a 400 naming the field instead of a "Saved" that
+ * changed nothing.
+ */
+export function sdkConfigUpdateErrors(body: Record<string, unknown>): string[] {
+  const errors: string[] = [];
+  if (body.widget !== undefined && body.widget !== null && !isRecord(body.widget)) {
+    errors.push('widget must be an object.');
+  }
+  const widget = isRecord(body.widget) ? body.widget : {};
+  const check = (key: string, allowed: readonly string[]) => {
+    const v = widget[key];
+    if (v !== undefined && v !== null && !isOneOf(v, allowed)) {
+      errors.push(`widget.${key} must be one of ${allowed.join(', ')}.`);
+    }
+  };
+  check('position', SDK_WIDGET_POSITIONS);
+  check('theme', SDK_WIDGET_THEMES);
+  check('launcher', SDK_WIDGET_LAUNCHERS);
+  const accent = widget.accent;
+  if (accent !== undefined && accent !== null && accent !== '' && accent !== 'auto' && !parseAccentColour(accent)) {
+    errors.push('widget.accent must be a hex colour like #3b5bdb, or "auto" to match the site.');
+  }
+  if (widget.triggerText !== undefined && widget.triggerText !== null && typeof widget.triggerText !== 'string') {
+    errors.push('widget.triggerText must be text (up to 24 characters) or null.');
+  }
+  return errors;
+}
+
 export function coerceSdkConfigUpdate(body: Record<string, unknown>): Record<string, unknown> {
   const updates: Record<string, unknown> = {};
   const widget = isRecord(body.widget) ? body.widget : {};
@@ -284,6 +407,15 @@ export function coerceSdkConfigUpdate(body: Record<string, unknown>): Record<str
     updates.sdk_widget_trigger_text = null;
   }
   if (isOneOf(widget.launcher, SDK_WIDGET_LAUNCHERS)) updates.sdk_widget_launcher = widget.launcher;
+  // accent: a hex colour stores it; null, '' or 'auto' clears it (auto =
+  // match the site). An unparseable colour changes nothing here: the routes
+  // reject it first through sdkConfigUpdateErrors.
+  if (widget.accent === null || widget.accent === '' || widget.accent === 'auto') {
+    updates.sdk_widget_accent = null;
+  } else {
+    const accent = parseAccentColour(widget.accent);
+    if (accent) updates.sdk_widget_accent = accent;
+  }
   if (typeof widget.attachToSelector === 'string') {
     const trimmed = widget.attachToSelector.trim();
     updates.sdk_widget_attach_selector = trimmed ? trimmed.slice(0, 200) : null;

@@ -27,12 +27,18 @@ import {
   storeSettingsSecret,
 } from '../../_shared/settings-secrets.ts';
 import {
-  projectConfigDenied,
+  canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
   normalizeSdkConfig,
   type SdkConfigRow,
 } from '../helpers.ts';
-import { SDK_CONFIG_CONSOLE_SELECT } from '../../_shared/sdk-config.ts';
+import {
+  isMissingAccentColumn,
+  SDK_CONFIG_CONSOLE_SELECT,
+  sdkConfigUpdateErrors,
+  withoutAccentColumn,
+} from '../../_shared/sdk-config.ts';
+import { claimTenantRateLimit } from '../../_shared/tenant-observability.ts';
 import { validateFixBranchTemplate } from '../../_shared/github-pr.ts';
 import { parseSupabaseProjectRefSetting } from '../../_shared/supabase-project-ref.ts';
 import { parseSentryDsnSetting, sentrySelfHostedHosts } from '../../_shared/sentry-dsn.ts';
@@ -1729,19 +1735,55 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     },
   );
 
-  app.get('/v1/admin/projects/:id/sdk-config', jwtAuth, async (c) => {
-    const projectId = c.req.param('id')!;
+  // GET|PUT /v1/admin/projects/:id/sdk-config — the console's widget editor,
+  // and since 2026-11-22 MCP get_widget_settings / set_widget_settings and
+  // `mushi widget show|set` (adminOrApiKey). Any member (or a key reaching
+  // the project) reads; only owners and admins write (canManageProjectSdkConfig,
+  // so a viewer or member key gets 403). The same values are public in
+  // GET /v1/sdk/config, so a read leaks nothing new.
+  async function sdkConfigAccess(
+    c: Context,
+    db: ReturnType<typeof getServiceClient>,
+    projectId: string,
+    write: boolean,
+  ): Promise<{ canEdit: boolean } | Response> {
     const userId = c.get('userId') as string;
+    const access = await callerCanAccessProject(c, db, userId, projectId);
+    if (!access.allowed) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
+    }
+    const canEdit = await canManageProjectSdkConfig(db, projectId, userId);
+    if (write && !canEdit) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'FORBIDDEN',
+            message: 'Only project owners and admins can change the widget settings. Ask an owner or admin of this project.',
+          },
+        },
+        403,
+      );
+    }
+    return { canEdit };
+  }
+
+  /** Read the console columns, without the accent while its migration is pending. */
+  async function readSdkConfigRow(db: ReturnType<typeof getServiceClient>, projectId: string) {
+    const read = (select: string) =>
+      db.from('project_settings').select(select).eq('project_id', projectId).maybeSingle();
+    const first = await read(SDK_CONFIG_CONSOLE_SELECT);
+    return isMissingAccentColumn(first.error) ? read(withoutAccentColumn(SDK_CONFIG_CONSOLE_SELECT)) : first;
+  }
+
+  app.get('/v1/admin/projects/:id/sdk-config', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
+    const projectId = c.req.param('id')!;
     const db = getServiceClient();
 
-    const denied = await projectConfigDenied(c, db, projectId, userId, 'view SDK settings');
-    if (denied) return denied;
+    const access = await sdkConfigAccess(c, db, projectId, false);
+    if (access instanceof Response) return access;
 
-    const { data, error } = await db
-      .from('project_settings')
-      .select(SDK_CONFIG_CONSOLE_SELECT)
-      .eq('project_id', projectId)
-      .maybeSingle();
+    const { data, error } = await readSdkConfigRow(db, projectId);
     if (error) return dbError(c, error);
 
     // Effective brandFooter (plan default when the column is NULL) so the
@@ -1749,27 +1791,57 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     const brandFooterDefault = await brandFooterDefaultForProject(db, projectId);
     return c.json({
       ok: true,
-      data: { projectId, ...normalizeSdkConfig(data as SdkConfigRow | null, { brandFooterDefault }) },
+      data: {
+        projectId,
+        canEdit: access.canEdit,
+        ...normalizeSdkConfig(data as SdkConfigRow | null, { brandFooterDefault }),
+      },
     });
   });
 
-  app.put('/v1/admin/projects/:id/sdk-config', jwtAuth, async (c) => {
+  app.put('/v1/admin/projects/:id/sdk-config', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
     const projectId = c.req.param('id')!;
     const userId = c.get('userId') as string;
     const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
     const db = getServiceClient();
 
-    const denied = await projectConfigDenied(c, db, projectId, userId, 'change SDK settings');
-    if (denied) return denied;
+    const access = await sdkConfigAccess(c, db, projectId, true);
+    if (access instanceof Response) return access;
+
+    const invalid = sdkConfigUpdateErrors(body && typeof body === 'object' ? body : {});
+    if (invalid.length > 0) {
+      return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: invalid.join(' ') } }, 400);
+    }
+
+    // 60 saves an hour per app: generous for the console's Save button, a
+    // ceiling for an agent looping on set_widget_settings.
+    const limit = await claimTenantRateLimit(db, `sdk-config-write:${projectId}`, 60, 3600);
+    if (!limit.allowed) {
+      c.header('Retry-After', String(limit.retryAfterSec ?? 60));
+      return c.json(
+        { ok: false, error: { code: 'RATE_LIMITED', message: 'Too many widget setting changes for this app in the last hour. Try again later.' } },
+        429,
+      );
+    }
 
     const updates = coerceSdkConfigUpdate(body);
-    const { data, error } = await db
+    if ('sdk_widget_accent' in updates) {
+      // A colour cannot be saved before the column exists; say so instead of a raw 500.
+      const probe = await db.from('project_settings').select('sdk_widget_accent').limit(1);
+      if (isMissingAccentColumn(probe.error)) {
+        return c.json(
+          { ok: false, error: { code: 'MIGRATION_PENDING', message: 'The widget colour needs a database update that is not applied yet (migration 20261122120000_sdk_widget_accent).' } },
+          503,
+        );
+      }
+    }
+    const { error: writeError } = await db
       .from('project_settings')
-      .upsert({ project_id: projectId, ...updates }, { onConflict: 'project_id' })
-      .select(SDK_CONFIG_CONSOLE_SELECT)
-      .single();
-
+      .upsert({ project_id: projectId, ...updates }, { onConflict: 'project_id' });
+    if (writeError) return dbError(c, writeError);
+    const { data, error } = await readSdkConfigRow(db, projectId);
     if (error) return dbError(c, error);
+
     await logAudit(
       db,
       projectId,
@@ -1778,11 +1850,12 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       'sdk_config',
       projectId,
       updates,
+      { actorType: c.get('authMethod') === 'apiKey' ? 'api_key' : 'user' },
     ).catch(() => {});
     const brandFooterDefault = await brandFooterDefaultForProject(db, projectId);
     return c.json({
       ok: true,
-      data: { projectId, ...normalizeSdkConfig(data as SdkConfigRow, { brandFooterDefault }) },
+      data: { projectId, canEdit: true, ...normalizeSdkConfig(data as SdkConfigRow, { brandFooterDefault }) },
     });
   });
 

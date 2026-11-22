@@ -115,6 +115,14 @@ start a second copy. With no `data-project` and `data-key` it does nothing.
 | `data-endpoint` | `apiEndpoint`, for a self-hosted server |
 | `data-debug` | `debug` when set to `"true"` |
 
+The look attributes (`data-trigger`, `data-theme`, `data-position`,
+`data-trigger-text`, `data-accent`, `data-accent-text`, the banner ones) lock that setting: a value in your code
+wins over the console's widget settings
+([ADR 0068](https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0068-host-code-wins-over-console-widget-settings.md)).
+The console prints the tag without them unless you tick **Lock these settings
+in my code**, so you can change the look from the console without editing the
+tag.
+
 A value the widget does not accept is skipped with one console warning that
 names the attribute and the values it takes; it never breaks your page.
 Colours, CSS tokens and route rules: [Theming the bug widget](/sdks/theming).
