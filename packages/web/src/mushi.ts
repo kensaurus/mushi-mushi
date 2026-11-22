@@ -896,6 +896,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     .catch(() => null);
 
   widget = new MushiWidget(bootstrapConfig.widget, {
+    onWarning: (message) => log.warn(message),
     onSubmit: async ({ category, userCategory, description, intent }) => {
       log.info('Report submitted', { category, userCategory, intent });
       // Only a submit from a proactive prompt resets the dismissal streak; a
@@ -2458,6 +2459,7 @@ async function runDiagnostics(options: {
     widgetHostBounds: { width: number; height: number } | null;
     widgetSuppressed: boolean;
     bannerRendered: boolean;
+    warnings?: string[];
   };
 }): Promise<MushiDiagnosticsResult> {
   const endpoint = await probeApiEndpoint(options.apiEndpoint);
@@ -2475,6 +2477,7 @@ async function runDiagnostics(options: {
     widgetHostBounds: options.widgetDiagnostics?.widgetHostBounds ?? null,
     widgetSuppressed: options.widgetDiagnostics?.widgetSuppressed ?? false,
     bannerRendered: options.widgetDiagnostics?.bannerRendered ?? false,
+    warnings: options.widgetDiagnostics?.warnings ?? [],
   };
 }
 

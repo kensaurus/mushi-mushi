@@ -106,8 +106,16 @@ start a second copy. With no `data-project` and `data-key` it does nothing.
 | `data-trigger-text` | `widget.triggerText` |
 | `data-banner-variant` | `widget.bannerConfig.variant` (`neon`, `brand` or `subtle`) |
 | `data-banner-position` | `widget.bannerConfig.position` (`top` or `bottom`) |
+| `data-accent` | `widget.accent` (`#rrggbb`, `rgb()`, `hsl()` or `oklch()`) |
+| `data-accent-text` | `widget.accentText` (picked for you when left out) |
+| `data-locale` | `widget.locale` (`auto`, `en`, `ja`, `th`, `es` or `zh`) |
+| `data-hide-on-routes` | `widget.hideOnRoutes`, comma-separated (`/admin/*, /checkout`) |
 | `data-endpoint` | `apiEndpoint`, for a self-hosted server |
 | `data-debug` | `debug` when set to `"true"` |
+
+A value the widget does not accept is skipped with one console warning that
+names the attribute and the values it takes; it never breaks your page.
+Colours, CSS tokens and route rules: [Theming the bug widget](/sdks/theming).
 
 Anything else (capture options, `beforeSend`, `captureEvent` from your own
 code) needs the npm package above. The console's **Script tag** install tab

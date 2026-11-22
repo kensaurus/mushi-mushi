@@ -19,8 +19,10 @@
  *          the major version. There is no Mushi-hosted CDN host.
  *
  *          and this module — bundled as an IIFE — reads the credentials and
- *          appearance hints off its own <script> tag's data-* attributes and
- *          calls Mushi.init() exactly once. Everything else (the console
+ *          appearance hints off its own <script> tag's data-* attributes
+ *          (checked in loader-config.ts: data-accent, data-accent-text,
+ *          data-locale, data-hide-on-routes, …; bad values are dropped with a
+ *          console warning) and calls Mushi.init() exactly once. Everything else (the console
  *          runtime config, banner/FAB/panel) flows through the normal
  *          Mushi.init() path, so the loader stays a thin shim with zero
  *          divergent behaviour from the npm package.
@@ -30,7 +32,7 @@
  */
 
 import { Mushi } from './mushi';
-import type { MushiConfig, MushiWidgetConfig } from '@mushi-mushi/core';
+import { readConfigFromDataset } from './loader-config';
 
 type LoaderScript = HTMLScriptElement & { dataset: DOMStringMap };
 
@@ -48,33 +50,6 @@ function resolveLoaderScript(): LoaderScript | null {
     document.querySelectorAll<LoaderScript>('script[data-project][data-key]'),
   );
   return candidates.length > 0 ? candidates[candidates.length - 1] : null;
-}
-
-function readConfigFromDataset(ds: DOMStringMap): MushiConfig | null {
-  const projectId = ds.project?.trim();
-  const apiKey = ds.key?.trim();
-  if (!projectId || !apiKey) return null;
-
-  const widget: MushiWidgetConfig = {};
-  if (ds.trigger) widget.trigger = ds.trigger as MushiWidgetConfig['trigger'];
-  if (ds.theme) widget.theme = ds.theme as MushiWidgetConfig['theme'];
-  if (ds.position) widget.position = ds.position as MushiWidgetConfig['position'];
-  if (ds.triggerText) widget.triggerText = ds.triggerText;
-  // Banner-specific tuning.
-  const bannerVariant = ds.bannerVariant;
-  const bannerPosition = ds.bannerPosition;
-  if (bannerVariant || bannerPosition) {
-    widget.bannerConfig = {
-      ...(bannerVariant ? { variant: bannerVariant as 'neon' | 'brand' | 'subtle' } : {}),
-      ...(bannerPosition ? { position: bannerPosition as 'top' | 'bottom' } : {}),
-    };
-  }
-
-  const config: MushiConfig = { projectId, apiKey };
-  if (ds.endpoint) config.apiEndpoint = ds.endpoint;
-  if (ds.debug === 'true') config.debug = true;
-  if (Object.keys(widget).length > 0) config.widget = widget;
-  return config;
 }
 
 function bootstrap(): void {
