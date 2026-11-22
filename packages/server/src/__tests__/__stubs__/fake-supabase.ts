@@ -44,6 +44,12 @@ interface FakeDbOptions {
    * `limit` / `range` ask for (1,000 on Supabase). Unset = no cap.
    */
   maxRows?: number
+  /**
+   * Simulated network latency: milliseconds each read of a table waits before
+   * it answers (0 or unset = immediate). The concurrency suites use it to
+   * prove independent reads overlap (total ≈ the slowest, not the sum).
+   */
+  readDelayMs?: (table: string) => number
 }
 
 type Op = 'select' | 'insert' | 'update' | 'upsert' | 'delete'
@@ -372,7 +378,9 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
     onfulfilled?: ((value: { data: unknown; error: { code?: string; message: string } | null; count?: number | null }) => R1 | PromiseLike<R1>) | null,
     onrejected?: ((reason: unknown) => R2 | PromiseLike<R2>) | null,
   ): PromiseLike<R1 | R2> {
-    return Promise.resolve()
+    const delay = this.op === 'select' ? (this.db.options.readDelayMs?.(this.table) ?? 0) : 0
+    const wait = delay > 0 ? new Promise<void>((r) => setTimeout(r, delay)) : Promise.resolve()
+    return wait
       .then(() => this.exec())
       .then(onfulfilled ?? undefined, onrejected ?? undefined)
   }
