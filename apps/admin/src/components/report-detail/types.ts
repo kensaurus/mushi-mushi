@@ -230,6 +230,10 @@ export interface ReportDetail {
   parent_report_id?: string | null
   verified_at?: string | null
   reopened_at?: string | null
+  /** When the report was marked fixed (merge, or closed as fixed). */
+  fixed_at?: string | null
+  /** When a new event reopened a fixed report (a Sentry alert, …). */
+  regressed_at?: string | null
   regression_count?: number | null
   /** Child regression reports linked to this parent. */
   child_report_ids?: string[] | null
