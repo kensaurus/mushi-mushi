@@ -1,5 +1,16 @@
 # @mushi-mushi/cli
 
+## 0.42.0
+
+### Minor Changes
+
+- ef79529: - **Change the bug widget's look from your editor.** The MCP tools `get_widget_settings` and `set_widget_settings` read and change the widget's colour, corner, theme, trigger text and launcher for one app; the write returns what it was, what it is now and which settings changed. Installed SDKs pick the change up at their next start, with no redeploy. Project owners and admins only.
+  - **`mushi widget show` and `mushi widget set`** do the same from the terminal, for example `mushi widget set --accent '#3b5bdb' --position bottom-left --theme dark --trigger-text 'Report a bug'`. `--accent auto` goes back to matching your site; a bad colour, corner or theme is refused before anything is sent. A value your app's code sets wins over these settings.
+
+### Patch Changes
+
+- bdaa2dd: - **The wizard names the entry file your app has.** In a JavaScript React app it said to paste the snippet into `src/main.tsx` even though the file is `src/main.jsx`. It now names the file that exists (`.tsx`, `.jsx`, `.ts` or `.js`), in `--dry-run` too.
+
 ## 0.41.0
 
 ### Minor Changes

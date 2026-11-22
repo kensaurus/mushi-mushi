@@ -1,5 +1,26 @@
 # @mushi-mushi/web
 
+## 1.39.0
+
+### Minor Changes
+
+- ef79529: - **Your code now wins over the console for the widget's look.** If `Mushi.init({ widget: … })` (or a `data-*` attribute on the script tag) sets `position`, `theme`, `triggerText`, `accent`, a banner field or any other widget option, that value is used even when the console sets the same option; the console fills only what your code leaves out (ADR 0068). Before, the console won for position, theme, trigger text and the banner fields. **To let the console decide an option, remove it from your code.**
+  - **The console can set the widget's brand colour.** A colour saved in the console (or with `mushi widget set --accent`, or the MCP tool `set_widget_settings`) arrives as `widget.accent` with a black or white `widget.accentText` that Mushi checked for contrast; the two always apply together. Auto (no colour) keeps matching your site as before.
+- facd8c1: - **More settings on the script tag** — `data-accent`, `data-accent-text`, `data-locale` and `data-hide-on-routes` (comma-separated), so Lovable, Bolt and plain HTML sites can brand the widget without code.
+  - **Script tag typos no longer slip through** — every attribute is checked. A value the widget does not take is skipped with one console warning naming the attribute and the values it accepts; it never throws or breaks the page.
+  - **Route rules take simple globs** — `hideOnRoutes: ['/admin/*', '/blog/**']`. An entry without `*` still matches anywhere in the path, exactly as before.
+  - **Text on your accent stays readable** — when `accentText`, `data-accent-text` or a CSS `--mushi-accent-fg` is under 3:1 contrast on the accent, the widget uses black or white instead and says so in `Mushi.diagnose().warnings` (and in the console with `debug: true`). Your accent colour itself is never changed. A CSS `--mushi-accent` now also gets matching text colour instead of the panel background.
+  - **oklch and lab accents are measured correctly** for these contrast checks.
+  - `MushiDiagnosticsResult` gains an optional `warnings` list (core).
+  - New docs page: [Theming the bug widget](https://kensaur.us/mushi-mushi/docs/sdks/theming), with all 13 `--mushi-*` CSS tokens, now guarded by a test.
+  - The core web bundle budget moves from 89.2 KB to 89.8 KB gzipped for these checks (the script tag parser only ships in the script tag file).
+
+### Patch Changes
+
+- bdaa2dd: - **Closing the panel mid-screenshot sends nothing.** Thanks to [PeepSo](https://peepso.com), whose question led to these tests. With a host `screenshotProvider` the panel stays on screen while it captures, so the reporter can close it before the capture returns. The late screenshot then went out unseen with their next report, and a Send pressed in the closed panel could still post whatever they had started typing after reopening it. Every report now opens with no screenshot attached, a capture that lands after its panel closed (automatic, button, tab share or Mark up) is thrown away, and a Send from a closed panel stops there.
+- Updated dependencies [facd8c1]
+  - @mushi-mushi/core@1.39.0
+
 ## 1.38.0
 
 ### Minor Changes
