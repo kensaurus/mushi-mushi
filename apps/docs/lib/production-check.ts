@@ -30,12 +30,16 @@ export interface CheckReport {
   url: string
   status: 'running' | 'done' | 'failed'
   findings: CheckFinding[]
+  /** `CheckSummary` in packages/server/supabase/functions/_shared/production-check.ts; older reports lack some fields. */
   summary: {
-    pages?: Array<{ path: string; status: number | null }>
+    pages?: Array<{ path: string; status: number | null; error?: string }>
     headers?: Record<string, boolean>
     https?: 'ok' | 'not_redirected' | 'no_https' | 'unknown'
     linksChecked?: number
+    /** Unset on reports stored before images were checked. */
+    imagesChecked?: number
     scriptsChecked?: number
+    scriptsWithSourceMaps?: number
     incomplete?: string[]
   }
   error: string | null
@@ -133,7 +137,150 @@ const COUNT_WORDS: Record<Severity, string> = { high: 'to fix first', medium: 't
 /** "2 to fix first, 1 to fix soon": only the non-zero parts. */
 export function countLine(findings: readonly CheckFinding[]): string {
   const parts = groupBySeverity(findings).map((g) => `${g.items.length} ${COUNT_WORDS[g.severity]}`)
+  // The empty case is also the clean-report email's preheader (server route): change both together.
   return parts.length ? parts.join(', ') : 'Nothing to fix on the pages Mushi Mushi could read'
+}
+
+type CheckSummaryView = CheckReport['summary']
+
+function plural(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`
+}
+
+/** The headline of a report with nothing to fix: "No problems found on 4 pages". */
+export function cleanLine(summary: CheckSummaryView | undefined): string {
+  // Only pages that opened count: one that errored or never loaded was not checked.
+  const n = (summary?.pages ?? []).filter((p) => !p.error && p.status !== null && p.status < 400).length
+  return n ? `No problems found on ${plural(n, 'page', 'pages')}` : countLine([])
+}
+
+export type CheckRowStatus = 'passed' | 'failed' | 'not_checked'
+
+/** One line of "What was checked". */
+export interface CheckRow {
+  id: string
+  label: string
+  status: CheckRowStatus
+  detail: string
+}
+
+const PAGE_RULES = ['page_error_status', 'error_screen', 'page_not_found_screen', 'blank_page', 'nearly_empty_page']
+const TEXT_RULES = ['placeholder_metadata', 'missing_title', 'missing_description', 'missing_lang']
+
+/** The four headers the check reads, by the name a developer searches for. */
+const HEADER_ROWS = [
+  { key: 'content-security-policy', name: 'Content-Security-Policy', rule: 'missing_csp' },
+  { key: 'strict-transport-security', name: 'Strict-Transport-Security', rule: 'missing_hsts' },
+  { key: 'x-content-type-options', name: 'X-Content-Type-Options', rule: 'missing_nosniff' },
+  { key: 'referrer-policy', name: 'Referrer-Policy', rule: 'missing_referrer_policy' },
+] as const
+
+/**
+ * Every check of the report as passed, failed (it has a finding) or not
+ * checked (it did not run or could not finish), in the order the check runs.
+ *
+ * The passed wording mirrors `passedChecks()` in
+ * packages/server/supabase/functions/api/routes/production-check.ts (the
+ * clean-report email); production-check.test.ts fails when the two drift.
+ */
+export function checkRows(summary: CheckSummaryView | undefined, findings: readonly CheckFinding[]): CheckRow[] {
+  const s = summary ?? {}
+  const pages = s.pages ?? []
+  const incomplete = s.incomplete ?? []
+  const failedBy = (rules: readonly string[]) => findings.filter((f) => rules.includes(f.rule))
+  const row = (id: string, label: string, rules: readonly string[], passed: string | null, notChecked: string): CheckRow => {
+    const hits = failedBy(rules)
+    if (hits.length) return { id, label, status: 'failed', detail: hits.map((f) => f.title).join('; ') }
+    return passed === null ? { id, label, status: 'not_checked', detail: notChecked } : { id, label, status: 'passed', detail: passed }
+  }
+  const rows: CheckRow[] = []
+
+  const opened = pages.filter((p) => p.status !== null && p.status < 400).length
+  const openedLine = `${plural(opened, 'page', 'pages')} of ${pages.length} opened without an error`
+  rows.push(row('pages', 'Pages open', PAGE_RULES, pages.length && opened === pages.length ? openedLine : null, pages.length ? openedLine : 'No page could be read'))
+
+  const readable = pages.filter((p) => !p.error && p.status !== null && p.status < 400)
+  rows.push(
+    row('page_text', 'Title, description and language', TEXT_RULES, readable.length ? 'Every page read has a real title, a description and a language' : null, 'No page could be read'),
+  )
+  const home = pages[0]
+  rows.push(
+    row(
+      'share_image',
+      'Share preview picture',
+      ['missing_share_image'],
+      home && !home.error && home.status !== null && home.status < 400 ? 'Links to your site show a preview picture' : null,
+      'The home page could not be read',
+    ),
+  )
+  rows.push(row('mixed_content', 'Files load over https', ['mixed_content'], readable.length ? 'No http:// files on your https pages' : null, 'No page could be read'))
+
+  rows.push(row('links', 'Links', ['broken_links'], s.linksChecked ? `${plural(s.linksChecked, 'link', 'links')} checked, none broken` : null, 'No links were checked'))
+  // Reports stored before images were checked have no image count: no row.
+  if (s.imagesChecked !== undefined || failedBy(['broken_images']).length) {
+    rows.push(row('images', 'Images', ['broken_images'], s.imagesChecked ? `${plural(s.imagesChecked, 'image', 'images')} checked, all load` : null, 'No images were checked'))
+  }
+
+  const httpsBad = s.https === 'no_https' || s.https === 'not_redirected'
+  const httpsRow = row('https', 'HTTPS', ['no_https', 'http_not_redirected'], s.https === 'ok' ? 'http:// sends visitors to https://' : null, 'The home page did not answer in time')
+  rows.push(httpsBad && httpsRow.status !== 'failed' ? { ...httpsRow, status: 'failed', detail: s.https === 'no_https' ? 'The site does not load over https://' : 'http:// does not send visitors to https://' } : httpsRow)
+
+  for (const h of HEADER_ROWS) {
+    const sent = s.headers?.[h.key]
+    const r = row(`header_${h.rule}`, `${h.name} header`, [h.rule], sent === true ? 'Sent' : null, 'The home page’s headers could not be read')
+    rows.push(sent === false && r.status !== 'failed' ? { ...r, status: 'failed', detail: 'Not sent' } : r)
+  }
+
+  const scripts = s.scriptsChecked ?? 0
+  rows.push(
+    row(
+      'source_maps',
+      'Source maps',
+      ['source_maps_published'],
+      scripts && !s.scriptsWithSourceMaps ? `No source maps published (${plural(scripts, 'script', 'scripts')} checked)` : null,
+      incomplete.includes('the script check') ? 'The script check did not finish' : 'No scripts to check',
+    ),
+  )
+  return rows
+}
+
+/** "12 checks passed, 1 not checked": the zero parts left out. */
+export function checkTally(rows: readonly CheckRow[]): string {
+  const n = (st: CheckRowStatus) => rows.filter((r) => r.status === st).length
+  const parts = [
+    n('passed') ? `${plural(n('passed'), 'check', 'checks')} passed` : '',
+    n('failed') ? `${n('failed')} found a problem` : '',
+    n('not_checked') ? `${n('not_checked')} not checked` : '',
+  ].filter(Boolean)
+  return parts.join(', ')
+}
+
+/** One page of "Pages read". */
+export interface PageRow {
+  path: string
+  state: 'opened' | 'error' | 'not_read'
+  detail: string
+}
+
+/**
+ * Every page the check opened, and every page it tried and could not read
+ * (`incomplete` names those "the page /x"); `unfinished` is the rest of
+ * `incomplete` (the script check, the rendered home page, …).
+ */
+export function pagesRead(summary: CheckSummaryView | undefined): { pages: PageRow[]; unfinished: string[] } {
+  const out: PageRow[] = (summary?.pages ?? []).map((p) => {
+    if (p.error) return { path: p.path, state: 'not_read', detail: p.error.length > 160 ? `${p.error.slice(0, 157)}…` : p.error }
+    if (p.status === null) return { path: p.path, state: 'not_read', detail: 'The page did not answer' }
+    if (p.status >= 400) return { path: p.path, state: 'error', detail: `Answered with error ${p.status}` }
+    return { path: p.path, state: 'opened', detail: 'Opened' }
+  })
+  const unfinished: string[] = []
+  for (const part of summary?.incomplete ?? []) {
+    const m = /^the page (.+)$/.exec(part)
+    if (m) out.push({ path: m[1], state: 'not_read', detail: 'It did not finish loading during the check' })
+    else unfinished.push(part)
+  }
+  return { pages: out, unfinished }
 }
 
 /**
