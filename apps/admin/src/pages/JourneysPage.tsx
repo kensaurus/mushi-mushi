@@ -43,7 +43,7 @@ export function JourneysPage() {
           'Find duplicate pages and pages nothing links to',
           'Hand each fix to your coding agent as a ready prompt',
         ]}
-        helpHowToUse="Press Scan my site to map your pages (needs a Firecrawl key). Install the SDK to add real visits. Click a page on the map to see its problems. Copy a prompt into Cursor, Claude Code, Lovable or Bolt, or copy them all at once."
+        helpHowToUse="Install the SDK to see where real people go: that map needs no key. Press Scan my site to also map pages nobody has visited yet (this one needs your own Firecrawl key). Click a page on the map to see its problems. Copy a prompt into Cursor, Claude Code, Lovable or Bolt, or copy them all at once."
         helpFlowPath="/journeys"
       />
       {projectId ? <JourneysBody key={projectId} projectId={projectId} /> : <EmptyState title="No app selected" description="Pick an app at the top to see its journeys." />}

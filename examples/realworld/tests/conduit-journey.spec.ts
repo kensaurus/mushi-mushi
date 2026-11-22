@@ -192,6 +192,81 @@ test.describe.serial('node SDK capture', () => {
 // 3. Path-router frontend — widget-driven full report
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Screenshot privacy, in pixels: the image the ingest receives has the
+// [data-private] area blacked out (asked for on r/selfhosted by PeepSo).
+// ─────────────────────────────────────────────────────────────────────────────
+test.describe.serial('screenshot privacy (real browser)', () => {
+  test('the screenshot that reaches ingest has [data-private] blacked out', async ({ page }) => {
+    await stubReset()
+    await page.goto(`${REACT_BASE}/`)
+    await expect(page.locator('[data-testid="article-list"]')).toBeVisible()
+
+    // A private discussion (bright red) next to a public control box (bright green).
+    const boxes = await page.evaluate(() => {
+      const make = (attrs: Record<string, string>, color: string, left: number, text: string) => {
+        const el = document.createElement('div')
+        for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v)
+        el.textContent = text
+        el.style.cssText = `position:fixed;top:140px;left:${left}px;width:220px;height:120px;background:${color};color:#fff;z-index:2147483000;font:16px sans-serif`
+        document.body.appendChild(el)
+        const r = el.getBoundingClientRect()
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+      }
+      return {
+        priv: make({ 'data-private': '' }, 'rgb(255,0,0)', 20, 'PRIVATE-DISCUSSION-7f3a'),
+        pub: make({ 'data-testid': 'public-box' }, 'rgb(0,200,0)', 280, 'public text'),
+        vw: window.innerWidth,
+      }
+    })
+
+    // Open the real widget, describe the bug, take a screenshot and send.
+    await page.locator('.mushi-trigger').first().click()
+    const bugBtn = page.locator('[data-category="bug"]').first()
+    await bugBtn.waitFor({ state: 'visible', timeout: 10_000 })
+    await bugBtn.click()
+    const intentOrTextarea = page.locator('[data-intent], .mushi-textarea').first()
+    await intentOrTextarea.waitFor({ state: 'visible', timeout: 10_000 })
+    if (await intentOrTextarea.evaluate((el: Element) => el.hasAttribute('data-intent'))) {
+      await page.locator('[data-intent]').first().click()
+    }
+    await page.locator('.mushi-textarea').first().fill('Screenshot privacy check')
+    await page.locator('[data-action="screenshot"]').first().click()
+    await expect(page.locator('.mushi-screenshot-preview img').first()).toBeVisible({ timeout: 15_000 })
+    await page.locator('button[data-action="submit"]').first().click()
+    // An automatic screenshot mode shows it once more before sending.
+    const review = page.locator('[data-role="screenshot-review"]')
+    if (await review.isVisible().catch(() => false)) await page.locator('button[data-action="submit"]').first().click()
+
+    const reports = await waitForStub('reports', (r) => r.some((rep) => JSON.stringify(rep).includes('Screenshot privacy check')))
+    const rep = reports.find((r) => JSON.stringify(r).includes('Screenshot privacy check'))!
+    expect(JSON.stringify(rep)).not.toContain('PRIVATE-DISCUSSION-7f3a')
+    const dataUrl = rep['screenshotDataUrl'] as string | undefined
+    expect(dataUrl, 'the report carries the screenshot').toMatch(/^data:image\//)
+
+    // Decode the bytes that were actually sent and read the pixels.
+    const px = await page.evaluate(async ({ src, boxes }) => {
+      const img = new Image()
+      img.src = src
+      await img.decode()
+      const c = document.createElement('canvas')
+      c.width = img.naturalWidth
+      c.height = img.naturalHeight
+      const ctx = c.getContext('2d')!
+      ctx.drawImage(img, 0, 0)
+      const scale = img.naturalWidth / boxes.vw
+      const at = (p: { x: number; y: number }) => Array.from(ctx.getImageData(Math.round(p.x * scale), Math.round(p.y * scale), 1, 1).data)
+      return { priv: at(boxes.priv), pub: at(boxes.pub) }
+    }, { src: dataUrl!, boxes })
+
+    const [pr, pg, pb] = px.priv
+    expect(Math.max(pr!, pg!, pb!), `private area is black, got rgb(${px.priv})`).toBeLessThan(40)
+    const [ur, ug] = px.pub
+    expect(ug!, `public area keeps its colour, got rgb(${px.pub})`).toBeGreaterThan(150)
+    expect(ur!).toBeLessThan(90)
+  })
+})
+
 test.describe.serial('path-router frontend (react-vite)', () => {
   test('journey: browse → paginate by tag → article error → widget report', async ({ page }) => {
     await stubReset()

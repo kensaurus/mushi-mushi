@@ -427,7 +427,8 @@ export function onboardingNavBadge(
   const count = stats.sdkHostMismatch ? remaining + 1 : remaining
   const label = stats.sdkHostMismatch
     ? 'Setup incomplete · SDK endpoint mismatch'
-    : `${remaining} required setup step${remaining === 1 ? '' : 's'} remaining`
+    // Same words and count as Home and the first-run screens.
+    : `Set up · ${stats.requiredComplete} of ${stats.requiredTotal} done`
   return attentionBadge(count, stats.sdkHostMismatch ? 'danger' : 'warn', label)
 }
 

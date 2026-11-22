@@ -461,7 +461,37 @@ describe('dispatch controls go through the page request and gate', () => {
       reason: 'Set up first: Autofix enabled.',
     })
     expect(rec.cta?.disabled).toBe(true)
+    expect(rec.cta?.title).toBe('Set up first: Autofix enabled.')
     expect(rec.meta).toContainEqual({ label: 'Cannot dispatch', value: 'Set up first: Autofix enabled.', tone: 'warn' })
+    expect(rec.setupSteps).toBeUndefined()
+  })
+
+  // A new user's first report: two disabled Dispatch fix buttons, one tooltip (feedback 2026-11-22).
+  it('a setup-only block carries the steps for the visible line instead of the chip', () => {
+    const setup = { steps: [{ key: 'autofix', label: 'Turn on Autofix', href: '/integrations/config#integrations-codebase' }], done: 3, total: 4 }
+    const rec = deriveRecommendation(classifiedNew(), makeDispatchState(), 0, vi.fn(), Date.now(), {
+      blocked: true,
+      reason: 'Set up first: Autofix enabled.',
+      setup,
+    })
+    expect(rec.cta?.disabled).toBe(true)
+    expect(rec.cta?.title).toBe('Set up first: Autofix enabled.')
+    expect(rec.setupSteps).toBe(setup)
+    expect(rec.meta?.some((m) => m.label === 'Cannot dispatch')).not.toBe(true)
+
+    // Only a dispatch CTA gets the line under it; a disabled "Retry dispatch" keeps the chip.
+    const retryCard = deriveRecommendation(
+      makeReport({ fix_attempts: [makeFixAttempt({ status: 'failed', failure_category: 'llm_rate_limit' })] } as Partial<ReportDetail>),
+      makeDispatchState(),
+      0,
+      vi.fn(),
+      Date.now(),
+      { blocked: true, reason: 'Set up first: Autofix enabled.', setup },
+    )
+    expect(retryCard.actions?.find((a) => a.label === 'Retry dispatch')?.disabled).toBe(true)
+    expect(retryCard.cta?.onClick).toBeUndefined()
+    expect(retryCard.setupSteps).toBeUndefined()
+    expect(retryCard.meta).toContainEqual({ label: 'Cannot dispatch', value: 'Set up first: Autofix enabled.', tone: 'warn' })
   })
 
   it('a blocked gate disables "Retry dispatch" and leaves links alone', () => {
