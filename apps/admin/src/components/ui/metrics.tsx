@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { META_CHIP_TONE } from '../../lib/tokens';
@@ -159,6 +159,8 @@ interface RecommendedActionCta {
   href?: string
   to?: string
   disabled?: boolean
+  /** Hover text: why a disabled CTA is disabled. */
+  title?: string
 }
 
 /** Compact key/value chip rendered under the recommendation title. Used by
@@ -189,6 +191,8 @@ interface RecommendedActionProps {
   tone?: 'urgent' | 'info' | 'success' | 'neutral'
   meta?: RecommendedActionMeta[]
   actions?: RecommendedActionInlineAction[]
+  /** A short visible line under the CTA (why it is disabled and what to do); the CTA is described by it. */
+  ctaNote?: ReactNode
 }
 
 const RECOMMENDED_TONES = {
@@ -208,7 +212,7 @@ const RECOMMENDED_ACCENTS = {
 const CTA_BTN_CLASS =
   'shrink-0 inline-flex items-center gap-1 rounded-sm bg-brand px-2.5 py-1 text-xs font-medium text-brand-fg hover:bg-brand-hover motion-safe:transition-opacity disabled:opacity-50 disabled:cursor-not-allowed'
 
-function RecommendedActionCtaEl({ cta }: { cta: RecommendedActionCta }) {
+function RecommendedActionCtaEl({ cta, describedBy }: { cta: RecommendedActionCta; describedBy?: string }) {
   if (cta.to) {
     return (
       <Link to={cta.to} className={CTA_BTN_CLASS} aria-disabled={cta.disabled}>
@@ -229,7 +233,14 @@ function RecommendedActionCtaEl({ cta }: { cta: RecommendedActionCta }) {
     )
   }
   return (
-    <button type="button" onClick={cta.onClick} disabled={cta.disabled} className={CTA_BTN_CLASS}>
+    <button
+      type="button"
+      onClick={cta.onClick}
+      disabled={cta.disabled}
+      title={cta.title}
+      aria-describedby={describedBy}
+      className={CTA_BTN_CLASS}
+    >
       {cta.label}
     </button>
   )
@@ -279,7 +290,9 @@ export function RecommendedAction({
   tone = 'info',
   meta,
   actions,
+  ctaNote,
 }: RecommendedActionProps) {
+  const noteId = useId()
   return (
     <div className={`flex items-start gap-3 rounded-md border p-3 mb-3 ${RECOMMENDED_TONES[tone]}`}>
       <div className={`mt-0.5 shrink-0 ${RECOMMENDED_ACCENTS[tone]}`}>
@@ -323,7 +336,13 @@ export function RecommendedAction({
           </div>
         )}
       </div>
-      {cta && <RecommendedActionCtaEl cta={cta} />}
+      {cta && !ctaNote && <RecommendedActionCtaEl cta={cta} />}
+      {cta && ctaNote ? (
+        <div className="flex min-w-0 max-w-xs flex-col items-end gap-1 text-right">
+          <RecommendedActionCtaEl cta={cta} describedBy={noteId} />
+          <div id={noteId}>{ctaNote}</div>
+        </div>
+      ) : null}
     </div>
   )
 }

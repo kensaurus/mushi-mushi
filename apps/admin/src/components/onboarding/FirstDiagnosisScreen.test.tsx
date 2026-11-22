@@ -94,13 +94,13 @@ describe('FirstDiagnosisScreen — diagnosis_viewed', () => {
     vi.useRealTimers()
   })
 
-  function renderScreen(): void {
+  function renderScreen(extra: { setupProgress?: { done: number; total: number } } = {}): void {
     act(() => {
       root.render(
         createElement(
           MemoryRouter,
           null,
-          createElement(FirstDiagnosisScreen, { projectId: PROJECT, projectName: 'Demo' }),
+          createElement(FirstDiagnosisScreen, { projectId: PROJECT, projectName: 'Demo', ...extra }),
         ),
       )
     })
@@ -219,5 +219,16 @@ describe('FirstDiagnosisScreen — diagnosis_viewed', () => {
     act(() => installFirst!.click())
     expect(tracking.trackAdHoc).toHaveBeenCalledWith('onboarding_install_first_clicked', { project_id: PROJECT })
     expect(tracking.trackSelf).not.toHaveBeenCalled()
+  })
+
+  // It said "Step 2 of 2" while the sidebar and Home counted 4 setup steps (feedback 2026-11-22).
+  it('counts the same four setup steps as the sidebar, and says the SDK comes next', () => {
+    serveDiagnosis()
+    renderScreen({ setupProgress: { done: 2, total: 4 } })
+    const text = container.textContent ?? ''
+    expect(text).toContain('Set up · 2 of 4 done')
+    expect(text).not.toMatch(/Step \d of 2/)
+    expect(text).toContain('Nothing to install yet: connecting your app comes next.')
+    expect(text).not.toContain('Nothing to install for this step')
   })
 })

@@ -36,6 +36,8 @@ import { humanizeFixError } from '../../lib/humanizeFixError'
 import { reportHasCodeLocation } from '../../lib/reportCodeLocation'
 import type { ReportDetail, ReportFixAttempt } from './types'
 import { isSampleModel, SAMPLE_EXPLANATION_LABEL } from '../../lib/reportInternals'
+import { dispatchSetupSentence, type DispatchSetupSteps } from '../../lib/dispatchSetupSteps'
+import { DispatchSetupLine } from './DispatchSetupLine'
 
 type StoryState = StageStamp
 
@@ -52,6 +54,8 @@ interface StoryNode {
   link?: { href: string; label: string }
   /** Optional screenshot URL to render as a 56x40 thumbnail. */
   thumbnail?: string | null
+  /** A step that waits on the dispatch setup: shown inline, each step a link. */
+  setup?: DispatchSetupSteps
 }
 
 interface Props {
@@ -59,6 +63,8 @@ interface Props {
   dispatchState: DispatchState
   /** Operator accounts: show the model and its latency on the first step. */
   showInternals?: boolean
+  /** The page's dispatch gate: with `setup`, "Fix written" says what to set up first. */
+  dispatchBlock?: { blocked: boolean; setup?: DispatchSetupSteps | null }
 }
 
 /**
@@ -72,8 +78,8 @@ const STEP_NAME: Partial<Record<PdcaStageId, string>> = {
   act: 'Fix live',
 }
 
-export function ReportPdcaStory({ report, dispatchState, showInternals = false }: Props) {
-  const nodes = buildStoryNodes(report, dispatchState, showInternals)
+export function ReportPdcaStory({ report, dispatchState, showInternals = false, dispatchBlock }: Props) {
+  const nodes = buildStoryNodes(report, dispatchState, showInternals, dispatchBlock?.blocked ? dispatchBlock.setup ?? null : null)
   return (
     // The heading sits outside the list: an <ol> may only hold <li>, and a
     // <header> inside it broke the list for screen readers (REPORT A14).
@@ -139,7 +145,7 @@ function StoryRow({ node, isLast }: { node: StoryNode; isLast: boolean }) {
         {/* The circle shows the state; "✓ Done" / "○ Not yet" beside it said
             it again (round-3 sweep 2026-11-19). Screen readers still hear it. */}
         <span className="sr-only">Status: {v.label}</span>
-        {isIdle && <InfoHint content={node.headline} />}
+        {isIdle && !node.setup && <InfoHint content={node.headline} />}
         {node.at && (
           <span className="text-2xs text-fg-faint ml-auto">
             <RelativeTime value={node.at} />
@@ -148,6 +154,8 @@ function StoryRow({ node, isLast }: { node: StoryNode; isLast: boolean }) {
       </div>
       {/* A step that has not started says why behind its ⓘ, not in a grey sentence. */}
       {!isIdle && <InlineProof className="mt-0.5">{node.headline}</InlineProof>}
+      {/* Blocked on setup is not "not started yet": say what to do, in the open (feedback 2026-11-22). */}
+      {node.setup && <DispatchSetupLine setup={node.setup} lead="No fix yet. To dispatch one:" className="mt-0.5" data-testid="story-dispatch-setup" />}
       {(detailsClean.length > 0 || node.thumbnail || node.link) && (
         <div className="mt-1.5 flex items-center gap-2 flex-wrap">
           {node.thumbnail && (
@@ -196,6 +204,8 @@ export function buildStoryNodes(
   report: ReportDetail,
   dispatchState: DispatchState,
   showInternals = false,
+  /** The steps left before a fix can be dispatched, when that is what stops it. */
+  setup: DispatchSetupSteps | null = null,
 ): Record<PdcaStageId, StoryNode> {
   const fix: ReportFixAttempt | undefined = report.fix_attempts?.[0]
   const judge = report.judge_eval ?? null
@@ -261,10 +271,12 @@ export function buildStoryNodes(
       return `Last attempt stopped — ${humanizeFixError(fix?.error)?.title ?? fix?.error ?? 'see fixes page'}`
     }
     if (dispatched) return 'Fix attempt recorded'
-    return reportHasCodeLocation(report)
-      ? 'No fix dispatched yet — click "Dispatch fix" to start'
-      : 'No fix dispatched yet — no stack trace or file for an agent to change'
+    if (!reportHasCodeLocation(report)) return 'No fix dispatched yet — no stack trace or file for an agent to change'
+    return setup
+      ? dispatchSetupSentence(setup, 'No fix yet. To dispatch one:')
+      : 'No fix dispatched yet — click "Dispatch fix" to start'
   })()
+  const doSetup = doState === 'idle' && setup && reportHasCodeLocation(report) ? setup : undefined
   const doLink = fix?.pr_url
     ? { href: fix.pr_url, label: `PR${fix.pr_number ? ` #${fix.pr_number}` : ''}` }
     : dispatchState.prUrl
@@ -283,6 +295,7 @@ export function buildStoryNodes(
       fix?.lines_changed != null ? `${fix.lines_changed} loc` : null,
     ],
     link: doLink,
+    ...(doSetup ? { setup: doSetup } : {}),
   }
 
   // CHECK — judge + CI
