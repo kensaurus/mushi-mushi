@@ -6,17 +6,13 @@
 import { Tooltip } from '../ui'
 import { SEVERITY_TRAFFIC, SEVERITY_TRAFFIC_BADGE, type SeverityTrafficKey } from '../../lib/severityTraffic'
 import { severityLabelShort } from './types'
+import { CHIP_TONE } from '../../lib/chipTone'
 import {
   blastRadiusBlockTone,
   blastRadiusFilledBlocks,
   blastRadiusIntensity,
-  confidenceBarTone,
-  confidenceCellTint,
-  confidenceEmptySegmentTone,
   confidencePercent,
-  CONFIDENCE_SEGMENT_COUNT,
-  confidenceSegmentFilled,
-  confidenceTextTone,
+  isLowConfidence,
   recencyBarTone,
   recencyFreshness,
   recencyHours,
@@ -24,73 +20,32 @@ import {
   SEVERITY_LEVEL_KEYS,
 } from './reportMetricViz'
 
-interface ConfidenceCellProps {
+interface LowConfidenceChipProps {
   confidence: number | null | undefined
-  /** `table` = compact vertical stack, centered in metric cell. */
-  layout?: 'default' | 'table'
+  className?: string
 }
 
-/** 5-block heat strip + tinted wash + color-scaled %. */
-export function TableConfidenceCell({ confidence, layout = 'default' }: ConfidenceCellProps) {
-  const pct = confidencePercent(confidence)
-  if (pct == null || confidence == null) {
-    return <span className="block w-full text-center text-2xs text-fg-faint">—</span>
-  }
-
-  const barTone = confidenceBarTone(confidence)
-  const tint = confidenceCellTint(confidence)
-  const textTone = confidenceTextTone(pct)
-  const isTable = layout === 'table'
-
-  const bar = (
-    <div
-      className={`flex gap-px h-1.5 ${isTable ? 'w-full max-w-[2.75rem]' : 'min-w-0 flex-1'}`}
-      aria-hidden="true"
-    >
-      {Array.from({ length: CONFIDENCE_SEGMENT_COUNT }, (_, i) => (
-        <span
-          key={i}
-          className={`flex-1 rounded-hairline motion-safe:transition-opacity ${
-            confidenceSegmentFilled(pct, i) ? barTone : confidenceEmptySegmentTone()
-          }`}
-        />
-      ))}
-    </div>
-  )
-
-  const pctLabel = (
-    <span className={`shrink-0 text-2xs font-mono font-semibold tabular-nums leading-none ${textTone}`}>
-      {pct}%
-    </span>
-  )
-
-  const body = isTable ? (
-    <div
-      className="flex w-full min-w-0 flex-col items-center justify-center gap-0.5"
-      role="img"
-      aria-label={`Confidence ${pct} percent`}
-    >
-      {bar}
-      {pctLabel}
-    </div>
-  ) : (
-    <div
-      className={`flex min-w-0 w-full items-center gap-1 rounded-sm px-0.5 py-0.5 ${tint}`}
-      role="img"
-      aria-label={`Confidence ${pct} percent`}
-    >
-      {bar}
-      {pctLabel}
-    </div>
-  )
-
+/**
+ * "Low confidence · 62%": shown only when Mushi Mushi is under 80% sure of the
+ * severity and category (LOW_CONFIDENCE_BELOW). The bugs list dropped its
+ * "Conf." column, which read 95–100% on nearly every row (console UX pass
+ * 2026-11-22). The word carries the meaning, so it reads on touch and to a
+ * screen reader without the tooltip; amber is the warning colour, never red.
+ */
+export function LowConfidenceChip({ confidence, className = '' }: LowConfidenceChipProps) {
+  if (!isLowConfidence(confidence)) return null
+  const pct = confidencePercent(confidence) ?? 0
   return (
     <Tooltip
       portal
-      content={`LLM confidence ${pct}% — ${pct >= 85 ? 'high' : pct >= 65 ? 'review suggested' : 'low; read breadcrumbs before dispatch'}`}
-      className={isTable ? 'flex h-full w-full min-w-0 items-center justify-center' : undefined}
+      content={`Mushi Mushi is ${pct}% sure of the severity and category. Read the evidence before you send a fix.`}
     >
-      {body}
+      <span
+        className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-sm px-1.5 py-px text-2xs font-medium cursor-help ${CHIP_TONE.warnSubtle} ${className}`}
+        data-testid="low-confidence-chip"
+      >
+        Low confidence · {pct}%
+      </span>
     </Tooltip>
   )
 }

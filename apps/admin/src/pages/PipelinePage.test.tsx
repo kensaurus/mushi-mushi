@@ -21,6 +21,7 @@ const state = vi.hoisted(() => ({
   paths: [] as Array<{ path: string | null; scope?: string }>,
   posts: [] as Array<{ path: string; body: unknown }>,
   reloads: 0,
+  loading: false,
   respond: (_path: string, _body: unknown): unknown => ({ ok: true, data: { results: [] } }),
 }))
 
@@ -37,7 +38,7 @@ vi.mock('../lib/usePageData', () => ({
     state.paths.push({ path, scope: opts.scope })
     return {
       data: state.data,
-      loading: false,
+      loading: state.loading,
       error: null,
       isValidating: false,
       reload: () => {
@@ -198,6 +199,7 @@ beforeEach(() => {
   state.paths = []
   state.posts = []
   state.reloads = 0
+  state.loading = false
   state.respond = () => ({ ok: true, data: { results: [] } })
   window.localStorage.clear()
 })
@@ -762,5 +764,61 @@ describe('PipelinePage round-3 review (2026-11-19)', () => {
     expect(fold.querySelector('summary')!.textContent).toContain('yen-yen 3 · mushi-mushi 2')
     // The failing repo keeps its own row, outside the fold.
     expect(fold.contains(q('pipeline-train-kensaurus/glot.it'))).toBe(false)
+  })
+})
+
+describe('PipelinePage console polish (2026-11-22)', () => {
+  it('draws the stages and the group list as a skeleton while the first read is in flight', async () => {
+    state.data = null
+    state.loading = true
+    await render()
+    const sk = q('pipeline-skeleton')!
+    expect(sk.getAttribute('aria-busy')).toBe('true')
+    for (const name of ['Reported', 'Triaged', 'Fix PR', 'Reviewed', 'CI', 'Release train', 'Merged', 'Deployed']) expect(sk.textContent).toContain(name)
+    expect(sk.textContent).toContain('Reading the pipeline…')
+  })
+
+  it('the Start here button runs the whole section its group shares, and the section drops its own button', async () => {
+    const ci = (state.data as PipelineData).stages.find((s) => s.id === 'ci')!
+    ci.groups.push({
+      id: 'ci_red',
+      stage: 'ci',
+      tone: 'stuck',
+      label: '1 PR: its own CI is red',
+      count: 1,
+      oldestAt: '2026-10-24T12:00:00Z',
+      actions: ['ci_repair', 'rerun_ci'],
+      settings: null,
+      items: [item('f3')],
+    })
+    await render()
+    expect(q('pipeline-top-action')!.textContent).toBe('Send to CI repair (3)')
+    expect(q('pipeline-action-section-ci_repair-run')).toBeNull()
+    expect(q('pipeline-action-section-ci_repair-above')).not.toBeNull()
+    expect(document.body.textContent?.match(/Send to CI repair \(\d+\)/g)).toEqual(['Send to CI repair (3)'])
+    await click(q('pipeline-top-action'))
+    const confirm = Array.from(document.querySelectorAll('button')).find((b) => b.textContent === 'Send to CI repair' && b.hasAttribute('data-primary'))!
+    await click(confirm)
+    await flush()
+    expect(state.posts[0]).toEqual({ path: '/v1/admin/pipeline/actions', body: { action: 'ci_repair', fixIds: ['f1', 'f2', 'f3'] } })
+  })
+
+  it('never offers a closing action as the Start here button: an agent-failed group points to why instead', async () => {
+    const pr = (state.data as PipelineData).stages.find((s) => s.id === 'pr')!
+    pr.groups.push({
+      id: 'agent_failed',
+      stage: 'pr',
+      tone: 'stuck',
+      label: '34 reports: the agent failed, no PR opened',
+      count: 34,
+      oldestAt: '2026-10-20T00:00:00Z',
+      actions: ['dismiss'],
+      settings: null,
+      items: [item('f7', { prUrl: null, prNumber: null, repo: null })],
+    })
+    await render()
+    expect(q('pipeline-status')!.textContent).toContain('Start here: 34 reports: the agent failed, no PR opened')
+    expect(q('pipeline-top-action')).toBeNull()
+    expect(q('pipeline-top-why')).not.toBeNull()
   })
 })

@@ -26,14 +26,17 @@ export function confidenceBarTone(confidence: number): string {
   return 'bg-warn'
 }
 
-/** Subtle cell wash behind confidence meters — bordered so bars read on dark canvas. */
-export function confidenceCellTint(confidence: number): string {
-  if (confidence >= 0.65) return 'bg-surface-overlay/45 border border-edge-subtle'
-  return 'bg-warn-muted/45 border border-warn/25'
-}
+/**
+ * The bugs list shows confidence only below this (console UX pass
+ * 2026-11-22): a "Conf." column read 95–100% on nearly every row, so it
+ * said nothing and took width from the summary. A low score is the one
+ * that changes what you do (read the evidence before you send a fix).
+ */
+const LOW_CONFIDENCE_BELOW = 0.8
 
-export function confidenceEmptySegmentTone(): string {
-  return 'bg-fg-faint/20'
+/** True when a row should carry the low-confidence chip. */
+export function isLowConfidence(confidence: number | null | undefined): confidence is number {
+  return confidence != null && !Number.isNaN(confidence) && confidence < LOW_CONFIDENCE_BELOW
 }
 
 export function confidenceTextTone(pct: number): string {

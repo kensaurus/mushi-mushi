@@ -9,6 +9,7 @@ import { FixRowView } from './FixRowView'
 import { FixDetailPanel } from './FixDetailPanel'
 import type { FixAttempt } from './types'
 import { pluralizeWithCount } from '../../lib/format'
+import { useMediaQuery } from '../../lib/useMediaQuery'
 import { FIXES_STICKY_LEAD, FIXES_TABLE_COL, TABLE_CELL } from './fixesTableLayout'
 
 interface InventoryActionNodeLike {
@@ -70,6 +71,11 @@ export function FixesTable({
   hideTableChrome = false,
   actionLabels,
 }: Props) {
+  // Phones: the 44rem table hid Started and the actions off to the side and
+  // cut the state pill and the summary (2026-11-22 design pass). Below `sm`
+  // the time moves under the agent, the summary wraps, and the row fits.
+  const phone = useMediaQuery('(max-width: 639.98px)')
+  const columnCount = (compactTable ? 5 : 7) - (phone ? 1 : 0)
   return (
     <div className="border border-edge-subtle rounded-md overflow-hidden bg-surface-raised/30">
       {!hideTableChrome ? (
@@ -91,16 +97,16 @@ export function FixesTable({
         stickyOffsets={FIXES_STICKY_LEAD}
       >
         <table
-          className={`w-full table-fixed border-collapse text-sm ${compactTable ? 'min-w-[44rem]' : 'min-w-[56rem]'}`}
+          className={`w-full table-fixed border-collapse text-sm ${phone ? '' : compactTable ? 'min-w-[44rem]' : 'min-w-[56rem]'}`}
           aria-label="Fix attempts"
         >
           <colgroup>
             <col className={FIXES_TABLE_COL.stripe} />
             <col className={FIXES_TABLE_COL.status} />
-            <col className={FIXES_TABLE_COL.report} />
+            <col className={phone ? undefined : FIXES_TABLE_COL.report} />
             {!compactTable ? <col className={FIXES_TABLE_COL.pipeline} /> : null}
             {!compactTable ? <col className={FIXES_TABLE_COL.ci} /> : null}
-            <col className={FIXES_TABLE_COL.started} />
+            {!phone ? <col className={FIXES_TABLE_COL.started} /> : null}
             <col className={FIXES_TABLE_COL.action} />
           </colgroup>
           <thead className="bg-surface-raised text-2xs text-fg-secondary sticky top-0 z-10 font-semibold">
@@ -114,7 +120,9 @@ export function FixesTable({
               {!compactTable ? (
                 <th scope="col" className={`${FIXES_TABLE_COL.ci} ${TABLE_CELL.pxMeta} py-2 text-left font-medium hidden md:table-cell`}>CI / Agent</th>
               ) : null}
-              <th scope="col" className={`${FIXES_TABLE_COL.started} ${TABLE_CELL.pxMeta} py-2 text-right font-medium`}>Started</th>
+              {!phone ? (
+                <th scope="col" className={`${FIXES_TABLE_COL.started} ${TABLE_CELL.pxMeta} py-2 text-right font-medium`}>Started</th>
+              ) : null}
               <th scope="col" className={`${FIXES_TABLE_COL.action} ${TABLE_CELL.pxMeta} py-2 text-right font-medium`}>
                 {actionLabels?.nextStepHeader ?? 'Actions'}
               </th>
@@ -153,11 +161,12 @@ export function FixesTable({
                     onSelectChange={onSelectFix ? (on) => onSelectFix(fix.id, on) : undefined}
                     selectionDisabled={selectionDisabled}
                     compactTable={compactTable}
+                    phone={phone}
                     actionLabels={actionLabels}
                   />
                   {isExpanded && (
                     <tr>
-                      <td colSpan={compactTable ? 5 : 7} className="p-0">
+                      <td colSpan={columnCount} className="p-0">
                         <FixDetailPanel
                           fix={fix}
                           timeline={timelines[fix.id]}

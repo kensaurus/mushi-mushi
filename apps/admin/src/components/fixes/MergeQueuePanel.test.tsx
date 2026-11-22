@@ -87,21 +87,35 @@ describe('MergeQueuePanel', () => {
     expect(window.localStorage.getItem('mushi:merge-queue-nonempty:p1')).toBe('0')
   })
 
-  it('lists queued rows in a box that scrolls inside the panel', async () => {
+  it('lists queued rows in the panel, without a box that scrolls inside it', async () => {
     await render()
     await answer([row()])
-    const list = host.querySelector('ul.max-h-40')
+    const list = host.querySelector('ul#merge-queue-rows')
+    expect(list?.className).not.toContain('overflow-y-auto')
     expect(list?.textContent).toContain('o/r#7')
     expect(window.localStorage.getItem('mushi:merge-queue-nonempty:p1')).toBe('1')
+  })
+
+  it('shows the first 4 lines and opens the rest on request', async () => {
+    await render()
+    await answer([1, 2, 3, 4, 5, 6].map((n) => row({ id: `q${n}`, repo: `o/r${n}`, pr_number: n })))
+    const lines = () => host.querySelectorAll('ul#merge-queue-rows > li').length
+    expect(lines()).toBe(4)
+    const more = host.querySelector('[data-testid="merge-queue-show-all"]') as HTMLButtonElement
+    expect(more.textContent).toContain('Show 2 more')
+    expect(more.getAttribute('aria-expanded')).toBe('false')
+    await act(async () => more.click())
+    expect(lines()).toBe(6)
+    expect(more.textContent).toContain('Show fewer')
   })
 
   it('lets a long ref break and gives the reason its own line on a phone', async () => {
     await render()
     await answer([row({ repo: 'kensaurus/solo-boss-cloud-documentation', pr_number: 789 })])
-    const link = host.querySelector('ul.max-h-40 a')!
+    const link = host.querySelector('ul#merge-queue-rows a')!
     expect(link.className).toContain('wrap-anywhere')
     expect(link.textContent).toBe('kensaurus/solo-boss-cloud-documentation#789')
-    const reason = [...host.querySelectorAll('ul.max-h-40 span')].find((s) => s.textContent?.includes('Approved'))!
+    const reason = [...host.querySelectorAll('ul#merge-queue-rows span')].find((s) => s.textContent?.includes('Approved'))!
     expect(reason.className).toContain('flex-auto')
     expect(reason.className).not.toContain('flex-1')
   })

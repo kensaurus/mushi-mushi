@@ -141,6 +141,29 @@ export function setStoredProjectScopeMode(mode: ProjectScopeMode): void {
   window.dispatchEvent(new CustomEvent(PROJECT_SCOPE_EVENT, { detail: { mode } }))
 }
 
+/**
+ * A link that names one app opens that app. `?project=<uuid>` without
+ * `?apps=all` (a deep link from MCP, an email, Slack, a bookmark) used to land
+ * on every app combined when All apps was the stored choice: the switcher wrote
+ * `&apps=all` back and Bugs and Pipeline listed every app (console review
+ * 2026-11-22). Call it with the query of the first URL the console opens on (a
+ * page load, or the `next` path after sign-in), before anything renders.
+ *
+ * In-app navigation never comes through here: while All apps is on, the
+ * switcher keeps `?apps=all` in the address, so a reload or a shared copy of
+ * that address stays combined.
+ *
+ * Returns whether it left All apps.
+ */
+export function adoptLinkedAppScope(search: string): boolean {
+  const params = new URLSearchParams(search)
+  if (params.get(PROJECT_SCOPE_QUERY_PARAM) === ALL_APPS_VALUE) return false
+  if (!isValidProjectId(params.get(ACTIVE_PROJECT_QUERY_PARAM))) return false
+  if (getStoredProjectScopeMode() !== 'all') return false
+  setStoredProjectScopeMode('project')
+  return true
+}
+
 function subscribeProjectScope(listener: () => void): () => void {
   if (typeof window === 'undefined') return () => {}
   const onStorage = (event: StorageEvent) => {

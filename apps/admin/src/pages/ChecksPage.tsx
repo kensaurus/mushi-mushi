@@ -455,7 +455,9 @@ function OpenCheck({ card, gated, change, now }: RowProps) {
   return (
     <li {...link} className={`${link.className} min-w-0`} data-testid={`checks-card-${path.slice(1)}`} data-state={view?.state ?? 'loading'}>
       <Card interactive className={`relative flex h-full flex-col gap-1.5 p-3 ${gated ? 'opacity-80' : ''}`}>
-        <div className="flex min-w-0 items-center gap-2">
+        {/* Wraps: on a phone the state pill drops under the name instead of
+            cutting it ("Mushi Mushi hea…", 2026-11-22 design pass). */}
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1" data-testid="checks-card-head">
           {view ? <StatusMark status={STATE_STATUS[view.state]} /> : <Skeleton className="h-3 w-3 shrink-0 rounded-full" />}
           <Icon className="h-4 w-4 shrink-0 text-fg-secondary" />
           <Link to={path} className={LINK}>

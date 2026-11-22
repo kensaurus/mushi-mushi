@@ -45,8 +45,8 @@ import {
 } from './reportsTableLayout'
 import {
   BlastRadiusMeter,
+  LowConfidenceChip,
   RecencyHeatLabel,
-  TableConfidenceCell,
   TableSeverityCell,
 } from './ReportMetricCells'
 import { reportHeadline } from '../../lib/format'
@@ -252,6 +252,8 @@ function ReportRowViewInner({
               </div>
             </BreadcrumbPeek>
             <div className="shrink-0 flex items-center gap-1 pt-px">
+              {/* Only a low score shows; the "Conf." column read 95–100% on nearly every row. */}
+              <LowConfidenceChip confidence={row.confidence} />
               {blastRadius > 1 && (
                 <BlastRadiusMeter
                   value={blastRadius}
@@ -300,15 +302,12 @@ function ReportRowViewInner({
           <TableSeverityCell severity={showsSeverity(reportSourceKind(row)) ? row.severity : null} />
         </div>
       </td>
-      <td className={`reports-metric-cell reports-metric-cell--confidence ${REPORTS_TABLE_COL.confidence} ${TABLE_CELL.pxMeta}`}>
-        <div className="reports-metric-cell-slot reports-metric-cell-slot--confidence">
-          <TableConfidenceCell confidence={row.confidence} layout="table" />
-        </div>
-      </td>
       <td className={`reports-action-cell ${REPORTS_TABLE_COL.action} ${TABLE_CELL.pxMeta}`}>
         <div className={`reports-action-stack ${REPORTS_ACTION_STACK_MAX} ml-auto w-full min-w-0`}>
           <div className="reports-action-top ml-auto w-full min-w-0">
-            <span className="row-kebab-reveal pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto inline-flex shrink-0 items-center gap-0">
+            {/* Shown on row hover and keyboard focus; always on touch, where a
+                tap must reach the buttons, not open the row underneath. */}
+            <span className="row-kebab-reveal pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto pointer-coarse:pointer-events-auto inline-flex shrink-0 items-center gap-0">
               <RowKebab newTabHref={newTabHref} onCopyLink={onCopyLink} onDismiss={onDismiss} />
             </span>
             {canDispatch ? (
@@ -381,7 +380,7 @@ function RowKebab({ newTabHref, onCopyLink, onDismiss }: KebabProps) {
             e.stopPropagation()
             onCopyLink()
           }}
-          className="p-1 text-fg-faint hover:text-fg-muted hover:bg-surface-overlay rounded-sm"
+          className="p-1 text-fg-faint hover:text-fg-muted hover:bg-surface-overlay rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
           aria-label="Copy link"
         >
           <IconShare size={12} />
@@ -393,7 +392,7 @@ function RowKebab({ newTabHref, onCopyLink, onDismiss }: KebabProps) {
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}
-          className="p-1 text-fg-faint hover:text-fg-muted hover:bg-surface-overlay rounded-sm inline-flex"
+          className="p-1 text-fg-faint hover:text-fg-muted hover:bg-surface-overlay rounded-sm inline-flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
           aria-label="Open in new tab"
         >
           <IconExternalLink size={12} />
@@ -406,7 +405,7 @@ function RowKebab({ newTabHref, onCopyLink, onDismiss }: KebabProps) {
             e.stopPropagation()
             onDismiss()
           }}
-          className="p-1 text-fg-faint hover:text-danger hover:bg-danger-muted/20 rounded-sm"
+          className="p-1 text-fg-faint hover:text-danger hover:bg-danger-muted/20 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
           aria-label="Dismiss"
         >
           <IconClose size={12} />
