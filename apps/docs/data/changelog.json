@@ -50,6 +50,26 @@
         "description": "`--score-via server` (the default) uses your app's AI key, then Mushi's; `claude-code`, `cursor` and `anthropic-api` score locally. `--sync` puts the scorecard on the console (UX runs → Scorecard) with each page's trend across runs. Pages come from `--path` / `--paths-file`, your source (`--routes-from`) or a crawl; `/team?view=sso` counts as its own page. `--from-captures` scores captures another browser driver made, so no second browser opens on a profile already in use."
       },
       {
+        "title": "More settings on the script tag",
+        "description": "`data-accent`, `data-accent-text`, `data-locale` and `data-hide-on-routes` (comma-separated), so Lovable, Bolt and plain HTML sites can brand the widget without code."
+      },
+      {
+        "title": "Script tag typos no longer slip through",
+        "description": "every attribute is checked. A value the widget does not take is skipped with one console warning naming the attribute and the values it accepts; it never throws or breaks the page."
+      },
+      {
+        "title": "Route rules take simple globs",
+        "description": "`hideOnRoutes: ['/admin/*', '/blog/**']`. An entry without `*` still matches anywhere in the path, exactly as before."
+      },
+      {
+        "title": "Text on your accent stays readable",
+        "description": "when `accentText`, `data-accent-text` or a CSS `--mushi-accent-fg` is under 3:1 contrast on the accent, the widget uses black or white instead and says so in `Mushi.diagnose().warnings` (and in the console with `debug: true`). Your accent colour itself is never changed. A CSS `--mushi-accent` now also gets matching text colour instead of the panel background."
+      },
+      {
+        "title": "oklch and lab accents are measured correctly",
+        "description": "for these contrast checks."
+      },
+      {
         "title": "The wizard names the entry file your app has.",
         "description": "In a JavaScript React app it said to paste the snippet into `src/main.tsx` even though the file is `src/main.jsx`. It now names the file that exists (`.tsx`, `.jsx`, `.ts` or `.js`), in `--dry-run` too."
       }
