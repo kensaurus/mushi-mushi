@@ -13,7 +13,7 @@
 
 import type { PreflightCheck } from './useDispatchPreflight'
 
-export interface DispatchSetupStep {
+interface DispatchSetupStep {
   key: string
   /** What to do, as a short verb phrase: "Connect GitHub". */
   label: string
@@ -44,7 +44,7 @@ function agentStepLabel(check: Pick<PreflightCheck, 'label'>): string {
   return check.label
 }
 
-export function dispatchSetupStepLabel(check: Pick<PreflightCheck, 'key' | 'label'>): string {
+function dispatchSetupStepLabel(check: Pick<PreflightCheck, 'key' | 'label'>): string {
   if (check.key === 'agent') return agentStepLabel(check)
   return STEP_LABELS[check.key] ?? check.label
 }
