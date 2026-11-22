@@ -39,8 +39,8 @@ interface Props {
   preflight?: PreflightState
   /** GitHub repo URL the fix PR will land on. Sourced from platform integrations. */
   repoUrl?: string | null
-  /** Table row — shorter label, width-constrained trigger. */
-  variant?: 'default' | 'table'
+  /** Table row — shorter label, width-constrained trigger. Card = phone row, same label, 44px target. */
+  variant?: 'default' | 'table' | 'card'
   /** Why this report cannot be dispatched (e.g. a feature request), from
    *  `dispatchBlock()` — the same gate the report page uses. */
   blockReason?: string | null
@@ -149,7 +149,9 @@ export function DispatchFixPreflight({
     onConfirm()
   }
 
-  const isTable = variant === 'table'
+  // `card` is the phone row: the table's short label on a 44px touch target.
+  const isTable = variant === 'table' || variant === 'card'
+  const isCard = variant === 'card'
   const triggerLabel = busy
     ? isTable
       ? 'Sending…'
@@ -174,7 +176,9 @@ export function DispatchFixPreflight({
         disabled={busy}
         className={[
           'inline-flex items-center justify-center gap-0.5 rounded-sm border font-medium disabled:cursor-wait disabled:opacity-50',
-          isTable
+          isCard
+            ? 'min-h-11 shrink-0 px-3 text-xs bg-brand/12 text-brand border border-brand/28 hover:bg-brand/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60'
+            : isTable
             ? 'h-5 min-h-0 shrink-0 truncate px-1.5 text-3xs leading-none bg-brand/12 text-brand border border-brand/28 hover:bg-brand/20'
             : 'px-2 py-1 text-2xs bg-brand/12 text-brand border border-brand/28 hover:bg-brand/20',
         ].join(' ')}

@@ -82,7 +82,7 @@ interface ProjectsPayload {
 
 // The same order as the page: GitHub and Update share the first row.
 const CONNECT_SECTIONS = [
-  { id: 'connect-studio', label: 'Studio' },
+  { id: 'connect-studio', label: 'Editor' },
   { id: 'connect-github', label: 'GitHub' },
   { id: 'connect-update', label: 'Update' },
   { id: SDK_HEALTH_ANCHOR, label: 'SDK health' },

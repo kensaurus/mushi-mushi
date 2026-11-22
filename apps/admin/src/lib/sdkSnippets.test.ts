@@ -373,8 +373,11 @@ describe('renderSnippet — Script tag loader', () => {
     expect(out).not.toContain('cdn.mushi.dev')
   })
 
-  it('emits only data-* attributes that packages/web/src/loader.ts reads', () => {
-    const loaderSource = readFileSync(join(WEB_PACKAGE_DIR, 'src/loader.ts'), 'utf8')
+  it('emits only data-* attributes that the loader reads', () => {
+    // The loader parses its attributes in loader-config.ts (`ds.project`, `oneOf('trigger', …)`).
+    const loaderSource = ['src/loader.ts', 'src/loader-config.ts']
+      .map((f) => readFileSync(join(WEB_PACKAGE_DIR, f), 'utf8'))
+      .join('\n')
     const everyOption: SdkPreviewConfig = {
       ...DEFAULT_SDK_CONFIG,
       trigger: 'banner',
@@ -389,7 +392,7 @@ describe('renderSnippet — Script tag loader', () => {
     for (const attr of attrs) {
       // data-banner-variant → dataset.bannerVariant, read as `ds.bannerVariant`.
       const prop = attr.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase())
-      expect(loaderSource).toMatch(new RegExp(`\\bds\\.${prop}\\b`))
+      expect(loaderSource).toMatch(new RegExp(`\\bds\\.${prop}\\b|\\b(?:read|oneOf|color)\\('${prop}'`))
     }
   })
 })

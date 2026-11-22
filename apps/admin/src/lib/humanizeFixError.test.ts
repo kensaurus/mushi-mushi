@@ -92,3 +92,27 @@ describe('humanizeFixError: the agent explained why it opened no PR', () => {
     expect(h?.action?.target).toEqual({ kind: 'route', to: '/repo' })
   })
 })
+
+// Report 3a5cb64c (2026-11-20): the story printed this whole Node stack as the step's headline.
+describe('humanizeFixError: the local worker could not commit', () => {
+  const raw =
+    "mushi work: git commit failed: […] at wrapModuleLoad (node:internal/modules/cjs/loader:261:19) / at typescript (file:///C:/x/scripts/viz-token-emit.mjs:28:21) / { / code: 'MODULE_NOT_FOUND', / } / Node.js v26.13.1"
+
+  it('says a pre-commit check failed on a missing dependency, in one plain line', () => {
+    const h = humanizeFixError(raw)
+    expect(h?.title).toBe("The local worker couldn't commit: a pre-commit check failed (missing dependency).")
+    expect(h?.title).not.toMatch(/node:internal|MODULE_NOT_FOUND/)
+    expect(h?.raw).toBe(raw)
+    expect(h?.known).toBeUndefined()
+  })
+
+  it('says a pre-commit check failed when the cause is something else', () => {
+    expect(humanizeFixError('mushi work: git commit failed: lint-staged exited with code 1')?.title).toBe(
+      "The local worker couldn't commit: a pre-commit check failed.",
+    )
+  })
+
+  it('names a refused push separately', () => {
+    expect(humanizeFixError('mushi work: git push failed: remote: Permission denied')?.title).toBe("The local worker couldn't push the fix branch.")
+  })
+})

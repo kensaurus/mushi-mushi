@@ -92,6 +92,7 @@ import { DiagnosisFixHero } from '../components/report-detail/DiagnosisFixHero'
 import { GenerateTestButton } from '../components/report-detail/GenerateTestButton'
 import { SendToWorkerButton } from '../components/pipeline/SendToWorkerButton'
 import { SentryContextPanel } from '../components/report-detail/SentryContextPanel'
+import { sentryLastEventAt } from '../components/report-detail/sentryLastEvent'
 import { ReportReplayPlayer } from '../components/report-detail/ReportReplayPlayer'
 import { AgentTracePanel } from '../components/report-detail/AgentTracePanel'
 import { TraceWaterfall } from '../components/report-detail/TraceWaterfall'
@@ -918,6 +919,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
           reportStatus={report.status}
           onSentryClosed={onReload}
           hideNoBreadcrumbsNote
+          lastEventAt={sentryLastEventAt(report)}
         />
       </div>
 

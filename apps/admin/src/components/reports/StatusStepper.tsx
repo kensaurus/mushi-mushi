@@ -41,7 +41,7 @@ const STEP_LABELS: Record<StatusStep, string> = {
   fixed: 'Fixed',
 }
 
-/** The step most open reports rest on; the table row draws it as a bar only. */
+/** The step most open reports rest on; the table row prints it muted. */
 const CLASSIFIED_IDX = STATUS_STEPS.indexOf('classified')
 
 /** Map every report.status value into a step index (0..3). Anything we don't
@@ -70,7 +70,7 @@ interface StatusStepperProps {
    *  any stage we don't have an exact landing time for. */
   timestamps?: Partial<Record<StatusStep, string | null>>
   className?: string
-  /** Compact = label + bars. `table` = bars only (dense triage row). */
+  /** Compact = label + bars. `table` = word above the bars + "n of 4" (dense triage row). */
   size?: 'compact' | 'full' | 'table'
 }
 
@@ -152,9 +152,43 @@ export function StatusStepper({
     </div>
   )
 
+  if (isTable) {
+    // The word above the bar, the step count beside it: "Classified" then
+    // "▬▬▭▭ 2 of 4". A bare bar on the resting Classified step needed a
+    // legend (console UX pass 2026-11-22). That step stays muted, so the
+    // ~900 open rows that rest there do not shout (round-3 sweep 2026-11-19);
+    // the other steps carry their status ink and mark.
+    const resting = activeIdx === CLASSIFIED_IDX
+    return (
+      <div className={`flex w-full min-w-0 flex-col gap-1 ${className}`}>
+        <span
+          aria-hidden="true"
+          className={`inline-flex min-w-0 items-center gap-1 truncate text-2xs leading-none ${resting ? 'font-medium text-fg-muted' : `font-semibold ${STATUS_INK[runStatus]}`}`}
+          title={tableSummary}
+          data-testid="status-stepper-word"
+        >
+          <StatusMark status={runStatus} size={10} />
+          {activeLabel}
+        </span>
+        <div className="flex w-full min-w-0 items-center gap-1">
+          <Tooltip portal content={tableSummary} className="flex-1 min-w-0">
+            {barRow}
+          </Tooltip>
+          <span
+            aria-hidden="true"
+            className="shrink-0 whitespace-nowrap text-3xs leading-none tabular-nums text-fg-muted"
+            data-testid="status-stepper-step"
+          >
+            {activeIdx + 1} of 4
+          </span>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div
-      className={`flex items-stretch w-full min-w-0 ${size === 'full' ? 'flex-col gap-1' : isTable ? 'flex-row items-center gap-1' : 'flex-col gap-1'} ${className}`}
+      className={`flex items-stretch w-full min-w-0 flex-col gap-1 ${className}`}
     >
       {size === 'compact' && (
         <span aria-hidden="true" className={`inline-flex items-center gap-1 text-2xs leading-none font-semibold ${STATUS_INK[runStatus]}`}>
@@ -162,28 +196,7 @@ export function StatusStepper({
           {activeLabel}
         </span>
       )}
-      {isTable ? (
-        <Tooltip portal content={tableSummary} className="flex-1 min-w-0">
-          {barRow}
-        </Tooltip>
-      ) : (
-        barRow
-      )}
-      {/* "○ Classified" sat on almost every Open row beside a bar that
-          already says step 2 (round-3 sweep 2026-11-19). The table prints the
-          word only when the step is not the resting Classified one; the bar's
-          name and tooltip still say it. */}
-      {isTable && activeIdx !== CLASSIFIED_IDX && (
-        <span
-          aria-hidden="true"
-          className={`inline-flex shrink-0 items-center gap-1 text-2xs leading-none font-semibold ${STATUS_INK[runStatus]}`}
-          title={tableSummary}
-          data-testid="status-stepper-word"
-        >
-          <StatusMark status={runStatus} size={10} />
-          {activeLabel}
-        </span>
-      )}
+      {barRow}
       {size === 'full' && (
         <div aria-hidden="true" className="flex items-center justify-between text-2xs text-fg-faint w-full">
           {STATUS_STEPS.map((step, i) => (

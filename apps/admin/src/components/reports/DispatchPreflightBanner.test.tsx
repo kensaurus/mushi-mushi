@@ -140,3 +140,13 @@ describe('DispatchPreflightBanner when dispatch waits on it', () => {
     expect(details.querySelector('summary')?.textContent).toBe('Optional: let Mushi Mushi dispatch the fix for you (2 steps left)')
   })
 })
+
+// "Autofix enabled : You say yes…" had a space before the colon (2026-11-22).
+describe('DispatchPreflightBanner step labels', () => {
+  it('puts the colon right after the label', () => {
+    render(preflight([{ ...check('autofix', false), label: 'Autofix enabled' }]), true)
+    const text = host.querySelector('[data-testid="dispatch-preflight"]')!.textContent ?? ''
+    expect(text).toContain('Autofix enabled: ')
+    expect(text).not.toMatch(/\S :/)
+  })
+})
