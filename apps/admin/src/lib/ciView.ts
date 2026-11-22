@@ -723,9 +723,14 @@ export function groupSlowSteps(steps: ReadonlyArray<{ repo: string; job: string;
  * The first GitHub lane and every one with a failure stay; the other clean ones fold into one
  * summary row (`rest`) once that saves at least two rows. Order is kept.
  */
+/** A lane with a job running or waiting for a machine right now. */
+export const laneIsLive = (l: { bars: ReadonlyArray<{ outcome: string }> }): boolean =>
+  l.bars.some((b) => b.outcome === 'running' || b.outcome === 'waiting')
+
 export function foldGithubLanes<L extends Pick<CiTimelineLane, 'kind' | 'bars'>>(lanes: readonly L[]): { shown: L[]; rest: L[] } {
   const failed = (l: L) => l.bars.some((b) => b.outcome === 'code_failure' || b.outcome === 'infra')
-  const clean = lanes.filter((l) => l.kind === 'github' && !failed(l))
+  // A lane with a job running now never folds away: what is live stays on screen.
+  const clean = lanes.filter((l) => l.kind === 'github' && !failed(l) && !laneIsLive(l))
   if (clean.length < 3) return { shown: [...lanes], rest: [] }
   const rest = new Set(clean.slice(1))
   return { shown: lanes.filter((l) => !rest.has(l)), rest: clean.slice(1) }
