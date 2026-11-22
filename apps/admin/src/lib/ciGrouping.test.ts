@@ -40,6 +40,12 @@ describe('foldGithubLanes', () => {
     expect((shown as unknown as typeof lanes).map((l) => l.id)).toEqual(['gh9', 'aw', 'gh7'])
     expect((rest as unknown as typeof lanes).map((l) => l.id)).toEqual(['gh1', 'gh10', 'gh3'])
   })
+
+  it('never folds a GitHub lane with a job running now', () => {
+    const lanes = [lane('gh1', 'github'), lane('gh2', 'github', 'running'), lane('gh3', 'github'), lane('gh4', 'github'), lane('gh5', 'github', 'waiting')]
+    const { shown } = foldGithubLanes(lanes as never)
+    expect((shown as unknown as typeof lanes).map((l) => l.id)).toEqual(['gh1', 'gh2', 'gh5'])
+  })
   it('folds nothing when it would save fewer than two rows', () => {
     const lanes = [lane('gh1', 'github'), lane('gh2', 'github')]
     expect(foldGithubLanes(lanes as never).rest).toEqual([])

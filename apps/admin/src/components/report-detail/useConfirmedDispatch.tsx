@@ -14,15 +14,27 @@ import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { ConfirmDialog } from '../ConfirmDialog'
 import { useToast } from '../../lib/toast'
 import { dispatchBlock, dispatchConfirmBody } from '../../lib/dispatchConfirm'
+import { dispatchSetupSteps, type DispatchSetupSteps } from '../../lib/dispatchSetupSteps'
 import type { PreflightState } from '../../lib/useDispatchPreflight'
 import type { DispatchTargetRepo } from '../../lib/useDispatchTargetRepo'
 import type { ReportDetail } from './types'
+
+/**
+ * The gate every dispatch control renders from. `setup` is set only when the
+ * dispatch setup is the one thing in the way: the controls then show the
+ * steps left as links (DispatchSetupLine), not just a tooltip.
+ */
+export interface DispatchGate {
+  blocked: boolean
+  reason: string | null
+  setup?: DispatchSetupSteps | null
+}
 
 export interface ConfirmedDispatch {
   /** Open the confirm, or explain why a fix cannot be dispatched. */
   request: () => void
   /** The gate every dispatch control renders from. */
-  block: { blocked: boolean; reason: string | null }
+  block: DispatchGate
   /** The confirm dialog; render it once on the page. */
   dialog: ReactNode
 }
@@ -40,9 +52,13 @@ export function useConfirmedDispatch(input: {
   const toast = useToast()
   const [open, setOpen] = useState(false)
   const { blocked, reason } = dispatchBlock({ report, preflight, busy, openPr })
+  // Setup only: the same gate without the preflight would let the fix go.
+  const setupOnly = blocked && Boolean(preflight) && !dispatchBlock({ report, preflight: null, busy, openPr }).blocked
+  const checks = preflight?.checks
+  const setup = useMemo(() => (setupOnly ? dispatchSetupSteps(checks) : null), [setupOnly, checks])
   // Stable identity while the verdict is unchanged, so memoized consumers
   // (the recommendation card) do not recompute every render.
-  const block = useMemo(() => ({ blocked, reason }), [blocked, reason])
+  const block = useMemo<DispatchGate>(() => (setup ? { blocked, reason, setup } : { blocked, reason }), [blocked, reason, setup])
 
   const request = useCallback(() => {
     if (blocked) {

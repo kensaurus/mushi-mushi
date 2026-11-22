@@ -41,7 +41,16 @@ export function LandingCheckBox() {
   }
 
   return (
-    <form className="landing-check-box" onSubmit={onSubmit} noValidate aria-labelledby="landing-check-heading">
+    // action/method: an Enter pressed before the page's script is ready still
+    // lands on /check with the address filled in, instead of doing nothing.
+    <form
+      className="landing-check-box"
+      action={publicAssetPath('/check')}
+      method="get"
+      onSubmit={onSubmit}
+      noValidate
+      aria-labelledby="landing-check-heading"
+    >
       <h2 id="landing-check-heading" className="landing-check-box__heading">
         {LANDING_CHECK.heading}
       </h2>

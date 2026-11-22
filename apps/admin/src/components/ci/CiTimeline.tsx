@@ -23,6 +23,7 @@ import {
   buildCiTimeline,
   foldGithubLanes,
   formatSeconds,
+  laneIsLive,
   splitQuietLanes,
   timelinePct,
   type CiJobOutcome,
@@ -158,11 +159,19 @@ function Lane({ lane, timeline, onInspect }: { lane: Timeline['lanes'][number]; 
     [lane],
   )
   const link = useCiLink(keys, ciRunnerKey(lane.label))
+  // Running now: the row is tinted in the running colour, so live work reads first.
+  const live = !lane.unassigned && laneIsLive(lane)
   return (
-    <li {...link} className={`${link.className} flex items-center gap-2 rounded-sm`} data-testid={`ci-timeline-lane-${lane.label}`} data-failed={laneFailed(lane) || undefined}>
+    <li
+      {...link}
+      className={`${link.className} flex items-center gap-2 rounded-sm`}
+      data-testid={`ci-timeline-lane-${lane.label}`}
+      data-failed={laneFailed(lane) || undefined}
+      data-live={live || undefined}
+    >
       <span
         // Pinned: on a narrow screen the lanes scroll sideways and the names stay put.
-        className={`sticky left-0 z-10 flex ${LABEL_W} shrink-0 items-center gap-1.5 bg-surface-raised text-2xs ${lane.unassigned ? 'italic text-fg-muted' : 'font-medium text-fg-secondary'}`}
+        className={`sticky left-0 z-10 flex ${LABEL_W} shrink-0 items-center gap-1.5 bg-surface-raised text-2xs ${lane.unassigned ? 'italic text-fg-muted' : live ? 'font-semibold text-st-running-ink' : 'font-medium text-fg-secondary'}`}
         title={lane.kind === 'family' ? `${lane.label}: jobs of one-job runners, packed so bars never overlap` : lane.label}
       >
         {lane.unassigned ? (
@@ -174,7 +183,7 @@ function Lane({ lane, timeline, onInspect }: { lane: Timeline['lanes'][number]; 
         )}
         <LaneName label={lane.label} />
       </span>
-      <div className="relative h-7 flex-1 rounded-sm bg-surface-overlay/50">
+      <div className={`relative h-7 flex-1 rounded-sm ${live ? 'bg-st-running-soft ring-1 ring-inset ring-st-running/30' : 'bg-surface-overlay/50'}`}>
         {lane.bars.map((bar) => (
           <Bar key={bar.jobId} bar={bar} timeline={timeline} onInspect={onInspect} />
         ))}
@@ -197,11 +206,12 @@ function LaneName({ label }: { label: string }) {
 const laneFailed = (l: { bars: ReadonlyArray<{ outcome: string }> }) => l.bars.some((b) => b.outcome === 'code_failure' || b.outcome === 'infra')
 
 /**
- * @internal Exported for tests. Lanes with a failed job (a code failure or a stopped machine)
- * first, "No runner yet" always last, otherwise the given order (busiest first).
+ * @internal Exported for tests. Machines running (or waiting on) a job right now first, then
+ * those with a failed job (a code failure or a stopped machine), "No runner yet" always last,
+ * otherwise the given order (busiest first).
  */
 export function failingLanesFirst<L extends { unassigned: boolean; bars: ReadonlyArray<{ outcome: string }> }>(lanes: readonly L[]): L[] {
-  const rank = (l: L) => (l.unassigned ? 2 : laneFailed(l) ? 0 : 1)
+  const rank = (l: L) => (l.unassigned ? 3 : laneIsLive(l) ? 0 : laneFailed(l) ? 1 : 2)
   return lanes.map((l, i) => ({ l, i })).sort((a, b) => rank(a.l) - rank(b.l) || a.i - b.i).map((x) => x.l)
 }
 
@@ -215,7 +225,8 @@ export function CiTimeline({ jobs }: { jobs: CiJob[] }) {
   const timeline = useMemo(() => buildCiTimeline(jobs, { now, windowMs: WINDOW_MS[win] }), [jobs, now, win])
   const { quiet } = useMemo(() => splitQuietLanes(timeline.lanes), [timeline.lanes])
   const quietIds = useMemo(() => new Set(quiet.map((l) => l.id)), [quiet])
-  // Machines with a failed job first: what went wrong reads before what went fine.
+  // Machines running a job now first, then those with a failed job: what is live and what
+  // went wrong read before what went fine.
   const visible = failingLanesFirst(showQuiet ? timeline.lanes : timeline.lanes.filter((l) => !quietIds.has(l.id)))
   // GitHub-hosted 2 to 10 read as near-identical rows (2026-11-18): clean ones fold into one row.
   const github = foldGithubLanes(visible)
