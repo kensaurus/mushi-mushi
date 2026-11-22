@@ -16,7 +16,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { testReportHref, useSendTestReport } from '../lib/useSendTestReport'
 import { usePageData } from '../lib/usePageData'
-import { formatDiagnosisDuration, type TimeToFirstDiagnosis } from '../lib/setupRail'
+import { buildSetupRail, formatDiagnosisDuration, type TimeToFirstDiagnosis } from '../lib/setupRail'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { Card, Btn, Input, ErrorAlert, ResultChip, type ResultChipTone, CopyButton, SegmentedControl, HelpBanner, Loading } from '../components/ui'
 import { SetupProgressRail } from '../components/onboarding/SetupProgressRail'
@@ -533,12 +533,18 @@ export function OnboardingPage() {
 
   // First-run wizard: S1 (name the project) → S2 (see your first diagnosis).
   // The key is auto-minted by the create endpoint, so there is no key step.
+  // Its count is the rail's four steps, the same as the sidebar and Home: it
+  // said "Step 1 of 2" / "Step 2 of 2" beside a sidebar counting 4 (feedback 2026-11-22).
+  const firstRunRail = buildSetupRail({ project: project ?? null, ttfd: null })
+  const firstRunProgress = { done: firstRunRail.doneCount, total: firstRunRail.steps.length }
   const firstRunWizard = (
     <div className="space-y-4" data-testid="onboarding-first-run">
       {!project ? (
         <div className="space-y-4">
           <div>
-            <p className="text-3xs font-semibold text-fg-secondary">Step 1 of 2</p>
+            <p className="text-3xs font-semibold text-fg-secondary" data-testid="onboarding-first-run-progress">
+              Set up · {firstRunProgress.done} of {firstRunProgress.total} done
+            </p>
             <h2 className="mt-0.5 text-base font-semibold text-fg">Name your project</h2>
           </div>
           {/* The field guide says what this step does: the name is the only
@@ -564,6 +570,7 @@ export function OnboardingPage() {
           projectSlug={project.project_slug}
           apiKey={createdProject?.apiKey ?? apiKey?.key ?? null}
           onDiagnosed={reloadAll}
+          setupProgress={firstRunProgress}
         />
       )}
       <p className="text-2xs text-fg-faint">

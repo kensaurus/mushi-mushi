@@ -73,6 +73,15 @@ describe('Set up page progress', () => {
     expect(src).not.toContain('>Go to Dashboard</Btn>')
   })
 
+  // The first-run screens said "Step 1 of 2" / "Step 2 of 2" beside a sidebar counting 4 (feedback 2026-11-22).
+  it('counts the first-run screens with the rail, not a hard-coded two', () => {
+    expect(src).not.toMatch(/>\s*Step [12] of 2\s*</)
+    expect(src).toContain('buildSetupRail({ project: project ?? null, ttfd: null })')
+    expect(src).toContain('setupProgress={firstRunProgress}')
+    const screen = readFileSync(join(__dirname, '../components/onboarding/FirstDiagnosisScreen.tsx'), 'utf8')
+    expect(screen).not.toMatch(/>\s*Step [12] of 2\s*</)
+  })
+
   it('shows one Developer details bar on Fix a problem', () => {
     expect(src).toContain("!firstRun && effectiveTab !== 'diagnose'")
   })
