@@ -121,10 +121,18 @@ const mushi = Mushi.init({ /* ... */ });
 mushi.setScreen({ name: 'Chat', route: '/chat', feature: 'roleplay' });
 ```
 
-**Match your brand.** The widget uses your page's font and light/dark colors. Set an accent, theme, corner, language and hidden pages from code, the script tag (`data-accent="#7c3aed"`) or the console; text on the accent is kept readable for you ([theming guide](https://kensaur.us/mushi-mushi/docs/sdks/theming), with all 13 CSS tokens):
+**Match your brand.** The widget uses your page's font and light/dark colors. Set the accent, theme, corner, language and hidden pages in the console; text on the accent is kept readable for you ([theming guide](https://kensaur.us/mushi-mushi/docs/sdks/theming), with all 13 CSS tokens). Your code needs only the app's identity:
 
 ```ts
-Mushi.init({ projectId: 'proj_xxx', apiKey: 'mushi_xxx', widget: { accent: '#7c3aed', position: 'bottom-left', hideOnRoutes: ['/admin/*'] } });
+Mushi.init({ projectId: 'proj_xxx', apiKey: 'mushi_xxx' });
+```
+
+Look and position come from the console; set them in code only to lock them (your code's value wins).
+
+**Lock in code.** A value set here, or on the script tag (`data-accent="#7c3aed"`), wins over the console, which can then no longer change it ([runtime config](https://kensaur.us/mushi-mushi/docs/concepts/runtime-config)):
+
+```ts
+Mushi.init({ projectId: 'proj_xxx', apiKey: 'mushi_xxx', widget: { accent: '#7c3aed', position: 'bottom-left' } });
 ```
 
 Screenshots cannot capture cross-origin iframes or tainted `<canvas>` elements, and strict CSP can block them. Playwright and jsdom helpers live in `@mushi-mushi/web/test-utils`, which production bundles never load.
