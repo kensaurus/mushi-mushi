@@ -1,26 +1,10 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "Unreleased",
-    "pending": true,
-    "versions": [],
-    "highlights": [
-      {
-        "title": "The console's colour and corner reach React Native apps.",
-        "description": "The SDK now reads your project's widget settings once at start and applies the colour (with readable text on it) and the bottom corner you chose in the console, without a new app build. What you set in code still wins (ADR 0068), and `runtimeConfig: false` turns this off. The console's trigger and minimum-length defaults are not applied, so an app that never asked for shake-to-report won't get it."
-      },
-      {
-        "title": "The README's brand example no longer locks the look in code.",
-        "description": "It sets only the app's identity (project id and key), says that look and position come from the console and that a value set in code wins (ADR 0068), and shows locking the accent and corner in code as a separate example."
-      }
-    ],
-    "packages": []
-  },
-  {
     "majorMinor": "1.39",
     "headline": null,
     "pending": false,
     "versions": [
+      "1.39.1",
       "1.39.0"
     ],
     "highlights": [
@@ -69,8 +53,8 @@
         "description": "a 27-second clip of `npx mushi-mushi --dry-run` (the real output: what a run installs and writes, with nothing changed) ending on the report button in an app, and a 30-second clip of the free check, from typing an address to the prompts that fix what it found. A new \"Check your live app free\" section says how to run it with no sign-up."
       },
       {
-        "title": "Your code now wins over the console for the widget's look.",
-        "description": "If `Mushi.init({ widget: … })` (or a `data-*` attribute on the script tag) sets `position`, `theme`, `triggerText`, `accent`, a banner field or any other widget option, that value is used even when the console sets the same option; the console fills only what your code leaves out (ADR 0068). Before, the console won for position, theme, trigger text and the banner fields. **To let the console decide an option, remove it from your code.**"
+        "title": "The README's brand example no longer locks the look in code.",
+        "description": "It sets only the app's identity (project id and key), says that look and position come from the console and that a value set in code wins (ADR 0068), and shows locking the accent and corner in code as a separate example."
       }
     ],
     "packages": [
@@ -80,7 +64,7 @@
       },
       {
         "name": "@mushi-mushi/web",
-        "version": "1.39.0"
+        "version": "1.39.1"
       },
       {
         "name": "mushi-mushi",
@@ -1941,7 +1925,12 @@
       "0.26.1",
       "0.26.0"
     ],
-    "highlights": [],
+    "highlights": [
+      {
+        "title": "The console's colour and corner reach React Native apps.",
+        "description": "The SDK now reads your project's widget settings once at start and applies the colour (with readable text on it) and the bottom corner you chose in the console, without a new app build. What you set in code still wins (ADR 0068), and `runtimeConfig: false` turns this off. The console's trigger and minimum-length defaults are not applied, so an app that never asked for shake-to-report won't get it."
+      }
+    ],
     "packages": [
       {
         "name": "@mushi-mushi/cli",
@@ -1950,6 +1939,10 @@
       {
         "name": "@mushi-mushi/mcp",
         "version": "0.26.1"
+      },
+      {
+        "name": "@mushi-mushi/react-native",
+        "version": "0.26.0"
       }
     ]
   },
