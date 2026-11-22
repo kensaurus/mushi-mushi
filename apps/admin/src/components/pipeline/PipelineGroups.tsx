@@ -81,7 +81,7 @@ const TONE_BORDER: Record<SignalTone, string> = {
 const DAY = 86_400_000
 
 /** One of the age bar's buckets (lib/pipelineSignals.ts AGE_BUCKET_LABELS): 0–3 d, 3–7 d, 7–30 d, 30 d+. */
-export type AgeBucket = 0 | 1 | 2 | 3
+type AgeBucket = 0 | 1 | 2 | 3
 
 /**
  * How long a group's oldest item has waited, in the age bar's buckets. The group's `oldestAt`,
@@ -620,7 +620,7 @@ export function sectionBlocks(groups: readonly PipelineGroup[]): SectionBlock[] 
  * What a section's one button runs on: each group's primary items, in list order. The status
  * line's "Start here" button runs the same set when its group sits in that section, so the
  * two never show different counts (2026-11-22: "Re-run CI (67)" above "Re-run CI (68)").
- * @internal Exported for the page and tests.
+ * Exported for the page (and its tests).
  */
 export function sectionRun(groups: readonly PipelineGroup[]): { ids: string[]; reportIds: Array<string | null> } {
   const ids: string[] = []
@@ -635,7 +635,7 @@ export function sectionRun(groups: readonly PipelineGroup[]): { ids: string[]; r
   return { ids, reportIds }
 }
 
-/** The action section a group sits in, when it shares its fix with other groups. @internal Exported for the page. */
+/** The action section a group sits in, when it shares its fix with other groups. Exported for the page. */
 export function sectionOf(groups: readonly PipelineGroup[], groupId: string): { action: PipelineAction; groups: PipelineGroup[] } | null {
   for (const b of sectionBlocks(groups)) if (b.kind === 'action' && b.groups.some((g) => g.id === groupId)) return { action: b.action, groups: b.groups }
   return null
