@@ -25733,13 +25733,14 @@ While your project has no report yet, the page shows two screens instead of the 
 checklist:
 
 ### Name your project
-**Step 1 of 2.** Enter a project name and create it. That is the only input: the
-create call also makes your report key (`report:write`), so there is no separate key step.
+Enter a project name and create it. That is the only input: the create call also
+makes your report key (`report:write`), so there is no separate key step. The
+screen shows **Set up · 2 of 4 done**, the same count as the sidebar and Home.
 
 ### See your first diagnosis
-**Step 2 of 2.** Click **Send test report**. The report goes through the real ingest
-path and the diagnosis appears on the same screen. From there, **Install the SDK** to
-get the same for real bugs.
+Click **Send test report**. The report goes through the real ingest path and the
+diagnosis appears on the same screen (**3 of 4 done**). The last step is to
+**Install the SDK** so real bugs arrive the same way.
 
 Add `?view=all` to the URL, or click **Show all steps**, to see the full checklist
 instead.

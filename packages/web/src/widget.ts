@@ -82,6 +82,8 @@ export class MushiWidget {
   private rc: ReporterCopy;
   private lang = 'en';
   private isOpen = false;
+  /** Bumped on every open, so work started in one panel never finishes in the next. */
+  private openCount = 0;
   private step: WidgetStep = 'report';
 
   // ─── Persistent DOM (built once; regions are patched, never rebuilt) ───
@@ -403,6 +405,7 @@ export class MushiWidget {
     if (this.isOpen) return;
     this.rememberOpener();
     this.isOpen = true;
+    this.openCount++;
     this.screenshotAttached = false;
     this.screenshotCapturing = false;
     this.screenshotError = false;
@@ -465,6 +468,7 @@ export class MushiWidget {
     if (this.isOpen) return;
     this.rememberOpener();
     this.isOpen = true;
+    this.openCount++;
     this.callbacks.onOpen();
   }
 
@@ -2098,12 +2102,15 @@ export class MushiWidget {
     if (this.callbacks.onBeforeSubmit) {
       this.submitting = true;
       this.render();
+      const opened = this.openCount;
       let review = false;
       try {
         review = await this.callbacks.onBeforeSubmit();
       } catch {
         review = false;
       }
+      // Closed (and maybe reopened) meanwhile: that Send belongs to no report.
+      if (opened !== this.openCount) return;
       this.submitting = false;
       if (!this.isOpen || this.step !== 'report') return;
       if (review && this.screenshotAttached && this.screenshotPreview) {

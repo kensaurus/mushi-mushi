@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { useInRouterContext } from 'react-router-dom'
 import { Card } from '../../components/ui'
 import { SelectField, Btn } from '../ui'
@@ -16,6 +16,8 @@ import { closeReasonSentryNotice, closeReasonsFor } from '../../lib/closeReasons
 import { humanizeFixError } from '../../lib/humanizeFixError'
 import { trackAdHoc } from '../../lib/track'
 import { NO_CODE_LOCATION_REASON } from '../../lib/reportCodeLocation'
+import type { DispatchGate } from './useConfirmedDispatch'
+import { DispatchSetupLine } from './DispatchSetupLine'
 
 // One option per label: 'resolved' is the legacy spelling of 'fixed' (both
 // read "Fixed"), so listing both showed "Fixed" twice. A legacy row selects
@@ -45,8 +47,9 @@ interface ReportTriageBarProps {
   dispatchState: DispatchState
   /** Opens the page's dispatch confirm (useConfirmedDispatch().request). */
   onRequestDispatch: () => void
-  /** The page's dispatch gate (dispatchBlock()); disables the button. */
-  dispatchBlock: { blocked: boolean; reason: string | null }
+  /** The page's dispatch gate (dispatchBlock()); disables the button. With
+   *  `setup`, the steps left show under the button as links. */
+  dispatchBlock: DispatchGate
   isDispatchBusy: boolean
   /** The project's linked repos and the one the fix goes to. The Repo
    *  select shows only when there is more than one. */
@@ -101,6 +104,8 @@ export function ReportTriageBar({
   // One gate for every dispatch control on the page (dispatchBlock()).
   const dispatchDisabled = dispatchBlock.blocked
   const dispatchBlockReason = dispatchBlock.reason ?? undefined
+  const dispatchSetup = dispatchBlock.blocked ? dispatchBlock.setup ?? null : null
+  const dispatchSetupId = useId()
   // A failed dispatch says why in plain words. Only offer "retry" when a
   // retry can help: a report with nothing to fix stops the same way again.
   const failure = dispatchState.status === 'failed' ? humanizeFixError(dispatchState.error) : null
@@ -320,17 +325,30 @@ export function ReportTriageBar({
           </Btn>
         )}
         <div className="flex flex-col items-end gap-1">
-          <Btn
-            variant={hasCodeLocation ? 'primary' : 'ghost'}
-            size={hasCodeLocation ? 'md' : 'sm'}
-            onClick={onRequestDispatch}
-            disabled={dispatchDisabled}
-            loading={isDispatchBusy && dispatchState.status !== 'completed' && dispatchState.status !== 'failed'}
-            leadingIcon={<IconArrowRight />}
-            title={dispatchBlockReason}
-          >
-            {dispatchLabel}
-          </Btn>
+          {/* A disabled Btn takes no pointer events, so its own title never
+              showed; the wrapper carries the hover text (feedback 2026-11-22). */}
+          <span className="inline-flex" title={dispatchDisabled ? dispatchBlockReason : undefined} data-testid="report-dispatch-wrap">
+            <Btn
+              variant={hasCodeLocation ? 'primary' : 'ghost'}
+              size={hasCodeLocation ? 'md' : 'sm'}
+              onClick={onRequestDispatch}
+              disabled={dispatchDisabled}
+              loading={isDispatchBusy && dispatchState.status !== 'completed' && dispatchState.status !== 'failed'}
+              leadingIcon={<IconArrowRight />}
+              title={dispatchBlockReason}
+              aria-describedby={dispatchSetup ? dispatchSetupId : undefined}
+            >
+              {dispatchLabel}
+            </Btn>
+          </span>
+          {dispatchSetup ? (
+            <DispatchSetupLine
+              setup={dispatchSetup}
+              id={dispatchSetupId}
+              className="max-w-xs text-right"
+              data-testid="report-dispatch-setup"
+            />
+          ) : null}
           {dispatchState.status === 'completed' && dispatchState.prUrl && (
             <a
               href={dispatchState.prUrl}

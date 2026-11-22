@@ -15,15 +15,22 @@ import {
   cachedNotice,
   findingPrompt,
   checkIdFromLocation,
+  checkRows,
+  checkTally,
+  cleanLine,
   countLine,
   groupBySeverity,
   hostOf,
   loadCheck,
+  pagesRead,
   reportShareUrl,
   srcFromSearch,
   urlFromSearch,
   startCheck,
   type CheckReport,
+  type CheckRow,
+  type CheckRowStatus,
+  type PageRow,
   type Severity,
 } from '@/lib/production-check'
 
@@ -283,6 +290,10 @@ function Report({ report }: { report: CheckApiReport }) {
   const groups = groupBySeverity(findings)
   const allPrompt = allFindingsPrompt(report.url, findings)
   const pages = report.summary?.pages ?? []
+  const clean = findings.length === 0
+  const rows = checkRows(report.summary, findings)
+  const read = pagesRead(report.summary)
+  const unreadCount = read.pages.filter((p) => p.state === 'not_read').length
 
   async function share() {
     try {
@@ -313,17 +324,31 @@ function Report({ report }: { report: CheckApiReport }) {
       <header className="space-y-2">
         <p className="text-xs font-semibold uppercase tracking-wide text-mushi-vermillion">Production Check</p>
         <h1 className="text-3xl font-bold tracking-tight text-mushi-ink">{host}</h1>
-        <p className="text-base text-mushi-ink">{countLine(report.findings ?? [])}.</p>
+        <p className="text-base text-mushi-ink">{clean ? `${cleanLine(report.summary)}.` : `${countLine(findings)}.`}</p>
+        {clean ? (
+          <p className="text-sm text-mushi-ink-muted">
+            {checkTally(rows)}.{unreadCount ? ` Could not read ${unreadCount === 1 ? '1 page' : `${unreadCount} pages`}: named below.` : ''}
+          </p>
+        ) : null}
         <p className="text-xs text-mushi-ink-muted">
           Checked {checkedOn}: {pages.length ? `${pages.length} ${pages.length === 1 ? 'page' : 'pages'}` : 'the home page'}
           {report.summary?.linksChecked ? `, ${report.summary.linksChecked} links` : ''}
           {report.summary?.imagesChecked ? `, ${report.summary.imagesChecked} images` : ''}. Public pages only.
-          {report.summary?.incomplete?.length ? ` Could not check: ${report.summary.incomplete.join(', ')}.` : ''}
+          {!clean && report.summary?.incomplete?.length ? ` Could not check: ${report.summary.incomplete.join(', ')}.` : ''}
         </p>
         <button type="button" onClick={share} className="text-sm font-medium text-mushi-vermillion underline underline-offset-2">
           {copied ? 'Link copied' : 'Share this report'}
         </button>
       </header>
+
+      {clean ? (
+        <section className="space-y-4" aria-labelledby="check-what-heading">
+          <h2 id="check-what-heading" className="text-lg font-semibold text-mushi-ink">
+            What was checked
+          </h2>
+          <WhatWasChecked rows={rows} pages={read.pages} unfinished={read.unfinished} />
+        </section>
+      ) : null}
 
       {allPrompt ? (
         <section className="space-y-2 rounded-md border border-mushi-rule bg-mushi-paper-wash p-4" aria-label="Fix everything with your AI builder">
@@ -378,6 +403,17 @@ function Report({ report }: { report: CheckApiReport }) {
         </section>
       ))}
 
+      {!clean ? (
+        <details className="rounded-md border border-mushi-rule p-4">
+          <summary className="cursor-pointer py-1 text-base font-semibold text-mushi-ink">
+            What was checked <span className="text-sm font-normal text-mushi-ink-muted">({checkTally(rows)})</span>
+          </summary>
+          <div className="mt-4">
+            <WhatWasChecked rows={rows} pages={read.pages} unfinished={read.unfinished} />
+          </div>
+        </details>
+      ) : null}
+
       <section className="space-y-3 rounded-md border border-mushi-rule p-5">
         <h2 className="text-lg font-semibold text-mushi-ink">{CHECK_NEXT.heading}</h2>
         <p className="text-sm text-mushi-ink-muted">{CHECK_NEXT.body}</p>
@@ -400,6 +436,64 @@ function Report({ report }: { report: CheckApiReport }) {
           </Link>
         </div>
       </section>
+    </div>
+  )
+}
+
+const ROW_MARK: Record<CheckRowStatus, { glyph: string; word: string; tone: string }> = {
+  passed: { glyph: '✓', word: 'Passed', tone: 'text-mushi-positive' },
+  failed: { glyph: '✗', word: 'Problem found', tone: 'text-mushi-danger' },
+  not_checked: { glyph: '–', word: 'Not checked', tone: 'text-mushi-ink-muted' },
+}
+
+const PAGE_MARK: Record<PageRow['state'], CheckRowStatus> = { opened: 'passed', error: 'failed', not_read: 'not_checked' }
+
+/** A tick, cross or dash (shape, not only colour) with its word for screen readers. */
+function Mark({ status }: { status: CheckRowStatus }) {
+  const m = ROW_MARK[status]
+  return (
+    <>
+      <span aria-hidden="true" className={`w-4 shrink-0 text-center font-bold leading-5 ${m.tone}`}>
+        {m.glyph}
+      </span>
+      <span className="sr-only">{m.word}: </span>
+    </>
+  )
+}
+
+/** Every check with its result, then every page read or not read. */
+function WhatWasChecked({ rows, pages, unfinished }: { rows: CheckRow[]; pages: PageRow[]; unfinished: string[] }) {
+  return (
+    <div className="space-y-6">
+      <ul className="divide-y divide-mushi-rule rounded-md border border-mushi-rule bg-mushi-paper-wash">
+        {rows.map((r) => (
+          <li key={r.id} className="flex gap-3 px-3 py-2 text-sm leading-5">
+            <Mark status={r.status} />
+            <div className="min-w-0">
+              <p className="font-medium text-mushi-ink">{r.label}</p>
+              <p className="break-words text-mushi-ink-muted">{r.detail}</p>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <div className="space-y-2">
+        <h3 className="text-base font-semibold text-mushi-ink">Pages read</h3>
+        <ul className="divide-y divide-mushi-rule rounded-md border border-mushi-rule bg-mushi-paper-wash">
+          {pages.map((p, i) => (
+            <li key={`${p.path}-${i}`} className="flex gap-3 px-3 py-2 text-sm leading-5">
+              <Mark status={PAGE_MARK[p.state]} />
+              <p className="min-w-0 break-words text-mushi-ink">
+                {p.state === 'not_read' ? <span className="font-medium">Could not read: </span> : null}
+                <code className="break-all text-xs">{p.path}</code>
+                <span className="text-mushi-ink-muted"> — {p.detail}</span>
+              </p>
+            </li>
+          ))}
+        </ul>
+        {unfinished.length ? (
+          <p className="text-xs text-mushi-ink-muted">Did not finish in time: {unfinished.join(', ')}.</p>
+        ) : null}
+      </div>
     </div>
   )
 }

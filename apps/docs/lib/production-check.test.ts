@@ -1,6 +1,14 @@
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import {
   CHECK_NEXT,
+  checkRows,
+  checkTally,
+  cleanLine,
+  pagesRead,
+  type CheckReport,
   UNREACHABLE_ADDRESS_MESSAGE,
   allFindingsPrompt,
   cachedFromSearch,
@@ -140,5 +148,112 @@ describe('API calls', () => {
       throw new TypeError('Failed to fetch')
     }) as unknown as typeof fetch)
     expect(r.ok).toBe(false)
+  })
+})
+
+describe('what was checked', () => {
+  const clean: CheckReport['summary'] = {
+    pages: [
+      { path: '/', status: 200 },
+      { path: '/pricing', status: 200 },
+      { path: '/about', status: 200 },
+    ],
+    headers: { 'content-security-policy': true, 'strict-transport-security': true, 'x-content-type-options': true, 'referrer-policy': true },
+    https: 'ok',
+    linksChecked: 12,
+    imagesChecked: 4,
+    scriptsChecked: 3,
+    scriptsWithSourceMaps: 0,
+    incomplete: ['the page /blog'],
+  }
+
+  it('lists every check of a clean report as passed, in plain words', () => {
+    const rows = checkRows(clean, [])
+    expect(rows.every((r) => r.status === 'passed')).toBe(true)
+    expect(rows.map((r) => r.label)).toEqual([
+      'Pages open',
+      'Title, description and language',
+      'Share preview picture',
+      'Files load over https',
+      'Links',
+      'Images',
+      'HTTPS',
+      'Content-Security-Policy header',
+      'Strict-Transport-Security header',
+      'X-Content-Type-Options header',
+      'Referrer-Policy header',
+      'Source maps',
+    ])
+    const detail = (id: string) => rows.find((r) => r.id === id)?.detail
+    expect(detail('pages')).toBe('3 pages of 3 opened without an error')
+    expect(detail('links')).toBe('12 links checked, none broken')
+    expect(detail('images')).toBe('4 images checked, all load')
+    expect(detail('https')).toBe('http:// sends visitors to https://')
+    expect(detail('source_maps')).toBe('No source maps published (3 scripts checked)')
+    expect(checkTally(rows)).toBe('12 checks passed')
+    expect(cleanLine(clean)).toBe('No problems found on 3 pages')
+    expect(cleanLine({ pages: [{ path: '/', status: 200 }] })).toBe('No problems found on 1 page')
+    expect(cleanLine({})).toMatch(/^Nothing to fix/)
+    // A page that errored or never loaded is not counted as clean.
+    expect(cleanLine({ pages: [{ path: '/', status: 200 }, { path: '/blog', status: null, error: 'timeout' }, { path: '/x', status: 500 }] }))
+      .toBe('No problems found on 1 page')
+    expect(cleanLine({ pages: [{ path: '/', status: null, error: 'timeout' }] })).toMatch(/^Nothing to fix/)
+  })
+
+  it('marks a check with a finding as failed, with the finding title', () => {
+    const rows = checkRows({ ...clean, headers: { ...clean.headers, 'content-security-policy': false } }, [
+      { ...f('low', 'missing_csp'), title: 'No Content-Security-Policy' },
+      { ...f('high', 'broken_links'), title: '2 links are broken' },
+    ])
+    expect(rows.find((r) => r.id === 'header_missing_csp')).toMatchObject({ status: 'failed', detail: 'No Content-Security-Policy' })
+    expect(rows.find((r) => r.id === 'links')).toMatchObject({ status: 'failed', detail: '2 links are broken' })
+    expect(checkTally(rows)).toBe('10 checks passed, 2 found a problem')
+  })
+
+  it('says what did not run instead of passing it', () => {
+    const rows = checkRows(
+      { pages: [{ path: '/', status: 200 }], headers: {}, https: 'unknown', linksChecked: 0, scriptsChecked: 0, incomplete: ['the script check', 'the plain fetch of the home page'] },
+      [],
+    )
+    const status = (id: string) => rows.find((r) => r.id === id)?.status
+    expect(status('https')).toBe('not_checked')
+    expect(status('header_missing_hsts')).toBe('not_checked')
+    expect(status('links')).toBe('not_checked')
+    expect(rows.find((r) => r.id === 'source_maps')).toMatchObject({ status: 'not_checked', detail: 'The script check did not finish' })
+    // A report stored before images were checked gets no image row at all.
+    expect(rows.some((r) => r.id === 'images')).toBe(false)
+    // A page that answered with an error is not a pass even without a finding.
+    expect(checkRows({ pages: [{ path: '/', status: 200 }, { path: '/x', status: null }] }, [])[0]).toMatchObject({
+      status: 'not_checked',
+      detail: '1 page of 2 opened without an error',
+    })
+  })
+
+  it('names every page it read and every page it could not', () => {
+    const { pages, unfinished } = pagesRead({
+      pages: [
+        { path: '/', status: 200 },
+        { path: '/gone', status: 404 },
+        { path: '/slow', status: null, error: 'Timed out' },
+      ],
+      incomplete: ['the page /blog', 'the script check'],
+    })
+    expect(pages).toEqual([
+      { path: '/', state: 'opened', detail: 'Opened' },
+      { path: '/gone', state: 'error', detail: 'Answered with error 404' },
+      { path: '/slow', state: 'not_read', detail: 'Timed out' },
+      { path: '/blog', state: 'not_read', detail: 'It did not finish loading during the check' },
+    ])
+    expect(unfinished).toEqual(['the script check'])
+  })
+
+  it('keeps the passed wording of the clean-report email (server passedChecks)', () => {
+    const route = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'packages', 'server', 'supabase', 'functions', 'api', 'routes', 'production-check.ts'),
+      'utf8',
+    )
+    for (const phrase of ['opened without an error', 'checked, none broken', 'checked, all load', 'http:// sends visitors to https://', 'No source maps published', 'Nothing to fix on the pages Mushi Mushi could read']) {
+      expect(route).toContain(phrase)
+    }
   })
 })
