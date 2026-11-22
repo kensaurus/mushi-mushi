@@ -84,6 +84,8 @@ export interface SentryRestIssue {
   permalink?: string;
   platform?: string;
   status?: string;
+  /** When Sentry last saw the issue (ISO). */
+  lastSeen?: string;
   project?: { id?: string; slug?: string } | null;
   /** The issue's activity feed, newest first, as the issue details endpoint returns it. */
   activity?: Array<{ type?: string; user?: unknown; dateCreated?: string }> | null;

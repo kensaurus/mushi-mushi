@@ -93,7 +93,42 @@ export interface SentryIssuePayload {
   level?: string;
   permalink?: string;
   firstSeen?: string;
+  /** When Sentry last saw the issue (issue webhooks and the issues API carry it). */
+  lastSeen?: string;
   platform?: string;
+}
+
+/**
+ * When Sentry last saw the issue, as Sentry says it: the issue's `lastSeen`,
+ * else the alert event's own time. Never the issue's firstSeen or "now".
+ * null when the payload carries neither.
+ */
+export function sentryLastSeenAt(event: SentryEventPayload | null | undefined, issue: SentryIssuePayload | null | undefined): string | null {
+  const fromIso = (v: unknown) => (typeof v === 'string' ? Date.parse(v) : NaN);
+  const candidates = [fromIso(issue?.lastSeen), fromIso(event?.datetime), typeof event?.timestamp === 'number' ? event.timestamp * 1000 : NaN];
+  const ms = candidates.find((n) => Number.isFinite(n));
+  return ms === undefined ? null : new Date(ms).toISOString();
+}
+
+/**
+ * Store when Sentry last saw a linked issue (report_external_issues.last_seen_at),
+ * only moving it forward. One cheap update; never throws, so a failure (or the
+ * column before its migration lands) never fails the ingest around it.
+ */
+export async function recordSentryLastSeen(db: SupabaseClient, projectId: string, sentryIssueId: string, at: string | null): Promise<void> {
+  if (!at) return;
+  try {
+    const { error } = await db
+      .from('report_external_issues')
+      .update({ last_seen_at: at })
+      .eq('project_id', projectId)
+      .eq('system', 'sentry')
+      .eq('external_id', sentryIssueId)
+      .or(`last_seen_at.is.null,last_seen_at.lt.${at}`);
+    if (error) log.warn('Sentry last seen not stored', { sentryIssueId, code: error.code ?? null, err: error.message });
+  } catch (err) {
+    log.warn('Sentry last seen not stored', { sentryIssueId, err: String(err).slice(0, 200) });
+  }
 }
 
 /** The event's wall-clock time in ms (event datetime → event timestamp → issue firstSeen → now). */
@@ -277,6 +312,8 @@ export async function ingestSentryError(
   if (sentryIssueId) {
     const linked = await findLinkedReport(db, projectId, sentryIssueId);
     if (linked) {
+      // Every repeat (alert, poll, import) tells when Sentry last saw it.
+      await recordSentryLastSeen(db, projectId, sentryIssueId, sentryLastSeenAt(event, issue));
       if (intake === 'import') return { outcome: 'linked', reportId: linked.reportId };
       if (DONE_STATUSES.has(linked.status)) {
         // The fix didn't hold — reopen instead of filing a duplicate.
@@ -420,6 +457,10 @@ export async function ingestSentryError(
         sentryIssueId,
         err: linkError.message,
       });
+    } else {
+      // A separate update, not a column on the insert: the dedup link must
+      // land even while the last_seen_at migration is pending.
+      await recordSentryLastSeen(db, projectId, sentryIssueId, sentryLastSeenAt(event, issue));
     }
   }
 

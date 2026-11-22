@@ -27,12 +27,18 @@ describe('report detail: sentry_links', () => {
     const route = detailRoute()
     const at = route.indexOf(".from('report_external_issues')")
     expect(at).toBeGreaterThan(0)
-    const query = route.slice(at, at + 400)
+    const query = route.slice(at, at + 900)
     // archived_at (2026-10-30): an issue archived from Mushi reads "Archived in Sentry", not open.
-    expect(query).toContain("'external_id, external_url, resolved_at, archived_at'")
+    // last_seen_at (2026-11-22): Sentry's own last seen, for "Last seen in Sentry".
+    expect(query).toContain("'external_id, external_url, resolved_at, archived_at, last_seen_at'")
     expect(query).toContain(".eq('report_id', reportId)")
     expect(query).toContain(".eq('project_id', data.project_id as string)")
     expect(query).toContain(".eq('system', 'sentry')")
+  })
+
+  it('reads without last_seen_at while its migration is pending (42703), never dropping the links', () => {
+    const route = detailRoute()
+    expect(route).toContain("res.error?.code === '42703' ? await read('external_id, external_url, resolved_at, archived_at') : res")
   })
 
   it('answers null on a failed read', () => {

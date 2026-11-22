@@ -10,6 +10,7 @@
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { listCursorModelsV1, type CursorModelInfo } from './cursor-cloud.ts'
+import { mapWithConcurrency } from './concurrency.ts'
 import {
   keyOwnerForProject,
   keyScopeFor,
@@ -369,18 +370,20 @@ export async function ciJobsForHeads(
   const out = new Map<string, CiJobForRepair[]>()
   const unique = [...new Set(heads.filter(Boolean))]
   if (projectIds.length === 0 || unique.length === 0) return out
-  for (let i = 0; i < unique.length; i += IN_CHUNK) {
+  const chunks: string[][] = []
+  for (let i = 0; i < unique.length; i += IN_CHUNK) chunks.push(unique.slice(i, i + IN_CHUNK))
+  // A few chunks at a time (a page of many PRs has dozens); rows merged in chunk order.
+  const parts = await mapWithConcurrency(chunks, 4, async (chunk) => {
     const { data, error } = await db
       .from('ci_jobs')
       .select(CI_REPAIR_JOB_COLUMNS)
       .in('project_id', projectIds)
-      .in('head_sha', unique.slice(i, i + IN_CHUNK))
+      .in('head_sha', chunk)
       .limit(2000)
     if (error) throw new Error(`CI jobs read failed: ${error.message}`)
-    for (const row of (data ?? []) as Array<CiJobForRepair & { head_sha: string }>) {
-      out.set(row.head_sha, [...(out.get(row.head_sha) ?? []), row])
-    }
-  }
+    return (data ?? []) as Array<CiJobForRepair & { head_sha: string }>
+  })
+  for (const row of parts.flat()) out.set(row.head_sha, [...(out.get(row.head_sha) ?? []), row])
   return out
 }
 
