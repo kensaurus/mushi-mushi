@@ -39,6 +39,15 @@ export interface HostGuards {
   gh_floor: number
 }
 
+/**
+ * The coding agent a machine's lanes run, from its heartbeat (`mushi work --agent`); a daemon
+ * older than that field runs Cursor. A Claude Code worker read "Cursor account: not checked
+ * yet" and offered a Cursor account switch (2026-11-20).
+ */
+export function workerAgentLabel(status: Record<string, unknown> | null | undefined): 'Claude Code' | 'Cursor' {
+  return status?.agent === 'claude' ? 'Claude Code' : 'Cursor'
+}
+
 export interface WorkerHost {
   id: string
   hostname: string
@@ -234,7 +243,9 @@ export function workersSummary(data: WorkLanesData, now: number = Date.now()) {
   const hosts = new Map(data.hosts.map((h) => [h.id, h]))
   const online = data.hosts.filter((h) => h.online && !h.revoked).length
   const taking = data.lanes.filter((l) => laneTaking(l, hosts.get(l.hostId), now)).length
-  const queued = data.lanes.reduce((n, l) => n + l.queue.length, 0)
+  // Each report once: a report queued on two lanes is one report waiting (the status said 119
+  // beside a lane's "Queue (117)", round-2 review 2026-11-18).
+  const queued = new Set(data.lanes.flatMap((l) => l.queue.map((q) => q.reportId))).size
   const offlineWithQueue = data.lanes.filter((l) => l.queue.length > 0 && !hosts.get(l.hostId)?.online).length
   let tone: 'ok' | 'warn' | 'neutral' = 'neutral'
   let sentence: string

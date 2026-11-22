@@ -113,8 +113,17 @@ describe('InventoryPage', () => {
     mocks.proposals = { proposals: [] }
   })
 
-  it('names the tabs in plain words', async () => {
+  it('hides the section tabs on an empty app until there is something to show', async () => {
     mocks.inventory = { snapshot: null, summary: null }
+    mocks.findings = { runs: [], findings: [] }
+    await render()
+    expect(host.querySelector('[data-testid="inventory-first-step"]')).not.toBeNull()
+    expect(host.querySelector('[aria-label="Inventory sections"]')).toBeNull()
+  })
+
+  it('names the tabs in plain words', async () => {
+    mocks.inventory = FILLED
+    mocks.findings = { runs: [], findings: [] }
     await render()
     const text = host.textContent ?? ''
     for (const label of ['All actions', 'Code checks', 'Live probes', 'Out of sync', 'Map file']) expect(text).toContain(label)

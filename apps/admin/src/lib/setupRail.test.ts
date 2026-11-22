@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { buildSetupRail, heartbeatSentence } from './setupRail'
+import { buildSetupRail, formatDiagnosisDuration, heartbeatSentence } from './setupRail'
 import { ONBOARDING_TAB_IDS } from '../components/onboarding/types'
 import type { SetupProject } from './useSetupStatus'
 
@@ -49,7 +49,7 @@ describe('buildSetupRail', () => {
   it('a new app: app done, key is the current step, the rest to do', () => {
     const rail = buildSetupRail({ project: project(), ttfd: null, now: NOW })
     expect(rail.steps.map((s) => s.state)).toEqual(['done', 'current', 'todo', 'todo'])
-    expect(rail.steps[0].detail).toBe('Created 1h ago')
+    expect(rail.steps[0].detail).toBe('1h ago')
     expect(rail.next?.id).toBe('key')
     expect(rail.next?.action).toBe('make a key')
     expect(rail.doneCount).toBe(1)
@@ -83,7 +83,8 @@ describe('buildSetupRail', () => {
       now: NOW,
     })
     expect(rail.steps[2]).toMatchObject({ state: 'done', detail: 'Last heard 2m ago' })
-    expect(heartbeatSentence(rail.heartbeat)).toBe('Your app last checked in 2m ago · key “web-prod” · from https://app.example.com.')
+    // The step says when; the sentence says how, without repeating "2m ago" (round-3 review).
+    expect(heartbeatSentence(rail.heartbeat)).toBe('Checks in with key “web-prod” from https://app.example.com.')
     expect(rail.next?.id).toBe('report')
   })
 
@@ -109,5 +110,24 @@ describe('buildSetupRail', () => {
     expect(heartbeatSentence(null)).toMatch(/^Mushi Mushi has not heard from your app yet\./)
     expect(heartbeatSentence(null)).not.toMatch(/heartbeat/i)
     expect(heartbeatSentence(null)).not.toMatch(/deploy|removed|cold/i)
+  })
+})
+
+// Test it showed "346h 8m" beside "Target: under 2 minutes" (round-2 review).
+describe('formatDiagnosisDuration', () => {
+  it('reads seconds and minutes under an hour, hours under a day, days after', () => {
+    expect(formatDiagnosisDuration(42_000)).toBe('42s')
+    expect(formatDiagnosisDuration(108_000)).toBe('1m 48s')
+    expect(formatDiagnosisDuration((3 * 60 + 5) * 60_000)).toBe('3h 5m')
+    expect(formatDiagnosisDuration((346 * 60 + 8) * 60_000)).toBe('14 d')
+  })
+})
+
+// "Created 19d ago" under "App created", "Made 19d ago" under "Key made".
+describe('rail step lines', () => {
+  it('give only when for the app and key, not the verb again', () => {
+    const rail = buildSetupRail({ project: project({ key: true }), ttfd: { keyMintedAt: '2026-10-27T10:00:00Z' } as never, now: NOW })
+    expect(rail.steps[0].detail).toBe('1h ago')
+    expect(rail.steps[1].detail).toBe('2h ago')
   })
 })

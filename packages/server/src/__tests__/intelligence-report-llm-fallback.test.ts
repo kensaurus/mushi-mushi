@@ -23,7 +23,7 @@ describe('intelligence-report LLM fallback (MUSHI-MUSHI-SERVER-1S)', () => {
     // openAiProvider wraps createOpenAI so OpenRouter keys get OpenRouter model ids.
     expect(source).toContain("import { openAiProvider } from '../_shared/openai-compat.ts'");
     expect(source).toContain('withAnthropicOrOpenAi(');
-    expect(source).toContain('model: openai(INTELLIGENCE_FALLBACK)');
+    expect(source).toContain('model: openai(resolved.model ?? INTELLIGENCE_FALLBACK)');
     expect(source).toContain("usedProvider === 'openai'");
   });
 

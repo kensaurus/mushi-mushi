@@ -32,8 +32,6 @@ import type { DailySpendSeries } from './dailySpendSeries'
 interface Props {
   projectId: string | null | undefined
   series: DailySpendSeries
-  /** UTC calendar month spend (from GET /v1/admin/costs/stats spendMonthUsd). */
-  monthToDateUsd: number
   fmtSpend: (usd: number) => string
 }
 
@@ -58,7 +56,7 @@ function ema7(values: number[]): number {
   return ema
 }
 
-export function BudgetForecastCard({ projectId, series, monthToDateUsd, fmtSpend }: Props) {
+export function BudgetForecastCard({ projectId, series, fmtSpend }: Props) {
   const toast = useToast()
   const [budget, setBudget] = useState<number | null>(null)
   const [budgetInput, setBudgetInput] = useState('')
@@ -154,7 +152,7 @@ export function BudgetForecastCard({ projectId, series, monthToDateUsd, fmtSpend
   return (
     <Card className="p-4">
       <div className="flex items-center justify-between gap-2 mb-3">
-        <p className="text-xs font-medium text-fg-muted uppercase tracking-wide">Month-end forecast</p>
+        <p className="text-xs font-semibold text-fg-secondary">Month-end forecast</p>
         {projectId && !canManage && (
           <span className="text-2xs text-fg-muted" title="Only team owners and admins can change the monthly budget.">
             {budget !== null ? `Budget: ${fmtSpend(budget)} / mo` : 'No budget set'}
@@ -226,15 +224,17 @@ export function BudgetForecastCard({ projectId, series, monthToDateUsd, fmtSpend
       )}
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        {/* Month-to-date is the "This month" number in the summary above; this cell says how far
+            into the month the forecast starts (2026-11-19: the same $0.0190 twice). */}
         <ForecastCell
-          label="Month-to-date"
-          value={fmtSpend(monthToDateUsd)}
-          hint={`${daysElapsed} of ${daysTotal} days (UTC)`}
+          label="Month so far"
+          value={`${daysElapsed} of ${daysTotal} days`}
+          hint="UTC"
         />
         <ForecastCell
           label="Linear forecast"
           value={fmtSpend(linearForecast)}
-          hint={`$${avg14dDaily.toFixed(3)}/day · last ${series.days.length}d`}
+          hint={`${fmtSpend(avg14dDaily)}/day · last ${series.days.length}d`}
           accent={isOverBudget80 ? (isOverBudget100 ? 'text-critical' : 'text-warn') : undefined}
         />
         <ForecastCell
@@ -273,7 +273,7 @@ interface ForecastCellProps {
 function ForecastCell({ label, value, hint, accent }: ForecastCellProps) {
   return (
     <div>
-      <p className="text-3xs text-fg-muted uppercase tracking-wider">{label}</p>
+      <p className="text-3xs text-fg-secondary font-semibold">{label}</p>
       <p className={`mt-0.5 text-sm font-semibold ${accent ?? 'text-fg'}`}>{value}</p>
       <p className="mt-0.5 text-3xs text-fg-faint">{hint}</p>
     </div>

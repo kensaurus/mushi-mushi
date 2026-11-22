@@ -10,7 +10,7 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReviewFollowupsResponse } from './reviewFollowups'
-import { followupKeyLabel, followupRecentLine, followupScoreLine } from './reviewFollowups'
+import { cursorModelName, followupKeyLabel, followupRecentLine, followupRecentMark, followupScoreLine } from './reviewFollowups'
 
 const HIROSE = '2000000b-0000-4000-8000-000000000000'
 const SHARED = '2000000a-0000-4000-8000-000000000000'
@@ -207,7 +207,11 @@ describe('ReviewFollowupsSection', () => {
     mocks.data = { ...BASE, canManage: false }
     await render()
     expect(document.body.textContent).toContain('An organization owner or admin can change review follow-ups.')
-    expect(Array.from(document.body.querySelectorAll('button')).length).toBe(0)
+    // No action buttons; the only button left is the (i) beside the one-line intro.
+    const actions = Array.from(document.body.querySelectorAll('button')).filter(
+      (b) => !(b.getAttribute('aria-label') ?? '').startsWith('Opus reviews the push'),
+    )
+    expect(actions.length).toBe(0)
   })
 
   it('renders nothing before the migration or without data', async () => {
@@ -239,5 +243,21 @@ describe('reviewFollowups words', () => {
     expect(followupRecentLine({ ...BASE.recent![1], status: 'skipped', reason: 'The pull request is closed or merged.' })).toBe(
       'yen-yen: skipped: The pull request is closed or merged.',
     )
+  })
+})
+
+describe('review follow-up display names and marks', () => {
+  it('reads a Cursor model spec as a name, not a query string', () => {
+    expect(cursorModelName('grok-4.7?context=500k&reasoning_effort=xhigh')).toBe('Grok 4.7 (500k context, xhigh effort)')
+    expect(cursorModelName('gpt-5.6-sol')).toBe('GPT 5.6 Sol')
+    expect(cursorModelName('')).toBe('')
+  })
+
+  it('marks a failed follow-up as failed and a push as passed', () => {
+    const r = BASE.recent![0]
+    expect(followupRecentMark({ ...r, status: 'failed', head_sha_after: null })).toBe('failed')
+    expect(followupRecentMark({ ...r, status: 'completed', head_sha_after: r.head_sha_before })).toBe('idle')
+    expect(followupRecentMark({ ...r, status: 'completed', head_sha_after: 'fffffff1', verdict_after: 'merge' })).toBe('passed')
+    expect(followupRecentMark({ ...r, status: 'running' })).toBe('running')
   })
 })

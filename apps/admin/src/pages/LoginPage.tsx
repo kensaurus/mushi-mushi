@@ -514,7 +514,7 @@ export function LoginPage() {
               <div className="rounded-sm border border-edge-subtle bg-surface-raised/40 px-3 py-2">
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-2xs uppercase tracking-wider text-fg-faint">Last used email</p>
+                    <p className="text-2xs text-fg-secondary font-semibold">Last used email</p>
                     <p className="truncate text-xs font-medium text-fg-secondary">{rememberedEmail}</p>
                   </div>
                   <Btn

@@ -497,7 +497,7 @@ describe('operator detectors in the scheduled run (Plan 020 Phase 2)', () => {
     const f = db.table('gate_findings').find((x) => x.rule_id === 'provider_key_invalid')!
     expect(f.severity).toBe('error')
     expect(f.message).toMatch(/OpenAI rejects the key for "main"/)
-    expect(String((f.suggested_fix as { fix: string }).fix)).toMatch(/Settings → API Keys/)
+    expect(String((f.suggested_fix as { fix: string }).fix)).toMatch(/Settings → AI keys/)
     const dead = db.table('gate_findings').find((x) => x.rule_id === 'dead_app_live_spend')!
     expect(dead.message).toMatch(/1 edge function still deployed/)
     expect(dead.message).not.toMatch(/provider key/)

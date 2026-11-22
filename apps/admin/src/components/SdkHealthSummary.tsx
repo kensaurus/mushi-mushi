@@ -96,6 +96,8 @@ export interface SdkHealthSummaryProps {
   /** Compact mode strips the headline + chrome so the card slots into a
    *  page that already has a hero (e.g. ProjectsPage row). */
   compact?: boolean
+  /** No frame of its own: the caller's Section is the card (Setup copilot step 3). */
+  bare?: boolean
   /** Called after a successful "Send test report" so the parent can refetch
    *  and the new ingest immediately appears. */
   onTestReportSent?: () => void
@@ -206,7 +208,10 @@ export function diagnoseKey(
   if (age <= SDK_COLD_MS) {
     return {
       status: 'stale',
-      label: 'Stale',
+      // "Quiet", not "Stale" (2026-11-18): an hour without a report is normal
+      // for a low-traffic app, and "stale" is the word for the revoke set
+      // ("unused 7d+"), so the key your app used an hour ago read as dead.
+      label: 'Quiet',
       description:
         'No SDK activity in the last hour. This is normal for a low-traffic app; investigate if you expect continuous traffic.',
     }
@@ -266,7 +271,7 @@ export function summarizeCardStatus(
 const SDK_CARD_CHIP_LABEL: Record<CardStatus, string> = {
   healthy: 'Connected',
   'endpoint-mismatch': 'Mismatch',
-  stale: 'Stale',
+  stale: 'Quiet',
   cold: 'Cold',
   never: 'Never used',
   'no-key': 'No key',
@@ -285,11 +290,12 @@ const STATUS_TONE: Record<CardStatus, { dot: string; chip: string; headline: str
     headline: 'SDK is pointed at the wrong backend',
     subtitle: 'Reports may be landing somewhere else. Fix your API endpoint env var and rebuild.',
   },
+  // Quiet (1 h – 7 d) is normal for a low-traffic app: neutral, not a warning (2026-11-18).
   stale: {
-    dot: 'bg-warn',
-    chip: CHIP_TONE.warnSubtle,
-    headline: 'App has not checked in recently',
-    subtitle: 'Normal for low-traffic apps. If you just shipped an update, confirm SDK env vars are still in the build.',
+    dot: 'bg-fg-faint',
+    chip: 'bg-surface-overlay text-fg-muted border border-edge-subtle',
+    headline: 'App is quiet',
+    subtitle: 'No check-in in the last hour. Normal for low-traffic apps. If you just shipped an update, confirm SDK env vars are still in the build.',
   },
   cold: {
     dot: 'bg-warn',
@@ -318,7 +324,7 @@ const KEY_STATUS_CHIP: Record<
 > = {
   healthy: 'ok',
   'endpoint-mismatch': 'danger',
-  stale: 'warn',
+  stale: 'neutral',
   cold: 'warn',
   // A key the app hasn't used yet is a setup step, not a failure.
   never: 'neutral',
@@ -331,7 +337,7 @@ const CARD_BLOCK_TONE: Record<
 > = {
   healthy: 'ok',
   'endpoint-mismatch': 'danger',
-  stale: 'warn',
+  stale: 'muted',
   cold: 'warn',
   never: 'muted',
   'no-key': 'muted',
@@ -663,6 +669,7 @@ export function SdkHealthSummary({
   adminHost,
   reportCount,
   compact = false,
+  bare = false,
   onTestReportSent,
   hideTestCta = false,
 }: SdkHealthSummaryProps) {
@@ -693,6 +700,9 @@ export function SdkHealthSummary({
   const playbook = buildPlaybook(envVars, projectSlug)[status]
   const activeKeys = activeSdkKeys(apiKeys)
   const freshest = freshestHeartbeatKey(activeKeys)
+  // Editor, CI and ops keys are left out on purpose (not the app's SDK); say
+  // so, or the list reads one short of Connect's "Active API keys".
+  const otherKeyCount = apiKeys.filter((k) => k.is_active).length - activeKeys.length
 
   async function sendTestReport() {
     setSending(true)
@@ -836,6 +846,11 @@ export function SdkHealthSummary({
           </div>
         )
       )}
+      {otherKeyCount > 0 && (
+        <p className="px-3 pt-1.5 text-2xs text-fg-muted" data-testid="sdk-health-other-keys">
+          {otherKeyCount} other {otherKeyCount === 1 ? 'key is' : 'keys are'} not listed: editor, CI or ops keys, not the app&apos;s SDK.
+        </p>
+      )}
 
       <div className="flex flex-wrap items-center gap-2 border-t border-edge-subtle/40 px-3 py-2.5">
         {playbook.cta && !hideTestCta && (
@@ -937,6 +952,8 @@ export function SdkHealthSummary({
     )
   }
 
+  if (bare) return <div className="overflow-hidden">{inner}</div>
+
   return <Card className="overflow-hidden p-0">{inner}</Card>
 }
 
@@ -1007,7 +1024,7 @@ export function SdkConnectivityEmptyState({
 
   return (
     <Card className="p-5 space-y-4 border-dashed">
-      <div className="flex items-center gap-2 text-2xs font-mono text-fg-faint uppercase tracking-wide">
+      <div className="flex items-center gap-2 text-2xs font-mono text-fg-secondary font-semibold">
         <Badge tone="infoSubtle">Connectivity check</Badge>
         <span>{headline}</span>
       </div>

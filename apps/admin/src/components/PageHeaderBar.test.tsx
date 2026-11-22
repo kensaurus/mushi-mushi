@@ -51,7 +51,9 @@ describe('PageHeaderBar overview chip', () => {
     container.remove()
   })
 
-  function renderDashboardHeader() {
+  // A heading other than the chip's own word, so the chip renders (a chip that repeats the
+  // heading is hidden: see the last test).
+  function renderDashboardHeader(title = 'A long dashboard heading') {
     act(() => {
       root.render(
         createElement(
@@ -59,7 +61,7 @@ describe('PageHeaderBar overview chip', () => {
           { initialEntries: ['/dashboard'] },
           createElement(
             PageHeaderBar,
-            { title: 'Home', showCopyLink: false },
+            { title, showCopyLink: false },
             createElement('span', null, 'now'),
           ),
         ),
@@ -69,7 +71,7 @@ describe('PageHeaderBar overview chip', () => {
 
   it('renders a chip that can shrink instead of overflowing the row', () => {
     renderDashboardHeader()
-    const chip = container.querySelector<HTMLElement>('[aria-label^="Overview:"]')
+    const chip = container.querySelector<HTMLElement>('[aria-label^="Home:"]')
     expect(chip).not.toBeNull()
     const cls = chip!.className
     expect(cls).toContain('min-w-0')
@@ -81,10 +83,15 @@ describe('PageHeaderBar overview chip', () => {
 
   it('truncates the chip label rather than widening the header', () => {
     renderDashboardHeader()
-    const chip = container.querySelector<HTMLElement>('[aria-label^="Overview:"]')
-    // The label is the cycle's word now ("Overview"), not "PDCA …" (P5).
-    const label = Array.from(chip!.querySelectorAll('span')).find((el) => el.textContent === 'Overview')
+    const chip = container.querySelector<HTMLElement>('[aria-label^="Home:"]')
+    // The label is the page's own word ("Home", 2026-11-18), not "PDCA …" (P5).
+    const label = Array.from(chip!.querySelectorAll('span')).find((el) => el.textContent === 'Home')
     expect(label).toBeDefined()
     expect(label!.className).toContain('truncate')
+  })
+
+  it('hides the chip when it repeats the heading ("Home" over Home)', () => {
+    renderDashboardHeader('Home')
+    expect(container.querySelector('[aria-label^="Home:"]')).toBeNull()
   })
 })

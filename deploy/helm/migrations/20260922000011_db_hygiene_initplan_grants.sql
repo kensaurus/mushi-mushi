@@ -26,8 +26,8 @@
 -- ============================================================================
 
 -- ── 1. initplan-friendly policies ────────────────────────────────────────────
-alter policy "Authenticated users can read agent_skills" on public.agent_skills
-  using (((select auth.uid()) is not null) and (is_active = true));
+do $policy$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'agent_skills' and policyname = 'Authenticated users can read agent_skills') then execute $stmt$ alter policy "Authenticated users can read agent_skills" on public.agent_skills
+  using (((select auth.uid()) is not null) and (is_active = true)) $stmt$; end if; end $policy$; -- guarded 2026-11-19: policy may exist only on hosted
 
 alter policy backend_schema_snapshots_select on public.backend_schema_snapshots
   using (project_id in (
@@ -51,54 +51,54 @@ alter policy cqi_select_member on public.content_quality_issues
     union
     select p.id from public.projects p where p.owner_id = (select auth.uid())));
 
-alter policy "owner read end_user_sessions" on public.end_user_sessions
+do $policy$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'end_user_sessions' and policyname = 'owner read end_user_sessions') then execute $stmt$ alter policy "owner read end_user_sessions" on public.end_user_sessions
   using (project_id in (
     select p.id from public.projects p
       join public.organization_members om on om.organization_id = p.organization_id
-     where om.user_id = (select auth.uid())));
+     where om.user_id = (select auth.uid()))) $stmt$; end if; end $policy$; -- guarded 2026-11-19: policy may exist only on hosted
 
-alter policy "owner read session_page_views" on public.session_page_views
+do $policy$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'session_page_views' and policyname = 'owner read session_page_views') then execute $stmt$ alter policy "owner read session_page_views" on public.session_page_views
   using (project_id in (
     select p.id from public.projects p
       join public.organization_members om on om.organization_id = p.organization_id
-     where om.user_id = (select auth.uid())));
+     where om.user_id = (select auth.uid()))) $stmt$; end if; end $policy$; -- guarded 2026-11-19: policy may exist only on hosted
 
-alter policy "Members can create pipeline runs" on public.skill_pipeline_runs
+do $policy$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'skill_pipeline_runs' and policyname = 'Members can create pipeline runs') then execute $stmt$ alter policy "Members can create pipeline runs" on public.skill_pipeline_runs
   with check (project_id in (
-    select pm.project_id from public.project_members pm where pm.user_id = (select auth.uid())));
+    select pm.project_id from public.project_members pm where pm.user_id = (select auth.uid()))) $stmt$; end if; end $policy$; -- guarded 2026-11-19: policy may exist only on hosted
 
-alter policy "Members can read their project pipeline runs" on public.skill_pipeline_runs
+do $policy$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'skill_pipeline_runs' and policyname = 'Members can read their project pipeline runs') then execute $stmt$ alter policy "Members can read their project pipeline runs" on public.skill_pipeline_runs
   using (project_id in (
-    select pm.project_id from public.project_members pm where pm.user_id = (select auth.uid())));
+    select pm.project_id from public.project_members pm where pm.user_id = (select auth.uid()))) $stmt$; end if; end $policy$; -- guarded 2026-11-19: policy may exist only on hosted
 
-alter policy "Members can update pipeline runs they created" on public.skill_pipeline_runs
+do $policy$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'skill_pipeline_runs' and policyname = 'Members can update pipeline runs they created') then execute $stmt$ alter policy "Members can update pipeline runs they created" on public.skill_pipeline_runs
   using (project_id in (
-    select pm.project_id from public.project_members pm where pm.user_id = (select auth.uid())));
+    select pm.project_id from public.project_members pm where pm.user_id = (select auth.uid()))) $stmt$; end if; end $policy$; -- guarded 2026-11-19: policy may exist only on hosted
 
-alter policy "Members can read step runs via run access" on public.skill_pipeline_step_runs
+do $policy$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'skill_pipeline_step_runs' and policyname = 'Members can read step runs via run access') then execute $stmt$ alter policy "Members can read step runs via run access" on public.skill_pipeline_step_runs
   using (run_id in (
     select spr.id from public.skill_pipeline_runs spr
      where spr.project_id in (
-       select pm.project_id from public.project_members pm where pm.user_id = (select auth.uid()))));
+       select pm.project_id from public.project_members pm where pm.user_id = (select auth.uid())))) $stmt$; end if; end $policy$; -- guarded 2026-11-19: policy may exist only on hosted
 
-alter policy "Members can update step runs via run access" on public.skill_pipeline_step_runs
+do $policy$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'skill_pipeline_step_runs' and policyname = 'Members can update step runs via run access') then execute $stmt$ alter policy "Members can update step runs via run access" on public.skill_pipeline_step_runs
   using (run_id in (
     select spr.id from public.skill_pipeline_runs spr
      where spr.project_id in (
-       select pm.project_id from public.project_members pm where pm.user_id = (select auth.uid()))));
+       select pm.project_id from public.project_members pm where pm.user_id = (select auth.uid())))) $stmt$; end if; end $policy$; -- guarded 2026-11-19: policy may exist only on hosted
 
-alter policy "Members can manage their project skill sources" on public.skill_sources
+do $policy$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'skill_sources' and policyname = 'Members can manage their project skill sources') then execute $stmt$ alter policy "Members can manage their project skill sources" on public.skill_sources
   using (project_id in (
-    select pm.project_id from public.project_members pm where pm.user_id = (select auth.uid())));
+    select pm.project_id from public.project_members pm where pm.user_id = (select auth.uid()))) $stmt$; end if; end $policy$; -- guarded 2026-11-19: policy may exist only on hosted
 
-alter policy "Members can read their project skill sources" on public.skill_sources
+do $policy$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'skill_sources' and policyname = 'Members can read their project skill sources') then execute $stmt$ alter policy "Members can read their project skill sources" on public.skill_sources
   using (project_id in (
-    select pm.project_id from public.project_members pm where pm.user_id = (select auth.uid())));
+    select pm.project_id from public.project_members pm where pm.user_id = (select auth.uid()))) $stmt$; end if; end $policy$; -- guarded 2026-11-19: policy may exist only on hosted
 
-alter policy "project members can read sourcemaps" on public.sourcemaps
+do $policy$ begin if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'sourcemaps' and policyname = 'project members can read sourcemaps') then execute $stmt$ alter policy "project members can read sourcemaps" on public.sourcemaps
   using (project_id in (
     select project_members.project_id from public.project_members
-     where project_members.user_id = (select auth.uid())));
+     where project_members.user_id = (select auth.uid()))) $stmt$; end if; end $policy$; -- guarded 2026-11-19: policy may exist only on hosted
 
 alter policy user_push_subscriptions_owner_select on public.user_push_subscriptions
   using ((select auth.uid()) = user_id);

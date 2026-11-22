@@ -29,8 +29,10 @@ import { useEntitlements } from './useEntitlements'
 export type HealthTone = 'idle' | 'ok' | 'warn' | 'danger'
 
 export interface NavCounts {
-  /** Reports with status='new' (no age filter). */
+  /** Reports with status='new' (no age filter) from people and production; Mushi's checks are untriagedAutomated. */
   untriagedBacklog: number
+  /** Untriaged reports Mushi's own checks filed (ADR 0063); optional so older fixtures stay valid. */
+  untriagedAutomated?: number
   /** Unfixed reports with a fix queued or running (counted per report). */
   fixesInFlight: number
   /** Unfixed reports whose latest attempt failed, was skipped, or whose PR closed / went red. */
@@ -87,6 +89,7 @@ export interface NavCounts {
 
 const INITIAL: NavCounts = {
   untriagedBacklog: 0,
+  untriagedAutomated: 0,
   fixesInFlight: 0,
   fixesFailed: 0,
   fixesRetryable: 0,
@@ -196,6 +199,7 @@ function navCountsFromNavMeta(data: WorkspaceNavMetaResponse): NavCounts {
   const staleKeyCount = data.projects?.staleKeyCount ?? 0
   return {
     untriagedBacklog: countOrZero(counts?.untriagedBacklog),
+    untriagedAutomated: countOrZero(counts?.untriagedAutomated),
     fixesInFlight: countOrZero(counts?.fixesInFlight),
     fixesFailed: countOrZero(counts?.fixesFailed),
     fixesRetryable: countOrZero(counts?.fixesRetryable),
@@ -251,6 +255,31 @@ function publish(next: NavCounts): void {
   for (const l of listeners) l()
 }
 
+/** The team and app a context key is for (`org|project|…`), without the slice list. */
+function scopeOf(key: string | null): string | null {
+  return key ? key.split('|').slice(0, 2).join('|') : null
+}
+
+/**
+ * @internal Exported for unit tests only.
+ * A load for the same team and app that comes back without a slice (one
+ * server read failed or ran late) keeps that slice's last value. The Settings
+ * badge "1 key failing" used to appear, vanish on the next load and come
+ * back on the one after (owner's walkthrough, 2026-11-17). Another app or
+ * team never inherits a slice.
+ */
+export function keepMissingSlices(prev: NavCounts, next: NavCounts, sameScope: boolean): NavCounts {
+  if (!sameScope || !prev.ready) return next
+  const merged: NavStatSlices = { ...next.slices }
+  const keep = <K extends keyof NavStatSlices>(name: K) => {
+    if (prev.slices[name] != null && merged[name] == null) merged[name] = prev.slices[name]
+  }
+  for (const name of Object.keys(prev.slices) as Array<keyof NavStatSlices>) keep(name)
+  return { ...next, slices: merged }
+}
+
+let publishedKey: string | null = null
+
 function subscribe(listener: () => void): () => void {
   listeners.add(listener)
   return () => {
@@ -273,7 +302,8 @@ async function runLoad(ctx: LoadContext, fresh: boolean): Promise<void> {
     )
     if (seq !== loadSeq) return
     if (res.ok && res.data) {
-      publish(navCountsFromNavMeta(res.data))
+      publish(keepMissingSlices(snapshot, navCountsFromNavMeta(res.data), scopeOf(publishedKey) === scopeOf(ctx.key)))
+      publishedKey = ctx.key
     } else if (isRouteMissing(res.error)) {
       // Only an API build without nav-meta takes the per-slice fallback; on
       // a 5xx that fan-out would multiply the load on a struggling API.

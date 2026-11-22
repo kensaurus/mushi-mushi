@@ -9,10 +9,15 @@
  *          and Resume.
  */
 
-import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { makeFakeDb, type FakeDb } from './__stubs__/fake-supabase.ts'
 
 type FakeDbOptions = NonNullable<Parameters<typeof makeFakeDb>[1]>
+
+// "Today" is since 00:00 UTC, and the fixtures say "a minute ago". Run near midnight and a
+// minute ago is yesterday: dispatchedToday read 0 in CI at 2026-11-17T23:59Z. Pin the clock to
+// midday for the whole file, before any fixture date is computed (Date only; timers stay real).
+vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-17T12:00:00Z') })
 
 const state = vi.hoisted(() => ({
   db: null as unknown,
@@ -56,6 +61,9 @@ vi.mock('../../supabase/functions/api/shared.ts', () => ({
 let routes: typeof import('../../supabase/functions/api/routes/byok-spend-down.ts')
 beforeAll(async () => {
   routes = await import('../../supabase/functions/api/routes/byok-spend-down.ts')
+})
+afterAll(() => {
+  vi.useRealTimers()
 })
 
 const ORG = '0000000a-0000-4000-8000-000000000000'

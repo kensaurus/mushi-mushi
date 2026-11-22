@@ -2,14 +2,14 @@
 
 Status: Accepted 2026-11-11 (owner: "fix billing for me"). Date: 2026-11-11
 
-Related: [`VISION.md`](../../VISION.md) §2.2 (Cloud pricing canon),
+Related: [`docs/VISION.md`](../VISION.md) §2.2 (Cloud pricing canon),
 `packages/server/supabase/functions/_shared/org-billing.ts`,
 `_shared/quota.ts`, `stripe-webhooks/index.ts`,
 migration `20261111120000_billing_customers_one_per_org.sql`.
 
 ## Context
 
-VISION.md §2.2 sets every plan limit per team: apps, seats, diagnoses a
+docs/VISION.md §2.2 sets every plan limit per team: apps, seats, diagnoses a
 month, overage and the spend cap. The code did not. Found 2026-11-11 (read
 only):
 

@@ -50,7 +50,6 @@ export function originMatchesRepos(origin: string | null, repoUrls: readonly str
  * The words `mushi work` stops with when the clone is not the key's project's
  * repo. Null when it matches or the server named no repos (an older server,
  * or a project with none linked).
- * @internal Exported for tests.
  */
 export function wrongRepoMessage(o: {
   projectName: string | null | undefined

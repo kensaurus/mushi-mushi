@@ -149,31 +149,33 @@ export function GraphStoryboard({
   }, [edges, rects, blastRadiusIds])
 
   return (
+    // Sized to its content (fresh-eyes 2026-11-18: two cards sat in the corner of a
+    // 420px-tall box). On a phone the columns stack instead of scrolling sideways.
     <div
       ref={containerRef}
-      className="relative border border-edge rounded-md bg-surface-root overflow-auto"
-      style={{ minHeight: 420 }}
+      className="relative border border-edge rounded-md bg-surface-root overflow-x-hidden sm:overflow-x-auto"
       role="region"
       aria-label={`Sparse graph storyboard with ${nodes.length} nodes across ${columns.length} stages.`}
     >
-      <EdgeLegend />
+      {/* The thickness key only means something once a link is drawn. */}
+      {edges.length > 0 ? <EdgeLegend /> : null}
       <div
         ref={innerRef}
-        className="relative flex items-stretch gap-12 px-8 py-6 min-h-[420px] w-max min-w-full"
+        className="relative flex flex-col gap-4 p-3 sm:flex-row sm:items-start sm:gap-12 sm:px-6 sm:py-4 sm:w-max sm:min-w-full"
         onClick={(e) => {
           if (e.target === e.currentTarget) onClear()
         }}
       >
         {columns.map((col) => (
-          <div key={col.type} className="flex flex-col gap-3 min-w-40 max-w-56">
+          <div key={col.type} className="flex min-w-0 flex-col gap-3 sm:min-w-40 sm:max-w-56">
             <div className="space-y-0.5">
-              <div className="text-2xs uppercase tracking-wider text-fg-faint flex items-center gap-1.5">
+              <div className="text-2xs text-fg-secondary flex items-center gap-1.5 font-semibold">
                 <span
                   className="inline-block w-2 h-2 rounded-full"
                   style={{ backgroundColor: NODE_COLORS[col.type] }}
                   aria-hidden="true"
                 />
-                <span className="font-mono text-fg-secondary">{col.nodes.length}</span>
+                <span className="tabular-nums text-fg-secondary">{col.nodes.length}</span>
                 <span>{col.label}</span>
               </div>
               {col.topNode && col.nodes.length > 1 && (
@@ -209,13 +211,17 @@ export function GraphStoryboard({
                       ${dimmed ? 'opacity-40' : 'opacity-100'}
                     `}
                   >
-                    <div
-                      className="text-2xs font-mono text-fg-faint uppercase tracking-wider"
-                      style={{ color: NODE_COLORS[col.type] }}
-                    >
+                    {/* The type colour is a swatch, not the text colour: red and green
+                        2xs text on the card failed WCAG contrast (axe, audit 2026-11-21). */}
+                    <div className="flex items-center gap-1.5 text-2xs text-fg-secondary font-semibold">
+                      <span
+                        aria-hidden="true"
+                        className="inline-block h-2 w-2 shrink-0 rounded-full"
+                        style={{ backgroundColor: NODE_COLORS[col.type] }}
+                      />
                       {col.label}
                     </div>
-                    <div className="text-xs text-fg-secondary leading-snug line-clamp-2 mt-0.5">
+                    <div className="text-xs text-fg-secondary leading-snug wrap-break-word mt-0.5" title={node.label || undefined}>
                       {node.label || '(unnamed)'}
                     </div>
                   </button>
@@ -273,7 +279,7 @@ export function GraphStoryboard({
 function EdgeLegend() {
   return (
     <div
-      className="absolute right-2 top-2 z-20 flex items-center gap-1.5 rounded-sm border border-edge-subtle bg-surface-raised/80 px-2 py-1 text-3xs text-fg-muted backdrop-blur-sm"
+      className="flex items-center justify-end gap-1.5 border-b border-edge-subtle px-3 py-1 text-3xs text-fg-muted"
       title="Edge thickness scales with the number of bug reports touching both nodes."
     >
       <svg width="36" height="10" viewBox="0 0 36 10" aria-hidden="true">

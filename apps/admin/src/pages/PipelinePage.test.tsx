@@ -215,6 +215,11 @@ async function render(url = '/pipeline') {
 }
 
 const q = (id: string) => document.querySelector(`[data-testid="${id}"]`) as HTMLElement | null
+/** The status block's number for one label (PageStatus renders each as a dt/dd pair). */
+const statusMetric = (label: string) => {
+  const dt = Array.from(q('pipeline-status')?.querySelectorAll('dt') ?? []).find((d) => d.textContent?.startsWith(label))
+  return dt?.parentElement?.querySelector('dd')?.textContent ?? null
+}
 async function click(el: Element | null) {
   if (!el) throw new Error('missing element')
   await act(async () => {
@@ -293,6 +298,8 @@ describe('PipelinePage', () => {
   it('Close needs a reason before it can run, and sends it', async () => {
     state.respond = () => ({ ok: true, data: { results: [{ id: 'f9', ok: true, message: 'Closed; the reason is a note on the report.' }] } })
     await render()
+    // Close is never the one-click default: it sits in the group's More menu (2026-11-18).
+    await click(q('pipeline-group-draft_no_ci-more-actions'))
     await click(q('pipeline-group-draft_no_ci-close'))
     const confirm = () => Array.from(document.querySelectorAll('button')).find((b) => b.textContent === 'Close PR' && b.hasAttribute('data-primary'))!
     expect(confirm().disabled).toBe(true)
@@ -327,6 +334,9 @@ describe('PipelinePage', () => {
     expect(row.textContent).toContain('Build & Test ×2')
     const squares = row.querySelectorAll('[role="listitem"]')
     expect(squares).toHaveLength(2)
+    // Each train is a status mark, shape plus colour (2026-11-18).
+    expect([...squares].every((s) => s.querySelector('[data-testid="status-mark"]'))).toBe(true)
+    expect(row.querySelector('[data-testid="status-pill"][data-status="failed"]')?.textContent).toBe('Build & Test ×2')
     await click(squares[1])
     expect(q('pipeline-train-detail')!.textContent).toContain('CI failed: Build & Test.')
     await click(q('pipeline-train-kensaurus/glot.it-retry'))
@@ -339,10 +349,13 @@ describe('PipelinePage', () => {
 
   it('shows who opens fixes per app, red where auto-fix is on but nothing can dispatch', async () => {
     await render()
-    expect(q('pipeline-stage-pr-openers')!.textContent).toBe('Last 24 h, apps with a fix started: cloud 0 · your worker 1 · none 1')
+    expect(q('pipeline-stage-pr-openers')!.textContent).toBe('Apps that started a fix in 24 h: 1 of 2 (cloud 0, your worker 1)')
     // Each stage says what it means, and the pace line says how fast fixes land (2026-11-16).
     expect(q('pipeline-stage-ci-plain')!.textContent).toBe('Your tests run on the fix')
-    expect(q('pipeline-pace')!.textContent).toMatch(/^Pace: /)
+    // The pace is a row of labelled figures, not a paragraph (2026-11-18).
+    expect(q('pipeline-pace')!.textContent).toMatch(/^Pace/)
+    expect(q('pipeline-pace-merged')!.textContent).toBe('Merged, 7 d0')
+    expect(q('pipeline-pace-started')!.textContent).toBe('Fixes started, 24 h6(all by your own worker)')
     const glot = q('pipeline-opener-p1')!
     expect(glot.textContent).toContain('Server + local')
     expect(glot.textContent).toContain('On · 0 agent keys (1 off) · 0 in 24h · last 2 d ago')
@@ -394,7 +407,11 @@ describe('PipelinePage', () => {
     await render()
     const strip = q('worker-flags-strip')!
     expect(strip.textContent).toContain('glot: a run has held an agent space for 4 h.')
-    expect(strip.textContent).toContain('and 1 more on the Workers tab.')
+    // Failures in the red banner; a warning is an amber line under it, never inside (round-3 review, 2026-11-19).
+    // The label counts all four, as the tab does.
+    expect(document.body.textContent).toContain('Local workers: 4 problems')
+    expect(strip.textContent).not.toContain('The Cursor account check timed out on alienware')
+    expect(q('worker-flags-strip-warn')!.textContent).toContain('The Cursor account check timed out on alienware.')
     expect(q('worker-flags-strip-open')!.getAttribute('href')).toBe('/pipeline?tab=workers')
     expect(document.body.textContent).toContain('Workers (4 problems)')
   })
@@ -453,10 +470,14 @@ describe('PipelinePage', () => {
     it('disables an action every item would be refused, with the reason and the setting that fixes it', async () => {
       withBlocked()
       await render()
+      await click(q('pipeline-group-ci_red_queued-more-actions'))
       const bulkRerun = q('pipeline-group-ci_red_queued-rerun_ci') as HTMLButtonElement
       expect(bulkRerun.disabled).toBe(true)
       expect(bulkRerun.title).toBe(NO_ACTIONS_WRITE)
       await click(q('pipeline-group-ci_red_queued-toggle'))
+      // f1 can take neither: its primary shows disabled, and the menu keeps the other with its reason.
+      expect((q('pipeline-item-f1-ci_repair') as HTMLButtonElement).disabled).toBe(true)
+      await click(q('pipeline-item-f1-more-actions'))
       expect((q('pipeline-item-f1-rerun_ci') as HTMLButtonElement).disabled).toBe(true)
       const why = q('pipeline-item-f1-blocked')!
       expect(why.textContent).toContain('Re-run CI is off: The GitHub token cannot re-run workflows')
@@ -504,11 +525,45 @@ describe('PipelinePage', () => {
 
   it('the status line names the biggest stuck group and runs its first action that can succeed', async () => {
     await render()
-    expect(q('pipeline-status')!.textContent).toContain('5 items stuck. The biggest: 2 PRs: their own CI is red')
+    expect(q('pipeline-status')!.textContent).toContain('Start here: 2 PRs: their own CI is red')
+    // The count is the "Need you" number, not restated in the sentence (round-2 review, 2026-11-18).
+    expect(statusMetric('Need you')).toBe('5')
+    // "Waiting for a fix" is the Triaged stage's own count and "Merged, 7 days" the pace row's: never repeated here.
+    expect(q('pipeline-status')!.textContent).not.toContain('Waiting for a fix')
+    expect(q('pipeline-status')!.textContent).not.toContain('Merged, 7 days')
     const top = q('pipeline-top-action')!
     expect(top.textContent).toBe('Send to CI repair (2)')
     await click(top)
     expect(document.body.textContent).toContain('otherwise your local mushi work lanes')
+  })
+
+  it('counts the backlog stuck over 3 days as needing you, as Home does: never "Nothing needs you now" beside it', async () => {
+    // Round-2 review 2026-11-18 (390, This app): "Nothing needs you now", Need you 0, while the page
+    // listed "2 reports: triaged over 3 days ago, no fix started" and Home's Needs you listed it too.
+    const data = state.data as PipelineData
+    for (const st of data.stages) {
+      st.groups = []
+      st.count = 0
+      st.stuck = 0
+    }
+    const triaged = data.stages.find((x) => x.id === 'triaged')!
+    triaged.groups = [{ id: 'no_fix_old', stage: 'triaged', tone: 'stuck', label: '2 reports: triaged over 3 days ago, no fix started', count: 2, oldestAt: '2026-10-20T00:00:00Z', actions: [], settings: null, items: [], ages: [0, 2, 0, 0] }]
+    triaged.count = 4
+    triaged.stuck = 2
+    await render()
+    const status = q('pipeline-status')!
+    expect(status.textContent).not.toContain('Nothing needs you')
+    expect(status.textContent).toContain('Start here: 2 reports: triaged over 3 days ago, no fix started')
+    expect(statusMetric('Need you')).toBe('2')
+    // A backlog is a warning, not a failure: amber, never red.
+    expect(status.querySelector('.bg-danger')).toBeNull()
+    expect(status.querySelector('.bg-warn')).not.toBeNull()
+    // One stuck group: its row has the count and oldest age, so no age bar and no stage key say
+    // "2" again, and the heading does not count it a third time (round-3 review, 2026-11-19).
+    expect(q('pipeline-age-bar')).toBeNull()
+    expect(q('pipeline-funnel-legend')).toBeNull()
+    expect(document.body.textContent).not.toContain('Stuck: 2')
+    expect(document.body.textContent).toContain('Stuck groups')
   })
 
   it('a long group pages with "Show more" instead of a scroll box inside the page', async () => {
@@ -520,5 +575,192 @@ describe('PipelinePage', () => {
     expect(document.querySelectorAll('[data-testid^="pipeline-item-"][data-testid$="-blocked"], li[data-testid^="pipeline-item-"]').length).toBe(20)
     await click(q('pipeline-group-ci_red_queued-more'))
     expect(document.querySelectorAll('li[data-testid^="pipeline-item-"]').length).toBe(25)
+  })
+})
+
+describe('PipelinePage signals (2026-11-18)', () => {
+  it('colours only the jam: the bottleneck red, the backlog and moving stages neutral, the stuck count always in text', async () => {
+    await render()
+    // Empty stages fold into one line instead of four "0 · empty" boxes (round-2 review, 2026-11-18).
+    expect(q('pipeline-funnel')!.querySelectorAll('li').length).toBe(4)
+    expect(q('pipeline-stages-empty')!.textContent).toBe('Empty now:1 Reported2 Triaged7 Merged8 Deployed')
+    const tone = (id: string) => q(`pipeline-stage-${id}`)!.closest('li')!.getAttribute('data-tone')
+    expect(tone('pr')).toBe('danger')
+    // pr 2, ci 2, review 1: the bottleneck and one runner-up, never three of four.
+    expect(tone('ci')).toBe('warn')
+    expect(tone('review')).toBe('neutral')
+    expect(tone('train')).toBe('neutral')
+    expect(q('pipeline-stage-merged')).toBeNull()
+    expect(q('pipeline-stage-pr')!.querySelector('svg[data-tone="danger"]')).not.toBeNull()
+    expect(q('pipeline-stage-review-stuck')!.textContent).toBe('1 stuck')
+  })
+
+  it('never colours the triaged backlog, even when it is the biggest stuck stage', async () => {
+    const data = state.data as PipelineData
+    const triaged = data.stages.find((s) => s.id === 'triaged')!
+    triaged.groups = [{ id: 'no_fix_old', stage: 'triaged', tone: 'stuck', label: '900 reports: triaged over 3 days ago, no fix started', count: 900, oldestAt: '2026-09-01T00:00:00Z', actions: [], settings: null, items: [], ages: [0, 300, 400, 200] }]
+    triaged.count = 900
+    triaged.stuck = 900
+    await render()
+    expect(q('pipeline-stage-triaged')!.closest('li')!.getAttribute('data-tone')).toBe('neutral')
+    expect(q('pipeline-stage-triaged-stuck')!.textContent).toBe('900 waiting over 3 days')
+    // It needs you, as Home counts it: one "Need you" age row adding up to the status number,
+    // never a second row with an impossible "0–3 d" bucket (round-2 review, 2026-11-18).
+    expect(q('pipeline-age-need-you-total')!.textContent).toBe('905')
+    expect(q('pipeline-age-waiting')).toBeNull()
+    expect(statusMetric('Need you')).toBe('905')
+    // The failed PRs still lead the sentence; the backlog never takes the red bottleneck.
+    expect(q('pipeline-status')!.textContent).toContain('Start here: 2 PRs: their own CI is red')
+  })
+
+  it('shows how long stuck work has waited, adding up to "Need you", from the server buckets when present', async () => {
+    await render()
+    expect(statusMetric('Need you')).toBe('5')
+    expect(q('pipeline-age-need-you-total')!.textContent).toBe('5')
+    expect(q('pipeline-age-need-you')!.querySelector('[role="img"]')!.getAttribute('aria-label')).toBe('Need you, 5 by time in stage: 0–3 d 5, 3–7 d 0, 7–30 d 0, 30 d+ 0')
+    expect(q('pipeline-age-waiting')).toBeNull()
+
+    act(() => root.unmount())
+    root = createRoot(host)
+    const ci = (state.data as PipelineData).stages.find((s) => s.id === 'ci')!.groups[0]
+    ci.ages = [0, 0, 1, 1]
+    await render()
+    expect(q('pipeline-age-need-you')!.querySelector('[role="img"]')!.getAttribute('aria-label')).toBe('Need you, 5 by time in stage: 0–3 d 3, 3–7 d 0, 7–30 d 1, 30 d+ 1')
+  })
+
+  it('counts intake rejections beside the age bar, so it still adds up to "Need you"', async () => {
+    const data = state.data as PipelineData
+    const reported = data.stages.find((s) => s.id === 'reported')!
+    reported.groups = [
+      { id: 'intake_rejected', stage: 'reported', tone: 'stuck', label: '37 reports: rejected at intake (400) in 7 days', count: 37, oldestAt: null, actions: [], settings: null, items: [item('intake:p1', { reportId: null, prUrl: null, prNumber: null, since: '2026-10-26T07:00:00Z' })] },
+    ]
+    reported.count = 37
+    reported.stuck = 37
+    await render()
+    expect(statusMetric('Need you')).toBe('42')
+    expect(q('pipeline-age-need-you-total')!.textContent).toBe('42')
+    expect(q('pipeline-age-need-you-unaged')!.textContent).toContain('37')
+    expect(q('pipeline-age-need-you')!.querySelector('[role="img"]')!.getAttribute('aria-label')).toContain('0–3 d 5')
+  })
+
+  it('a cut backlog from a server without ages fills the bar from the listed oldest and counts the rest as newer, not "no time in a stage"', async () => {
+    const data = state.data as PipelineData
+    const triaged = data.stages.find((s) => s.id === 'triaged')!
+    const listed = Array.from({ length: 100 }, (_, i) => item(`t${i}`, { prUrl: null, prNumber: null, since: '2026-09-01T00:00:00Z' }))
+    triaged.groups = [{ id: 'no_fix_old', stage: 'triaged', tone: 'stuck', label: '765 reports: triaged over 3 days ago, no fix started', count: 765, oldestAt: '2026-09-01T00:00:00Z', actions: [], settings: null, items: listed }]
+    triaged.count = 765
+    triaged.stuck = 765
+    await render()
+    // The backlog joins the one "Need you" row (5 failed PRs + 765 waiting).
+    expect(q('pipeline-age-need-you-total')!.textContent).toBe('770')
+    expect(q('pipeline-age-need-you-unlisted')!.textContent).toContain('665')
+    expect(q('pipeline-age-need-you-unaged')).toBeNull()
+    expect(q('pipeline-age-need-you')!.querySelector('[role="img"]')!.getAttribute('aria-label')).toContain('30 d+ 100')
+    // The listed 100 fill 100 / (5 + 765) of the bar; the newer rest is empty track, not painted 30 d+.
+    const old = q('pipeline-age-need-you')!.querySelector('[data-bucket="3"]') as HTMLElement
+    expect(parseFloat(old.style.width)).toBeCloseTo((100 / 770) * 100, 1)
+  })
+
+  it('reads a reason code in a held PR as a plain-word chip', async () => {
+    const ci = (state.data as PipelineData).stages.find((s) => s.id === 'ci')!.groups[0]
+    ci.items = [item('f1', { queueDetail: 'Merge conflict. The follow-up Cursor key cannot be used here (key_used_up).' }), item('f2')]
+    await render()
+    await click(q('pipeline-group-ci_red_queued-toggle'))
+    expect(q('pipeline-item-f1-why')!.textContent).toBe('key used up')
+    expect(q('pipeline-item-f1')!.textContent).not.toContain('key_used_up')
+    expect(q('pipeline-item-f2-why')).toBeNull()
+  })
+
+  it('gives each stuck group one primary button and puts the rest in More', async () => {
+    await render()
+    expect(q('pipeline-group-ci_red_queued-ci_repair')!.textContent).toBe('Send to CI repair (2)')
+    expect(q('pipeline-group-ci_red_queued-rerun_ci')).toBeNull()
+    expect(q('pipeline-group-draft_no_ci-mark_ready')).not.toBeNull()
+    expect(q('pipeline-group-draft_no_ci-close')).toBeNull()
+    const more = q('pipeline-group-ci_red_queued-more-actions')!
+    expect(more.getAttribute('aria-expanded')).toBe('false')
+    await click(more)
+    expect(more.getAttribute('aria-expanded')).toBe('true')
+    expect(q('pipeline-group-ci_red_queued-rerun_ci')!.getAttribute('role')).toBe('menuitem')
+    // Escape closes it.
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    })
+    expect(q('pipeline-group-ci_red_queued-rerun_ci')).toBeNull()
+    // A group with a single action has no More menu.
+    expect(q('pipeline-group-hold-more-actions')).not.toBeNull()
+    expect(q('pipeline-group-autofix_no_agent-more-actions')).toBeNull()
+  })
+
+  it('says "just now" under a minute, and the minutes after', async () => {
+    ;(state.data as PipelineData).generatedAt = '2026-10-26T11:59:40Z'
+    await render()
+    expect(q('pipeline-updated')!.textContent).toBe('Updated just now')
+    act(() => root.unmount())
+    root = createRoot(host)
+    ;(state.data as PipelineData).generatedAt = '2026-10-26T11:55:00Z'
+    await render()
+    expect(q('pipeline-updated')!.textContent).toBe('Updated 5 min ago')
+  })
+
+  it('a train repo with 0 merged takes the idle mark, never the green check', async () => {
+    ;(state.data as PipelineData).trains[0]!.merged = 0
+    await render()
+    const merged = q('pipeline-train-kensaurus/glot.it-merged')!
+    expect(merged.textContent).toBe('0 merged')
+    expect(merged.querySelector('[data-testid="status-mark"]')!.getAttribute('data-status')).toBe('idle')
+    expect(merged.className).not.toContain('text-ok-foreground')
+  })
+
+  it('folds the quiet apps into one line and keeps the ones with something to say', async () => {
+    const d = state.data as PipelineData
+    d.projects.push({ id: 'p2', name: 'quiet-a', lastDeploy: null }, { id: 'p3', name: 'quiet-b', lastDeploy: { at: '2026-10-26T09:00:00Z', ok: true, version: 'abc' } } as never)
+    d.intake = {
+      since: '2026-10-24',
+      apps: [{ projectId: 'p1', rejected: 2, byReason: [{ reason: 'x:invalid', count: 2 }], sdkPackages: [], lastAt: '2026-10-26T07:00:00Z' }],
+    }
+    await render()
+    const fold = q('pipeline-intake-quiet')!
+    expect(fold.tagName).toBe('DETAILS')
+    expect(fold.querySelector('summary')!.textContent).toContain('2 apps: 0 rejected since Oct 24')
+    expect(fold.querySelector('summary')!.textContent).toContain('1 with a deploy seen')
+    expect(fold.contains(q('pipeline-intake-p2'))).toBe(true)
+    expect(fold.contains(q('pipeline-intake-p3'))).toBe(true)
+    expect(fold.contains(q('pipeline-intake-p1'))).toBe(false)
+    expect(q('pipeline-intake-p1-rejected')!.textContent).toContain('2 rejected')
+  })
+})
+
+describe('PipelinePage round-3 review (2026-11-19)', () => {
+  it('says who opens fixes once: the "Apps no one fixes" tile links to the card; the pace row and the Fix PR box drop it', async () => {
+    const d = state.data as PipelineData
+    const triaged = d.stages.find((s) => s.id === 'triaged')!
+    triaged.groups = [{ id: 'no_fix_old', stage: 'triaged', tone: 'stuck', label: '3 reports: triaged over 3 days ago, no fix started', count: 3, oldestAt: '2026-10-20T00:00:00Z', actions: [], settings: null, items: [], ages: [0, 3, 0, 0] }]
+    triaged.count = 3
+    triaged.stuck = 3
+    await render()
+    expect(statusMetric('Apps no one fixes, 24 h')).toBe('1')
+    expect(q('pipeline-status')!.querySelector('a[href$="#pipeline-openers"]')).not.toBeNull()
+    expect(q('pipeline-stage-pr-openers')).toBeNull()
+    expect(q('pipeline-pace-quiet')).toBeNull()
+    expect(q('pipeline-openers')!.querySelector('summary')!.textContent).not.toContain('nobody')
+  })
+
+  it('on This app, the Workers tab count reads the same app-scoped response as the tab body', async () => {
+    await render()
+    expect(state.paths.map((p) => p.path)).toContain('/v1/admin/work/lanes?projectId=p1')
+    expect(state.paths.map((p) => p.path)).not.toContain('/v1/admin/work/lanes')
+  })
+
+  it('folds release trains that are all green into one line', async () => {
+    const d = state.data as PipelineData
+    const green = (repo: string, merged: number) => ({ repo, projectId: 'p1', merged, failed: 0, active: 0, topFailures: [], trains: [{ id: `${repo}-t`, state: 'merged', prNumber: 1, members: 1, attempt: 1, detail: null, createdAt: '2026-10-25T10:00:00Z' }] })
+    d.trains.push(green('kensaurus/yen-yen', 3), green('kensaurus/mushi-mushi', 2))
+    await render()
+    const fold = q('pipeline-trains-green')!
+    expect(fold.querySelector('summary')!.textContent).toContain('2 repos green')
+    expect(fold.querySelector('summary')!.textContent).toContain('yen-yen 3 · mushi-mushi 2')
+    // The failing repo keeps its own row, outside the fold.
+    expect(fold.contains(q('pipeline-train-kensaurus/glot.it'))).toBe(false)
   })
 })

@@ -2,7 +2,7 @@
   "$comment": "Pinned copy of the kensaurus family for mushi-mushi. Source: https://kensaur.us/apps.json, built from src/data/family.json in kensaurus/kensaur.us. Do not edit this copy: change the source there, then run `node scripts/family-slice.mjs --app mushi-mushi --out <this file>` in kensaurus/kensaur.us and commit the result here.",
   "source": "https://kensaur.us/apps.json",
   "version": 1,
-  "updated": "2026-10-31",
+  "updated": "2026-11-14",
   "app": "mushi-mushi",
   "brand": {
     "name": "kensaurus",
@@ -32,8 +32,8 @@
       "ja": "Mushi Mushi"
     },
     "tagline": {
-      "en": "A report-a-bug button for apps, with AI that sorts the reports",
-      "ja": "アプリの不具合報告を受け取り、AIが仕分けるツール"
+      "en": "Tells you why your AI-built app broke, and hands the fix to your editor",
+      "ja": "AIで作ったアプリが壊れた理由を説明し、直し方をエディタに渡す"
     },
     "url": "https://kensaur.us/mushi-mushi/",
     "href": "https://kensaur.us/mushi-mushi/?utm_source=mushi-mushi&utm_medium=referral&utm_campaign=kensaurus-family",
@@ -79,6 +79,127 @@
     ]
   },
   "related": [
+    {
+      "id": "lazycow-studio",
+      "name": {
+        "en": "Lazycow Studio",
+        "ja": "Lazycow Studio"
+      },
+      "tagline": {
+        "en": "Turns your own footage into reels and books the posts; you only approve",
+        "ja": "自分の素材をリールにして、投稿の予約まで。あなたは承認するだけ"
+      },
+      "url": "https://github.com/kensaurus/lazycow-studio",
+      "href": "https://github.com/kensaurus/lazycow-studio",
+      "icon": "https://raw.githubusercontent.com/kensaurus/lazycow-studio/main/server/brand/icon-192.png",
+      "story": {
+        "ja": "https://kensaur.us/notes/lazycow-studio/",
+        "en": "https://kensaur.us/notes/lazycow-studio/en/"
+      },
+      "pages": [
+        {
+          "url": "https://github.com/kensaurus/lazycow-studio/releases",
+          "label": {
+            "en": "Download",
+            "ja": "ダウンロード"
+          },
+          "href": "https://github.com/kensaurus/lazycow-studio/releases"
+        },
+        {
+          "url": "https://github.com/kensaurus/lazycow-studio/blob/main/docs/user-guide.md",
+          "label": {
+            "en": "The studio, page by page",
+            "ja": "ページごとの使いかた（英語）"
+          },
+          "href": "https://github.com/kensaurus/lazycow-studio/blob/main/docs/user-guide.md"
+        },
+        {
+          "url": "https://github.com/kensaurus/lazycow-studio/blob/main/docs/mcp.md",
+          "label": {
+            "en": "Connect your AI agent (MCP)",
+            "ja": "AIエージェントとつなぐ（MCP・英語）"
+          },
+          "href": "https://github.com/kensaurus/lazycow-studio/blob/main/docs/mcp.md"
+        },
+        {
+          "url": "https://github.com/kensaurus/lazycow-studio/blob/main/SUPPORTING.md",
+          "label": {
+            "en": "Support plans",
+            "ja": "応援プラン"
+          },
+          "href": "https://github.com/kensaurus/lazycow-studio/blob/main/SUPPORTING.md"
+        },
+        {
+          "url": "https://github.com/kensaurus/lazycow-studio/blob/main/README.ja.md",
+          "label": {
+            "en": "In Japanese",
+            "ja": "日本語の説明"
+          },
+          "href": "https://github.com/kensaurus/lazycow-studio/blob/main/README.ja.md"
+        }
+      ]
+    },
+    {
+      "id": "tsumagoi",
+      "name": {
+        "en": "Tsumagoi Work&Camp",
+        "ja": "嬬恋牧場Work&Camp"
+      },
+      "tagline": {
+        "en": "A 24-hour mountain lounge, run by us",
+        "ja": "自分たちで運営する、山の24時間ラウンジ"
+      },
+      "url": "https://tsumagoi.kensaur.us/",
+      "href": "https://tsumagoi.kensaur.us/?utm_source=mushi-mushi&utm_medium=referral&utm_campaign=kensaurus-family",
+      "icon": "https://tsumagoi.kensaur.us/apple-touch-icon.png",
+      "spineId": "tsumagoi",
+      "story": {
+        "ja": "https://kensaur.us/notes/doryoku-meter/",
+        "en": "https://kensaur.us/notes/doryoku-meter/en/"
+      },
+      "pages": [
+        {
+          "url": "https://tsumagoi.kensaur.us/reserve",
+          "label": {
+            "en": "Book a stay",
+            "ja": "予約する"
+          },
+          "href": "https://tsumagoi.kensaur.us/reserve?utm_source=mushi-mushi&utm_medium=referral&utm_campaign=kensaurus-family"
+        },
+        {
+          "url": "https://tsumagoi.kensaur.us/office",
+          "label": {
+            "en": "The fiber office",
+            "ja": "光回線のオフィス"
+          },
+          "href": "https://tsumagoi.kensaur.us/office?utm_source=mushi-mushi&utm_medium=referral&utm_campaign=kensaurus-family"
+        },
+        {
+          "url": "https://tsumagoi.kensaur.us/events",
+          "label": {
+            "en": "Events at the ranch",
+            "ja": "牧場のイベント"
+          },
+          "href": "https://tsumagoi.kensaur.us/events?utm_source=mushi-mushi&utm_medium=referral&utm_campaign=kensaurus-family"
+        },
+        {
+          "url": "https://tsumagoi.kensaur.us/kenji",
+          "label": {
+            "en": "Who runs it",
+            "ja": "運営者のこと"
+          },
+          "href": "https://tsumagoi.kensaur.us/kenji?utm_source=mushi-mushi&utm_medium=referral&utm_campaign=kensaurus-family"
+        },
+        {
+          "url": "https://tsumagoi.kensaur.us/access",
+          "label": {
+            "en": "Getting there",
+            "ja": "アクセス"
+          },
+          "href": "https://tsumagoi.kensaur.us/access?utm_source=mushi-mushi&utm_medium=referral&utm_campaign=kensaurus-family"
+        }
+      ]
+    },
     {
       "id": "kenji-skills",
       "name": {
@@ -191,67 +312,6 @@
       "href": "https://kensaur.us/project-flow/?utm_source=mushi-mushi&utm_medium=referral&utm_campaign=kensaurus-family",
       "icon": "https://kensaur.us/project-flow/favicon.svg",
       "pages": []
-    },
-    {
-      "id": "tsumagoi",
-      "name": {
-        "en": "Tsumagoi Work&Camp",
-        "ja": "嬬恋牧場Work&Camp"
-      },
-      "tagline": {
-        "en": "A 24-hour mountain lounge, run by us",
-        "ja": "自分たちで運営する、山の24時間ラウンジ"
-      },
-      "url": "https://tsumagoi.kensaur.us/",
-      "href": "https://tsumagoi.kensaur.us/?utm_source=mushi-mushi&utm_medium=referral&utm_campaign=kensaurus-family",
-      "icon": "https://tsumagoi.kensaur.us/apple-touch-icon.png",
-      "spineId": "tsumagoi",
-      "story": {
-        "ja": "https://kensaur.us/notes/ranch-monitor/",
-        "en": "https://kensaur.us/notes/ranch-monitor/en/"
-      },
-      "pages": [
-        {
-          "url": "https://tsumagoi.kensaur.us/reserve",
-          "label": {
-            "en": "Book a stay",
-            "ja": "予約する"
-          },
-          "href": "https://tsumagoi.kensaur.us/reserve?utm_source=mushi-mushi&utm_medium=referral&utm_campaign=kensaurus-family"
-        },
-        {
-          "url": "https://tsumagoi.kensaur.us/office",
-          "label": {
-            "en": "The fiber office",
-            "ja": "光回線のオフィス"
-          },
-          "href": "https://tsumagoi.kensaur.us/office?utm_source=mushi-mushi&utm_medium=referral&utm_campaign=kensaurus-family"
-        },
-        {
-          "url": "https://tsumagoi.kensaur.us/events",
-          "label": {
-            "en": "Events at the ranch",
-            "ja": "牧場のイベント"
-          },
-          "href": "https://tsumagoi.kensaur.us/events?utm_source=mushi-mushi&utm_medium=referral&utm_campaign=kensaurus-family"
-        },
-        {
-          "url": "https://tsumagoi.kensaur.us/kenji",
-          "label": {
-            "en": "Who runs it",
-            "ja": "運営者のこと"
-          },
-          "href": "https://tsumagoi.kensaur.us/kenji?utm_source=mushi-mushi&utm_medium=referral&utm_campaign=kensaurus-family"
-        },
-        {
-          "url": "https://tsumagoi.kensaur.us/access",
-          "label": {
-            "en": "Getting there",
-            "ja": "アクセス"
-          },
-          "href": "https://tsumagoi.kensaur.us/access?utm_source=mushi-mushi&utm_medium=referral&utm_campaign=kensaurus-family"
-        }
-      ]
     }
   ]
 }

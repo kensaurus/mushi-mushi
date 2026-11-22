@@ -75,7 +75,7 @@ export const EXECUTE_WAIT_MS = 25_000
 const ITEMS_SHOWN = 300
 
 export const RACE_NOTE =
-  'Mushi asks GitHub to delete a branch only if it still points at the commit shown. Where GitHub cannot check that for your token, Mushi reads the branch again just before deleting it, so a push in that second could be lost. Restore brings back the commit shown.'
+  'Mushi Mushi asks GitHub to delete a branch only if it still points at the commit shown. Where GitHub cannot check that for your token, Mushi Mushi reads the branch again just before deleting it, so a push in that second could be lost. Restore brings back the commit shown.'
 
 type Db = ReturnType<typeof getServiceClient>
 type FetchLike = (url: string, init?: RequestInit) => Promise<Response>
@@ -264,7 +264,7 @@ async function previewRoute(c: Context, deps: RepoHousekeepingRouteDeps): Promis
     })
   } catch (err) {
     hlog.error('repo clean-up preview failed', { projectId: a.projectId, err: err instanceof Error ? err.message : String(err) })
-    return jsonError(c, 'REPO_CLEANUP_FAILED', 'Mushi could not build the clean-up list. Try again in a minute.', 500)
+    return jsonError(c, 'REPO_CLEANUP_FAILED', 'Mushi Mushi could not build the clean-up list. Try again in a minute.', 500)
   }
 }
 
@@ -312,7 +312,7 @@ async function requestRoute(c: Context, deps: RepoHousekeepingRouteDeps): Promis
     preview = (await buildPreview(db, deps, a.projectId, staleDays, actions, repo))[0]
   } catch (err) {
     hlog.error('repo clean-up request preview failed', { projectId: a.projectId, err: err instanceof Error ? err.message : String(err) })
-    return jsonError(c, 'REPO_CLEANUP_FAILED', 'Mushi could not build the clean-up list. Try again in a minute.', 500)
+    return jsonError(c, 'REPO_CLEANUP_FAILED', 'Mushi Mushi could not build the clean-up list. Try again in a minute.', 500)
   }
   if (!preview) return jsonError(c, 'REPO_NOT_IN_PROJECT', `${body.repo} is not connected to this app.`, 404)
   if (preview.error) return jsonError(c, 'GITHUB_UNREADABLE', preview.error, 409)
@@ -333,7 +333,7 @@ async function requestRoute(c: Context, deps: RepoHousekeepingRouteDeps): Promis
   if (missing.length > 0) {
     const why = new Map(preview.kept.map((k) => [k.key, k.reason]))
     return jsonError(c, 'NOT_A_CANDIDATE', `${missing.length} item${missing.length === 1 ? ' is' : 's are'} not on the clean-up list now. Reload the preview.`, 409, {
-      items: missing.slice(0, 20).map((k) => ({ key: k, reason: why.get(k) ?? 'Not something Mushi recorded, or no longer there.' })),
+      items: missing.slice(0, 20).map((k) => ({ key: k, reason: why.get(k) ?? 'Not something Mushi Mushi recorded, or no longer there.' })),
     })
   }
   const chosen = new Set(keys)
@@ -375,18 +375,18 @@ async function restoreRoute(c: Context, deps: RepoHousekeepingRouteDeps): Promis
     .in('id', ids)
   if (error) {
     if (isMissingTable(error)) return jsonError(c, 'MIGRATION_PENDING', 'Restore needs the database update 20261027183000_repo_housekeeping_items first.', 409)
-    return jsonError(c, 'DB_ERROR', 'Mushi could not read its clean-up log.', 500)
+    return jsonError(c, 'DB_ERROR', 'Mushi Mushi could not read its clean-up log.', 500)
   }
   const rows = ((data ?? []) as Array<ItemRow & { project_id: string }>).filter((r) => r.project_id === a.projectId)
   const bad = ids.filter((id) => !rows.some((r) => r.id === id && restorable(r)))
-  if (bad.length > 0) return jsonError(c, 'NOT_RESTORABLE', `${bad.length} item${bad.length === 1 ? ' is' : 's are'} not a branch Mushi deleted for this app, or already restored.`, 409, { itemIds: bad })
+  if (bad.length > 0) return jsonError(c, 'NOT_RESTORABLE', `${bad.length} item${bad.length === 1 ? ' is' : 's are'} not a branch Mushi Mushi deleted for this app, or already restored.`, 409, { itemIds: bad })
   const repos = [...new Set(rows.map((r) => r.repo))]
   if (repos.length !== 1) return jsonError(c, 'ONE_REPO', 'Restore branches of one repository at a time.', 400)
   let actions: HousekeepingActionRow[]
   try {
     actions = await loadActions(db, a.projectId)
   } catch {
-    return jsonError(c, 'DB_ERROR', 'Mushi could not read its clean-ups.', 500)
+    return jsonError(c, 'DB_ERROR', 'Mushi Mushi could not read its clean-ups.', 500)
   }
   const waiting = new Set(actions.filter((x) => x.action === 'restore_branches' && ['pending_approval', 'approved', 'executing'].includes(x.status))
     .flatMap((x) => ((x.payload as { items?: Array<{ itemId?: string }> }).items ?? []).map((i) => i.itemId ?? '')))
@@ -399,7 +399,7 @@ async function restoreRoute(c: Context, deps: RepoHousekeepingRouteDeps): Promis
       return { key: `branch:${r.branch}`, itemId: r.id, branch: r.branch as string, sha: r.deleted_sha as string }
     }),
   }
-  return store(c, deps, db, a, 'restore_branches', payload as unknown as Record<string, unknown>, parsed.data.reason ?? 'Restore branches Mushi deleted')
+  return store(c, deps, db, a, 'restore_branches', payload as unknown as Record<string, unknown>, parsed.data.reason ?? 'Restore branches Mushi Mushi deleted')
 }
 
 async function decideRoute(c: Context, deps: RepoHousekeepingRouteDeps, verb: 'approve' | 'reject' | 'execute'): Promise<Response> {

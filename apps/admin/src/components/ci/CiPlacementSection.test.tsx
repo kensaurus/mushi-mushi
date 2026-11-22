@@ -96,7 +96,9 @@ describe('CiPlacementSection', () => {
     const card = q('ci-placement-repo-kensaurus/yen-yen')
     expect(card.textContent).toContain('Now: GitHub-hosted (ubuntu-24.04): no variable set')
     expect(radio('GitHub-hosted', card).disabled).toBe(true)
-    expect(card.textContent).toContain('Your CI agreement says no paid GitHub-hosted minutes on private repos (CI-AGREEMENT.md, 2026-10-22).')
+    expect(card.textContent).toContain('Off: your CI agreement above rules out paid GitHub-hosted minutes on private repos.')
+    // The agreement's source is said once, in its own box, not again under the choice (round 3).
+    expect(card.textContent).not.toContain('CI-AGREEMENT.md')
     expect(card.textContent).toContain('kensaurus-local')
     expect(card.textContent).not.toContain('kensaurus-local-yen-yen-1')
   })

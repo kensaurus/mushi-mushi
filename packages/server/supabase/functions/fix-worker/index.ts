@@ -1018,11 +1018,11 @@ ${
           let callInputTokens = 0;
           let callOutputTokens = 0;
           try {
-            const { result, usedProvider } = await withAnthropicOrOpenAi(
+            const { result, usedProvider, fallbackUsed: routeFallback } = await withAnthropicOrOpenAi(
               db,
               dispatch.project_id,
               async (anthropicResolved) => {
-                usedModel = DEFAULT_ANTHROPIC_MODEL;
+                usedModel = anthropicResolved.model ?? DEFAULT_ANTHROPIC_MODEL;
                 usedKeySource = anthropicResolved.source;
                 const { object, usage } = await claudeGenerateObject({
                   apiKey: anthropicResolved.key,
@@ -1054,7 +1054,7 @@ ${
                 const openaiKey = openaiResolved.key;
                 const openaiBaseUrl = openaiResolved.baseUrl;
                 const isOpenRouter = openaiBaseUrl?.includes('openrouter.ai') ?? false;
-                usedModel = isOpenRouter ? DEFAULT_OPENAI_MODEL : FIX_FALLBACK;
+                usedModel = openaiResolved.model ?? (isOpenRouter ? DEFAULT_OPENAI_MODEL : FIX_FALLBACK);
                 usedKeySource = openaiResolved.source;
                 const openai = openAiProvider({
                   apiKey: openaiKey,
@@ -1072,6 +1072,7 @@ ${
                 callOutputTokens = usage?.completionTokens ?? 0;
                 return object;
               },
+              { feature: 'fix-worker', tier: 'premium' },
             );
             inputTokens += callInputTokens;
             outputTokens += callOutputTokens;
@@ -1083,8 +1084,8 @@ ${
               stage: 'fix',
               primaryModel: DEFAULT_ANTHROPIC_MODEL,
               usedModel,
-              fallbackUsed: usedProvider !== 'anthropic',
-              fallbackReason: usedProvider !== 'anthropic' ? 'anthropic_unavailable' : null,
+              fallbackUsed: routeFallback,
+              fallbackReason: routeFallback ? `primary_unavailable (answered on ${usedProvider})` : null,
               status: 'success',
               latencyMs: Date.now() - callStart,
               inputTokens: callInputTokens,

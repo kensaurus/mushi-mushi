@@ -40,7 +40,7 @@ Mushi Mushi is a shipped, open-source bug-report → plain-English diagnosis →
 - **Funnel scope:** "Both in the same phase" — dogfood Mushi's own funnel with the Mushi SDK **and** ship a customer-facing Users & Funnels feature for every project.
 - **Budget:** "20+ h/week or budget for help."
 - **Monetization (inherited from repo, not re-asked):** free-first this quarter — `docs/marketing/README.md` "Don't chase paid-Cloud conversion yet"; pricing page and Stripe stay live, get a CTA, no price changes.
-- **License (inherited, never a growth tactic):** SDKs MIT, server AGPLv3, EE commercial (`COMMERCIAL-LICENSE.md`, ADR in `content/blog/agplv3-relicense.mdx`). No change.
+- **License (inherited, never a growth tactic):** SDKs MIT, server AGPLv3, EE commercial (`docs/legal/COMMERCIAL-LICENSE.md`, ADR in `content/blog/agplv3-relicense.mdx`). No change.
 - **Language (assumption, flag to founder):** EN-first; JP is a second, optional track (founder is JP-based, widget already ships `ja`, docs are EN-only).
 - **Support inbox:** kensaurus@gmail.com (ADR 0015); never propose `support@kensaur.us`.
 
@@ -49,7 +49,7 @@ Mushi Mushi is a shipped, open-source bug-report → plain-English diagnosis →
 | Area | Status | Worst gap | Evidence |
 |---|---|---|---|
 | Monetization | Built: open-core + freemium hosted (Free Cloud 50 diagnoses, no card) + usage overage, Stripe live | No trial; `ee/` is LICENSE+README only; dead `hobby`/`starter` plan IDs still in `plans.ts` union + DB | `_shared/stripe.ts:191`, `_shared/plans.ts:16`, `pricing_plans` table, `apps/admin/src/components/billing/UpgradePrompt.tsx:171` |
-| License | Tri-modal, CI-enforced (`check:license`, `check:spdx-headers`) | Three licenses can confuse a buyer; fine for adoption | `LICENSE:1`, `packages/server/LICENSE`, `COMMERCIAL-LICENSE.md:1` |
+| License | Tri-modal, CI-enforced (`check:license`, `check:spdx-headers`) | Three licenses can confuse a buyer; fine for adoption | `LICENSE:1`, `packages/server/LICENSE`, `docs/legal/COMMERCIAL-LICENSE.md:1` |
 | Positioning | Sharp, ICP-named, category coined, tagline CI-enforced | Landing primary CTA is a docs link, not a start; secondary CTA sends teams to a GitHub folder | `packages/brand/src/index.js:87-92`, `apps/docs/lib/landing-copy.ts:106,318-326`, `apps/docs/app/layout.tsx:26-30` |
 | ICP signals | 11 frameworks, 30 npm packages, widget i18n en/ja/es/th | Console/docs EN-only, USD-only; ja/es/th widget locales have no funnel behind them | `packages/web/src/i18n/*` |
 | Activation path | 0-step no-signup demo exists at `/connect`; real path = signup → project → key → install → first report | Demo buried; new users land on `/dashboard` not `/onboarding`; no SDK snippet on empty Overview; **no "how did you hear about us"**; GitHub/Google OAuth wired but every signup used email | `apps/docs/app/connect/page.tsx:108,316`, `apps/admin/src/App.tsx:307-312`, `OnboardingPage.tsx:554-557`, `OverviewPage.tsx:216` |
@@ -358,7 +358,7 @@ Depends on Workstream A for the `setup_funnel_events` CHECK extension (`test_rep
 
 | Release | ~Day | Ships | Launch post | Journey post |
 |---|---|---|---|---|
-| R1 "Proof" | 14 | no-signup demo verified in incognito; `npx mushi-mushi` on a fresh app to first report filmed (< 5 min); hero GIF in both `TODO(loop-video)` slots; `search_mushi_docs` fixed; VS Code extension published (`VSCE_PAT`/`OVSX_PAT` + `publish-vscode-extension.yml`) or "deferred" written in `GTM-DISTRIBUTION.md` and not mentioned on HN; ToS/privacy live (B); issue SLA in `CONTRIBUTING.md:219`; `launch-week.mdx` rewritten honestly; `sameAs` fixed; Bluesky queue cleared; Workstream A activation SQL returns a number | **Show HN** (Tue, 12–17 UTC) | #1 (day 7, before HN) |
+| R1 "Proof" | 14 | no-signup demo verified in incognito; `npx mushi-mushi` on a fresh app to first report filmed (< 5 min); hero GIF in both `TODO(loop-video)` slots; `search_mushi_docs` fixed; VS Code extension published (`VSCE_PAT`/`OVSX_PAT` + `publish-vscode-extension.yml`) or "deferred" written in `GTM-DISTRIBUTION.md` and not mentioned on HN; ToS/privacy live (B); issue SLA in `.github/CONTRIBUTING.md:219`; `launch-week.mdx` rewritten honestly; `sameAs` fixed; Bluesky queue cleared; Workstream A activation SQL returns a number | **Show HN** (Tue, 12–17 UTC) | #1 (day 7, before HN) |
 | R2 "Found" | 45 | 5 compare/how-to pages; Mushi setup skill audited for Claude Code/Cursor; Cursor plugin submitted | **Product Hunt** + r/cursor, r/ClaudeAI value threads + Console.dev / TLDR Web Dev pitch with the HN number | #2 (HN retro, day 21) |
 | R3 "Loop" | 75 | powered-by mark + 3 K-factor events; console opt-out; Discussions as community home | dev.to + normal HN submission of journey post #3 (not Show HN) | #3, #4 |
 
@@ -414,7 +414,7 @@ Spec: footer becomes a link `https://kensaur.us/mushi-mushi/?utm_source=widget&u
 
 ### 6. Community home: GitHub Discussions
 
-Already enabled; indexed by Google and answer engines; async suits a solo JP-based founder; Langfuse precedent. Discord stays as an unpromoted link. Monday ritual (20 min): answer everything; turn each support email/DM into a Q&A thread with permission; "This week in Mushi" in Announcements; pin "Show and tell: your first report". Files: Community section in `README.md`, `CONTRIBUTING.md:219`, `.github/ISSUE_TEMPLATE/config.yml` contact link → Discussions, replace the Discord table in `drip-channels.md`.
+Already enabled; indexed by Google and answer engines; async suits a solo JP-based founder; Langfuse precedent. Discord stays as an unpromoted link. Monday ritual (20 min): answer everything; turn each support email/DM into a Q&A thread with permission; "This week in Mushi" in Announcements; pin "Show and tell: your first report". Files: Community section in `README.md`, `.github/CONTRIBUTING.md:219`, `.github/ISSUE_TEMPLATE/config.yml` contact link → Discussions, replace the Discord table in `drip-channels.md`.
 
 ### 7. JP track (optional)
 

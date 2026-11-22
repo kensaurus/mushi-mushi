@@ -144,7 +144,7 @@ export function QueryPromptLibrary({
   return (
     <Card className="p-3">
       <div className="flex items-center justify-between gap-2 mb-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-fg-secondary">
+        <h3 className="text-xs font-semibold text-fg-secondary">
           Prompt library
         </h3>
         <span className="text-2xs text-fg-faint hidden sm:inline">
@@ -152,14 +152,15 @@ export function QueryPromptLibrary({
         </span>
       </div>
 
-      <div className="overflow-x-auto -mx-1 mb-2 pb-1">
+      {/* Wraps at 390 instead of scrolling "Quality" out of view (round 3). */}
+      <div className="mb-2 pb-1">
         <SegmentedControl
           value={activeCat}
           onChange={setActiveCat}
           ariaLabel="Prompt library categories"
           size="md"
-          scrollable
-          className="min-w-max bg-surface-raised/50"
+          wrap
+          className="bg-surface-raised/50"
           options={PROMPT_CATEGORIES.map((c) => ({
             id: c.id,
             label: c.label,

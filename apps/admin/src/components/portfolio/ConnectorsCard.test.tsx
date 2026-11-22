@@ -7,6 +7,8 @@
  *   QA 44   Remove deleted the connector and its Vault credential on one click.
  *   QA 177  members saw Check / Remove / Connect, which always answer 403.
  *   QA 178  a load error showed "message (CODE)".
+ *   2026-11-18 a source row was a long "app → id · app → id" string and two big dropdowns:
+ *           now the bound apps are icons and Check / Bind / actions / Remove sit in one More menu.
  */
 
 import { act, createElement } from 'react'
@@ -35,8 +37,14 @@ vi.mock('../../lib/usePageData', () => ({
         ? { data: null, loading: false, error: mocks.error.value, reload: vi.fn() }
         : {
             data: {
-              instances: [{ id: 'c1', kind: 'llm_usage', display_name: 'OpenAI usage', status: 'ok', status_reason: null, bindings: [], enabled_capabilities: ['read'] }],
-              available: [{ kind: 'llm_usage', title: 'AI provider usage', credentialNote: '', actions: [], legacyBacked: false }],
+              instances: [
+                { id: 'c1', kind: 'llm_usage', display_name: 'OpenAI usage', status: 'ok', status_reason: null, bindings: [], enabled_capabilities: ['read'] },
+                { id: 'c2', kind: 'play_console', display_name: 'Google Play', status: 'connected', status_reason: null, bindings: [{ projectId: 'p-glot', externalId: 'com.glotit.app', role: 'primary' }, { projectId: 'p-lt', externalId: 'us.kensaur.talk', role: 'primary' }], enabled_capabilities: ['read'] },
+              ],
+              available: [
+                { kind: 'llm_usage', title: 'AI provider usage', credentialNote: '', actions: [], legacyBacked: false },
+                { kind: 'play_console', title: 'Google Play', credentialNote: '', actions: ['rollout'], legacyBacked: false },
+              ],
               planned: [],
             },
             loading: false,
@@ -48,7 +56,7 @@ vi.mock('../../lib/usePageData', () => ({
   },
 }))
 
-import { ConnectorsCard } from './ConnectorsCard'
+import { ConnectorsCard, groupConnectors } from './ConnectorsCard'
 
 async function flush(): Promise<void> {
   for (let i = 0; i < 8; i += 1) await Promise.resolve()
@@ -81,15 +89,23 @@ describe('ConnectorsCard', () => {
     mocks.error.value = null
   })
 
-  async function render(): Promise<void> {
+  async function render(hiddenIds?: ReadonlySet<string>): Promise<void> {
     await act(async () => {
-      root.render(createElement(MemoryRouter, null, createElement(ConnectorsCard, { orgId: ORG, projects: [] })))
+      root.render(createElement(MemoryRouter, null, createElement(ConnectorsCard, { orgId: ORG, projects: [{ projectId: 'p-glot', name: 'glot.it' }, { projectId: 'p-lt', name: 'lets-talk' }, { projectId: 'p-yen', name: 'yen-yen' }], hiddenIds })))
+      await flush()
+    })
+  }
+
+  async function openMore(id: string): Promise<void> {
+    await act(async () => {
+      ;(container.querySelector(`[data-testid="connector-more-${id}"]`) as HTMLButtonElement).click()
       await flush()
     })
   }
 
   it('asks before removing a source and its credential', async () => {
     await render()
+    await openMore('c1')
     await act(async () => {
       button('Remove')!.click()
       await flush()
@@ -107,6 +123,7 @@ describe('ConnectorsCard', () => {
     mocks.role.value = 'member'
     await render()
     expect(container.textContent).toContain('OpenAI usage')
+    expect(container.querySelector('[data-testid^="connector-more-"]')).toBeNull()
     expect(button('Remove')).toBeUndefined()
     expect(button('Check')).toBeUndefined()
     expect(container.textContent).not.toContain('Add a source')
@@ -116,8 +133,84 @@ describe('ConnectorsCard', () => {
   it('keeps the controls when the role is not known yet; the server still enforces it', async () => {
     mocks.role.value = 'unknown-org'
     await render()
+    expect(container.querySelector('[data-testid="connector-more-c1"]')).not.toBeNull()
+    await openMore('c1')
     expect(button('Remove')).toBeDefined()
     expect(container.textContent).not.toContain('Only team owners and admins can change this.')
+  })
+
+  it('shows the bound apps as icons, each id in its tooltip, and one More menu instead of buttons and dropdowns', async () => {
+    await render()
+    const row = container.querySelector('[data-testid="connector-c2"]')!
+    // The ids are only tooltips and screen-reader text now, never a printed string.
+    const seen = row.cloneNode(true) as HTMLElement
+    seen.querySelectorAll('.sr-only').forEach((n) => n.remove())
+    expect(seen.textContent).not.toContain('→')
+    const chips = row.querySelector('[data-testid="connector-bindings"] [data-testid="app-icon-chips"]')!
+    expect(chips.getAttribute('data-count')).toBe('2')
+    expect([...chips.querySelectorAll('li[data-app]')].map((li) => li.getAttribute('title'))).toEqual(['glot.it → com.glotit.app', 'lets-talk → us.kensaur.talk'])
+    // One mark per source: its state pill, with no second ✓ beside the bound apps.
+    expect(row.querySelector('[data-testid="connector-bindings"] .sr-only')!.textContent).toBe('2 apps bound:')
+    expect(row.querySelector('[data-testid="connector-bindings"] [data-testid="status-mark"]')).toBeNull()
+    // Round 3: a connected row carries no pill (the card says "N connected" once); only a problem gets one.
+    expect(row.querySelectorAll('[data-testid="status-pill"]')).toHaveLength(0)
+    expect(row.querySelector('.sr-only')?.textContent).toBe('Connected')
+    expect(container.querySelector('[data-testid="connectors-count"]')?.textContent).toMatch(/^\d+ connected$/)
+    // No loose buttons or dropdowns on the row: Check, Bind, the write actions and Remove are in More.
+    expect([...row.querySelectorAll('button')].map((b) => b.textContent?.trim())).toEqual(['More'])
+    expect(row.querySelector('select')).toBeNull()
+    await openMore('c2')
+    expect([...row.querySelectorAll('[role="menuitem"]')].map((b) => b.textContent)).toEqual(['Check', 'Bind another app…', 'Release actions (off)…', 'Remove'])
+  })
+
+  it('puts two or more sources of one kind under one heading, without the repeated prefix', () => {
+    const groups = groupConnectors(
+      [
+        { kind: 'revenuecat', display_name: 'RevenueCat · kensaurus' },
+        { kind: 'play_console', display_name: 'Google Play · glot.it + lets-talk' },
+        { kind: 'play_console', display_name: 'Google Play · yen-yen' },
+        { kind: 'play_console', display_name: 'Google Play' },
+      ],
+      (k) => (k === 'play_console' ? 'Google Play' : 'RevenueCat'),
+    )
+    expect(groups.map((g) => [g.title, g.items.map((x) => x.name)])).toEqual([
+      ['RevenueCat', ['RevenueCat · kensaurus']],
+      ['Google Play', ['glot.it + lets-talk', 'yen-yen', 'Google Play']],
+    ])
+  })
+
+  it('never draws a hidden app (the public demo) as a bound app', async () => {
+    await render(new Set(['p-lt']))
+    const row = container.querySelector('[data-testid="connector-c2"]')!
+    const chips = row.querySelector('[data-testid="connector-bindings"] [data-testid="app-icon-chips"]')!
+    expect(chips.getAttribute('data-count')).toBe('1')
+    expect(row.querySelector('[data-testid="connector-bindings"] .sr-only')!.textContent).toBe('1 app bound:')
+  })
+
+  it('opens the bind form inline when "Bind another app…" is chosen, listing only unbound apps', async () => {
+    await render()
+    await openMore('c2')
+    await act(async () => {
+      button('Bind another app…')!.click()
+      await flush()
+    })
+    const form = container.querySelector('[data-testid="connector-bind-c2"]')!
+    expect([...form.querySelectorAll('option')].map((o) => o.textContent)).toEqual(['Choose…', 'yen-yen'])
+    await act(async () => {
+      button('Close')!.click()
+      await flush()
+    })
+    expect(container.querySelector('[data-testid="connector-bind-c2"]')).toBeNull()
+  })
+
+  it('checks a source again from the More menu', async () => {
+    await render()
+    await openMore('c1')
+    await act(async () => {
+      button('Check')!.click()
+      await flush()
+    })
+    expect(mocks.apiFetch).toHaveBeenCalledWith(`/v1/admin/orgs/${ORG}/connectors/c1/probe`, { method: 'POST', body: '{}' })
   })
 
   it('explains a load error without the raw code', async () => {

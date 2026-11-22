@@ -111,4 +111,26 @@ describe('SkillsRunningNow', () => {
     })
     expect(host.textContent).toContain('Nothing has run on this app yet.')
   })
+
+  it('hides on the Pipeline Runs tab when empty, which has its own empty state (round-3 review 2026-11-19)', async () => {
+    state.runs = []
+    state.pipelines = []
+    await act(async () => {
+      root.render(
+        createElement(MemoryRouter, null, createElement(SkillsRunningNow, { projectId: 'p1', onRunOnBug: () => {}, hideWhenEmpty: true })),
+      )
+    })
+    expect(host.querySelector('[data-testid="skills-running-now"]')).toBeNull()
+  })
+
+  it('still shows runs on that tab when there are some', async () => {
+    state.runs = [run({})]
+    state.pipelines = []
+    await act(async () => {
+      root.render(
+        createElement(MemoryRouter, null, createElement(SkillsRunningNow, { projectId: 'p1', onRunOnBug: () => {}, hideWhenEmpty: true })),
+      )
+    })
+    expect(host.textContent).toContain('Running now')
+  })
 })

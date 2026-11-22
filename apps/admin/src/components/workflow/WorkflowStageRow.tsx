@@ -90,7 +90,7 @@ export function WorkflowStageRow({
         )}
         <span className="min-w-0 flex-1 text-xs font-medium text-fg truncate">{shortLabel}</span>
         <span
-          className={`shrink-0 rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wide whitespace-nowrap ${POSTURE_CHIP[posture]}`}
+          className={`shrink-0 rounded-sm px-1.5 py-0.5 text-3xs font-semibold whitespace-nowrap ${POSTURE_CHIP[posture]}`}
         >
           {chipText}
         </span>

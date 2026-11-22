@@ -64,7 +64,7 @@ export function JudgePipelineGuide({ topPriority, stats }: Props) {
         })}
       </div>
       <div>
-        <p className="mb-1.5 text-3xs font-semibold uppercase tracking-wider text-fg-faint">
+        <p className="mb-1.5 text-3xs font-semibold text-fg-secondary">
           Score rubric
         </p>
         <ul className="list-disc pl-4 space-y-0.5 text-2xs text-fg-secondary">
@@ -78,7 +78,7 @@ export function JudgePipelineGuide({ topPriority, stats }: Props) {
       <p className="text-2xs text-fg-faint">
         Tune classifier prompts in{' '}
         <Link to="/prompt-lab?tab=prompts" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
-          Prompt Lab
+          AI prompts
         </Link>
         . Disagreements appear under the Evaluations tab.
       </p>

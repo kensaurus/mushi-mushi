@@ -194,6 +194,17 @@ describe('manual cron run', () => {
     expect((await call(ADMIN, 'POST', '/v1/admin/health/cron/judge-batch/trigger')).status).toBe(200)
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
+
+  it('pipeline recovery by hand: admins only, this app only, no edge-function call and no cron_runs row', async () => {
+    const denied = await call(MEMBER, 'POST', '/v1/admin/health/cron/pipeline-recovery/trigger')
+    expect(denied.status).toBe(403)
+    const ok = await call(ADMIN, 'POST', '/v1/admin/health/cron/pipeline-recovery/trigger')
+    expect(ok.status).toBe(200)
+    expect(ok.json.data).toMatchObject({ reports: 0, queue: 0, reconciled: 0, message: 'Nothing was stuck; nothing to recover.' })
+    // pipeline-recovery is a SQL cron, not an edge function: nothing is fetched.
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(db.tables.cron_runs ?? []).toHaveLength(0)
+  })
 })
 
 describe('compliance', () => {

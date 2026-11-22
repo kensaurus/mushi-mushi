@@ -11,6 +11,7 @@ import { usePageData } from '../lib/usePageData'
 import { useEntitlements } from '../lib/useEntitlements'
 import { useActiveOrgSignal } from '../lib/activeOrg'
 import { usePublishPageContext } from '../lib/pageContext'
+import { tabbedPageTitle } from '../lib/pageTitle'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { RewardsStatusBanner } from '../components/rewards/RewardsStatusBanner'
@@ -19,12 +20,13 @@ import { RewardsSnapshotStrip } from '../components/rewards/RewardsSnapshotStrip
 import { RewardsTabNav } from '../components/rewards/RewardsTabNav'
 import { ProjectRewardsSwitch, useProjectRewardsToggle } from '../components/rewards/ProjectRewardsSwitch'
 import { EMPTY_REWARDS_STATS, type RewardsStats, type RewardsTabId } from '../components/rewards/types'
-import { rewardsTabMeta, resolveRewardsTabParam } from '../components/rewards/rewardsTabs'
+import { REWARDS_TABS, rewardsTabMeta, resolveRewardsTabParam } from '../components/rewards/rewardsTabs'
 import { useRewardsUx, resolveQuickRewardsTab } from '../lib/rewardsModeUx'
 import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
 import { Badge, Btn, Card } from '../components/ui'
 import { CHIP_TONE, runStatusChipTone } from '../lib/chipTone'
 import { rewardsHeaderChip } from '../components/rewards/overviewHelpers'
+import { rewardsPaused } from '../components/rewards/rewardsView'
 import { IconRewards } from '../components/icons'
 import {
   OverviewTab,
@@ -78,8 +80,7 @@ export function RewardsPage() {
 
   usePublishPageContext({
     route: '/rewards',
-    title: `${activeMeta.label} · Rewards`,
-    summary: activeMeta.description,
+    title: tabbedPageTitle('Tester rewards', activeMeta.label, activeMeta.id === REWARDS_TABS[0].id),
     filters: { tab: active },
   })
 
@@ -97,6 +98,15 @@ export function RewardsPage() {
   // A healthy program is said by the status line; the banner is for what needs you.
   const showStatus = !ux.hideRewardsSnapshot || offInStatus
   const showBanner = !offInStatus && !(showStatus && rewardsEnabled && rewardsStats.topPriority === 'healthy')
+
+  // Off is said once, by the status line, with its one button: no "Off for this app" chip
+  // beside it and no second switch card on Settings (2026-11-18: said 3-4 times per tab).
+  const paused = rewardsPaused({
+    entitled: rewardsEnabled,
+    projectId: rewardsStats.projectId,
+    projectEnabled: rewardsStats.projectRewardsEnabled,
+  })
+  const showHeaderChip = !(offInStatus && showStatus)
 
   const showHobbyInline =
     !rewardsEnabled && rewardsStats.organizationId != null && rewardsStats.topPriority !== 'no_org'
@@ -125,7 +135,9 @@ export function RewardsPage() {
       >
         {/* The open app's switch, not the plan: a green "Active" sat over
             "Rewards are off" when the plan allowed rewards but the app had them off (5f2ab6c5). */}
-        <Badge className={headerChip.tone === 'active' ? runStatusChipTone('active') : CHIP_TONE.neutral}>{headerChip.label}</Badge>
+        {showHeaderChip && (
+          <Badge className={headerChip.tone === 'active' ? runStatusChipTone('active') : CHIP_TONE.neutral}>{headerChip.label}</Badge>
+        )}
       </PageHeaderBar>
 
       <PagePosture
@@ -191,16 +203,17 @@ export function RewardsPage() {
           id={`rewards-panel-${active}`}
           aria-labelledby={`rewards-tab-${active}`}
         >
-          {active === 'overview' && <OverviewTab />}
-          {active === 'publishing' && <PublishingTab />}
+          {active === 'overview' && <OverviewTab projectId={rewardsStats.projectId} />}
+          {active === 'publishing' && <PublishingTab paused={paused} />}
           {active === 'rules' && <ActivityRulesTab canEdit={canEdit} />}
           {active === 'tiers' && <TierLadderTab canEdit={canEdit} />}
           {active === 'contributors' && <ContributorsTab canEdit={canEdit} />}
-          {active === 'quests' && <QuestsTab canEdit={canEdit} />}
+          {active === 'quests' && <QuestsTab canEdit={canEdit} paused={paused} projectId={rewardsStats.projectId} />}
           {active === 'analytics' && <RetentionAnalyticsTab />}
           {active === 'sandbox' && <SandboxSimulatorTab />}
           {active === 'settings' && (
             <>
+              {!(offInStatus && showStatus) && (
               <ProjectRewardsSwitch
                 projectId={rewardsStats.projectId}
                 projectName={rewardsStats.projectName}
@@ -208,6 +221,7 @@ export function RewardsPage() {
                 canEdit={canEdit}
                 onChanged={reloadRewardsStats}
               />
+              )}
               <SettingsTab canEdit={canEdit} />
             </>
           )}

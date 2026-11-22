@@ -254,6 +254,27 @@ describe('GET /v1/admin/ci/overview', () => {
     await s.app.call('GET', '/v1/admin/ci/overview')
     expect(s.calls.length).toBe(callsAfterFirst)
   })
+
+  it('serves the same build for 15 s (polling tabs share it), then builds again; refresh=1 always builds', async () => {
+    const s = setup({ ci_jobs: [] })
+    const tick = (s as unknown as { tick: (ms: number) => void }).tick
+    const first = await s.app.call('GET', '/v1/admin/ci/overview')
+    expect(first.status).toBe(200)
+    const read = (r: { body: unknown }) => JSON.stringify(r.body)
+    tick(10_000)
+    const cached = await s.app.call('GET', '/v1/admin/ci/overview')
+    expect(read(cached)).toBe(read(first))
+    // Another window is another entry.
+    const month = await s.app.call('GET', '/v1/admin/ci/overview', { query: { days: '30' } })
+    expect(month.body.data.window.days).toBe(30)
+    tick(6_000)
+    const rebuilt = await s.app.call('GET', '/v1/admin/ci/overview')
+    expect(rebuilt.status).toBe(200)
+    expect(cached.body.data.generatedAt).toBe(first.body.data.generatedAt)
+    expect(rebuilt.body.data.generatedAt).not.toBe(first.body.data.generatedAt)
+    const forced = await s.app.call('GET', '/v1/admin/ci/overview', { query: { refresh: '1' } })
+    expect(forced.status).toBe(200)
+  })
 })
 
 describe('POST /v1/admin/fixes/:id/ci/rerun', () => {

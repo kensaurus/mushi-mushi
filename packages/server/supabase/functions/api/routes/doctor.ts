@@ -15,7 +15,11 @@
  *   - dead_letter:      processing_queue rows in dead_letter
  *   - codebase_index:   per accessible project — enabled but 0 files, or
  *                       last_index_error set (incl. `partial:` markers)
- *   - observability:    Langfuse / Sentry transports configured
+ *   - observability:    Langfuse / Sentry transports configured (info when off:
+ *                       both are optional)
+ *   - instance checks (self-hosted callers, or a super-admin on Cloud;
+ *     _shared/doctor-checks.ts): llm_key, runtime_url (cron jobs still
+ *     calling Mushi Mushi Cloud), screenshots_bucket, console_url
  *   - platform_*:       super-admins only: server secrets an app owner cannot
  *                       set (Slack and Linear OAuth, Slack signing), present
  *                       or missing, never their values
@@ -29,24 +33,42 @@ import { ownedProjectIds } from '../shared.ts';
 import { codebaseIndexDoctorCheck, type IndexDoctorRepo } from '../../_shared/index-coverage.ts';
 import { getUserRole, SUPER_ADMIN_ROLE } from '../../_shared/super-admin.ts';
 import { platformGaps } from '../../_shared/platform-setup-checks.ts';
+import { CLOUD_PROJECT_REF, instanceMode } from '../../_shared/instance-mode.ts';
+import {
+  consoleUrlCheck,
+  type DoctorCheck,
+  doctorLabel,
+  doctorWorst,
+  llmKeyCheck,
+  observabilityCheck,
+  REAPPLY_SETUP,
+  runtimeUrlCheck,
+  screenshotsBucketCheck,
+  SELF_HOST_DOCS,
+  sentryDsnSet,
+} from '../../_shared/doctor-checks.ts';
+
+export type { DoctorCheck, DoctorStatus } from '../../_shared/doctor-checks.ts';
 
 /** The project_repos columns the codebase-index check reads. */
 interface DoctorRepoRow extends IndexDoctorRepo {
   project_id: string;
 }
 
-export interface DoctorCheck {
-  name: string;
-  status: 'pass' | 'warn' | 'fail';
-  summary: string;
-  hint?: string;
-}
+type Db = ReturnType<typeof getServiceClient>;
+
+const LLM_PROVIDERS = ['anthropic', 'openai', 'openrouter'];
 
 export interface DoctorOptions {
   /** Narrow the per-project checks to these apps (the caller checked access); default: the caller's own apps. */
   projectIds?: string[];
   /** Include the super-admin platform secret checks (default true). */
   platform?: boolean;
+  /**
+   * Include the instance checks (AI key, cron URL, screenshots bucket,
+   * console address). Default: on a self-hosted server, or for a super-admin.
+   */
+  instance?: boolean;
 }
 
 /**
@@ -55,7 +77,7 @@ export interface DoctorOptions {
  * (GET /v1/admin/health-checks, which narrows it to one app).
  */
 export async function runDoctorChecks(
-  db: ReturnType<typeof getServiceClient>,
+  db: Db,
   userId: string,
   opts: DoctorOptions = {},
 ): Promise<{ status: 'pass' | 'warn' | 'fail'; checks: DoctorCheck[] }> {
@@ -63,8 +85,9 @@ export async function runDoctorChecks(
 
   const projectIds = opts.projectIds ?? await ownedProjectIds(db, userId);
 
-  const [tokenRes, cronRes, strandedRes, deadRes, settingsRes, reposRes] = await Promise.all([
-    db.from('mushi_runtime_config').select('key').eq('key', 'internal_caller_token').maybeSingle(),
+  const [tokenRes, cronRes, strandedRes, deadRes, settingsRes, reposRes, projectsRes] = await Promise.all([
+    // A row the migrations seeded empty is not a token.
+    db.from('mushi_runtime_config').select('key').eq('key', 'internal_caller_token').neq('value', '').maybeSingle(),
     db
       .from('cron_runs')
       .select('status, finished_at, metadata')
@@ -101,7 +124,12 @@ export async function runDoctorChecks(
           .in('project_id', projectIds)
           .eq('is_primary', true)
       : Promise.resolve({ data: [], error: null }),
+    projectIds.length
+      ? db.from('projects').select('id, name, organization_id').in('id', projectIds)
+      : Promise.resolve({ data: [], error: null }),
   ]);
+  const projects = (projectsRes.data ?? []) as Array<{ id: string; name: string | null; organization_id: string | null }>;
+  const appName = new Map(projects.map((p) => [p.id, p.name ?? null]));
 
   // ── Recovery token ────────────────────────────────────────────────
   if (tokenRes.error) {
@@ -115,7 +143,7 @@ export async function runDoctorChecks(
       name: 'recovery_token',
       status: 'fail',
       summary: 'internal_caller_token is not configured — pipeline recovery is skipping every run.',
-      hint: 'Set mushi_runtime_config.internal_caller_token and the MUSHI_INTERNAL_CALLER_SECRET function secret (SELF_HOSTED.md → pg_cron section).',
+      hint: `${REAPPLY_SETUP} Each sets MUSHI_INTERNAL_CALLER_SECRET and writes the same value into mushi_runtime_config (${SELF_HOST_DOCS}/supabase).`,
     });
   } else {
     checks.push({ name: 'recovery_token', status: 'pass', summary: 'internal_caller_token configured.' });
@@ -130,7 +158,7 @@ export async function runDoctorChecks(
       name: 'recovery_cron',
       status: 'fail',
       summary: 'pipeline-recovery has never run.',
-      hint: "Register the pg_cron schedule (SELF_HOSTED.md → 'Recommended pg_cron schedules').",
+      hint: `The migrations schedule it every 5 minutes. Check that pg_cron and pg_net are enabled and that mushi_runtime_config points at this server (${SELF_HOST_DOCS}/supabase).`,
     });
   } else {
     const ageMin = (Date.now() - new Date(run.finished_at).getTime()) / 60_000;
@@ -194,23 +222,26 @@ export async function runDoctorChecks(
     ((reposRes.data ?? []) as DoctorRepoRow[]).map((r) => [r.project_id, r]),
   );
   for (const pid of enabledProjects) {
-    checks.push(codebaseIndexDoctorCheck(pid, repoByProject.get(pid)));
+    checks.push(codebaseIndexDoctorCheck(pid, repoByProject.get(pid), appName.get(pid) ?? null));
   }
 
   // ── Observability transports ───────────────────────────────────────
-  const langfuseConfigured = Boolean(Deno.env.get('LANGFUSE_SECRET_KEY') && Deno.env.get('LANGFUSE_PUBLIC_KEY'));
-  const sentryConfigured = Boolean(Deno.env.get('SENTRY_DSN'));
-  checks.push({
-    name: 'observability',
-    status: langfuseConfigured && sentryConfigured ? 'pass' : 'warn',
-    summary: `Langfuse: ${langfuseConfigured ? 'configured' : 'not configured'}; Sentry: ${sentryConfigured ? 'configured' : 'not configured'}.`,
-    ...(langfuseConfigured && sentryConfigured
-      ? {}
-      : { hint: 'Set LANGFUSE_SECRET_KEY/LANGFUSE_PUBLIC_KEY and SENTRY_DSN function secrets for full pipeline observability.' }),
-  });
+  const env = (name: string) => Deno.env.get(name);
+  checks.push(observabilityCheck({
+    langfuse: Boolean(env('LANGFUSE_SECRET_KEY') && env('LANGFUSE_PUBLIC_KEY')),
+    sentry: sentryDsnSet(env),
+  }));
+
+  const superAdmin = opts.platform !== false && (await getUserRole(userId)) === SUPER_ADMIN_ROLE;
+
+  // ── Instance setup (what a self-host gets wrong) ─────────────────────
+  const mode = instanceMode();
+  if (opts.instance ?? (mode === 'self-hosted' || superAdmin)) {
+    checks.push(...(await instanceChecks(db, userId, projectIds, projects, mode)));
+  }
 
   // ── Platform secrets (super-admins only; app owners never see these) ──
-  if (opts.platform !== false && (await getUserRole(userId)) === SUPER_ADMIN_ROLE) {
+  if (superAdmin) {
     for (const g of platformGaps((name) => !!Deno.env.get(name))) {
       checks.push({
         name: g.id,
@@ -221,13 +252,81 @@ export async function runDoctorChecks(
     }
   }
 
-  const worst = checks.some((ch) => ch.status === 'fail')
-    ? 'fail'
-    : checks.some((ch) => ch.status === 'warn')
-      ? 'warn'
-      : 'pass';
+  for (const ch of checks) ch.label ??= doctorLabel(ch.name);
+  return { status: doctorWorst(checks), checks };
+}
 
-  return { status: worst, checks };
+/** AI key, cron URL, screenshots bucket and console address; each read degrades to its own line. */
+async function instanceChecks(
+  db: Db,
+  userId: string,
+  projectIds: string[],
+  projects: Array<{ id: string; organization_id: string | null }>,
+  mode: 'hosted' | 'self-hosted',
+): Promise<DoctorCheck[]> {
+  const envAnthropic = Boolean(Deno.env.get('ANTHROPIC_API_KEY'));
+  const envOpenai = Boolean(Deno.env.get('OPENAI_API_KEY'));
+  const orgIds = [...new Set(projects.map((p) => p.organization_id).filter((id): id is string => !!id))];
+
+  const [appKeys, runtime, bucket] = await Promise.all([
+    envAnthropic || envOpenai ? Promise.resolve(0) : countAppLlmKeys(db, userId, projectIds, orgIds),
+    readRuntimeUrl(db),
+    readScreenshotsBucket(db),
+  ]);
+
+  return [
+    llmKeyCheck({ envAnthropic, envOpenai, appKeys }),
+    runtimeUrlCheck({ mode, cloudRef: CLOUD_PROJECT_REF, ...runtime }),
+    screenshotsBucketCheck(bucket),
+    consoleUrlCheck({ adminBaseUrl: Deno.env.get('ADMIN_BASE_URL') }),
+  ];
+}
+
+async function readRuntimeUrl(db: Db): Promise<{ supabaseUrl: string | null; readError: string | null }> {
+  try {
+    const { data, error } = await db.from('mushi_runtime_config').select('value').eq('key', 'supabase_url').maybeSingle();
+    if (error) return { supabaseUrl: null, readError: error.message };
+    return { supabaseUrl: (data as { value?: string | null } | null)?.value ?? null, readError: null };
+  } catch (err) {
+    return { supabaseUrl: null, readError: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** AI keys on the caller's apps, their teams, or their own universal keys; null when unreadable. */
+async function countAppLlmKeys(db: Db, userId: string, projectIds: string[], orgIds: string[]): Promise<number | null> {
+  const count = async (column: string, ids: string[]): Promise<number> => {
+    if (ids.length === 0) return 0;
+    const { count: n, error } = await db
+      .from('byok_keys')
+      .select('id', { count: 'exact', head: true })
+      .in('provider_slug', LLM_PROVIDERS)
+      .in(column, ids);
+    if (error) throw new Error(error.message);
+    return n ?? 0;
+  };
+  try {
+    const [own, team, universal] = await Promise.all([
+      count('project_id', projectIds),
+      count('organization_id', orgIds),
+      // Before the owner_user_id column exists, universal keys count as none.
+      count('owner_user_id', [userId]).catch(() => 0),
+    ]);
+    return own + team + universal;
+  } catch {
+    return null;
+  }
+}
+
+async function readScreenshotsBucket(db: Db): Promise<{ bucket: { public: boolean } | null; readError?: string | null }> {
+  try {
+    const { data, error } = await db.storage.getBucket('screenshots');
+    if (error) {
+      return /not.?found/i.test(error.message) ? { bucket: null } : { bucket: null, readError: error.message };
+    }
+    return { bucket: { public: Boolean((data as { public?: boolean } | null)?.public) } };
+  } catch (err) {
+    return { bucket: null, readError: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 export function registerDoctorRoutes(app: Hono<{ Variables: Variables }>): void {

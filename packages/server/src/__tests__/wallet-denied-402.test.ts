@@ -43,6 +43,9 @@ vi.mock('../../supabase/functions/_shared/llm-failover.ts', () => ({
   withLlmFailover: async () => {
     throw new h.WalletDeniedError('insufficient', 1234)
   },
+  withAnthropicOrOpenAi: async () => {
+    throw new h.WalletDeniedError('insufficient', 1234)
+  },
   WalletDeniedError: h.WalletDeniedError,
 }))
 vi.mock('../../supabase/functions/_shared/byok.ts', () => ({ resolveLlmKey: async () => ({ key: 'fc-key' }) }))

@@ -224,7 +224,7 @@ export function CostRawLogTable({ projectId }: { projectId: string }) {
     <div className="space-y-2">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0 flex-1 space-y-1">
-          <p className="text-xs font-medium text-fg-muted uppercase tracking-wide">Raw log</p>
+          <p className="text-xs font-semibold text-fg-secondary">Raw log</p>
           <p className="text-2xs text-fg-faint">
             {total === 0
               ? 'No calls match your filters'

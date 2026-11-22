@@ -10,7 +10,7 @@ Mushi Mushi checks your live site, shows where people get stuck, and reviews you
 
 **[Check your live app free →](https://kensaur.us/mushi-mushi/docs/check?src=github-readme)** No sign-up, nothing to install.
 
-**[Add it to Lovable or Bolt with one prompt →](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt)** No terminal, about five minutes, free for one app.
+**[Add it to Lovable or Bolt with one prompt →](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt)** No terminal, about five minutes, free for three apps.
 
 Or, in your app's folder:
 
@@ -23,10 +23,10 @@ npx mushi-mushi
 [![npm](https://img.shields.io/npm/v/mushi-mushi?label=mushi-mushi&color=cb3837)](https://www.npmjs.com/package/mushi-mushi)
 [![Server](https://img.shields.io/badge/server-AGPL--3.0-brightgreen.svg)](./packages/server/LICENSE)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/kensaurus/mushi-mushi/badge)](https://scorecard.dev/viewer/?uri=github.com/kensaurus/mushi-mushi)
-[![npm provenance](https://img.shields.io/badge/npm-provenance-2ea44f?logo=npm)](./SECURITY.md#verifying-a-mushi-mushi-tarball-before-installing)
+[![npm provenance](https://img.shields.io/badge/npm-provenance-2ea44f?logo=npm)](./.github/SECURITY.md#verifying-a-mushi-mushi-tarball-before-installing)
 [![skills.sh](https://skills.sh/b/kensaurus/mushi-mushi)](https://skills.sh/kensaurus/mushi-mushi)
 
-[Quick start](#quick-start) · [How it works](#how-it-works) · [Docs](https://kensaur.us/mushi-mushi/docs/) · [Sample diagnosis](https://kensaur.us/mushi-mushi/docs/demo/diagnosis) · [Why not Sentry?](#why-not-just-sentry) · [Self-host](#self-host) · [Vision](./VISION.md)
+[Quick start](#quick-start) · [How it works](#how-it-works) · [Docs](https://kensaur.us/mushi-mushi/docs/) · [Sample diagnosis](https://kensaur.us/mushi-mushi/docs/demo/diagnosis) · [Why not Sentry?](#why-not-just-sentry) · [Self-host](#self-host) · [Vision](./docs/VISION.md)
 
 <a href="https://kensaur.us/mushi-mushi/docs/demo/diagnosis?src=github-readme" title="See a sample diagnosis: no signup">
   <img alt="A Mushi Mushi diagnosis of the report 'Pay now does nothing on my phone': the cause in plain English, why it broke, the two lines of code at fault, the suggested fix and the steps to reproduce." src="./docs/screenshots/sample-diagnosis.png" width="100%" />
@@ -64,6 +64,76 @@ It catches the bugs that never throw an error: the pay button hidden under the k
 - **Journeys.** The Journey optimizer maps how people move from page to page, from real visits, and flags dead ends, loops, pages people leave from, and orphan or duplicate pages. Each finding has a plain suggestion and a prompt your coding agent can run. The map from visits needs no key; the crawl of your live site needs a Firecrawl key. A first-time user test shows where a new user gets stuck (it runs on your own coding agent).
 - **Code.** Known security holes in your dependencies (once GitHub is connected), code audits run by your own agent, and clean-up of the branches and PRs Mushi Mushi made. Every change is a pull request you review.
 
+## Page by page
+
+Ten pages of the console, recorded on the maker's own apps (glot.it, tsumagoi, Help Her Take Photo, yen-yen and more). Real data, nothing staged; other people's emails and keys are masked. Each page has a longer write-up in the [console guide](https://kensaur.us/mushi-mushi/docs/admin).
+
+### Find out what broke
+
+**Home: the coffee-length check**  
+*Open it when* you just woke up and want to know whether your app survived the night.  
+Is the site up, what broke, which pull requests wait for you and what ships next, on one screen per app.
+
+<img src="./docs/media/tour/dashboard.gif" alt="Home for one app: site status, what needs you, the release train, pages with bugs and who can reach the repo" width="800" />
+
+**Bugs: every report, already sorted**  
+*Open it when* a user wrote “it's broken” and you need to know how bad, how many and where.  
+Reports from your users, Sentry and your own checks land in one list. “Fix first” ranks open bugs by severity and by how many people they reached.
+
+<img src="./docs/media/tour/reports.gif" alt="The Bugs list across all apps: severity tiles with week sparklines, Fix first, and reports from users and Sentry with their status" width="800" />
+
+**Bug detail: the cause in plain English**  
+*Open it when* you don't fully understand the code your AI wrote, and now you need to.  
+Each report gets a diagnosis: what the person saw, why it broke, the file at fault, and a fix prompt to paste into Claude Code, Cursor or any MCP client.
+
+<img src="./docs/media/tour/report-detail.gif" alt="One bug report: its plain-English classification, the fix prompt for your coding agent, and the evidence behind it" width="800" />
+
+**Apps: every app on one table**  
+*Open it when* you run several apps and want the worst one first.  
+One row per app, one column per signal (open bugs, risks, SDK, release age, CI failures, last check-in), darker where it is worse. Problems open in several apps become one "Fix once" item.
+
+<img src="./docs/media/tour/portfolio.gif" alt="Apps: alert cards for the apps that need you, the apps-by-signal heat table, and Fix once items shared across apps" width="800" />
+
+### Get it fixed
+
+**Fixes: what your agent tried**  
+*Open it when* you sent a few bugs to an agent and want to know which fixes are safe to merge.  
+Every attempt with its pull request, review verdict and CI. A train of counts shows where fixes are, ready ones sit at the top, and the ones that stopped say why.
+
+<img src="./docs/media/tour/fixes.gif" alt="Fixes: ready, stopped and fixed counts, the release train, pull requests ready to merge with their review and CI state, then every attempt with its outcome" width="800" />
+
+**Pipeline: where fixes get stuck**  
+*Open it when* bugs go in, but nothing seems to come out the other end.  
+Every stage from report to deploy, with the bottleneck in red, a bar of how long stuck work has waited, and the one action for each stuck group (re-run CI, re-run the review, close the PR) right beside it.
+
+<img src="./docs/media/tour/pipeline.gif" alt="Pipeline: stage cards from reported to deployed with the bottleneck marked, age bars for stuck work, then the stuck groups with one action button each" width="800" />
+
+**CI runners: why the merge is still waiting**  
+*Open it when* a fix is done but its tests haven't run, or your Actions bill jumped.  
+Which jobs wait for which machine and for how long, what every machine is running, and how long each job usually takes. On a big screen it uses the whole width.
+
+<img src="./docs/media/tour/ci.gif" alt="CI runners: alert cards for what needs a look, the machines running now, the week as a heatmap, and every check with its result" width="800" />
+
+### Keep it from coming back
+
+**Lessons: never the same bug a fourth time**  
+*Open it when* you have fixed the same kind of bug twice and you're tired of it.  
+Bugs that keep coming back become rules, and your editor reads them over MCP before it writes the next fix.
+
+<img src="./docs/media/tour/lessons.gif" alt="Lessons: rules learned from repeated bugs, each with how often it was seen and where it came from" width="800" />
+
+**Checks: is my app OK?**  
+*Open it when* you want one answer before you ship.  
+Every automatic check in one grid (the full-stack audit, scheduled browser tests, triage grading and more), failing ones first.
+
+<img src="./docs/media/tour/checks.gif" alt="Checks: alert cards for failing checks, then every automatic check for one app in a grid with its state" width="800" />
+
+**Connect: Mushi Mushi inside your editor**  
+*Open it when* you'd rather ask your editor than open another dashboard.  
+Pick your AI client and run one command; your editor can then ask what broke and pull the fix context. The SDK, GitHub and upgrade PRs live here too.
+
+<img src="./docs/media/tour/connect.gif" alt="Connect: pick an AI client, the one-command MCP setup, GitHub, SDK keys and the install snippet" width="800" />
+
 ## Quick start
 
 ```bash
@@ -80,17 +150,30 @@ Run it in your app's folder. What happens next:
 Prefer to have your AI editor run it? Paste this into Cursor or Claude Code:
 
 ```text
-Add Mushi Mushi to this app. In the project folder, run `npx mushi-mushi --yes`.
-It prints a sign-in link: show it to me and wait while I approve it in my
-browser. Then add the code it prints to the file it names, and tell me which
-file you changed.
+Add Mushi Mushi to this app. In the project folder, first run
+`npx mushi-mushi --dry-run` and tell me what it will change. Then run
+`npx mushi-mushi --yes`. It prints a sign-in link: show it to me and wait while
+I approve it in my browser. It sends a test report at the end. If it prints
+code and names a file, add the code there. Then run `npx mushi-mushi doctor`
+and tell me which file you changed and what doctor says.
 ```
 
 Starting from nothing? `npx mushi-mushi --template vue my-app` (or `svelte`, `node`) makes a starter app with Mushi Mushi already in it. Want your linter to catch the buttons that do nothing and the fake data AI tools leave behind? Add [`mushi-mushi/eslint`](https://kensaur.us/mushi-mushi/docs/sdks/eslint-plugin) to `eslint.config.js`.
 
-Then connect your editor so it can read diagnoses: one click on the [Connect page](https://kensaur.us/mushi-mushi/docs/connect), or `npx mushi-mushi setup --ide cursor` (or `--ide claude`). Ask it: *"Get the latest Mushi Mushi report and fix it."*
+Then connect your editor so it can read diagnoses. You sign in once in your browser; there is no key to paste.
 
-Building in Lovable or Bolt, with no terminal? Paste one script tag through your prompt instead: [Mushi Mushi in Lovable or Bolt](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt).
+[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=mushi&config=eyJ1cmwiOiJodHRwczovL2tlbnNhdXIudXMvbXVzaGktbXVzaGkvaG9zdGVkLW1jcC8ifQ%3D%3D)
+[![Add to VS Code](https://img.shields.io/badge/VS_Code-Add_Mushi_Mushi-0098FF?logo=visualstudiocode&logoColor=white)](https://vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%7B%22name%22%3A%22mushi%22%2C%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fkensaur.us%2Fmushi-mushi%2Fhosted-mcp%2F%22%7D)
+
+```bash
+claude mcp add --transport http mushi https://kensaur.us/mushi-mushi/hosted-mcp/
+```
+
+Other editors: the [Connect page](https://kensaur.us/mushi-mushi/docs/connect), or `npx mushi-mushi setup --ide cursor` (or `--ide claude`). Ask it: *"Get the latest Mushi Mushi report and fix it."*
+
+No SDK for your stack? [File a report with one curl](https://kensaur.us/mushi-mushi/docs/quickstart/http-api) ([OpenAPI spec](https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/openapi.json)).
+
+Building in Lovable, Bolt or Replit, with no terminal? Paste one script tag through your prompt instead: [Mushi Mushi in Lovable or Bolt](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt), [in Replit](https://kensaur.us/mushi-mushi/docs/quickstart/replit).
 
 The SDK needs two env vars (`VITE_MUSHI_PROJECT_ID` / `VITE_MUSHI_API_KEY`, or `NEXT_PUBLIC_MUSHI_*`; see [`examples/sdk.env.example`](./examples/sdk.env.example)). No Sentry, no LLM key, no monitoring stack.
 
@@ -98,7 +181,7 @@ The SDK needs two env vars (`VITE_MUSHI_PROJECT_ID` / `VITE_MUSHI_API_KEY`, or `
 
 **Want a real diagnosis of your own code right away?** A test report is one made-up sentence, so its diagnosis is thin. Bring in a bug you already know about: `npx mushi-mushi sentry import` (your newest unresolved Sentry issues, once Sentry is connected under Integrations in the console) or `npx mushi-mushi reports file --title "…" --description "…"`. Connect your GitHub repository so the diagnosis can name your files.
 
-The hosted free plan covers one app and 100 diagnoses a month, with no card and no AI key of your own ([pricing](https://kensaur.us/mushi-mushi/docs/pricing)). Or you can [self-host](#self-host).
+The hosted free plan covers three apps and 300 diagnoses a month, with no card and no AI key of your own ([pricing](https://kensaur.us/mushi-mushi/docs/pricing)). Or you can [self-host](#self-host).
 
 <details>
 <summary><b>Let your AI editor do the setup</b></summary>
@@ -203,12 +286,23 @@ A "fix first" review can go back to the agent with its findings, at most twice p
 
 ## Self-host
 
+On your own Supabase project (the free tier works):
+
 ```bash
-cd deploy && cp .env.example .env   # add ANTHROPIC_API_KEY and your Supabase credentials
-docker compose up -d
+git clone https://github.com/kensaurus/mushi-mushi.git && cd mushi-mushi
+npx mushi-mushi@latest selfhost up --project-ref <your-supabase-ref>
 ```
 
-Walkthroughs: [`SELF_HOSTED.md`](./SELF_HOSTED.md) and [Docker Compose guide](https://kensaur.us/mushi-mushi/docs/self-hosting/docker-compose). Self-hosting is bring-your-own-key: you pay your LLM vendor at list price. The hosted service needs no key; it bills per diagnosis with a spend cap ([pricing](https://kensaur.us/mushi-mushi/docs/pricing)). Teams wiring Mushi Mushi into an existing stack (SSO, retention, region routing, Kubernetes) start at [`docs/operators/`](./docs/operators/). Only the public `api` function should face the internet: see [internal caller authentication](./packages/server/README.md#internal-caller-authentication-sec-1).
+Or everything in Docker on one Linux or macOS server, no Supabase account:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kensaurus/mushi-mushi/master/deploy/selfhost/install.sh -o install.sh
+sh install.sh --email you@example.com
+```
+
+The installer runs Supabase's self-host kit plus Mushi's published images (amd64 and arm64), generates every secret, closes sign-up and keeps every port on `127.0.0.1`. `sh mushi.sh https your.domain` adds HTTPS; `backup`, `restore` and `update` are one command each; your own model server (Ollama, vLLM) works too.
+
+Guides: [Self-hosting quickstart](https://kensaur.us/mushi-mushi/docs/self-hosting), [Docker (one command)](https://kensaur.us/mushi-mushi/docs/self-hosting/docker-compose) and [every environment variable](https://kensaur.us/mushi-mushi/docs/self-hosting/environment). Self-host turns every feature on, with no plan limits. Self-hosting is bring-your-own-key: you pay your LLM vendor at list price. The hosted service needs no key; it bills per diagnosis with a spend cap ([pricing](https://kensaur.us/mushi-mushi/docs/pricing)). Teams wiring Mushi Mushi into an existing stack (SSO, retention, region routing, Kubernetes) start at [`docs/operators/`](./docs/operators/). Only the public `api` function should face the internet: see [internal caller authentication](./packages/server/README.md#internal-caller-authentication-sec-1).
 
 ## Where it stops
 
@@ -221,18 +315,18 @@ Walkthroughs: [`SELF_HOSTED.md`](./SELF_HOSTED.md) and [Docker Compose guide](ht
 | Inventory and QA gates | Behind the `inventory_v2` plan flag; reachable from Checks |
 | Multi-region | Region pinning works. Active/active write replication is not automated |
 
-<sub>Repo at a glance (run `pnpm docs-stats`): ~630K TS lines · ~2,800 source files · 45 workspace / 37 npm packages · 78 edge functions · 570 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
+<sub>Repo at a glance (run `pnpm docs-stats`): ~680K TS lines · ~2,900 source files · 45 workspace / 37 npm packages · 78 edge functions · 582 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
 
 ## Community and contributing
 
-Questions and show-and-tell: [GitHub Discussions](https://github.com/kensaurus/mushi-mushi/discussions). Bugs: [Issues](https://github.com/kensaurus/mushi-mushi/issues) (first reply within 24 hours on weekdays). Security: [`SECURITY.md`](./SECURITY.md). Anything else private: kensaurus@gmail.com.
+Questions and show-and-tell: [GitHub Discussions](https://github.com/kensaurus/mushi-mushi/discussions). Bugs: [Issues](https://github.com/kensaurus/mushi-mushi/issues) (first reply within 24 hours on weekdays). Security: [`.github/SECURITY.md`](./.github/SECURITY.md). Anything else private: kensaurus@gmail.com.
 
 ```bash
 git clone https://github.com/kensaurus/mushi-mushi.git && cd mushi-mushi
 pnpm install && pnpm dev   # Node ≥ 22, pnpm ≥ 10
 ```
 
-See [`CONTRIBUTING.md`](./CONTRIBUTING.md) and [`docs/stats.md`](./docs/stats.md).
+See [`.github/CONTRIBUTING.md`](./.github/CONTRIBUTING.md) and [`docs/stats.md`](./docs/stats.md).
 
 ## License
 
@@ -241,11 +335,11 @@ Open core. Each package directory's own `LICENSE` governs that package; the [roo
 | Part | License | In short |
 | --- | --- | --- |
 | SDKs, CLI, MCP, plugins, adapters | [MIT](./LICENSE) | Use anywhere, including closed-source products |
-| Server (`server`, `agents`, `verify`) and console (`apps/admin`) | [AGPLv3](./packages/server/LICENSE) | Self-host and modify freely. Offer a modified server or console as a service: publish your changes or get a [commercial license](./COMMERCIAL-LICENSE.md) |
+| Server (`server`, `agents`, `verify`) and console (`apps/admin`) | [AGPLv3](./packages/server/LICENSE) | Self-host and modify freely. Offer a modified server or console as a service: publish your changes or get a [commercial license](./docs/legal/COMMERCIAL-LICENSE.md) |
 | Enterprise features (`packages/server/ee/`) | [EE license](./packages/server/ee/LICENSE) | SSO, audit ingest, retention, region pinning. Paid for production use |
-| Name, logo, icons, mascot | [Trademark policy](./TRADEMARK.md) | All rights reserved. Link to Mushi Mushi with the unmodified logo; forks must rename |
+| Name, logo, icons, mascot | [Trademark policy](./docs/legal/TRADEMARK.md) | All rights reserved. Link to Mushi Mushi with the unmodified logo; forks must rename |
 
-Self-hosting is free and complete: the repo has every feature and working default prompts. Mushi Mushi Cloud runs the same code and keeps its own tuning data (prompt wording, evaluation sets and scoring weights tuned on live traffic) as configuration. Contributions come in under a [CLA](./CLA.md). Why it is set up this way: [ADR 0036](./docs/adr/0036-licensing-posture.md). Third-party notices: [NOTICE](./NOTICE).
+Self-hosting is free and complete: the repo has every feature and working default prompts. Mushi Mushi Cloud runs the same code and keeps its own tuning data (prompt wording, evaluation sets and scoring weights tuned on live traffic) as configuration. Contributions come in under a [CLA](./docs/legal/CLA.md). Why it is set up this way: [ADR 0036](./docs/adr/0036-licensing-posture.md). Third-party notices: [NOTICE](./docs/legal/NOTICE).
 
 ## More apps from the same maker
 
@@ -259,6 +353,7 @@ Self-hosting is free and complete: the repo has every feature and working defaul
 | <img src="https://solo-boss.kensaur.us/apple-touch-icon.png" width="28" height="28" alt=""> | [一人社長 Solo Boss](https://solo-boss.kensaur.us/?utm_source=github&utm_medium=readme) | Bookkeeping and tax-filing co-pilot for one-person companies in Japan — [Free tools](https://solo-boss.kensaur.us/tools?utm_source=github&utm_medium=readme&utm_campaign=kensaurus-family) |
 | <img src="https://tsumagoi.kensaur.us/apple-touch-icon.png" width="28" height="28" alt=""> | [Tsumagoi Work&Camp](https://tsumagoi.kensaur.us/?utm_source=github&utm_medium=readme) | A 24-hour mountain lounge at 1,444 m; guests sleep in their own car or tent — [Book a stay](https://tsumagoi.kensaur.us/reserve?utm_source=github&utm_medium=readme&utm_campaign=kensaurus-family) · [Instagram](https://www.instagram.com/tsumagoicamp/) · [Facebook](https://www.facebook.com/profile.php?id=61592113053042) · [Maps](https://maps.app.goo.gl/JCNnTfsdQVHCS1FA7) |
 | <img src="https://github.com/kensaurus.png" width="28" height="28" alt=""> | [kenji skills](https://github.com/kensaurus/skills) | Agent skills and slash commands for Claude Code, Cursor, Codex, and Gemini — [Getting started](https://github.com/kensaurus/skills/blob/main/docs/GETTING-STARTED.md) |
+| <img src="https://raw.githubusercontent.com/kensaurus/lazycow-studio/main/server/brand/icon-192.png" width="28" height="28" alt=""> | [Lazycow Studio](https://github.com/kensaurus/lazycow-studio) | Turns your own footage into reels and books the posts; you only approve. Open source — [npm `lazycow`](https://www.npmjs.com/package/lazycow) · [Connect your AI agent (MCP)](https://github.com/kensaurus/lazycow-studio/blob/main/docs/mcp.md) |
 | <img src="https://kensaur.us/favicon.svg" width="28" height="28" alt=""> | [kensaur.us](https://kensaur.us/?utm_source=github&utm_medium=readme&utm_campaign=kensaurus-family) | All apps from the same maker |
 
 The list comes from https://kensaur.us/apps.json (kensaurus/kensaur.us `src/data/family.json`).

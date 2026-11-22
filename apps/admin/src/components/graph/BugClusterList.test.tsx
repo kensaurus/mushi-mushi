@@ -54,10 +54,12 @@ describe('BugClusterList', () => {
     expect(rows[0].querySelector('a')!.getAttribute('href')).toBe('/reports/r3')
   })
 
-  it('says so when no two bugs share a cause', () => {
+  // Round 3: the page's status line says "0 bug groups"; the empty card was a second copy.
+  it('draws nothing when no two bugs share a cause', () => {
     state.groups = [{ id: 'g', title: 'x', canonical_report_id: 'r', report_count: 1, reports: [] }]
     render()
-    expect(host.querySelector('[data-testid="graph-clusters-empty"]')).not.toBeNull()
+    expect(host.querySelector('#graph-clusters')).toBeNull()
+    expect(host.textContent).toBe('')
   })
 
   it('reads the fix state from the reports', () => {

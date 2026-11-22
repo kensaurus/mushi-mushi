@@ -154,17 +154,6 @@ export interface FixSummary {
   days: { day: string; total: number; completed: number; failed: number }[];
 }
 
-export const DISPATCH_STATUS: Record<DispatchJob['status'], string> = {
-  queued: 'bg-surface-overlay text-fg-muted',
-  running: CHIP_TONE.infoSubtle,
-  completed: CHIP_TONE.okSubtle,
-  completed_no_pr: CHIP_TONE.warnSubtle,
-  failed: CHIP_TONE.dangerSubtle,
-  cancelled: 'bg-surface-overlay text-fg-faint',
-  skipped: CHIP_TONE.warnSubtle,
-  skipped_no_sandbox: CHIP_TONE.warnSubtle,
-};
-
 export const DISPATCH_STATUS_LABEL: Record<DispatchJob['status'], string> = {
   queued: 'Queued',
   running: 'Running',

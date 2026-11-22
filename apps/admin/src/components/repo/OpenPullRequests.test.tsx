@@ -18,7 +18,9 @@ const mocks = vi.hoisted(() => ({ usePageData: vi.fn(), apiFetchMutate: vi.fn() 
 vi.mock('../../lib/usePageData', () => ({ usePageData: mocks.usePageData }))
 vi.mock('../../lib/supabase', () => ({ apiFetchMutate: mocks.apiFetchMutate }))
 
-import { OpenPullRequests, openPrMergeBlocker } from './OpenPullRequests'
+import { OpenPullRequests, countMergeable, openPrMergeBlocker } from './OpenPullRequests'
+import { repoSentence } from './RepoSnapshotStrip'
+import type { RepoStats } from './RepoStatsTypes'
 
 const check = (name: string, conclusion: string | null) => ({
   name,
@@ -73,7 +75,7 @@ describe('openPrMergeBlocker', () => {
 describe('OpenPullRequests', () => {
   it('merges only after the confirmation, with the chosen method', async () => {
     const { reload } = render([pr(7, [check('gate', 'success')])])
-    expect(host.textContent).toContain('all 1 required checks passed')
+    expect(host.textContent).toContain('its required check passed')
     act(() => button('Merge')?.click())
     expect(mocks.apiFetchMutate).not.toHaveBeenCalled()
     mocks.apiFetchMutate.mockResolvedValueOnce({ ok: true, data: { merged: true, alreadyMerged: false } })
@@ -156,5 +158,18 @@ describe('OpenPullRequests', () => {
     expect(numbers('hold')).toEqual(['1'])
     // A review of an older commit is not a "merge" yet; CI still running waits too.
     expect(numbers('waiting')).toEqual(['3', '6'])
+  })
+})
+
+describe('ready-to-merge in the status line', () => {
+  const stats = (_over: Partial<RepoStats>) => ({ prOpen: 0, ciPassing: 0, ciFailed: 0, merged: 0 }) as RepoStats & typeof _over
+  it('counts only PRs whose required checks passed', () => {
+    expect(countMergeable([pr(1, [check('ci', 'success')]), pr(2, [check('ci', 'failure')]), pr(3, [check('ci', null)])])).toBe(1)
+  })
+  it('leads with "1 PR ready to merge" instead of "No fix PRs open"', () => {
+    expect(repoSentence(stats({}), 1)).toBe('1 PR ready to merge.')
+    expect(repoSentence(stats({}), 0)).toBe('No fix PRs open.')
+    expect(repoSentence({ ...stats({}), prOpen: 2, ciPassing: 2 }, 1)).toBe('1 PR ready to merge; 2 fix PRs open, CI green on 2.')
+    expect(repoSentence({ ...stats({}), prOpen: 2, ciPassing: 2 })).toBe('2 fix PRs open, CI green on 2.')
   })
 })

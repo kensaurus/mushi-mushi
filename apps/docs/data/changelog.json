@@ -4,8 +4,116 @@
     "headline": "Unreleased",
     "pending": true,
     "versions": [],
-    "highlights": [],
+    "highlights": [
+      {
+        "title": "A scorecard run keeps its top 60 root causes",
+        "description": "causes that span pages or contradict come first, then the rest by rank, so a large app's run syncs and files instead of failing with \"at most 60\" (the first real run on Mushi's console grouped 235). `scorecard.json` on your machine still lists every cause."
+      },
+      {
+        "title": "A server-scored run keeps its screenshots",
+        "description": "`--score-via server` sends the screenshot names it uploaded with the final sync, so the console no longer loses them."
+      },
+      {
+        "title": "`mushi-ux scorecard` scores every page of a live app",
+        "description": "each page gets a 1–10 score on eight written dimensions (clarity, hierarchy, consistency, states, truthfulness, copy, accessibility, speed), its top problems with quoted evidence and a fix, and the overall score follows its worst dimension. It reads the page as a person meets it: the tab title, the text, a screenshot early in the load and one once it settles, the settle time and axe. The settle time and axe cap the speed and accessibility scores (ADR 0067)."
+      },
+      {
+        "title": "Problems that repeat across pages become one root cause",
+        "description": "the same shared component, banner or status rule on ten pages is one cause with ten pages, and two pages that disagree about the same fact are flagged. `--file` files the top causes as Mushi reports, one per cause and at most five a run; a cause already open only gets its pages refreshed."
+      },
+      {
+        "title": "Score on Mushi or on your machine",
+        "description": "`--score-via server` (the default) uses your app's AI key, then Mushi's; `claude-code`, `cursor` and `anthropic-api` score locally. `--sync` puts the scorecard on the console (UX runs → Scorecard) with each page's trend across runs. Pages come from `--path` / `--paths-file`, your source (`--routes-from`) or a crawl; `/team?view=sso` counts as its own page. `--from-captures` scores captures another browser driver made, so no second browser opens on a profile already in use."
+      }
+    ],
     "packages": []
+  },
+  {
+    "majorMinor": "1.38",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "1.38.0"
+    ],
+    "highlights": [
+      {
+        "title": "A removed screenshot stays removed.",
+        "description": "With `'auto'` or `'on-report'`, pressing Remove and then Send took a new screenshot and sent it. Remove now holds until that report is sent or closed."
+      },
+      {
+        "title": "The selected element's text follows the privacy rules.",
+        "description": "Pointing at an element sent up to 200 characters of its text unscrubbed, even inside `data-private`. Text from inside (or around) a redacted, masked or blocked area is now left out, and the rest goes through the PII scrubber."
+      }
+    ],
+    "packages": [
+      {
+        "name": "@mushi-mushi/web",
+        "version": "1.38.0"
+      },
+      {
+        "name": "mushi-mushi",
+        "version": "1.38.0"
+      }
+    ]
+  },
+  {
+    "majorMinor": "1.37",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "1.37.3",
+      "1.37.2",
+      "1.37.1",
+      "1.37.0"
+    ],
+    "highlights": [
+      {
+        "title": "App version.",
+        "description": "`reports.app_version` now comes from the new `appVersion` option, then `expo-application` (version and build) or `react-native-device-info`. It never falls back to the OS version, which made Expo apps report Android's `36`."
+      },
+      {
+        "title": "`loadMyReports()`.",
+        "description": "It resolves `null` when the list could not be loaded, so the report sheet shows an error with Retry instead of \"no reports\". `listMyReports()` keeps returning `[]` on failure."
+      },
+      {
+        "title": "Scroll position",
+        "description": "the capture shows the part of the page the user had scrolled to, including pages that scroll inside an app shell (`<main>`) and sticky headers. It used to always show the top of the page."
+      },
+      {
+        "title": "Layout",
+        "description": "sections above the viewport keep their live size, so the visible part no longer drifts out of frame on long pages. Each stylesheet's own text is used, in document order. Chrome's CSSOM dropped `font: … var()` shorthands, and the old order broke `@layer` cascades. CSS-in-JS rules added with `insertRule` are kept."
+      },
+      {
+        "title": "Images and canvases",
+        "description": "they are embedded at their natural size and keep transparency, so pixel sprites no longer turn into black boxes. CSS background images (sprites, hero art, icons) are embedded too. Running animations keep their current frame. Unreadable media becomes a grey box of the same size."
+      },
+      {
+        "title": "Hidden stays hidden",
+        "description": "what the page hides (display, visibility, opacity) stays hidden, so hover-only buttons no longer show up."
+      },
+      {
+        "title": "Pages that failed outright",
+        "description": "pages with a `--` comment, framework attribute names (`@click`, `:href`) or control characters in text no longer fail with reason `error`."
+      },
+      {
+        "title": "Speed and size",
+        "description": "off-screen media is never read. The capture code is a separate chunk that loads with the first screenshot, so the core bundle is smaller (88.5 KB budget)."
+      }
+    ],
+    "packages": [
+      {
+        "name": "@mushi-mushi/core",
+        "version": "1.37.0"
+      },
+      {
+        "name": "@mushi-mushi/web",
+        "version": "1.37.3"
+      },
+      {
+        "name": "mushi-mushi",
+        "version": "1.37.2"
+      }
+    ]
   },
   {
     "majorMinor": "1.36",
@@ -1125,6 +1233,14 @@
     ],
     "highlights": [
       {
+        "title": "`captureScreenshot()` works on Android.",
+        "description": "It always returned `null`; it now returns a base64 JPEG of the current screen."
+      },
+      {
+        "title": "The native bottom sheet (`useNativeWidget`) shows its screenshot",
+        "description": "with a Remove button; only a screenshot still shown is sent."
+      },
+      {
         "title": "`mushi sync-lessons`",
         "description": "pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs."
       },
@@ -1142,6 +1258,10 @@
       }
     ],
     "packages": [
+      {
+        "name": "@mushi-mushi/capacitor",
+        "version": "1.2.0"
+      },
       {
         "name": "@mushi-mushi/core",
         "version": "1.2.0"
@@ -1284,17 +1404,63 @@
     ]
   },
   {
+    "majorMinor": "0.41",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "0.41.0"
+    ],
+    "highlights": [
+      {
+        "title": "The audit lane rechecks its open findings once a day",
+        "description": "on the default branch, with no model. What no longer reproduces is closed with the commit it checked. When the app is at its open cap, the lane only rechecks."
+      },
+      {
+        "title": "`mushi work --recheck --dry-run --json` shows the pattern plan",
+        "description": "how the open findings would collapse into one report per pattern."
+      },
+      {
+        "title": "`mushi work --collapse-backlog [--apply]` collapses the findings filed before",
+        "description": "a dry run unless `--apply`; each group's other reports become duplicates of one, a report with a live PR stays open, and every changed row is tagged so the SQL it prints reverts it. With `--apply-cap` it then keeps only the best reports up to the app's open cap; the rest wait and come back as slots free."
+      }
+    ],
+    "packages": [
+      {
+        "name": "@mushi-mushi/cli",
+        "version": "0.41.0"
+      }
+    ]
+  },
+  {
     "majorMinor": "0.40",
     "headline": null,
     "pending": false,
     "versions": [
+      "0.40.5",
+      "0.40.4",
+      "0.40.3",
+      "0.40.2",
+      "0.40.1",
       "0.40.0"
     ],
-    "highlights": [],
+    "highlights": [
+      {
+        "title": "pnpm repos on a Windows worker",
+        "description": "the worker looked for pnpm only beside `node.exe`, so a global `npm i -g pnpm` was never found and pnpm repos ran with no dependencies (no tests, failing commit hooks). It now also looks on PATH, including a standalone `pnpm.exe`."
+      },
+      {
+        "title": "The worker's stop hint",
+        "description": "on Windows it no longer says `systemctl`."
+      },
+      {
+        "title": "`mushi login` outside an app folder",
+        "description": "run from a folder with no `package.json` or `.git` (your home folder, say) by an account that already has projects, it no longer creates a new project named after the folder. It lists your projects with their `--project-id` instead."
+      }
+    ],
     "packages": [
       {
         "name": "@mushi-mushi/cli",
-        "version": "0.40.0"
+        "version": "0.40.5"
       }
     ]
   },
@@ -1449,6 +1615,12 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.31.8",
+      "0.31.7",
+      "0.31.6",
+      "0.31.5",
+      "0.31.4",
+      "0.31.3",
       "0.31.2",
       "0.31.1",
       "0.31.0"
@@ -1461,7 +1633,7 @@
       },
       {
         "name": "@mushi-mushi/mcp",
-        "version": "0.31.2"
+        "version": "0.31.8"
       }
     ]
   },
@@ -1603,7 +1775,16 @@
     "versions": [
       "0.25.0"
     ],
-    "highlights": [],
+    "highlights": [
+      {
+        "title": "App version.",
+        "description": "`reports.app_version` now comes from the new `appVersion` option, then `expo-application` (version and build) or `react-native-device-info`. It never falls back to the OS version, which made Expo apps report Android's `36`."
+      },
+      {
+        "title": "`loadMyReports()`.",
+        "description": "It resolves `null` when the list could not be loaded, so the report sheet shows an error with Retry instead of \"no reports\". `listMyReports()` keeps returning `[]` on failure."
+      }
+    ],
     "packages": [
       {
         "name": "@mushi-mushi/cli",
@@ -1611,6 +1792,10 @@
       },
       {
         "name": "@mushi-mushi/mcp",
+        "version": "0.25.0"
+      },
+      {
+        "name": "@mushi-mushi/react-native",
         "version": "0.25.0"
       }
     ]
@@ -1620,6 +1805,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.24.7",
       "0.24.6",
       "0.24.5",
       "0.24.4",
@@ -1669,7 +1855,7 @@
       },
       {
         "name": "@mushi-mushi/react-native",
-        "version": "0.24.6"
+        "version": "0.24.7"
       }
     ]
   },
@@ -2782,6 +2968,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.6.18",
       "0.6.17",
       "0.6.16",
       "0.6.15",
@@ -2882,7 +3069,7 @@
       },
       {
         "name": "create-mushi-mushi",
-        "version": "0.6.17"
+        "version": "0.6.18"
       },
       {
         "name": "mushi-mushi",

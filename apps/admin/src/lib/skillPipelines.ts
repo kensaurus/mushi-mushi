@@ -84,3 +84,21 @@ export function nextCheckinStep<T extends CheckinStep>(steps: readonly T[]): T |
   const ordered = [...steps].sort((a, b) => a.step_index - b.step_index)
   return ordered.find((s) => s.status === 'pending' || s.status === 'running') ?? null
 }
+
+/**
+ * The Sources tab with no repo of this app's own. Sources are per app, but the
+ * catalog is shared, so "No skill sources yet … load 70+ skills" sat beside a
+ * catalog of 173 (round-2 review 2026-11-18). The line now counts from data.
+ */
+export function skillSourcesEmptyLine(catalogTotal: number): string {
+  if (catalogTotal > 0) {
+    const n = catalogTotal.toLocaleString('en-US')
+    return `This app has no repos of its own. The catalog's ${n} ${catalogTotal === 1 ? 'skill is' : 'skills are'} shared; add a repo above to bring in yours.`
+  }
+  return 'No skill sources yet. Add kensaurus/skills above, then sync it to fill the catalog.'
+}
+
+/** Nothing running, waiting or failed: the runs card below says so once. */
+export function skillsIdle(stats: { activeRuns: number; awaitingCheckin: number; failedRuns: number }): boolean {
+  return stats.activeRuns === 0 && stats.awaitingCheckin === 0 && stats.failedRuns === 0
+}

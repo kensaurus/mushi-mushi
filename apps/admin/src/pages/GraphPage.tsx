@@ -32,6 +32,7 @@ import { GraphBackendPanel } from '../components/graph/GraphBackendPanel'
 import { GraphStatusBanner } from '../components/graph/GraphStatusBanner'
 import { OntologyPanel } from '../components/graph/OntologyPanel'
 import { GroupsPanel } from '../components/graph/GroupsPanel'
+import { filterIsolated, isolatedToggleState } from '../components/graph/isolatedNodes'
 import { BugClusterList } from '../components/graph/BugClusterList'
 import { GraphCanvas } from '../components/graph/GraphCanvas'
 import { readVizToken } from '../lib/vizTokens'
@@ -64,6 +65,7 @@ import {
   type NodeType,
 } from '../components/graph/types'
 import { GraphWorkspaceReadout } from '../components/graph/GraphWorkspaceReadout'
+import { planGraphSnapshot } from '../components/graph/graphSnapshot'
 import {
   ActionPill,
   ActionPillRow,
@@ -122,6 +124,8 @@ type ViewMode = 'graph' | 'table' | 'surface'
  * back to the canvas with the view switch.
  */
 const STORYBOARD_THRESHOLD = 12
+/** Below this many items the search, type filters, quick views and Re-layout stay hidden (round 3). */
+const SMALL_GRAPH = 6
 
 export function GraphPage() {
   const toast = useToast()
@@ -250,28 +254,20 @@ export function GraphPage() {
     }
   }, [activeTab, searchParams, applyView])
 
-  const filteredNodes = useMemo(() => {
+  // A node is isolated if no enabled edge connects it, computed against the
+  // type-filtered set so the result is stable when only edge filters change.
+  // When every node is isolated they stay visible (filterIsolated): hiding
+  // all of them left an empty canvas on a young map.
+  const isolated = useMemo(() => {
     const q = search.trim().toLowerCase()
     const typeFiltered = rawNodes.filter((n) => {
       if (!enabledNodeTypes.has(n.node_type as NodeType)) return false
       if (q && !n.label.toLowerCase().includes(q)) return false
       return true
     })
-    if (!hideSingletons) return typeFiltered
-    // A node is a singleton if no enabled edge connects to it. We have to
-    // compute connections against the type-filtered set to keep the result
-    // stable when only edge filters change.
-    const visible = new Set(typeFiltered.map((n) => n.id))
-    const connected = new Set<string>()
-    for (const e of rawEdges) {
-      if (!enabledEdgeTypes.has(e.edge_type as EdgeType)) continue
-      if (visible.has(e.source_node_id) && visible.has(e.target_node_id)) {
-        connected.add(e.source_node_id)
-        connected.add(e.target_node_id)
-      }
-    }
-    return typeFiltered.filter((n) => connected.has(n.id))
+    return filterIsolated(typeFiltered, rawEdges, (t) => enabledEdgeTypes.has(t as EdgeType), hideSingletons)
   }, [rawNodes, rawEdges, enabledNodeTypes, enabledEdgeTypes, search, hideSingletons])
+  const filteredNodes = isolated.nodes
 
   const filteredEdges = useMemo(() => {
     const visibleNodeIds = new Set(filteredNodes.map((n) => n.id))
@@ -283,11 +279,7 @@ export function GraphPage() {
     )
   }, [rawEdges, filteredNodes, enabledEdgeTypes])
 
-  const singletonCount = useMemo(() => {
-    if (!hideSingletons) return 0
-    const typeFiltered = rawNodes.filter((n) => enabledNodeTypes.has(n.node_type as NodeType))
-    return typeFiltered.length - filteredNodes.length
-  }, [rawNodes, filteredNodes, enabledNodeTypes, hideSingletons])
+  const singletonCount = isolated.hidden
 
   const positions = useMemo(
     () => layoutNodes(filteredNodes, filteredEdges, layoutSeed),
@@ -465,6 +457,8 @@ export function GraphPage() {
     [stats, copy?.tabLabels],
   )
 
+  const snapshotPlan = planGraphSnapshot(stats, { fragile: copy?.statLabels?.fragile ?? 'Hotspots' })
+
   usePublishPageContext({
     route: '/graph',
     title: 'Bug clusters',
@@ -503,10 +497,11 @@ export function GraphPage() {
             Surface · inventory overlay
           </SignalChip>
         )}
-        <InlineProof className="font-mono tabular-nums border-0 bg-transparent px-0 py-0">
+        <InlineProof className="tabular-nums border-0 bg-transparent px-0 py-0">
           {graphCanvasProof('nodes', filteredNodes.length, rawNodes.length, nodesQuery.data?.total)}
-          {singletonCount > 0 ? ` (${singletonCount} with no links hidden)` : ''} ·{' '}
-          {graphCanvasProof('edges', filteredEdges.length, rawEdges.length, edgesQuery.data?.total)}
+          {singletonCount > 0 ? ` (${singletonCount} with no links hidden)` : ''}
+          {/* "no links" is the status line's: the proof names links only once there are some (round 3). */}
+          {rawEdges.length > 0 && <> · {graphCanvasProof('edges', filteredEdges.length, rawEdges.length, edgesQuery.data?.total)}</>}
         </InlineProof>
         <SegmentedControl<ViewMode>
           size="sm"
@@ -517,15 +512,19 @@ export function GraphPage() {
         />
       </div>
 
+      {/* Search, type filters, quick views and Re-layout start to matter past a handful of items
+          (round 3: all of them for 2 nodes). */}
+      {rawNodes.length >= SMALL_GRAPH && (
       <div data-dav-anchor="graph:act">
         <QuickViewsRow
-          hideSingletons={hideSingletons}
+          isolatedToggle={isolatedToggleState(hideSingletons, isolated)}
           singletonCount={singletonCount}
           onApplyView={applyView}
           onToggleSingletons={setHideSingletons}
           onRelayout={() => setLayoutSeed((s) => s + 1)}
         />
       </div>
+      )}
 
       {rawNodes.length === 0 ? (
         <NextStep
@@ -542,6 +541,7 @@ export function GraphPage() {
         />
       ) : (
         <div className="space-y-2" data-dav-anchor="graph:verify">
+          {rawNodes.length >= SMALL_GRAPH && (
           <GraphFilterChips
             search={search}
             onSearchChange={setSearch}
@@ -550,10 +550,13 @@ export function GraphPage() {
             onToggleNodeType={toggleNodeType}
             onToggleEdgeType={toggleEdgeType}
           />
+          )}
 
           {useStoryboard ? (
+            // The side panel only once a card is picked: alone it was an empty box repeating the
+            // strip's "click a card" hint (round 3).
             // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
-            <div className="grid gap-3 md:grid-cols-[1fr_18rem]">
+            <div className={`grid gap-3 ${selectedNode ? 'md:grid-cols-[1fr_18rem]' : ''}`}>
               <div className="space-y-2 min-w-0">
                 <StoryboardNarrative
                   nodes={filteredNodes}
@@ -571,12 +574,14 @@ export function GraphPage() {
                   onClear={clearSelection}
                 />
               </div>
-              <GraphSidePanel
-                node={selectedNode}
-                blastRadius={blastRadius}
-                blastLoading={blastLoading}
-                onClear={clearSelection}
-              />
+              {selectedNode && (
+                <GraphSidePanel
+                  node={selectedNode}
+                  blastRadius={blastRadius}
+                  blastLoading={blastLoading}
+                  onClear={clearSelection}
+                />
+              )}
             </div>
           ) : view === 'table' ? (
             // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
@@ -704,42 +709,56 @@ export function GraphPage() {
       {!ux.hideGraphSnapshot && activeTab === 'overview' && (
       <Section title={copy?.sections?.snapshot ?? 'GRAPH SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
         <SnapshotSectionHint text={activeTabMeta.description} />
+        {snapshotPlan.tiles.length > 0 ? (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {/* Leads with clusters (report groups): the node total mixes every
               node type, so "192" under a "report groups" caption misled. */}
+          {snapshotPlan.tiles.includes('clusters') && (
           <StatCard
             label="Clusters"
             value={stats.reportNodes}
-            accent={stats.reportNodes > 0 ? 'text-fg' : undefined}
+            accent="text-fg"
             tooltip={nodesTooltip(stats)}
             detail={nodesDetail(stats)}
             to={graphLinks.nodes}
           />
+          )}
+          {snapshotPlan.tiles.includes('links') && (
           <StatCard
             label={copy?.statLabels?.edges ?? 'Links'}
             value={stats.edgeCount}
-            accent={stats.edgeCount > 0 ? 'text-brand' : undefined}
+            accent="text-fg"
             tooltip={edgesTooltip(stats)}
             detail={edgesDetail(stats)}
             to={graphLinks.edges}
           />
+          )}
+          {snapshotPlan.tiles.includes('fragile') && (
           <StatCard
             label={copy?.statLabels?.fragile ?? 'Fragile'}
             value={stats.fragileComponents}
-            accent={stats.fragileComponents > 0 ? 'text-danger' : 'text-ok'}
+            accent="text-danger"
             tooltip={fragileTooltip(stats)}
             detail={fragileDetail(ux.plainBanner)}
             to={graphLinks.fragile}
           />
+          )}
+          {snapshotPlan.tiles.includes('inventory') && (
           <StatCard
             label={copy?.statLabels?.inventory ?? 'Inventory'}
             value={stats.inventoryNodes}
-            accent={stats.inventoryNodes > 0 ? 'text-info' : undefined}
+            accent="text-fg"
             tooltip={inventoryTooltip(stats)}
             detail={inventoryDetail(stats)}
             to={graphLinks.inventory}
           />
+          )}
         </div>
+        ) : null}
+        {/* Zeros and unknowns in one line, not a row of 0 tiles (fresh-eyes 2026-11-18). */}
+        {snapshotPlan.zeroLine ? (
+          <p className="text-2xs text-fg-muted" data-testid="graph-snapshot-zero-line">{snapshotPlan.zeroLine}</p>
+        ) : null}
       </Section>
       )}
 
@@ -764,25 +783,9 @@ export function GraphPage() {
 
       {activeTab === 'backend' && (
         <div className="space-y-3">
-          <ContainedBlock tone="info" label="Graph backend debug">
-            <p className="text-sm font-medium text-fg">Sync posture</p>
-            <InlineProof className="mt-2">
-              Backend: <span className="font-mono text-fg-secondary">{stats.graphBackend}</span>
-              {stats.ageAvailable ? ' · Apache AGE available' : ' · SQL-only mode'}
-              {stats.unsyncedNodes > 0 || stats.unsyncedEdges > 0
-                ? ` · ${stats.unsyncedNodes} unsynced nodes · ${stats.unsyncedEdges} unsynced edges`
-                : ' · fully synced'}
-            </InlineProof>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              <SignalChip tone={stats.ageAvailable ? 'ok' : 'neutral'}>
-                {stats.ageAvailable ? 'AGE on' : 'SQL mode'}
-              </SignalChip>
-              <SignalChip tone={stats.unsyncedNodes > 0 || stats.unsyncedEdges > 0 ? 'warn' : 'ok'}>
-                {stats.unsyncedNodes > 0 || stats.unsyncedEdges > 0 ? 'Sync pending' : 'Fully synced'}
-              </SignalChip>
-            </div>
-          </ContainedBlock>
-          <div className="grid gap-3 md:grid-cols-2">
+          {/* items-start: each card sizes to its own content; the 2-row storage card stretched to the
+              ontology list's height (round 3). */}
+          <div className="grid items-start gap-3 md:grid-cols-2">
             <GraphBackendPanel />
             <OntologyPanel />
           </div>

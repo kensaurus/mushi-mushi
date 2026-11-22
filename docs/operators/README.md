@@ -3,7 +3,7 @@
 > **This is Bucket C.** Running Mushi for a team, wiring it into an existing
 > monitoring stack, or evaluating it as a platform? This is your section. The
 > README leads with the wedge — a solo builder understanding and fixing one bug,
-> standalone, no Sentry required (see [`/VISION.md`](../../VISION.md)). The
+> standalone, no Sentry required (see [`docs/VISION.md`](../VISION.md)). The
 > operator-grade depth lives here so the front door stays uncluttered. None of it
 > was removed from the product — only re-shelved.
 
@@ -19,7 +19,7 @@
   enrichment / synthesis story, for teams that already run a monitoring stack.
 - [Multi-platform console](#multi-platform-console) — filtering and device/build
   panels across iOS, Android, Web, and React Native.
-- Self-host at scale: [`SELF_HOSTED.md`](../../SELF_HOSTED.md) and the Helm chart
+- Self-host at scale: [`docs/SELF_HOSTED.md`](../SELF_HOSTED.md) and the Helm chart
   at [`deploy/helm/`](../../deploy/helm/README.md).
 - [BYOK validation migration gate](#byok-validation-migration-gate) — inventory
   credentials that will be quarantined until they pass a provider probe.
@@ -37,6 +37,9 @@
 - [Local workers](./local-workers.md) — `mushi work --daemon` as a systemd
   user unit or a Windows scheduled task, its guards and key, and moving the
   hand-made lane services onto it (ADR 0048).
+- [Providers & AI routes](./providers-ai-routes.md) — the operator page for
+  the shared AI provider accounts, spend and model routes (kensaurus-ops), its
+  secrets and guards.
 
 ## BYOK validation migration gate
 
@@ -60,7 +63,7 @@ retest list in the deployment change log.
 
 ## Operator-grade plumbing
 
-Mushi is the _mediator_ — this is now the front-door story (VISION.md §1.5),
+Mushi is the _mediator_ — this is now the front-door story (docs/VISION.md §1.5),
 not an operators-only footnote. We deliberately avoid replicating Sentry /
 Datadog / Firebase — instead we ship the boring-but-essential standards that
 let those tools talk to each other through one console, with one audit trail,

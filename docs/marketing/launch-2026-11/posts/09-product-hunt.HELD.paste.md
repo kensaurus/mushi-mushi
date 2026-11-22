@@ -2,7 +2,7 @@ Name: Mushi Mushi
 
 Tagline: One place to improve your AI-built app
 
-Description: Find what breaks, where people get stuck and what the code needs. Each problem comes back in plain English with a fix prompt Lovable, Cursor or Claude Code can apply. Free check of any live site, no sign-up. Open source, free for one app.
+Description: Find what breaks, where people get stuck and what the code needs. Each problem comes back in plain English with a fix prompt Lovable, Cursor or Claude Code can apply. Free check of any live site, no sign-up. Open source, free for three apps.
 
 Topics: Developer Tools, Open Source, Artificial Intelligence
 
@@ -24,7 +24,7 @@ Mushi Mushi is what I built for that. It does three things:
 
 An MCP server lets Claude Code and Cursor pull all of it straight into the editor.
 
-The free plan covers one app and 100 diagnoses a month, and I pay for the model. The hourly site watch and the code audits need your own keys or a local agent.
+The free plan covers three apps and 300 diagnoses a month, and I pay for the model. The hourly site watch and the code audits need your own keys or a local agent.
 
 The guide in the screenshots is Field Kenji, a naturalist with a magnifier. He walks you through sign-in, setup and your first diagnosis.
 

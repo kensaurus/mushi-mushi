@@ -202,6 +202,17 @@ describe('Sync to destinations (#84)', () => {
   })
 })
 
+describe('No sync destination (sweep 2026-11-18)', () => {
+  it('offers "Connect a destination" instead of a "Sync to 0 destinations" button', async () => {
+    pageData.current = { integrations: [], syncDestinations: [] }
+    await render(choice([FRONTEND], 'repo-front'))
+    expect(buttonByText('Sync to 0 destinations')).toBeUndefined()
+    const link = document.querySelector('[data-testid="triage-connect-destination"]')
+    expect(link?.textContent).toContain('Connect a destination')
+    expect(link?.getAttribute('href')).toMatch(/integrations$/)
+  })
+})
+
 describe('ReportTriageBar feature-request confirmation', () => {
   /** The page's triage loop: updates merge into the report, the gate re-reads it. */
   function StatefulHarness({ initial }: { initial: ReportDetail }) {

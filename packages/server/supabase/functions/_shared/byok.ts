@@ -54,6 +54,15 @@ export type KeyStatus =
   | 'quota_exhausted'
   | 'auth_failed';
 
+/** True when the project's first Anthropic or OpenAI key is its own (BYOK), not Mushi Mushi's. */
+export async function projectHasOwnLlmKey(db: SupabaseClient, projectId: string): Promise<boolean> {
+  for (const provider of ['anthropic', 'openai'] as const) {
+    const key = await resolveLlmKey(db, projectId, provider, { purpose: 'probe' }).catch(() => null)
+    if (key?.key && key.source === 'byok') return true
+  }
+  return false
+}
+
 export interface ResolvedKey {
   /** byok_keys row id (null for legacy/env) */
   keyId?: string;
@@ -78,6 +87,15 @@ export interface ResolvedKey {
   shared?: boolean;
   /** Which pool the key came from; absent for the legacy and platform keys. */
   scope?: KeyScope;
+  /**
+   * Platform keys from a KENSAURUS AI route (llm-failover.ts `withAnthropicOrOpenAi`):
+   * the model the route row names, its priority and its params. Callers send
+   * `key.model ?? <their default>`, so an app's own key (BYOK) keeps the
+   * caller's model and a platform call runs the route's.
+   */
+  model?: string;
+  routePriority?: number;
+  routeParams?: Record<string, unknown>;
 }
 
 /**
@@ -200,7 +218,12 @@ export async function resolveLlmKeys(
   db: SupabaseClient,
   projectId: string,
   provider: LlmProvider,
-  opts: { openAiOnly?: boolean } = {},
+  /**
+   * `ownOnly`: the app's keys only (own, legacy, shared, universal), never
+   * the platform key. withAnthropicOrOpenAi runs platform calls through the
+   * KENSAURUS AI routes instead.
+   */
+  opts: { openAiOnly?: boolean; ownOnly?: boolean } = {},
 ): Promise<ResolvedKey[]> {
   // An organization that runs AI on OpenAI (ADR 0039 amendment, 2026-10-31)
   // gets no Claude key at all: not its pool, legacy field or the platform's.
@@ -225,7 +248,7 @@ export async function resolveLlmKeys(
     legacy: own.length > 0 ? [] : await legacyCandidates(db, projectId, provider),
     shared,
     universal,
-    env: () => envCandidates(projectId, provider),
+    env: () => (opts.ownOnly ? [] : envCandidates(projectId, provider)),
   });
 }
 
@@ -315,7 +338,8 @@ export async function resolveLlmKeySources(
     if (legacy.get(provider)) return 'project';
     if (sourceFlags.organization) return 'organization';
     if (sourceFlags.universal) return 'owner_universal';
-    if (Deno.env.get(ENV_VAR[provider])) return 'env';
+    // Same answer as resolveLlmKeys: no platform Claude key outside a route.
+    if (provider !== 'anthropic' && Deno.env.get(ENV_VAR[provider])) return 'env';
     return null;
   });
 }
@@ -624,6 +648,10 @@ async function legacySourcesAvailable(
 
 /** Step 3: the platform env-var key, when the project has no key of its own or shared. */
 function envCandidates(projectId: string, provider: LlmProvider): ResolvedKey[] {
+  // The platform Claude key is handed out only through a KENSAURUS AI route
+  // (platformRouteKey), so which vendor and model a platform call uses is the
+  // route row's choice, never a caller's (CONTRACT, 2026-11-21).
+  if (provider === 'anthropic') return [];
   const env = Deno.env.get(ENV_VAR[provider]);
   if (env) {
     log.warn('BYOK call using platform env key — BYOK not configured for this project', {
@@ -638,6 +666,55 @@ function envCandidates(projectId: string, provider: LlmProvider): ResolvedKey[] 
   }
 
   return [];
+}
+
+/** Together's OpenAI-compatible API root, for a route row that names provider 'together'. */
+const TOGETHER_BASE_URL = 'https://api.together.xyz/v1';
+
+/** Route providers mushi can run on the platform key, and their secrets. */
+const ROUTE_PROVIDER_SECRET: Record<string, string> = {
+  openai: 'OPENAI_API_KEY',
+  openrouter: 'OPENROUTER_API_KEY',
+  together: 'TOGETHER_API_KEY',
+  anthropic: 'ANTHROPIC_API_KEY',
+};
+
+/**
+ * The platform key for one KENSAURUS AI route candidate, carrying the route's
+ * model, priority and params; null when this project holds no key for that
+ * provider (or the provider is one mushi cannot call). A route row may name a
+ * different secret in `params.secret_name` (how a drill points a provider at a
+ * dummy key). `provider` is the family the caller's function speaks:
+ * 'anthropic', or 'openai' for every OpenAI-compatible host.
+ */
+export function platformRouteKey(
+  projectId: string,
+  candidate: { provider: string; model: string; priority: number; params?: Record<string, unknown> },
+): (ResolvedKey & { provider: LlmProvider }) | null {
+  const secretOverride = candidate.params?.secret_name;
+  const secret = typeof secretOverride === 'string' && /^[A-Z][A-Z0-9_]{2,63}$/.test(secretOverride)
+    ? secretOverride
+    : ROUTE_PROVIDER_SECRET[candidate.provider];
+  if (!secret) return null;
+  const key = Deno.env.get(secret);
+  if (!key) return null;
+  const baseUrl = candidate.provider === 'openai'
+    ? validatedPlatformOpenAiBaseUrl(projectId)
+    : candidate.provider === 'openrouter'
+      ? OPENROUTER_BASE_URL
+      : candidate.provider === 'together'
+        ? TOGETHER_BASE_URL
+        : undefined;
+  return {
+    key,
+    source: 'env',
+    hint: hint(key),
+    baseUrl,
+    provider: candidate.provider === 'anthropic' ? 'anthropic' : candidate.provider === 'openrouter' ? 'openrouter' : 'openai',
+    model: candidate.model,
+    routePriority: candidate.priority,
+    routeParams: candidate.params ?? {},
+  };
 }
 
 /**
@@ -793,7 +870,10 @@ function validatedPlatformOpenAiBaseUrl(projectId: string): string | undefined {
   const configured = Deno.env.get('OPENAI_BASE_URL');
   if (!configured) return undefined;
 
-  const validation = validateOpenAiBaseUrl(configured, openAiCompatibleHostAllowlist());
+  // Self-host: the operator's own model server (http://ollama:11434/v1).
+  // Only this env-level URL can opt in; per-key base URLs stay https-only.
+  const allowPrivateServer = Deno.env.get('MUSHI_ALLOW_PRIVATE_LLM_BASE_URL') === 'true';
+  const validation = validateOpenAiBaseUrl(configured, openAiCompatibleHostAllowlist(), { allowPrivateServer, operatorConfigured: true });
   if (validation.ok) return validation.value;
 
   log.error('Ignoring unsafe OPENAI_BASE_URL platform configuration', {

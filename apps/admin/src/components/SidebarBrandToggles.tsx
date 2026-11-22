@@ -44,7 +44,7 @@ export function SidebarBrandToggles({
 
   if (env.mode === 'self-hosted') {
     return (
-      <p className="mt-1 font-mono text-3xs uppercase tracking-widest text-fg-faint">
+      <p className="mt-1 font-mono text-3xs text-fg-secondary font-semibold">
         {onTester ? 'Tester' : 'Admin'}
       </p>
     )

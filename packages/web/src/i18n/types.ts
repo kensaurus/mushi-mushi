@@ -77,6 +77,8 @@ export interface MushiLocale {
     notSentBlocked: string;
     /** The SDK's own send limiter refused the report; the text is kept. */
     notSentThrottled: string;
+    /** Shown after Send captured a screenshot the reporter hasn't seen yet: check it, then Send again. */
+    screenshotReview: string;
     /** Why the last capture failed, shown under the attachment row. */
     screenshotErrors: {
       permission: string;

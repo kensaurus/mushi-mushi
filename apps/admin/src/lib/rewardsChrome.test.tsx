@@ -32,7 +32,7 @@ describe('Rewards responsive chrome', () => {
         <RewardsSnapshotStrip stats={EMPTY_REWARDS_STATS} statsFetchedAt={null} />
       </MemoryRouter>,
     )
-    expect(html).toContain('Rewards are off for this app.')
+    expect(html).toContain('Rewards are off for this app,')
     expect(html).not.toContain('<dl')
   })
 
@@ -43,7 +43,10 @@ describe('Rewards responsive chrome', () => {
         <RewardsSnapshotStrip stats={{ ...EMPTY_REWARDS_STATS, activeContributors30d: 1, pointsAwarded30d: 20 }} statsFetchedAt={null} />
       </MemoryRouter>,
     )
-    expect(html).toContain('Rewards are off for this app. New activity earns no points. In the last 30 days 1 tester earned 20 points.')
+    expect(html).toContain('Rewards are off for this app, so its new activity earns no points. The counts cover all your apps.')
+    expect(html).not.toContain('tester earned')
+    expect(html).toContain('aria-label="1 Testers · 30d')
+    expect(html).toContain('aria-label="20 Points · 30d')
   })
 
   it('RewardsSnapshotStrip shows three linked numbers once testers earn points', () => {
@@ -55,7 +58,9 @@ describe('Rewards responsive chrome', () => {
         />
       </MemoryRouter>,
     )
-    expect(html).toContain('56 testers earned 981 points in the last 30 days')
+    expect(html).toContain('Rewards are on.')
+    expect(html).toContain('aria-label="56 Testers · 30d')
+    expect(html).toContain('aria-label="981 Points · 30d')
     expect(html.match(/<dd/g)).toHaveLength(3)
   })
 })

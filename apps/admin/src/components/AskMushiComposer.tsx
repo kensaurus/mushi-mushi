@@ -239,7 +239,7 @@ export const AskMushiComposer = forwardRef<HTMLTextAreaElement, AskMushiComposer
           data-testid="ask-mushi-popover"
         >
           <Command label={popover.kind === 'slash' ? 'Slash commands' : '@ mentions'} loop>
-            <div className="px-2 py-1 text-3xs uppercase tracking-wider text-fg-faint border-b border-edge-subtle">
+            <div className="px-2 py-1 text-3xs text-fg-secondary border-b border-edge-subtle font-semibold">
               {popover.kind === 'slash' ? 'Slash commands' : 'Mentions' + (mentionLoading ? ' — searching…' : '')}
             </div>
             <Command.List className="max-h-48 overflow-y-auto">
@@ -276,7 +276,7 @@ export const AskMushiComposer = forwardRef<HTMLTextAreaElement, AskMushiComposer
                       className="cmdk-item !flex-col !items-stretch !gap-0.5"
                     >
                       <div className="flex items-baseline gap-2 min-w-0">
-                        <span className="text-3xs font-medium uppercase tracking-wider text-fg-faint shrink-0 whitespace-nowrap">
+                        <span className="text-3xs font-semibold text-fg-secondary shrink-0 whitespace-nowrap">
                           {m.kind}
                         </span>
                         <span className="font-mono text-2xs text-brand truncate">{m.label}</span>

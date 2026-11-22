@@ -43,7 +43,7 @@ export function GraphSidePanel({ node, blastRadius, blastLoading, onClear }: Pro
     <Card className="p-3 self-start space-y-3">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="text-2xs uppercase tracking-wider text-fg-faint">
+          <div className="text-2xs text-fg-secondary font-semibold">
             {NODE_TYPE_LABELS[node.node_type] ?? node.node_type}
           </div>
           <h3 className="text-sm font-medium text-fg break-words">{node.label}</h3>

@@ -71,3 +71,33 @@ export function utcInputToIso(value: string): string | null {
   const d = new Date(`${value}${value.length === 16 ? ':00' : ''}Z`)
   return Number.isNaN(d.getTime()) ? null : d.toISOString()
 }
+
+/**
+ * A report's headline: the part before " — " when the classifier wrote "what — more detail"
+ * ("The GET /api/calendar request failed… — The request produced a PrismaClientKnownRequestError…"
+ * said one fact twice in every row, 2026-11-16). The whole text stays the tooltip. A short
+ * first part (under 20 characters) is not a headline, so the text is kept whole.
+ */
+export function reportHeadline(text: string): string {
+  const at = text.indexOf(' — ')
+  if (at < 20) return text
+  return text.slice(0, at).replace(/[.;:,]\s*$/, '')
+}
+
+/**
+ * Round numbers with four or more decimals for reading: "15.341893476 GB"
+ * reads "15.34 GB" (owner's walkthrough, 2026-11-17: alarm reports carried
+ * CloudWatch's raw values). Under 1, three significant digits, never a bare 0.
+ * Whole numbers, short decimals and versions (1.2.3) are left as they are.
+ * Mirrors the server's `roundLongDecimals` (_shared/cloudwatch-ingest.ts),
+ * which rounds new alarm reports at intake; this covers older ones.
+ */
+export function roundLongDecimals(text: string): string {
+  return text.replace(/(?<![\w.])(-?\d+)\.(\d{4,})(?![\w.])/g, (match, whole: string) => {
+    const n = Number(match)
+    if (!Number.isFinite(n)) return match
+    const fixed = Math.abs(n) < 1 && n !== 0 ? String(Number(n.toPrecision(3))) : n.toFixed(Math.abs(n) >= 100 ? 1 : 2)
+    const trimmed = fixed.includes('e') ? fixed : fixed.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')
+    return trimmed === '' || trimmed === '-' ? whole : trimmed
+  })
+}

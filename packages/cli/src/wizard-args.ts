@@ -52,6 +52,8 @@ export interface ParsedArgs {
   cwd?: string
   endpoint?: string
   audit?: boolean
+  /** `--dry-run`: print what the wizard would do; change nothing. */
+  dryRun?: boolean
   /** `--template <id>`: scaffold a starter app instead of running the wizard. */
   template?: TemplateId
   /** Optional directory right after the template id. */
@@ -74,6 +76,8 @@ Flags (forwarded to the wizard):
   --skip-install                print the install command instead of running it
   --skip-test-report            don't offer to send a test report at the end
   --audit                       health-check an existing install (doctor checks) instead of re-running the wizard
+  --dry-run                     print what the wizard would install and write, then stop (changes nothing,
+                                no sign-in)
   --cwd <path>                  run in a different directory
   --endpoint <url>              override the Mushi API endpoint (self-hosted)
   -y, --yes                     take the defaults: detected framework, saved credentials, browser sign-in
@@ -103,6 +107,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     if (a === '--skip-install') { out.skipInstall = true; continue }
     if (a === '--skip-test-report') { out.skipTestReport = true; continue }
     if (a === '--audit') { out.audit = true; continue }
+    if (a === '--dry-run') { out.dryRun = true; continue }
     if (a === '--project-id') { out.projectId = args[++i]; continue }
     if (a === '--api-key') { out.apiKey = args[++i]; continue }
     if (a === '--cwd') { out.cwd = args[++i]; continue }

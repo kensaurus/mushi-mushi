@@ -50,6 +50,14 @@
 --    where conname like '%\_is\_vault\_ref' escape '\'
 --      and conrelid in ('public.project_settings'::regclass, 'public.organization_integration_settings'::regclass);
 
+-- 2026-11-19: hosted has these columns from outside the migrations; a fresh install needs
+-- them before the data step (types as on hosted, read 2026-11-19).
+ALTER TABLE public.project_settings
+  ADD COLUMN IF NOT EXISTS github_installation_token_ref text,
+  ADD COLUMN IF NOT EXISTS github_user_token_ref text,
+  ADD COLUMN IF NOT EXISTS github_webhook_secret text,
+  ADD COLUMN IF NOT EXISTS github_deploy_key text;
+
 DO $$
 DECLARE
   -- column => Vault kind segment (matches VAULTED_FIELDS_BY_KIND in api/routes/integrations.ts)

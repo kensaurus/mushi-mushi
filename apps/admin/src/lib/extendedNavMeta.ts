@@ -846,10 +846,19 @@ export function marketplaceNavBadge(
 
 export function settingsNavBadge(stats: NavStatSlices['settings']): WorkspaceNavBadge | null {
   if (!stats) return null
+  // Amber, as the Settings page draws the same key ("1 key to fix"): a red dot in the sidebar
+  // beside an amber row on the page read as two different states (round-3 review, 2026-11-19).
+  // One number with the Settings page banner ("3 keys need you"): servers from 2026-11-19 send it.
+  const needing = stats.byokKeysNeedingAction
+  if (needing != null) {
+    return needing > 0
+      ? attentionBadge(needing, 'warn', `${needing} AI key${needing === 1 ? '' : 's'} need${needing === 1 ? 's' : ''} you`)
+      : null
+  }
   if (stats.byokKeysFailing > 0) {
     return attentionBadge(
       stats.byokKeysFailing,
-      'danger',
+      'warn',
       `${stats.byokKeysFailing} BYOK key${stats.byokKeysFailing === 1 ? '' : 's'} failing probe`,
     )
   }

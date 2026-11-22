@@ -39,7 +39,6 @@ import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { StatusBannerShell } from '../components/StatusBannerShell'
 import { NextStep } from '../components/NextStep'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
-import { IconMic } from '../components/icons'
 import { VoiceRecorderCard, type SubmitStage } from '../components/voice/VoiceRecorderCard'
 import { VoiceSessionsList } from '../components/voice/VoiceSessionsList'
 import { fixesForReportPath } from '../lib/fixDeepLink'
@@ -201,8 +200,9 @@ export function VoicePage() {
   }
 
   const statusBanner = settingsKnown && !intakeEnabled ? (
+    // An optional feature that is off is not a warning: a neutral ink mark, not amber (2026-11-19).
     <StatusBannerShell
-      tone="warn"
+      tone="brand"
       title="Voice intake is off"
       subtitle="Recordings are refused until the project turns it on."
       action={
@@ -217,7 +217,6 @@ export function VoicePage() {
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-voice">
       <PageHeaderBar
         title="Voice reports"
-        icon={<IconMic className="h-4 w-4" />}
         projectScope={projectName ?? undefined}
         description="Talk a bug or a fix request; confirm the transcript; the draft PR comes back to this phone."
         helpTitle={HELP.title}
@@ -226,24 +225,47 @@ export function VoicePage() {
         helpHowToUse={HELP.howToUse}
       >
         {awaitingCount > 0 && <Badge tone="warn">{awaitingCount} to confirm</Badge>}
-        <FreshnessPill at={lastFetchedAt} isValidating={isValidating} />
-        <Btn size="sm" variant="ghost" onClick={reload} title="Reload voice requests">
-          Refresh
-        </Btn>
+        {/* Nothing to refresh while intake is off: no "Updated now" and Refresh over an empty page. */}
+        {!(settingsKnown && !intakeEnabled) && (
+          <>
+            <FreshnessPill at={lastFetchedAt} isValidating={isValidating} />
+            <Btn size="sm" variant="ghost" onClick={reload} title="Reload voice requests">
+              Refresh
+            </Btn>
+          </>
+        )}
       </PageHeaderBar>
 
       <PagePosture slots={[{ id: 'intake-off', priority: POSTURE_PRIORITY.status, show: statusBanner != null, children: statusBanner }]} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-5 items-start">
         <div className={`space-y-4 min-w-0 ${intakeEnabled ? 'lg:col-span-3' : 'lg:col-span-5'}`}>
-          <VoiceRecorderCard
-            onFile={(file) => void submitFile(file)}
-            onTranscript={(text) => void submitText(text)}
-            busyStage={busyStage}
-            disabled={settingsKnown && !intakeEnabled}
-            initialText={sharedText}
-            pendingFile={sharedFile}
-          />
+          {settingsKnown && !intakeEnabled ? (
+            // Off: the recorder only refuses, and the banner above says so: no dead
+            // "Talk" accordion (round-2 review). A memo shared into the app while
+            // off still shows, so it is not silently lost.
+            sharedText || sharedFile ? (
+            <DisclosurePanel title="Shared recording (turn on voice intake to send it)">
+              <VoiceRecorderCard
+                onFile={(file) => void submitFile(file)}
+                onTranscript={(text) => void submitText(text)}
+                busyStage={busyStage}
+                disabled
+                initialText={sharedText}
+                pendingFile={sharedFile}
+              />
+            </DisclosurePanel>
+            ) : null
+          ) : (
+            <VoiceRecorderCard
+              onFile={(file) => void submitFile(file)}
+              onTranscript={(text) => void submitText(text)}
+              busyStage={busyStage}
+              disabled={false}
+              initialText={sharedText}
+              pendingFile={sharedFile}
+            />
+          )}
           {current && <VoiceSessionResult session={current} pending={pendingId === current.id} onConfirm={() => void confirm(current)} onCancel={() => void cancel(current)} />}
         </div>
         {/* Pushes only matter once requests can be sent. */}
@@ -260,7 +282,9 @@ export function VoicePage() {
         <PanelSkeleton rows={4} label="Loading voice requests" />
       ) : error ? (
         <PageLoadError error={error} resource="voice requests" onRetry={reload} />
-      ) : (
+      ) : settingsKnown && !intakeEnabled && sessions.length === 0 ? null : (
+        // Off with nothing recorded: the banner is the whole story; an empty list
+        // saying "turn on voice intake first" again is not drawn.
         <VoiceSessionsList sessions={sessions} onConfirm={(s) => void confirm(s)} onCancel={(s) => void cancel(s)} pendingId={pendingId} intakeEnabled={!settingsKnown || intakeEnabled} />
       )}
     </div>
@@ -275,7 +299,7 @@ function VoiceSessionResult({ session, pending, onConfirm, onCancel }: { session
     <Section title="What Mushi Mushi heard" action={<Badge tone={voiceStatusTone(status)}>{voiceStatusLabel(status)}</Badge>}>
       <div className="space-y-3" data-testid="voice-session-result">
         <Card variant="flat" className="p-3">
-          <p className="mb-1 text-2xs font-semibold uppercase tracking-wide text-fg-muted">Transcript (verbatim)</p>
+          <p className="mb-1 text-2xs font-semibold text-fg-secondary">Transcript (verbatim)</p>
           <p className="text-sm leading-relaxed text-fg whitespace-pre-wrap">{session.transcript?.trim() || '—'}</p>
         </Card>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">

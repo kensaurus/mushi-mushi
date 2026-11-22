@@ -89,7 +89,9 @@ describe('SpendLimitsPanel', () => {
     expect(inputByLabel(container, 'Auto-fix spend limit').value).toBe('2')
     expect(inputByLabel(container, 'Automatic fixes per day').value).toBe('3')
     expect(inputByLabel(container, 'Monthly AI budget').value).toBe('')
-    expect(container.textContent).toContain('Fixes you start yourself still run')
+    // A long purpose shows its first sentence; the rest sits behind the row's (i).
+    const hints = Array.from(container.querySelectorAll('[data-testid="settings-row-purpose"] button')).map((b) => b.getAttribute('aria-label'))
+    expect(hints.some((h) => h?.includes('Fixes you start yourself still run'))).toBe(true)
   })
 
   it('PATCHes only the changed fields', async () => {

@@ -11,6 +11,7 @@ import { KpiTile, type KpiDelta, type Tone } from '../charts'
 import { MetricStrip } from '../MetricStrip'
 import type { ThroughputDay } from './types'
 import type { QueueStats } from './QueueStatsTypes'
+import { StatusGlyph } from '../signal/StatusGlyph'
 
 interface Props {
   stats: QueueStats
@@ -40,6 +41,17 @@ export function QueueKpiRow({ stats, throughput = [] }: Props) {
   const failedSeries = useMemo(() => throughput.map((d) => d.failed), [throughput])
 
   const dlqCount = stats.deadLetter
+
+  // Nothing waiting, running or failing (2026-11-18): four tiles of 0 become one line.
+  if (stats.pending + stats.running + stats.failed + dlqCount === 0) {
+    return (
+      <p className="mb-3 flex flex-wrap items-center gap-x-1.5 text-sm text-fg" data-testid="queue-quiet-line">
+        <StatusGlyph tone="ok" />
+        <span className="tabular-nums whitespace-nowrap">0 pending · 0 failed · 0 dead letter</span>
+        <span className="tabular-nums whitespace-nowrap text-fg-muted">· {stats.completed.toLocaleString()} completed</span>
+      </p>
+    )
+  }
 
   return (
     <MetricStrip cols={5} ariaLabel="Queue processing metrics" className="mb-3">

@@ -6,6 +6,7 @@
 import { Btn } from '../ui'
 import { usePageCopy } from '../../lib/copy'
 import { StatusBannerShell } from '../StatusBannerShell'
+import { formatDigestWeek } from '../../lib/intelligenceView'
 import type { IntelligenceStats, IntelligenceTabId } from './IntelligenceStatsTypes'
 
 interface Props {
@@ -121,15 +122,14 @@ export function IntelligenceStatusBanner({
   }
 
   if (stats.topPriority === 'stale_digest') {
+    const staleWeek = formatDigestWeek(stats.latestWeekStart)
     return (
       <StatusBannerShell
         tone="warn"
-        title={
-          plainBanner
-            ? `Summary is ${stats.daysSinceLastDigest} days old`
-            : `Digest is ${stats.daysSinceLastDigest} days old`
-        }
-        subtitle={stats.topPriorityLabel}
+        // One amber line: the age and the week it covers. The subtitle
+        // ("Last digest was 9 days ago — …") and the snapshot card under it
+        // said the same thing twice more (round-3 sweep 2026-11-19).
+        title={`${plainBanner ? 'Summary' : 'Digest'} is ${stats.daysSinceLastDigest} days old${staleWeek ? ` · week of ${staleWeek}` : ''}`}
         action={
           onGenerate ? (
             <Btn size="sm" variant="ghost" onClick={onGenerate} loading={generating} disabled={generating}>

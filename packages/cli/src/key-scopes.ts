@@ -25,6 +25,16 @@ export const CLI_KEY_SCOPES = ['report:write', 'mcp:read'] as const
 /** `mushi login --upgrade-scope`: adds the admin writes (billing cap, fix merge…). */
 export const FULL_CLI_KEY_SCOPES = ['report:write', 'mcp:read', 'mcp:write'] as const
 
+/**
+ * The one command that saves a key the editor's MCP server can read reports
+ * with: `login` mints {@link CLI_KEY_SCOPES} through a browser approval into
+ * the CLI config, which the stdio MCP server reads when MUSHI_API_KEY is
+ * unset. The project id skips the project picker.
+ */
+export function editorKeyCommand(projectId?: string): string {
+  return `npx mushi-mushi login${projectId ? ` --project-id ${projectId}` : ''}`
+}
+
 /** Console-visible labels (server rule: 1-40 chars, lowercase alphanumerics and hyphens). */
 export const SDK_KEY_LABEL = 'sdk-ingest'
 export const CLI_KEY_LABEL = 'cli-login'

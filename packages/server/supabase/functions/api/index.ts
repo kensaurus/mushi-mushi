@@ -49,7 +49,6 @@ import { registerAnomaliesRoutes } from './routes/anomalies.ts';
 import { registerCostsRoutes } from './routes/costs.ts';
 import { registerEvolutionRoutes } from './routes/evolution.ts';
 import { registerCommunityRoutes } from './routes/community.ts';
-import { registerPublishedAppsRoutes } from './routes/published-apps.ts';
 import { registerContentQualityRoutes } from './routes/content-quality.ts';
 import { registerFeatureBoardRoutes } from './routes/feature-board.ts';
 import { registerBackendRoutes } from './routes/backend.ts';
@@ -57,9 +56,7 @@ import { registerCodeHealthRoutes } from './routes/code-health.ts';
 import { registerRecipeRoutes } from './routes/recipe.ts';
 import { registerPortfolioRoutes } from './routes/portfolio.ts';
 import { registerRadarRoutes } from './routes/radar.ts';
-import { registerDigestRoutes } from './routes/digest.ts';
 import { registerConnectorRoutes } from './routes/connectors.ts';
-import { registerAccountsRegisterRoutes } from './routes/accounts-register.ts';
 import { registerRecipeChangeRoutes } from './routes/recipe-changes.ts';
 import { registerStoreOpsRoutes } from './routes/store-ops.ts';
 import { registerFindingExplainRoutes } from './routes/finding-explain.ts';
@@ -68,7 +65,6 @@ import { registerPortfolioFunnelRoutes } from './routes/portfolio-funnel.ts';
 import { registerStoreReviewIntakeRoutes } from './routes/store-review-intake.ts';
 import { registerWorkspaceNavMetaRoutes } from './routes/workspace-nav-meta.ts';
 import { registerActivationRoutes } from './routes/activation.ts';
-import { registerSdkUpgradeRoutes } from './routes/sdk-upgrade.ts';
 import { registerPullRequestRoutes } from './routes/pull-requests.ts';
 import { registerUxCloudRoutes } from './routes/ux-cloud.ts';
 import { registerProjectGroupRoutes } from './routes/project-groups.ts';
@@ -747,7 +743,16 @@ forwardToApiExt([
   '/v1/webhooks/tremendous',
 ]);
 registerCommunityRoutes(app);
-registerPublishedAppsRoutes(app);
+// published-apps.ts (marketplace listing, admin only): served by api-ext (api size budget, 2026-11-17).
+forwardToApiExt([
+  '/v1/admin/published-apps/:projectId',
+  '/v1/admin/published-apps/:projectId/publish',
+  '/v1/admin/published-apps/:projectId/pause',
+  '/v1/admin/published-apps/:projectId/targeting',
+  '/v1/admin/published-apps/:projectId/bounties',
+  '/v1/admin/published-apps/:projectId/marketplace-settings',
+  '/v1/admin/published-apps/:projectId/stats',
+]);
 // Database health (advisors + stats, _shared/db-health.ts): served by api-ext (api size budget).
 forwardToApiExt(['/v1/admin/projects/:id/db-advisors']);
 registerContentQualityRoutes(app);
@@ -776,7 +781,8 @@ registerCodeHealthRoutes(app);
 registerRecipeRoutes(app);
 registerPortfolioRoutes(app);
 registerRadarRoutes(app);
-registerDigestRoutes(app);
+// The operator digest (_shared/operator-digest.ts): served by api-ext (api size budget, 2026-11-21, ADR 0065).
+forwardToApiExt(['/v1/admin/orgs/:orgId/digest', '/v1/admin/orgs/:orgId/digest/settings', '/v1/admin/orgs/:orgId/digest/send']);
 registerConnectorRoutes(app);
 // recipe-ingest.ts (design CI push, portfolio resources, recipe drift): served
 // by api-ext, so `api` has room for the runner and worker heartbeats it now
@@ -788,7 +794,14 @@ forwardToApiExt([
   '/v1/admin/orgs/:orgId/portfolio/resources',
   '/v1/admin/projects/:id/recipe/drift',
 ]);
-registerAccountsRegisterRoutes(app);
+// accounts-register.ts (the org's accounts and domains): served by api-ext (api size
+// budget, 2026-11-18); a few calls a day, and it alone pulls in the secret scanner.
+forwardToApiExt([
+  '/v1/admin/orgs/:orgId/accounts',
+  '/v1/admin/orgs/:orgId/accounts/export',
+  '/v1/admin/orgs/:orgId/accounts/:id',
+  '/v1/admin/orgs/:orgId/domains/:id',
+]);
 registerRecipeChangeRoutes(app);
 registerStoreOpsRoutes(app);
 registerFindingExplainRoutes(app);
@@ -803,7 +816,8 @@ registerWorkspaceNavMetaRoutes(app);
 forwardToApiExt(['/v1/admin/skills', '/v1/admin/skills/*']);
 // Claude models the app's Anthropic key can use (anthropic-models.ts), for the settings model pickers.
 forwardToApiExt(['/v1/admin/byok/anthropic/models']);
-registerSdkUpgradeRoutes(app);
+// SDK upgrade PRs (sdk-upgrade.ts); api size budget, 2026-11-21 (hosted LLM order + Langfuse OTLP).
+forwardToApiExt(['/v1/admin/projects/:pid/sdk-upgrade', '/v1/admin/projects/:pid/sdk-upgrade/*']);
 registerUxCloudRoutes(app);
 forwardToApiExt([
   // ux-runs.ts; deploy size limit, 2026-10-22.
@@ -826,6 +840,15 @@ forwardToApiExt([
   '/v1/admin/projects/:pid/fresh-eyes/:runId/findings',
   '/v1/admin/projects/:pid/fresh-eyes/:runId/cancel',
 ]);
+// The UX scorecard (ux-scorecard.ts, ADR 0067).
+forwardToApiExt([
+  '/v1/admin/projects/:pid/ux-scorecard',
+  '/v1/admin/projects/:pid/ux-scorecard/:runId',
+  '/v1/admin/projects/:pid/ux-scorecard/:runId/uploads',
+  '/v1/admin/projects/:pid/ux-scorecard/:runId/score',
+  '/v1/admin/projects/:pid/ux-scorecard/:runId/group',
+  '/v1/admin/projects/:pid/ux-scorecard/:runId/file',
+]);
 registerPullRequestRoutes(app);
 registerProjectGroupRoutes(app);
 registerBootstrapRoutes(app);
@@ -836,7 +859,7 @@ registerGrowthRoutes(app);
 // Daily GTM scorecard and the cookieless landing page-view beacon
 // (landing-visits.ts in api-ext; api only hashes the visitor IP into the
 // beacon's rate-limit bucket, page-view-forward.ts).
-forwardToApiExt(['/v1/admin/growth/daily']);
+forwardToApiExt(['/v1/admin/growth/daily', '/v1/admin/kensaurus/ops']);
 app.post('/v1/public/page-view', forwardPageView);
 registerEventsAdminRoutes(app);
 registerLifecycleEmailRoutes(app);
@@ -851,6 +874,9 @@ registerReportFileRoutes(app);
 // forwarded: a forward costs a second edge invocation (2026-11-11 audit).
 registerRunnerIngestRoute(app);
 forwardToApiExt(['/v1/admin/ci/*', '/v1/admin/fixes/:id/ci/rerun', '/v1/admin/projects/:id/runner-key']);
+// A report's pipeline trail and its stage retry (report-pipeline.ts): served by api-ext so api
+// stays under its upload budget (scripts/deploy-edge-function.test.mjs, 2026-11-19).
+forwardToApiExt(['/v1/admin/reports/:id/pipeline', '/v1/admin/reports/:id/pipeline/retry']);
 // Verified fixes (Plan 024, ADR 0035): settings, gates, re-check, the verify workflow.
 forwardToApiExt([
   '/v1/admin/projects/:id/verify-settings',
@@ -858,6 +884,22 @@ forwardToApiExt([
   '/v1/admin/fixes/:id/verify',
   '/v1/admin/projects/:id/verify-workflow',
   '/v1/admin/projects/:id/verify-workflow/pr',
+]);
+// The Ops hub (ops.ts, docs/execplans/ops-hub-slack.md): app events (ops:write key), the console
+// feed and settings, the ops key, and the team's Slack bot (slash command, buttons). Served by
+// api-ext (api size budget); the Slack Request URLs stay /functions/v1/api/v1/ops/slack/*.
+forwardToApiExt([
+  '/v1/ops/events',
+  '/v1/ops/slack/commands',
+  '/v1/ops/slack/interactions',
+  '/v1/admin/ops/events',
+  '/v1/admin/ops/events/:id/ack',
+  '/v1/admin/ops/coverage',
+  '/v1/admin/ops/slack-settings',
+  '/v1/admin/ops/slack-settings/test',
+  '/v1/admin/projects/:id/ops-key',
+  // Service role only; sentry-ingest posts straight to api-ext, this keeps the paths aligned.
+  '/v1/internal/ops/sentry',
 ]);
 // Known holes in dependencies and the runtime (ADR 0038).
 forwardToApiExt(['/v1/admin/projects/:id/vulnerabilities', '/v1/admin/projects/:id/vulnerabilities/*']);

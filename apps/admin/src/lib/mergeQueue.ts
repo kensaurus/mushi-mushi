@@ -39,26 +39,20 @@ export const MERGE_QUEUE_STATE_LABEL: Record<MergeQueueState, string> = {
   removed: 'Removed',
 }
 
-export const MERGE_QUEUE_STATE_TONE: Record<MergeQueueState, 'info' | 'accent' | 'warn' | 'ok' | 'neutral'> = {
-  queued: 'info',
-  waiting: 'info',
-  resolving: 'accent',
-  blocked: 'warn',
-  merged: 'ok',
-  removed: 'neutral',
-}
-
 export function isActiveQueueRow(row: Pick<MergeQueueRow, 'state'>): boolean {
   return row.state === 'queued' || row.state === 'waiting' || row.state === 'resolving' || row.state === 'blocked'
 }
 
-/** "4 to merge · 1 held · 6 merged today" (empty parts left out). */
+/**
+ * "4 queued to merge · 1 held · 6 merged today" (empty parts left out). "Queued", not
+ * "ready": Fixes' own "Ready to merge" counts approved PRs with green CI, a different set.
+ */
 export function mergeQueueSummary(rows: Array<Pick<MergeQueueRow, 'state'>>): string {
   const moving = rows.filter((r) => r.state === 'queued' || r.state === 'waiting' || r.state === 'resolving').length
   const blocked = rows.filter((r) => r.state === 'blocked').length
   const merged = rows.filter((r) => r.state === 'merged').length
   const parts: string[] = []
-  if (moving) parts.push(`${moving} to merge`)
+  if (moving) parts.push(`${moving} queued to merge`)
   if (blocked) parts.push(`${blocked} held`)
   if (merged) parts.push(`${merged} merged today`)
   return parts.join(' · ')
@@ -101,7 +95,7 @@ export function intervalLabel(minutes: number): string {
 
 /**
  * One line for a repo's train: "4 fixes · CI running",
- * or when the next one leaves ("2 approved · next train leaves in 4 h"), from the last train.
+ * or when the next one leaves ("2 queued · next train leaves in 4 h"), from the last train.
  */
 export function trainLine(train: Pick<ReleaseTrain, 'state' | 'members' | 'attempt' | 'detail'> | null, next?: { lastAt: string | null; intervalMinutes: number; now: Date; ready: number }): string {
   if (train && (train.state === 'building' || train.state === 'testing')) {
@@ -115,7 +109,7 @@ export function trainLine(train: Pick<ReleaseTrain, 'state' | 'members' | 'attem
   const leavesAt = next.lastAt ? Date.parse(next.lastAt) + next.intervalMinutes * 60_000 : 0
   const mins = Math.ceil((leavesAt - next.now.getTime()) / 60_000)
   const when = mins <= 1 ? 'leaves within a few minutes' : mins < 90 ? `leaves in ${mins} min` : `leaves in ${Math.round(mins / 60)} h`
-  return `${next.ready} approved · next train ${when}`
+  return `${next.ready} queued · next train ${when}`
 }
 
 export function prLink(row: Pick<MergeQueueRow, 'repo' | 'pr_number'>): string {

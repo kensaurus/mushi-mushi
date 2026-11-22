@@ -104,7 +104,7 @@ describe('call sites skip Sentry for an account state', () => {
 
   it('mistake-clusterer skips a cluster with no usable key at warn level (3K)', () => {
     const src = read('mistake-clusterer/index.ts')
-    expect(src).toContain('if (!anthropicKey) throw new NoProjectLlmKeyError()')
+    expect(src).toContain("err.code === 'NO_KEYS_CONFIGURED') throw new NoProjectLlmKeyError()")
     const skipAt = src.indexOf('if (err instanceof NoProjectLlmKeyError)')
     expect(skipAt).toBeGreaterThan(-1)
     expect(skipAt).toBeLessThan(src.indexOf("log.error('coherence judge failed'"))

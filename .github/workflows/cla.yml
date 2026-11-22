@@ -1,6 +1,6 @@
 name: CLA
 
-# Asks outside contributors to sign the Contributor License Agreement (CLA.md)
+# Asks outside contributors to sign the Contributor License Agreement (docs/legal/CLA.md)
 # once, by commenting on their pull request. Why there is a CLA:
 # docs/adr/0036-licensing-posture.md (dual licensing needs every contribution
 # to come in with the same rights).
@@ -8,7 +8,7 @@ name: CLA
 # Signatures are stored in the repository itself, in
 # signatures/version1/cla.json on the `cla-signatures` branch (created by the
 # first step below if it does not exist). That branch must stay unprotected so
-# the action can commit to it. If CLA.md changes materially, bump the path to
+# the action can commit to it. If docs/legal/CLA.md changes materially, bump the path to
 # signatures/version2/ so everyone signs the new text.
 #
 # SECURITY: `pull_request_target` runs with base-branch permissions. Nothing
@@ -88,7 +88,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           path-to-signatures: signatures/version1/cla.json
-          path-to-document: https://github.com/kensaurus/mushi-mushi/blob/master/CLA.md
+          path-to-document: https://github.com/kensaurus/mushi-mushi/blob/master/docs/legal/CLA.md
           branch: cla-signatures
           allowlist: kensaurus,*[bot]
           lock-pullrequest-aftermerge: true

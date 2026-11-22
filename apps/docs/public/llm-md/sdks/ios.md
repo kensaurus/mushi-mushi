@@ -71,6 +71,12 @@ and when the network comes back.
 Screenshots are taken with `UIGraphicsImageRenderer` when `captureScreenshot`
 is `true`. Turn it off for flows that show sensitive data.
 
+The bottom sheet shows the screenshot it took when it opened, with **Remove**;
+only a screenshot still shown is sent (releases after 0.4.0). `report(description:)` called
+from your own code captures one without showing it, so pass
+`captureScreenshot: false` there, or `screenshot:` with an image your own UI
+showed the reporter.
+
 ## Sentry
 
 There is no Sentry bridge in the Swift package. Keep initialising Sentry in the

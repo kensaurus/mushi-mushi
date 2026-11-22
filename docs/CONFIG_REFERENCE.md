@@ -3,7 +3,7 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_120 configuration knobs across 19 sections · last regenerated 2026-11-13._
+_120 configuration knobs across 19 sections · last regenerated 2026-11-20._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
@@ -449,7 +449,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 `projects.create_project`
 
-**Summary** — Names a new project — the bucket every report, key, and integration is scoped to.
+**Summary** — Names a new app: one per app or environment, the bucket every report, key, and integration is scoped to. Your API key and setup command appear on the next screen.
 
 **How it works** — Project names appear in the switcher, on every report, and in webhook payloads — keep them recognisable to humans. Slugs are auto-derived from the name (lowercased, hyphenated) and used in URLs / API keys, so very short or generic names produce ambiguous slugs across orgs. After you click Create, the success panel shows the Project UUID to paste into the CLI (`MUSHI_PROJECT_ID`).
 
@@ -1869,15 +1869,15 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 `sdk-install.screenshot_mode`
 
-**Summary** — When the SDK captures a screenshot — when the report opens, always (continuous), or never.
+**Summary** — When the SDK takes a screenshot on its own: when the reporter presses Send, when the report opens, or never. The reporter always sees it before it is sent.
 
-**How it works** — `on-report` is the default and respects user privacy. `auto` captures every few seconds (more diagnostic context, but storage-heavy). `off` disables screenshots entirely (compliance-friendly).
+**How it works** — `on-report` (the default) leaves the app's own `capture.screenshot` setting in charge; with none set, a screenshot is taken only when the reporter presses the camera button. An app set to `on-report` takes one when the reporter presses Send, shows it, and sends it on a second Send. `auto` takes one when the report opens. Every screenshot is previewed with Mark up (blur) and Remove, and a removed one is never taken again for that report. `off` turns screenshots off, including the camera button.
 
 **Default** — `on-report`
 
 **Recommended** — `on-report`. Capture a screenshot only when someone files a report, not continuously. Data minimisation: collect what the purpose needs. Sources: [GDPR Article 5: data minimisation and storage limitation](https://gdpr-info.eu/art-5-gdpr/) (read 2026-10-22).
 
-**When to change** — Stay on `on-report` for most apps. Switch to `auto` for hard-to-repro intermittent bugs. Switch to `off` for HIPAA-style apps where any screenshot is a privacy risk.
+**When to change** — Stay on `on-report` for most apps. Switch to `auto` for hard-to-repro intermittent bugs. Switch to `off` for HIPAA-style apps, or for pages where any screenshot is a privacy risk; to hide only parts of a page, mark them `data-private` instead.
 
 ### Screenshot privacy caption
 

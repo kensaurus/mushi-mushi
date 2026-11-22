@@ -447,7 +447,7 @@ export function resolveNavBadge(
         label:
           extras.criticalReports30d > 0
             ? `${extras.criticalReports30d} critical ${extras.criticalReports30d === 1 ? 'report' : 'reports'} (30d)`
-            : `${navCounts.untriagedBacklog} untriaged ${navCounts.untriagedBacklog === 1 ? 'report' : 'reports'}`,
+            : `${navCounts.untriagedBacklog} untriaged ${navCounts.untriagedBacklog === 1 ? 'report' : 'reports'}${(navCounts.untriagedAutomated ?? 0) > 0 ? ` (+${navCounts.untriagedAutomated} from Mushi's checks)` : ''}`,
         hideWhenZero: true,
       }
     case '/judge':
@@ -486,7 +486,8 @@ export function resolveNavBadge(
     case '/notifications':
       return {
         kind: 'health',
-        tone: toneForOpen(navCounts.notificationsUnread, 11),
+        // Unread updates are not a failure: a neutral count, never the failure red (fresh-eyes 2026-11-18).
+        tone: 'idle',
         count: navCounts.notificationsUnread,
         label:
           navCounts.notificationsUnread > 0
@@ -516,6 +517,12 @@ export function renderNavBadge(
   navCounts: NavCounts,
   extras: NavBadgeExtras,
 ): ReactNode {
+  // Before the first load a slice-backed badge holds its place with a quiet
+  // skeleton, so it does not pop in a moment later (owner's walkthrough,
+  // 2026-11-17: Settings' "1 key failing" appeared and vanished on load).
+  if (!navCounts.ready && PATH_SLICES[path.split('?')[0] ?? path]) {
+    return <span aria-hidden="true" data-testid="nav-badge-skeleton" className="inline-block h-2 w-3 shrink-0 rounded-full bg-surface-overlay" />
+  }
   const spec = resolveNavBadge(path, navCounts, extras)
   if (!spec) return null
   switch (spec.kind) {

@@ -20,6 +20,7 @@ import { makeFakeDb, type FakeDb, type Row } from './__stubs__/fake-supabase.ts'
 
 const mocks = vi.hoisted(() => ({
   resolveLlmKey: vi.fn(),
+  withPlatformRoute: vi.fn(),
 }))
 
 vi.mock('../../supabase/functions/_shared/logger.ts', () => {
@@ -30,6 +31,10 @@ vi.mock('../../supabase/functions/_shared/db.ts', () => ({ getServiceClient: () 
 vi.mock('../../supabase/functions/_shared/sentry.ts', () => ({ withSentry: (_n: string, h: unknown) => h }))
 vi.mock('../../supabase/functions/_shared/auth.ts', () => ({ requireServiceRoleAuth: () => null }))
 vi.mock('../../supabase/functions/_shared/byok.ts', () => ({ resolveLlmKey: (...a: unknown[]) => mocks.resolveLlmKey(...a) }))
+// The platform keys reach the second review only through its KENSAURUS AI route.
+vi.mock('../../supabase/functions/_shared/llm-failover.ts', () => ({
+  withPlatformRoute: (...a: unknown[]) => mocks.withPlatformRoute(...a),
+}))
 vi.mock('../../supabase/functions/_shared/llm-usage.ts', () => ({
   recordLlmUsage: async () => ({ error: null }),
   extractLlmUsage: (r: { usage?: { promptTokens?: number; completionTokens?: number } }) => ({
@@ -245,8 +250,24 @@ describe('the second review', () => {
     expect(gatesOf(db.table('fix_merge_gates')[0])).toEqual(['review:pass', 'ci:pass', 'fail_to_pass:not_set_up', 'protected:pass', 'budget:pass', 'second_review:pending'])
   })
 
-  it('is unavailable without a key of the project\'s own, and never uses the platform key', async () => {
+  it("without a key of the project's own, runs on the fix-verifier-judge route (OpenAI family only), never a raw platform key", async () => {
     mocks.resolveLlmKey.mockResolvedValue({ key: 'platform', source: 'env', hint: 'tfrm' })
+    mocks.withPlatformRoute.mockImplementation(async (_db: unknown, _p: unknown, route: unknown, fns: { anthropic?: unknown; openai: (k: unknown) => Promise<unknown> }) => {
+      expect(route).toEqual({ feature: 'fix-verifier-judge', tier: 'standard' })
+      expect(fns.anthropic).toBeUndefined()
+      return { result: await fns.openai({ key: 'route-key', source: 'env', hint: 'rkey', provider: 'openrouter', model: 'openai/gpt-6.1-terra' }) }
+    })
+    const { d, calls } = deps({ resolveJudgeKey: undefined })
+    await worker.runFixVerifier(db as never, {}, d)
+    expect(calls.judge).toHaveBeenCalledWith(expect.objectContaining({ model: 'openai/gpt-6.1-terra', key: expect.objectContaining({ key: 'route-key' }) }))
+    expect(db.table('fix_merge_gates')[0].second_judge).toMatchObject({ provider: 'openrouter' })
+    // auto: the OpenAI pool, OpenRouter keys included, through the resolver first.
+    expect(mocks.resolveLlmKey).toHaveBeenCalledWith(expect.anything(), P, 'openai', expect.objectContaining({ openAiOnly: false }))
+  })
+
+  it('is unavailable when neither the project nor the route has a key', async () => {
+    mocks.resolveLlmKey.mockResolvedValue(null)
+    mocks.withPlatformRoute.mockRejectedValue(Object.assign(new Error('no keys'), { name: 'LlmFailoverError', code: 'NO_KEYS_CONFIGURED' }))
     const { d, calls } = deps({ resolveJudgeKey: undefined })
     await worker.runFixVerifier(db as never, {}, d)
     expect(calls.judge).not.toHaveBeenCalled()
@@ -254,15 +275,13 @@ describe('the second review', () => {
     const row = db.table('fix_merge_gates')[0]
     expect(gatesOf(row).at(-1)).toBe('second_review:unavailable')
     expect(row.passed).toBe(false)
-    // auto: the OpenAI pool, OpenRouter keys included, through the resolver.
-    expect(mocks.resolveLlmKey).toHaveBeenCalledWith(expect.anything(), P, 'openai', expect.objectContaining({ openAiOnly: false }))
   })
 
   it('uses the project\'s OpenRouter key with the vendor-prefixed default model', async () => {
     mocks.resolveLlmKey.mockResolvedValue({ key: 'sk-or', source: 'byok', hint: 'x-or', provider: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1' })
     const { d, calls } = deps({ resolveJudgeKey: undefined })
     await worker.runFixVerifier(db as never, {}, d)
-    expect(calls.judge).toHaveBeenCalledWith(expect.objectContaining({ model: 'openai/gpt-6.1-sol' }))
+    expect(calls.judge).toHaveBeenCalledWith(expect.objectContaining({ model: 'openai/gpt-6.2-sol' }))
     expect(db.table('fix_merge_gates')[0].second_judge).toMatchObject({ provider: 'openrouter' })
   })
 

@@ -74,6 +74,7 @@ With `--steps` (on by default in the studio) the agent first plans 2–5 small c
 | `mushi-ux run --dev "<cmd with {port}>"` | Run the loop from the terminal |
 | `mushi-ux discover --url <url>` | List the screens, change nothing |
 | `mushi-ux audit --url <live url> --profile-dir <dir>` | Find UX bugs on signed-in screens and file them as Mushi Mushi reports (below) |
+| `mushi-ux scorecard --url <live url> --profile-dir <dir>` | Score every page 1–10 on a written UX rubric and file the root causes (below) |
 | `mushi-ux explore --url <live url> --profile-dir <dir>` | Let a model use the signed-in app like a careless user; file the errors a replay confirms (below) |
 | `mushi-ux fresh-eyes --url <landing> --goal "<text>"` | Try one goal as a first-time visitor; time the path and file what stops them (below) |
 | `mushi-ux login --url <url>` | Sign in once, in a visible browser |
@@ -107,6 +108,25 @@ mushi-ux audit --url https://example.com/admin \
 - `--file` files at most 15 reports a run, one per screen and problem, and skips one filed in the last 14 days or still open. It needs `MUSHI_API_KEY` and `MUSHI_PROJECT_ID`; without them it writes `to-file.json` next to the summary. `--dry-run` files nothing.
 - `--profile-dir` opens the profile with your installed Chrome (`--channel chromium` for one Chromium made). A signed-out profile stops the run: sign it in once by hand.
 - Output: `~/.cache/mushi/ux-audits/<run>/` (summary, findings, screenshots).
+
+## Score every page: the UX scorecard
+
+`mushi-ux scorecard` scores each page of the live app 1–10 against a written rubric, groups what is wrong into root causes, and can file the top causes as Mushi Mushi reports (ADR 0067).
+
+```bash
+mushi-ux scorecard --url https://example.com/admin/ \
+  --profile-dir ~/.playwright-cli-profiles/example \
+  --paths-file pages.txt --sync --file --dry-run
+```
+
+- **The rubric:** clarity, hierarchy and density, consistency with the app's own pages, states (loading, empty, error, locked), truthfulness (does the page claim what its own data contradicts), copy, accessibility and speed. A page's score follows its worst dimension. The settle time and axe cap the speed and accessibility scores.
+- **What it reads:** the tab title, headings, visible text (with banners outside the content), controls, a screenshot about a second into the load and one once the page settles, the settle time and axe. It never clicks, only navigates.
+- **Pages:** `--path` (repeatable) or `--paths-file`, else the routes in your source (`--routes-from <dir>`), else a crawl under the URL. `/team?view=sso` and `/team?view=billing` are two pages. A console with its own nav registry should pass that list as `--paths-file`; `--routes-from` reads route files and `<Route path>` literals, and misses views kept in the query string.
+- **Who scores:** `--score-via server` (default) sends each page to Mushi, which uses your app's AI key, then Mushi's. `claude-code`, `cursor` or `anthropic-api` score on your machine.
+- **The viewport:** desktop first, 1440×900. Set it per app on the console, or pass `--viewport 390x844`.
+- **Root causes:** problems that come from one shared thing (a component, a banner, a status rule) become one cause with every page it touches. So do two pages that disagree about the same fact. `--file` files at most 5 causes a run, one report per cause. A cause that is already open only gets its pages refreshed.
+- **`--from-captures <dir>`** scores captures another browser driver wrote as `<dir>/pages/<page>/{facts.json, early.png, settled.png}`. Use it when the signed-in profile is already open in another browser.
+- **Output:** `scorecard.md` and `scorecard.json` in the run folder. `--sync` shows the run on the console (UX runs → Scorecard), with each page's trend across runs.
 
 ## Explore signed-in screens
 

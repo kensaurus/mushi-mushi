@@ -286,7 +286,7 @@ export function RevealedKeyCard({
       className="mt-3 pt-2 border-t border-edge-subtle bg-warn-muted/20 -mx-3 px-3 py-2"
       data-testid={testIdPrefix ?? `revealed-key-${projectId}`}
     >
-      <div className="text-2xs text-warn font-medium uppercase tracking-wider mb-2 flex items-center gap-2 flex-wrap">
+      <div className="text-2xs text-warn font-semibold mb-2 flex items-center gap-2 flex-wrap">
         <span>⚠️ One-time key — copy now, will not be shown again</span>
         {scopes.map((s) => (
           <Badge key={s} className={scopeBadgeTone(s)}>{s}</Badge>

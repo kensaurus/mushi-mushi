@@ -58,7 +58,8 @@ export function SdkInstallConfigurator({
 
   return (
     <div className="space-y-3 text-2xs">
-      <label className="flex items-start gap-2 rounded-sm border border-edge-subtle bg-surface-raised/60 p-2">
+      {/* A row, not a box inside the install card (round-3 review, 2026-11-19). */}
+      <label className="flex items-start gap-2">
         <input
           type="checkbox"
           checked={enabled}
@@ -75,12 +76,13 @@ export function SdkInstallConfigurator({
 
       {/* Position 4-corner picker */}
       <fieldset>
-        <legend className="text-2xs text-fg-muted uppercase tracking-wider font-medium mb-1 inline-flex items-center gap-1">
+        <legend className="text-2xs text-fg-secondary font-semibold mb-1 inline-flex items-center gap-1">
           Position
           <ConfigHelp helpId="sdk-install.position" />
         </legend>
+        {/* Each corner says which corner it is; four blank boxes named nothing (round-3 review). */}
         <div
-          className="grid grid-cols-2 gap-1 w-32 p-1 bg-surface-raised border border-edge-subtle rounded-sm"
+          className="grid grid-cols-2 gap-1 w-48"
           role="radiogroup"
           aria-label="Widget position"
         >
@@ -92,20 +94,19 @@ export function SdkInstallConfigurator({
               aria-checked={config.position === pos}
               aria-label={POSITION_LABEL[pos]}
               onClick={() => update('position', pos)}
-              className={`h-6 rounded-sm transition-opacity ${
-                config.position === pos
-                  ? 'bg-brand'
-                  : 'bg-surface-overlay hover:bg-edge-subtle'
+              className={`rounded-sm border px-2 py-1 text-2xs transition-opacity ${
+                config.position === pos ? SELECTED_TONE : SELECTED_TONE_IDLE
               }`}
-              title={POSITION_LABEL[pos]}
-            />
+            >
+              {POSITION_LABEL[pos]}
+            </button>
           ))}
         </div>
       </fieldset>
 
       {!isMobileFramework(framework) && (
         <fieldset>
-          <legend className="text-2xs text-fg-muted uppercase tracking-wider font-medium mb-1 inline-flex items-center gap-1">
+          <legend className="text-2xs text-fg-secondary font-semibold mb-1 inline-flex items-center gap-1">
             Trigger mode
             <ConfigHelp helpId="sdk-install.trigger_mode" />
           </legend>
@@ -138,11 +139,11 @@ export function SdkInstallConfigurator({
                   {config.trigger === value && <span className="w-1.5 h-1.5 rounded-full bg-brand-fg" />}
                 </span>
                 <span className="font-medium">{label}</span>
-                {value === 'banner' && <span className="ml-auto text-2xs text-ok uppercase tracking-wider font-semibold">Recommended</span>}
+                {value === 'banner' && <span className="ml-auto text-2xs text-ok font-semibold">Recommended</span>}
                 {/* The SDK's own default is what is selected until you pick; say so,
                     so "Recommended" elsewhere does not read as a contradiction. */}
                 {value === DEFAULT_SDK_CONFIG.trigger && value !== 'banner' && (
-                  <span className="ml-auto text-2xs text-fg-faint uppercase tracking-wider">Default</span>
+                  <span className="ml-auto text-2xs text-fg-secondary font-semibold">Default</span>
                 )}
               </button>
             ))}
@@ -258,7 +259,7 @@ export function SdkInstallConfigurator({
       {/* Theme + trigger text on one row */}
       <div className="grid grid-cols-2 gap-3">
         <fieldset>
-          <legend className="text-2xs text-fg-muted uppercase tracking-wider font-medium mb-1 inline-flex items-center gap-1">
+          <legend className="text-2xs text-fg-secondary font-semibold mb-1 inline-flex items-center gap-1">
             Theme
             <ConfigHelp helpId="sdk-install.theme" />
           </legend>
@@ -283,7 +284,7 @@ export function SdkInstallConfigurator({
         </fieldset>
 
         <label className="block">
-          <span className="text-2xs text-fg-muted uppercase tracking-wider font-medium inline-flex items-center gap-1">
+          <span className="text-2xs text-fg-secondary font-semibold inline-flex items-center gap-1">
             Trigger
             <ConfigHelp helpId="sdk-install.trigger_text" />
           </span>
@@ -301,7 +302,7 @@ export function SdkInstallConfigurator({
 
       {/* Capture options */}
       <fieldset>
-        <legend className="text-2xs text-fg-muted uppercase tracking-wider font-medium mb-1">Capture</legend>
+        <legend className="text-2xs text-fg-secondary font-semibold mb-1">Capture</legend>
         <div className="grid grid-cols-2 gap-1.5">
           <CaptureToggle
             label="Console logs"
@@ -344,7 +345,7 @@ export function SdkInstallConfigurator({
           </select>
         </label>
         {config.capture.screenshot !== 'off' && (
-          <div className="mt-2 rounded-sm border border-edge-subtle bg-surface-raised/40 p-2">
+          <div className="mt-2 pl-4">
             <label className="flex items-center gap-1.5 cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -381,7 +382,7 @@ export function SdkInstallConfigurator({
       </fieldset>
 
       <fieldset>
-        <legend className="text-2xs text-fg-muted uppercase tracking-wider font-medium mb-1">
+        <legend className="text-2xs text-fg-secondary font-semibold mb-1">
           Native mobile
         </legend>
         <div className="grid grid-cols-2 gap-3">
@@ -398,7 +399,7 @@ export function SdkInstallConfigurator({
             </select>
           </label>
           <label className="block">
-            <span className="text-fg-muted">Min description</span>
+            <span className="text-fg-muted">Min description (characters)</span>
             <input
               type="number"
               min={0}

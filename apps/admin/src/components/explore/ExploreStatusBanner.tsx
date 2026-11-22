@@ -15,9 +15,11 @@ interface Props {
   onRefresh?: () => void
   refreshing?: boolean
   plainBanner?: boolean
+  /** The snapshot tiles below already show the file and chunk counts: do not repeat them. */
+  hideCounts?: boolean
 }
 
-export function ExploreStatusBanner({ stats, onTab, onRefresh, refreshing, plainBanner = false }: Props) {
+export function ExploreStatusBanner({ stats, onTab, onRefresh, refreshing, plainBanner = false, hideCounts = false }: Props) {
   const copy = usePageCopy('/explore')
   const actions = copy?.actionLabels ?? {}
   const projectLabel = stats.projectName ?? 'workspace'
@@ -139,12 +141,18 @@ export function ExploreStatusBanner({ stats, onTab, onRefresh, refreshing, plain
       tone="ok"
       title={plainBanner ? 'Code map is ready' : `Atlas ready on ${projectLabel}`}
       subtitle={
-        <>
-          {stats.topPriorityLabel}
-          {stats.lastIndexedAt ? (
-            <> · indexed <RelativeTime value={stats.lastIndexedAt} /></>
-          ) : null}
-        </>
+        hideCounts ? (
+          stats.lastIndexedAt ? (
+            <>Indexed <RelativeTime value={stats.lastIndexedAt} /></>
+          ) : undefined
+        ) : (
+          <>
+            {stats.topPriorityLabel}
+            {stats.lastIndexedAt ? (
+              <> · indexed <RelativeTime value={stats.lastIndexedAt} /></>
+            ) : null}
+          </>
+        )
       }
       action={
         onRefresh ? (

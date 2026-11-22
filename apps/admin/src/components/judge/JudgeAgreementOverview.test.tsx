@@ -25,7 +25,7 @@ vi.mock('../../lib/usePageData', () => ({
   },
 }))
 
-import { JudgeAgreementOverview, agreementPoints } from './JudgeAgreementOverview'
+import { JudgeAgreementOverview, agreementPoints, agreementStatus } from './JudgeAgreementOverview'
 import { judgeStatusSentence } from './JudgeSnapshotStrip'
 import { EMPTY_JUDGE_STATS, type JudgeStats } from './JudgeStatsTypes'
 
@@ -58,6 +58,14 @@ describe('agreementPoints', () => {
   })
 })
 
+describe('agreementStatus', () => {
+  it('is green at or over the 80% target, amber under it, red under 60%', () => {
+    expect(agreementStatus(80)).toBe('passed')
+    expect(agreementStatus(79)).toBe('slow')
+    expect(agreementStatus(59)).toBe('failed')
+  })
+})
+
 describe('JudgeAgreementOverview', () => {
   it('draws the trend and lists the worst recent disagreements with their reason', () => {
     mocks.evaluations = [
@@ -85,10 +93,17 @@ describe('JudgeAgreementOverview', () => {
         ),
       ),
     )
-    expect(host.querySelector('[data-testid="metric-timeline"]')).not.toBeNull()
+    // One bar per graded week against the target line.
+    const bars = host.querySelector('[data-testid="judge-agreement-bars"]')!
+    expect(bars.querySelectorAll('[role="listitem"]')).toHaveLength(2)
+    expect(bars.querySelector('[data-testid="judge-agreement-target"]')).not.toBeNull()
+    expect([...bars.querySelectorAll('[role="listitem"]')].map((b) => b.getAttribute('data-status'))).toEqual(['passed', 'slow'])
     const worst = host.querySelector('[data-testid="judge-worst-disagreements"]')!
     expect(worst.textContent).toContain('Pay button does nothing')
     expect(worst.textContent).toContain('12%')
+    // An older server sends no review fields: the row offers "Open report" only.
+    expect(worst.textContent).toContain('Open report')
+    expect(worst.textContent).not.toContain('Accept')
     expect(worst.textContent).toContain('The crash is in checkout, not auth.')
     expect(worst.textContent).not.toContain('CartService')
     expect(worst.querySelector('a')?.getAttribute('href')).toBe('/reports/r1')
@@ -99,6 +114,24 @@ describe('JudgeAgreementOverview', () => {
     expect(q.get('sort')).toBe('score_asc')
     expect(q.get('limit')).toBe('3')
     expect(Date.parse(q.get('to')!) - Date.parse(q.get('from')!)).toBe(14 * 86_400_000)
+  })
+})
+
+describe('JudgeAgreementOverview with one graded week', () => {
+  it('shows no chart and no "0% agreed" line: the status line already counts the disagreements', () => {
+    mocks.evaluations = []
+    act(() =>
+      root.render(
+        createElement(
+          MemoryRouter,
+          null,
+          createElement(JudgeAgreementOverview, { weeks: [{ weekStart: '2026-11-09', graded: 2, agreed: 0 }], windowDays: 14 }),
+        ),
+      ),
+    )
+    expect(host.querySelector('[data-testid="judge-agreement-bars"]')).toBeNull()
+    expect(host.querySelector('[data-testid="judge-agreement-single"]')).toBeNull()
+    expect(host.textContent).not.toContain('agreed, week of')
   })
 })
 
@@ -114,15 +147,25 @@ describe('judgeStatusSentence', () => {
     disagreementRatePct: 32,
   }
 
-  it('counts disagreements over the recent window and says so', () => {
+  it('counts disagreements over the recent window and says so, without repeating the grade', () => {
     expect(judgeStatusSentence({ ...base, recentWindowDays: 14, recentEvaluations: 10, recentDisagreements: 1 })).toBe(
-      'Diagnoses scored 66% this week across 53 grades. In the last 14 days the grader disagreed with 1 of 10 diagnoses (10%).',
+      '1 of 10 diagnoses in the last 14 days disagreed with the grader. Review them before merging those fixes.',
     )
   })
 
   it('says "so far" for an all-time count from an older server', () => {
     expect(judgeStatusSentence(base)).toBe(
-      'Diagnoses scored 66% this week across 53 grades. So far the grader disagreed with 18 of 57 diagnoses (32%).',
+      '18 of 57 diagnoses so far disagreed with the grader. Review them before merging those fixes.',
+    )
+  })
+
+  it('says how many still need review, and that all are reviewed when none do', () => {
+    const recent = { ...base, recentWindowDays: 14, recentEvaluations: 12, recentDisagreements: 7 }
+    expect(judgeStatusSentence({ ...recent, recentToReview: 3 })).toBe(
+      '7 of 12 diagnoses in the last 14 days disagreed with the grader. 3 still need your review before you merge their fixes.',
+    )
+    expect(judgeStatusSentence({ ...recent, recentToReview: 0 })).toBe(
+      '7 of 12 diagnoses in the last 14 days disagreed with the grader. You reviewed them all.',
     )
   })
 })

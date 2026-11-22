@@ -1,5 +1,6 @@
 export default {
   index: 'Overview',
+  'what-leaves-the-browser': 'What leaves the browser',
   byok: 'Bring-your-own-key',
   'data-residency': 'Data residency',
   'byo-storage': 'BYO storage',

@@ -13,15 +13,9 @@ import { CHIP_TONE } from '../../lib/chipTone'
 
 export interface OnboardingSetupReadoutProps {
   stats: OnboardingStats
-  statsFetchedAt: string | null
-  statsValidating?: boolean
 }
 
-export function OnboardingSetupReadout({
-  stats,
-  statsFetchedAt,
-  statsValidating,
-}: OnboardingSetupReadoutProps) {
+export function OnboardingSetupReadout({ stats }: OnboardingSetupReadoutProps) {
   if (!stats.hasAnyProject || !stats.projectId) return null
 
   const endpointRows: DetailRowItem[] = [
@@ -65,10 +59,9 @@ export function OnboardingSetupReadout({
   ]
 
   return (
-    <ReadoutPanel
-      title="Setup provenance"
-      freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
-    >
+    // "Setup", as on the Fix a problem tab ("Setup provenance" there read "Copilot setup"), and no
+    // freshness pill: Setup gaps above already carries the page's one (round-3 review, 2026-11-19).
+    <ReadoutPanel title="Setup readout">
       <p className="mb-4 text-xs leading-relaxed text-fg-muted">
         Where your SDK should send reports and whether the pipeline is aligned with this console.
         Copy the ingest URL into your app env or SDK init.

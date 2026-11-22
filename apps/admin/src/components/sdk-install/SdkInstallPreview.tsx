@@ -81,7 +81,9 @@ export function SdkInstallPreview({
 
   return (
     <div
-      className="relative h-80 w-full rounded-md border overflow-hidden"
+      // Short until the button is pressed: a 320 px grey page with three skeleton bars read as a
+      // broken preview (round-3 review, 2026-11-19). The open panel needs the full height.
+      className={`relative w-full rounded-md border overflow-hidden ${panelOpen ? 'h-80' : 'h-32'}`}
       style={{ colorScheme: isDark ? 'dark' : 'light', background: surface, color: ink, borderColor: hairline }}
       aria-label="Live preview of the issue-report widget in your app"
       data-testid="sdk-install-preview"

@@ -7,7 +7,9 @@
  *   GET  /v1/admin/pipeline/fix/:id  one fix's group, actions and refused actions (report page)
  *   POST /v1/admin/pipeline/actions  { action, fixIds?, projectId?, reason? } one-click fixes
  *
- * The read returns every stage with its stuck groups (_shared/pipeline-view.ts),
+ * The read returns every stage with its stuck groups (_shared/pipeline-view.ts;
+ * each group carries `ages`, its items' time in stage as [0–3 d, 3–7 d, 7–30 d,
+ * 30 d+] counted before the item list is cut, for the console's age bar),
  * the release trains of the last 7 days per repo, and intake rejects. The
  * actions change only GitHub PRs and merge-queue rows the caller can write;
  * the merge queue's own logic (train.ts, worker.ts) is never changed here:
@@ -418,7 +420,7 @@ async function readLocalInfra(db: Db, projectIds: string[], now: Date) {
       seen.add(x.report_id);
       return !x.auto_requeued && open.has(x.report_id) && !queuedIds.has(x.report_id) && newest.get(x.report_id) === x.claimed_at;
     });
-    return localInfraGroup(stuck, open, new Map(lanes.map((l) => [l.id, l.name])));
+    return localInfraGroup(stuck, open, new Map(lanes.map((l) => [l.id, l.name])), now);
   } catch (err) {
     plog.warn('local worker runs read failed', { err: err instanceof Error ? err.message : String(err) });
     return null;
@@ -464,7 +466,7 @@ export async function readDispatchers(db: Db, projectIds: string[], projects: Di
   try {
     const [settingsRes, keysRes, ownersRes, jobsRes, attemptsRes] = await Promise.all([
       db.from('project_settings').select('project_id, autofix_enabled').in('project_id', projectIds),
-      db.from('byok_keys').select('project_id, organization_id, owner_user_id, status, spend_down_enabled, exhausted_until').eq('provider_slug', 'cursor').limit(500),
+      db.from('byok_keys').select('project_id, organization_id, owner_user_id, status, spend_down_enabled, exhausted_until, label').eq('provider_slug', 'cursor').limit(500),
       orgIds.length
         ? db.from('organization_members').select('organization_id, user_id').in('organization_id', orgIds).eq('role', 'owner')
         : Promise.resolve({ data: [], error: null }),

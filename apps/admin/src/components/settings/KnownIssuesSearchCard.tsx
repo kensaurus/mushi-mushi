@@ -16,7 +16,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
-import { ErrorAlert, Toggle } from '../ui'
+import { ErrorAlert, InfoHint, Toggle } from '../ui'
 import { IconLink } from '../icons'
 import { SettingsList, SettingsRow } from './SettingsRow'
 
@@ -69,13 +69,11 @@ export function KnownIssuesSearchCard({ projectId, id }: { projectId: string | n
         icon={<IconLink size={16} />}
         title="Search the web for known fixes"
         purpose={
-          <>
-            Off by default. When on, Mushi Mushi sends the error message from each error report to Firecrawl, with IDs,
-            URLs and long numbers removed, to search GitHub and Stack Overflow (issues, merged fixes, docs) for
-            known fixes, after classification and when someone presses Search again. The top results appear on the
-            report under &ldquo;Others who hit this&rdquo;. A fix dispatch with little code context also sends the
-            report summary (or the start of its description) to find related fixes.
-          </>
+          // One line + (i): the full rule ran four lines (round-3 review 2026-11-19).
+          <span className="inline-flex flex-wrap items-center gap-x-1.5">
+            <span>Off by default. Searches GitHub and Stack Overflow for fixes to the same error, through Firecrawl.</span>
+            <InfoHint content="When on, Mushi Mushi sends the error message from each error report to Firecrawl, with IDs, URLs and long numbers removed, to search GitHub and Stack Overflow (issues, merged fixes, docs) for known fixes, after classification and when someone presses Search again. The top results appear on the report under “Others who hit this”. A fix dispatch with little code context also sends the report summary (or the start of its description) to find related fixes." />
+          </span>
         }
         action={
           <Toggle

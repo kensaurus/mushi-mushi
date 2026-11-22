@@ -5,7 +5,7 @@
  * Namespace hygiene + cross-link consistency for every publishable package, so
  * a developer browsing npm sees ONE product (not 36 loosely-related packages)
  * and the *real* Mushi is unambiguous vs. the unrelated `Mushi-mushi` GitHub
- * user in the security/malware space (VISION.md / liftup plan §3.2).
+ * user in the security/malware space (docs/VISION.md / liftup plan §3.2).
  *
  * For each non-private packages/<dir>/package.json it guarantees:
  *   - `homepage`    → the canonical product site (cross-link)
@@ -60,7 +60,7 @@ export const NODE_ENGINE = '>=20.19.0'
 export const DESCRIPTION_HARD_MAX = 255
 // Primary entry points must read in full on a search card.
 export const PRIMARY_DESCRIPTION_MAX = 140
-// Mushi is a Sentry companion (VISION.md) — this keyword says the opposite.
+// Mushi is a Sentry companion (docs/VISION.md) — this keyword says the opposite.
 export const BANNED_KEYWORDS = ['sentry-alternative']
 
 /**

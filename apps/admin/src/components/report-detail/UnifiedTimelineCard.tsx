@@ -11,6 +11,7 @@ const LANE_PILL: Record<UnifiedTimelineLane, string> = {
   qa: CHIP_TONE.accentSubtle,
   skill_pipeline: 'bg-brand/12 text-brand border border-brand/28',
   ask_mushi: 'bg-surface-overlay text-fg-muted border border-edge-subtle',
+  pipeline: CHIP_TONE.warnSubtle,
 }
 
 const LANE_LABEL: Record<UnifiedTimelineLane, string> = {
@@ -21,6 +22,7 @@ const LANE_LABEL: Record<UnifiedTimelineLane, string> = {
   qa: 'qa',
   skill_pipeline: 'pipeline',
   ask_mushi: 'ask',
+  pipeline: 'triage',
 }
 
 interface UnifiedTimelineResponse {
@@ -46,6 +48,15 @@ export function UnifiedTimelineCard({ reportId }: { reportId: string }) {
   }
 
   const timeline = data?.timeline ?? []
+  // Only "Report submitted": its text repeats the description and the
+  // header's "Reported …" (R2 sweep 2026-11-18, a big card with one line).
+  if (timeline.length === 1 && timeline[0].lane === 'report') {
+    return (
+      <p className="text-xs text-fg-muted" data-testid="unified-timeline-only-report">
+        Only the report so far. Comments, fix events, QA runs and pipeline steps appear here as they happen.
+      </p>
+    )
+  }
   if (timeline.length === 0) {
     return (
       <EmptyState
@@ -78,20 +89,22 @@ export function UnifiedTimelineCard({ reportId }: { reportId: string }) {
               <RelativeTime value={entry.at} />
             </time>
             <span
-              className={`shrink-0 inline-flex items-center rounded-sm px-1 py-px text-3xs font-semibold uppercase tracking-wide ${LANE_PILL[entry.lane]}`}
+              className={`shrink-0 inline-flex items-center rounded-sm px-1 py-px text-3xs font-semibold ${LANE_PILL[entry.lane]}`}
             >
               {LANE_LABEL[entry.lane]}
             </span>
             <div className="min-w-0 flex-1">
               <div className="text-2xs font-medium text-fg leading-snug wrap-anywhere">
                 {entry.title}
-                {entry.status ? (
+                {/* A triage job's title already says its state ("Quick check failed"). */}
+                {entry.status && entry.lane !== 'pipeline' ? (
                   <span className="ml-1 text-fg-muted font-normal">· {entry.status}</span>
                 ) : null}
               </div>
               {entry.body ? (
-                <p className="text-3xs text-fg-secondary leading-snug wrap-anywhere mt-0.5">
-                  {truncate(entry.body, 160)}
+                // A triage job's body is the plain line, then the raw error: the line shows, the raw text is the tooltip.
+                <p className="text-3xs text-fg-secondary leading-snug wrap-anywhere mt-0.5" title={entry.lane === 'pipeline' ? entry.body : undefined}>
+                  {truncate(entry.lane === 'pipeline' ? entry.body.split('\n')[0]! : entry.body, 160)}
                 </p>
               ) : null}
             </div>

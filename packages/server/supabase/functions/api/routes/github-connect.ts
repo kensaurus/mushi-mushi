@@ -357,6 +357,10 @@ export function registerGithubConnectRoutes(app: Hono<{ Variables: Variables }>,
       github_app_installation_id: chosen.installationId,
       is_primary: true,
       indexing_enabled: true,
+      // A new binding answers the old "no token" error: the sweep kicked
+      // below writes its own result (owner, 2026-11-17: the stale error
+      // stayed on Codebase indexing after the App was given access).
+      last_index_error: null,
       updated_at: nowIso,
     }
     const { error: repoErr } = existing

@@ -120,8 +120,9 @@ describe('RecommendedSkillsSection triage links', () => {
     const buttons = copyButtons()
     expect(buttons).toHaveLength(SKILLS.length)
     for (const button of buttons) {
-      expect(button.className).toContain('h-5')
-      expect(button.className).toContain('w-5')
+      // The sm size: a 24px hit area (WCAG 2.5.8, report 44ac4ce2), never the md 28px one.
+      expect(button.className).toContain('h-6')
+      expect(button.className).toContain('w-6')
       expect(button.className).not.toContain('h-7')
     }
   })

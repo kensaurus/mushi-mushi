@@ -21,7 +21,7 @@ const KIND_ACCENT: Record<'peak' | 'today' | 'low', string> = {
 }
 
 const LABEL_CLASS =
-  'pointer-events-none absolute z-10 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-sm border border-edge-subtle/70 bg-surface/95 px-1 py-px text-2xs font-mono font-semibold tabular-nums leading-none shadow-sm'
+  'pointer-events-none absolute z-10 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-sm bg-surface/95 px-1 py-px text-2xs font-mono font-semibold tabular-nums leading-none shadow-sm'
 
 interface LineLabelProps {
   mode: 'line'

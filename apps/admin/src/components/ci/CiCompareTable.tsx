@@ -19,7 +19,7 @@
 
 import { useState } from 'react'
 import type { CiCompare, CiCompareRow, Provenance } from '../../lib/ciCompareTypes'
-import { costText, formatMinutes, formatMoney, formatPercent, groupRowsByRepo, runsOnText, type RepoCostGroup } from '../../lib/ciCompareView'
+import { costText, formatMinutes, formatMoney, groupRowsByRepo, passRateText, runsOnText, type RepoCostGroup } from '../../lib/ciCompareView'
 import { formatSeconds } from '../../lib/ciView'
 import { Btn, DataTableCell, DataTableHead } from '../ui'
 import { IconCloud, IconServer, IconServerOff } from '../icons'
@@ -160,7 +160,7 @@ function WideTable({ groups, fields, expanded }: { groups: RepoCostGroup[]; fiel
                 <DataTableCell align="right" className="tabular-nums">{formatSeconds(r.queueP95s)}</DataTableCell>
                 <DataTableCell align="right" className="tabular-nums">{formatSeconds(r.runP50s)}</DataTableCell>
                 <DataTableCell align="right" className="tabular-nums">
-                  <span title={`${r.prJobs} pull-request jobs`}>{formatPercent(r.prPassRate)}</span>
+                  <span title={`${r.prJobs} pull-request jobs`}>{passRateText(r)}</span>
                 </DataTableCell>
                 <DataTableCell align="right" className="tabular-nums">
                   <span title={`${r.rawMinutes} minutes of run time; GitHub rounds each job up to a whole minute`}>{formatMinutes(r.billedMinutes)}</span>
@@ -198,18 +198,25 @@ function PhoneList({ groups, expanded }: { groups: RepoCostGroup[]; expanded: Re
             {view.rows.map((r) => (
               <li key={r.key} className="py-2">
                 <RunsOn row={r} />
-                <dl className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1 text-2xs">
-                  <dt className="text-fg-muted">Jobs (measured)</dt>
+                {/* Two groups, each named once: "(measured)" / "(estimated)" sat on every label of every card (round 3). */}
+                <dl className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1 text-2xs" data-testid="ci-compare-card-figures">
+                  <dt className="col-span-2 text-3xs font-semibold tracking-wide text-fg-secondary uppercase" title={PROVENANCE.measured.title}>
+                    Measured
+                  </dt>
+                  <dt className="text-fg-muted">Jobs</dt>
                   <dd className="text-right tabular-nums text-fg">{r.jobs}</dd>
-                  <dt className="text-fg-muted">Wait p95 (measured)</dt>
+                  <dt className="text-fg-muted">Wait p95</dt>
                   <dd className="text-right tabular-nums text-fg">{formatSeconds(r.queueP95s)}</dd>
-                  <dt className="text-fg-muted">Run time p50 (measured)</dt>
+                  <dt className="text-fg-muted">Run time p50</dt>
                   <dd className="text-right tabular-nums text-fg">{formatSeconds(r.runP50s)}</dd>
-                  <dt className="text-fg-muted">PR pass rate (measured)</dt>
-                  <dd className="text-right tabular-nums text-fg">{formatPercent(r.prPassRate)}</dd>
-                  <dt className="text-fg-muted">Minutes billed (estimated)</dt>
+                  <dt className="text-fg-muted">PR pass rate</dt>
+                  <dd className="text-right tabular-nums text-fg">{passRateText(r)}</dd>
+                  <dt className="col-span-2 mt-1 text-3xs font-semibold tracking-wide text-warn-foreground uppercase" title={PROVENANCE.estimated.title}>
+                    Estimated
+                  </dt>
+                  <dt className="text-fg-muted">Minutes billed</dt>
                   <dd className="text-right tabular-nums text-fg">{formatMinutes(r.billedMinutes)}</dd>
-                  <dt className="text-fg-muted">Per month (estimated)</dt>
+                  <dt className="text-fg-muted">Per month</dt>
                   <dd className="text-right">
                     <Cost row={r} />
                   </dd>

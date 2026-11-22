@@ -112,7 +112,7 @@ export function JudgeStatusBanner({
           stats.topPriorityLabel ??
           (drifting
             ? 'Recent grades are worse than last week — review mismatches before merging fixes.'
-            : 'The judge thinks triage quality is poor — review Prompt Lab or recent evaluations.')
+            : 'The judge thinks triage quality is poor — review AI prompts or recent evaluations.')
         }
         action={
           stats.topPriorityTo ? (

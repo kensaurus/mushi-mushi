@@ -15,7 +15,7 @@
 
 import { Link } from 'react-router-dom'
 import { Btn } from '../ui'
-import { CHIP_TONE } from '../../lib/chipTone'
+import { StatusMark, StatusPill, type RunStatus } from '../signal/StatusMark'
 import { SDK_HEALTH_ANCHOR } from '../../lib/sdkHealth'
 import { relativeTime } from '../../lib/setupGuideSteps'
 import { sdkFreshness } from '../../lib/heartbeat'
@@ -63,7 +63,8 @@ export function connectPills(input: ConnectPillsInput): ConnectPill[] {
       id: 'heartbeat',
       label: 'App checked in',
       value: heard ? `Heard ${heard}` : 'Not heard yet',
-      tone: freshness === 'healthy' ? 'ok' : freshness === 'never' ? 'neutral' : 'warn',
+      // Quiet (1 h – 7 d) is grey; only a week of silence warns (2026-11-18).
+      tone: freshness === 'healthy' ? 'ok' : freshness === 'cold' ? 'warn' : 'neutral',
       href: `#${SDK_HEALTH_ANCHOR}`,
     },
     {
@@ -87,7 +88,8 @@ export function connectPills(input: ConnectPillsInput): ConnectPill[] {
   ]
 }
 
-const DOT: Record<PillTone, string> = { ok: 'bg-ok', warn: 'bg-warn', neutral: 'bg-fg-faint' }
+/** Each pill's mark (2026-11-18): ✓ fine, ⧗ behind or stale, ○ not seen yet. */
+const PILL_STATUS: Record<PillTone, RunStatus> = { ok: 'passed', warn: 'slow', neutral: 'idle' }
 
 function jump(hash: string) {
   document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -118,11 +120,11 @@ export function ConnectStatusPills(props: ConnectPillsInput & { loading?: boolea
               data-tone={p.tone}
               className="inline-flex min-w-0 max-w-full items-center gap-2 rounded-full border border-edge-subtle bg-surface-raised px-3 py-1.5 text-xs hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
             >
-              <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${DOT[p.tone]}`} />
+              <StatusMark status={PILL_STATUS[p.tone]} />
               <span className="shrink-0 text-fg-muted">{p.label}</span>
               <span className="min-w-0 truncate font-medium text-fg">{p.value}</span>
               {p.badge ? (
-                <span className={`shrink-0 rounded-full px-1.5 py-px text-2xs font-medium ${CHIP_TONE.warnSubtle}`}>{p.badge}</span>
+                <StatusPill status="slow" label={p.badge} className="shrink-0" />
               ) : null}
             </Link>
           </li>

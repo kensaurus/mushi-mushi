@@ -10,9 +10,9 @@ can execute without additional context.
 
 ## Positioning — read this before you touch any user-facing surface
 
-> The canonical constitution is [`/VISION.md`](./VISION.md). This block is the
+> The canonical constitution is [`docs/VISION.md`](./docs/VISION.md). This block is the
 > compressed copy so on-message behavior survives even when an agent only loads
-> `AGENTS.md`. If this and `VISION.md` ever disagree, `VISION.md` wins — fix it
+> `AGENTS.md`. If this and `docs/VISION.md` ever disagree, `docs/VISION.md` wins — fix it
 > here, don't fork it. Drift is enforced against by
 > [`scripts/check-positioning-consistency.mjs`](./scripts/check-positioning-consistency.mjs).
 
@@ -907,8 +907,8 @@ Reporter opens widget (capture.screenshot on-report/auto)
 | SdkInstallCard | `apps/admin/src/components/SdkInstallCard.tsx` | Checkbox + optional custom text for screenshot privacy caption |
 | ConfigHelp | `sdk-install.screenshot_sensitive_hint` in `configDocs.ts` | Operator docs + link to deep-dive |
 
-**Introduced in:** `@mushi-mushi/core` / `@mushi-mushi/web` **1.19.0** (current: **1.35.0** — see root `CHANGELOG.md`).
-`@mushi-mushi/react-native` **0.19.0** (current: **0.24.0**). Full doc:
+**Introduced in:** `@mushi-mushi/core` / `@mushi-mushi/web` **1.19.0** (current: **1.37.0** — see `docs/CHANGELOG.md`).
+`@mushi-mushi/react-native` **0.19.0** (current: **0.25.0**). Full doc:
 [`docs/SDK_SCREENSHOT_PREVIEW.md`](docs/SDK_SCREENSHOT_PREVIEW.md).
 
 ---
@@ -1174,6 +1174,20 @@ ADR 0053 (amended 2026-10-28). In the console it is the **First-time user test**
 | Run now on a local worker (amendment 2026-10-28) | Claim kind `fresh_eyes` (`api/routes/work-fresh-eyes.ts`, rules in `_shared/fresh-eyes-queue.ts`): any claiming lane of the app whose daemon sends `takes: ['fresh_eyes']` takes it first; the daemon runs `mushi-ux fresh-eyes --request-stdin --sync [--file \| --dry-run]` with Node, no shell, the run on stdin (`packages/cli/src/worker/fresh-eyes.ts`); test accounts minted at claim time only on the granting operator's own machine, sent once in the claim answer (`no-store`), never stored or logged |
 
 Operator guide: [`docs/operators/fresh-eyes.md`](docs/operators/fresh-eyes.md). A charter-driven `ux` lane mode for other UX runs is still BL-138.
+
+## Ops hub (Nov 17 2026)
+
+Plan: [`docs/execplans/ops-hub-slack.md`](docs/execplans/ops-hub-slack.md). User docs: `apps/docs/content/integrations/ops-hub.mdx`. Migration `20261117120000_ops_hub.sql` (apply before deploying `api`, `api-ext`, `webhooks-github-indexer`, `site-watch-poll`, `sentry-seer-poll`).
+
+| Object | Role |
+| --- | --- |
+| `POST /v1/ops/events` | An app server's payment / release / alert. Key scope `ops:write` only (refused from a browser, implied by nothing), 422 `PII_REJECTED`, dedupe, 120/min per app (fails closed). Served by `api-ext`; `api` forwards. |
+| `POST /v1/ops/slack/commands`, `/v1/ops/slack/interactions` | The team's own Slack bot: slash command (`status`, `sales`, `releases`, `alerts`, `bugs`, `ci`, `apps`, `mute`, `unmute`, `help`) and the Acknowledge / Mute 24h buttons. Verified with the org's signing secret, found by `team_id`. |
+| `/v1/admin/ops/*`, `POST /v1/admin/projects/:id/ops-key` | Console (`jwtAuth`): feed, ack, coverage, Slack settings (secrets in Vault, never returned), the ops key. |
+| `_shared/ops-format.ts` / `ops-events.ts` / `ops-slack.ts` / `ops-commands.ts` | Pure payload + PII guard + threads; record + deliver (`chat.postMessage`, `chat.update`, `reactions.add`, webhook fallback, mutes); command answers. |
+| `_shared/ops-sources.ts` | Mushi Mushi's own sources for orgs with the bot on: GitHub production `deployment_status`, Sentry new errors / regressions / resolves, edge canary down / up. |
+| `ops_events`, `ops_slack_settings`, `ops_mutes`, `ops_coverage(uuid)` | RLS on all: members read events and mutes; settings and the function are service role only. |
+| Console `/ops` | `OpsPage` + `components/ops/*`; Settings → Slack bot (`SlackBotCard`); Projects → Ops key (`OpsKeyRow`). |
 
 ## ExecPlans
 

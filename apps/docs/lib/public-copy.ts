@@ -53,9 +53,9 @@ export const PRICING_LEDE = DIAGNOSIS_PLAIN
  * at click time.
  */
 export const PRICING_CTA = {
-  label: 'Start free — 1 app, 100 diagnoses/mo, no card',
+  label: 'Start free — 3 apps, 300 diagnoses/mo, no card',
   href: `${ADMIN_DEMO_BASE}/signup?src=pricing`,
-  note: 'Move to Builder for a second app. Upgrade from Billing, no sales call.',
+  note: 'Move to Builder for 1,000 diagnoses a month. Upgrade from Billing, no sales call.',
 } as const
 
 export interface PricingTierCta {
@@ -97,7 +97,7 @@ export const CLOUD_INTRO = {
   diagnosisNote:
     'A diagnosis = one finished plain-English root cause written to your queue. Filtered noise and deduplicated groups do not count.',
   meteredWhy:
-    'A plan sets how many apps your team can have; diagnoses are the allowance under it. Free covers one app and 100 diagnoses a month, Builder three apps, Studio ten. Bug signals are bursty, so past the allowance each diagnosis is a few cents, with a monthly overage cap you set for the team. Duplicate reports collapse, so you pay once per root cause.',
+    'A plan sets how many apps your team can have; diagnoses are the allowance under it. Free covers three apps and 300 diagnoses a month, Builder three apps and 1,000, Studio ten apps and 3,000. Bug signals are bursty, so past the allowance each diagnosis is a few cents, with a monthly overage cap you set for the team. Duplicate reports collapse, so you pay once per root cause.',
 } as const
 
 export const CONNECT_SKILLS = {
@@ -179,13 +179,13 @@ export const PRICING_TIERS: readonly PricingTierRow[] = [
   {
     id: 'free',
     name: 'Free',
-    apps: '1',
+    apps: '3',
     monthly: '$0',
     cloudCost: '$0 / mo',
-    diagnoses: '100 / mo',
-    retention: '14 days',
+    diagnoses: '300 / mo',
+    retention: '30 days',
     seats: '1',
-    highlights: 'One app, the whole loop once: plain-English diagnosis and a fix packet in your editor; agent fix PRs once you connect GitHub. Hard stop at the limit',
+    highlights: 'Three apps and the whole loop: plain-English diagnosis and a fix packet in your editor, plugins and usage alerts; agent fix PRs once you connect GitHub. Hard stop at the limit, no limit with your own AI key',
     // No AI or Cursor key is needed: diagnoses run on Mushi Mushi's key when the
     // app has none (_shared/byok.ts resolves the platform key last). Your own
     // key is optional (pricing_plans.feature_flags.byok is true on Free).
@@ -194,8 +194,8 @@ export const PRICING_TIERS: readonly PricingTierRow[] = [
     // an empty wallet could refuse a platform-key diagnosis. Keep this claim in
     // step with that flag.
     cloudNotes:
-      'All SDKs and the hosted console. No AI key needed; add your own AI or Cursor key if you want. Community support in GitHub Discussions',
-    plain: 'One app. Up to 100 bugs explained a month. No card, no AI key.',
+      'All SDKs, the hosted console, plugins and usage alerts. No AI key needed; with your own Anthropic or OpenAI key there is no diagnosis cap. Community support in GitHub Discussions',
+    plain: 'Up to 3 apps. Up to 300 bugs explained a month. No card, no AI key.',
   },
   {
     id: 'indie',
@@ -208,10 +208,10 @@ export const PRICING_TIERS: readonly PricingTierRow[] = [
     retention: '90 days',
     seats: '1',
     highlights:
-      'Three apps, plugins from the marketplace, usage alerts and an audit log; then $0.03/diagnosis with a $50 overage cap you set',
+      '1,000 diagnoses, 90 days of history, an audit log and email support; then $0.03/diagnosis with a $50 overage cap you set',
     cloudNotes:
-      'Three apps, plugin marketplace, usage alerts, email support; $0.03 per extra diagnosis',
-    plain: 'Up to 3 apps. 1,000 bugs explained a month, shared by every app in your team. Adds plugins, usage alerts and email support.',
+      'Three apps, 1,000 diagnoses, audit log, email support; $0.03 per extra diagnosis',
+    plain: 'Up to 3 apps. 1,000 bugs explained a month, shared by every app in your team. Adds 90 days of history, an audit log and email support.',
   },
   {
     id: 'pro',

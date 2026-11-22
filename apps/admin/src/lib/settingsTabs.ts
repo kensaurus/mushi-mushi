@@ -24,6 +24,7 @@ export const SETTINGS_SECTION_IDS = {
   ciCost: 'ci-cost',
   ciPolicy: 'ci-policy',
   sidebarPages: 'sidebar-pages',
+  opsSlackBot: 'ops-slack-bot',
 } as const
 
 /** Where "Search the web for known fixes" lives (KnownIssuesSearchCard). */
@@ -51,6 +52,8 @@ const SETTINGS_TAB_ALIASES: Readonly<Record<string, SettingsTabTarget>> = {
   'ci-policy': { tab: 'general', anchor: SETTINGS_SECTION_IDS.ciPolicy },
   // Settings › Labs became the sidebar half of Display & sidebar (2026-10-27).
   labs: { tab: 'display', anchor: SETTINGS_SECTION_IDS.sidebarPages },
+  // The Ops page's "Connect the Slack bot" (docs/execplans/ops-hub-slack.md).
+  'slack-bot': { tab: 'general', anchor: SETTINGS_SECTION_IDS.opsSlackBot },
 }
 
 function isSettingsTabId(value: unknown): value is SettingsTabId {

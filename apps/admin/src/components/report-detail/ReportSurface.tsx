@@ -46,7 +46,7 @@ export function ContainedBlock({ children, tone = 'muted', label, icon, classNam
   return (
     <div className={`rounded-md border px-3 py-2.5 text-xs ${BLOCK_TONE[tone]} ${className}`}>
       {label && (
-        <p className="mb-1.5 text-2xs font-semibold uppercase tracking-wide text-fg-muted opacity-70">
+        <p className="mb-1.5 text-2xs font-semibold text-fg-secondary opacity-70">
           {label}
         </p>
       )}
@@ -88,7 +88,7 @@ export function SignalChip({ children, tone = 'neutral', className = '', title }
   return (
     <span
       title={title}
-      className={`inline-flex max-w-full min-w-0 items-center rounded-full border px-2 py-0.5 text-2xs font-medium whitespace-nowrap ${SIGNAL_CHIP_TONE[tone]} ${className}`}
+      className={`inline-flex max-w-full min-w-0 items-center rounded-sm px-2 py-px text-2xs font-medium whitespace-nowrap ${SIGNAL_CHIP_TONE[tone]} ${className}`}
     >
       <span className="min-w-0 truncate">{children}</span>
     </span>
@@ -172,8 +172,10 @@ export function ActionPillRow({ children, className = '', ...rest }: ActionPillR
 }
 
 // ─── MetaChip ─────────────────────────────────────────────────
-// Labelled key-value chip: small label above, content below.
-// Used in report headers for metadata like "Reported" date, "Component".
+// Labelled key-value: "Page: Reports queue" on one line, no box of its own
+// (fresh-eyes sweep 2026-11-18: four bordered tiles in the report header were
+// cards in a card, and the inbox "Page / Reports queue" chip wrapped to two
+// lines). Used in report headers and inbox cards.
 // The value row is a flex row: chips that pass several spans (reporter name +
 // short id + "· view all") would otherwise render glued together, since JSX
 // drops the newline between sibling elements.
@@ -189,13 +191,13 @@ export interface MetaChipProps {
 export function MetaChip({ children, label, title, to, className = '' }: MetaChipProps) {
   const inner = (
     <>
-      <span className="text-2xs font-medium uppercase tracking-wide text-fg-faint">{label}</span>
-      <span className="inline-flex min-w-0 items-center gap-1 text-fg-muted">{children}</span>
+      <span className="shrink-0 whitespace-nowrap text-2xs font-semibold text-fg-secondary">{label}:</span>
+      <span className="inline-flex min-w-0 items-center gap-1 whitespace-nowrap text-fg-muted">{children}</span>
     </>
   )
-  const base = `flex flex-col gap-0.5 rounded border border-edge bg-surface-overlay px-2 py-1 text-xs ${className}`
+  const base = `inline-flex min-w-0 max-w-full items-baseline gap-1 text-xs ${className}`
   if (to) {
-    return <Link to={to} title={title} className={`${base} hover:bg-surface-raised transition-opacity`}>{inner}</Link>
+    return <Link to={to} title={title} className={`${base} hover:underline`}>{inner}</Link>
   }
   return <div title={title} className={base}>{inner}</div>
 }

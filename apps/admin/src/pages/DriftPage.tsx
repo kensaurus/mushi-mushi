@@ -42,6 +42,7 @@ import { DriftStatusBanner, isDriftStatusBannerCritical } from '../components/dr
 import { DriftReadout } from '../components/drift/DriftReadout'
 import { SchemaChangesTimeline } from '../components/drift/SchemaChangesTimeline'
 import { DriftSnapshotStrip } from '../components/drift/DriftSnapshotStrip'
+import { checkGroupFor, type GateFindingsPayload } from '../lib/gateFindings'
 import { DriftSchemaGuide } from '../components/drift/DriftSchemaGuide'
 import {
   EMPTY_DRIFT_STATS,
@@ -50,7 +51,6 @@ import {
 } from '../components/drift/DriftStatsTypes'
 import { Drawer } from '../components/Drawer'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
-import { PdcaContextHint } from '../components/PdcaContextHint'
 import { PageHero } from '../components/PageHero'
 import type { PageAction } from '../components/PageActionBar'
 import { CHIP_TONE, runStatusChipTone, HEADER_BADGE_TONE } from '../lib/chipTone'
@@ -109,6 +109,15 @@ const TABS: Array<{ id: DriftTabId; label: string; description: string }> = [
   { id: 'scanner', label: 'Run a scan', description: 'Scan your API and database now.' },
 ]
 
+/**
+ * Exported for tests; page modules are knip entries. Before the first scan, Changes and Scans are
+ * empty and "Run a scan" repeats the first step's "Run first scan": the bar stays away until there
+ * is a scan, except on the scanner itself so the way back stays (2026-11-18: a third stacked bar).
+ */
+export function showDriftTabs(snapshotCount: number, activeTab: DriftTabId): boolean {
+  return snapshotCount > 0 || activeTab !== 'overview'
+}
+
 function resolveDriftTab(value: string | null): DriftTabId {
   if (value === 'findings' || value === 'snapshots' || value === 'scanner') return value
   return 'overview'
@@ -164,6 +173,15 @@ export function DriftPage() {
     projectId && activeTab === 'snapshots' ? `/v1/admin/drift/snapshots?project_id=${projectId}` : null,
     { deps: [projectId, activeTab] },
   )
+
+  // Before this page's own first scan, Full-stack audit's daily schema read (schema_drift) is the
+  // schema result this app has: show it, named, instead of "No baseline scan yet" (audit 2026-11-21).
+  const { data: gateFindings } = usePageData<GateFindingsPayload>(
+    projectId && statsData && stats.snapshotCount === 0 ? `/v1/admin/inventory/${encodeURIComponent(projectId)}/findings` : null,
+    { deps: [projectId, stats.snapshotCount] },
+  )
+  const schemaRead = checkGroupFor(gateFindings, 'schema_drift')
+  const dailyRead = schemaRead ? { ranAt: schemaRead.ranAt, open: schemaRead.open } : null
 
   const findings = listRows(findingsData)
   const snapshots = listRows(snapshotsData)
@@ -320,7 +338,7 @@ export function DriftPage() {
         projectScope={stats.projectName ?? projectName ?? undefined}
         withPageHero={!ux.hideOverviewChrome}
 
-        contextChip={<PdcaContextHint stage="check" />}
+        // No unexplained "C Check" stage chip before the heading (round 3): the section bar names the place.
         helpTitle={copy?.help?.title ?? 'Contract drift detection'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? 'Each scan reads your API routes, your app map and your database tables, and compares them with the scan before.'}
         helpUseCases={copy?.help?.useCases ?? [
@@ -458,6 +476,7 @@ export function DriftPage() {
                 statLabels={copy?.statLabels}
                 onFirstScan={() => setActiveTab('scanner')}
                 onReview={() => setActiveTab('findings')}
+                dailyRead={dailyRead}
               />
             ),
           },
@@ -477,7 +496,7 @@ export function DriftPage() {
         ]}
       />
 
-      {!ux.hideTabs && (
+      {!ux.hideTabs && showDriftTabs(stats.snapshotCount, activeTab) && (
       <SegmentedControl<DriftTabId>
         size="sm"
         ariaLabel="Drift sections"
@@ -827,14 +846,14 @@ function FindingDetailDrawer({
 
         {finding.expected != null && (
           <div>
-            <p className="mb-1 text-xs font-medium text-fg-muted uppercase tracking-wide">Expected</p>
+            <p className="mb-1 text-xs font-semibold text-fg-secondary">Expected</p>
             <pre className="mushi-code-block mushi-code-body overflow-x-auto rounded-md px-3 py-2 text-xs">{JSON.stringify(finding.expected, null, 2)}</pre>
           </div>
         )}
 
         {finding.actual != null && (
           <div>
-            <p className="mb-1 text-xs font-medium text-fg-muted uppercase tracking-wide">Actual</p>
+            <p className="mb-1 text-xs font-semibold text-fg-secondary">Actual</p>
             <pre className="mushi-code-block mushi-code-body overflow-x-auto rounded-md px-3 py-2 text-xs">{JSON.stringify(finding.actual, null, 2)}</pre>
           </div>
         )}

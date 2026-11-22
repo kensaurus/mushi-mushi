@@ -133,6 +133,10 @@ describe('UxRunsPage', () => {
     // It says where each step happens: the studio is local, review and merge are here.
     expect(host.textContent).toContain('Local studio · this computer')
     expect(host.textContent).toContain('Merge · this page')
+    // One strip of three steps, no boxed paragraphs; the studio's questions and the cost stay one line until opened.
+    expect(host.querySelectorAll('[aria-label="Where each step happens"] > li')).toHaveLength(3)
+    expect((host.querySelector('[data-testid="ux-start-costs"]') as HTMLDetailsElement).open).toBe(false)
+    expect((host.querySelector('[data-testid="ux-start-asks"]') as HTMLDetailsElement).open).toBe(false)
   })
 
   it('opens the run named in ?run=, which the studio links to', () => {
@@ -286,6 +290,18 @@ describe('UxRunsPage, live progress and choices', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('in the cloud, never asks to run a command it does not show, nor repeats the model (round-2 sweep)', () => {
+    render({ runs: [] })
+    expect(host.textContent).toContain('Run the command below')
+    openCloud()
+    const steps = host.querySelector('[aria-label="Where each step happens"]')!.textContent ?? ''
+    expect(steps).not.toContain('Run the command below')
+    expect(steps).toContain('.github/workflows/mushi-ux.yml')
+    expect(host.textContent).not.toContain('model: ')
+    // The workflow file is named once, by the steps.
+    expect((host.textContent ?? '').split('mushi-ux.yml').length - 1).toBe(1)
   })
 
   it('starts a cloud run with a model from the account, its settings, and a skill', async () => {

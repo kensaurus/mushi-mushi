@@ -1,9 +1,9 @@
 # North star — one place to improve AI-built apps
 
-> **Canonical source of truth:** [`/VISION.md`](../../VISION.md) (the constitution).
+> **Canonical source of truth:** [`docs/VISION.md`](../VISION.md) (the constitution).
 > This file is the internal working notes layer: it carries the *shipped vs.
 > target* honesty table and the Phase-1 GTM metric. When this file and
-> `VISION.md` disagree on identity, **`VISION.md` wins** — update this file, not
+> `docs/VISION.md` disagree on identity, **`docs/VISION.md` wins** — update this file, not
 > the other way around.
 
 Public surfaces import copy from `@mushi-mushi/brand` and
@@ -33,7 +33,7 @@ run a monitoring stack. The word is **understandable**.
 
 The solo / indie **vibe coder** who builds fast with AI and loses whole
 afternoons when something breaks. Small teams/agencies are secondary. The
-enterprise SRE is explicitly *not* who we lead with. See `VISION.md` §1.4.
+enterprise SRE is explicitly *not* who we lead with. See `docs/VISION.md` §1.4.
 
 ## Primary surface
 

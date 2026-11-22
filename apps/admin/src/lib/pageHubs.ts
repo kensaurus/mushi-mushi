@@ -110,6 +110,19 @@ export function hubRedirectTarget(hub: PageHub, viewId: string, search: string):
   return qs ? `${hub.path}?${qs}` : hub.path
 }
 
+/**
+ * The label of the hub view a URL opens, when it is not the hub's first view
+ * ("Billing" for `/team?view=billing`), else null. The browser tab said just
+ * "Team" on all seven Team views (console audit 2026-11-21).
+ */
+export function hubViewLabel(pathname: string, search: string): string | null {
+  const hub = PAGE_HUBS.find((h) => h.path === pathname)
+  if (!hub) return null
+  const raw = new URLSearchParams(search).get('view')
+  const view = hub.views.find((v) => v.id === raw)
+  return view && view.id !== hub.views[0].id ? view.label : null
+}
+
 /** Every retired route with its hub and view, for the router and the tests. */
 export function legacyHubRoutes(): Array<{ path: string; hub: PageHub; viewId: string }> {
   return PAGE_HUBS.flatMap((hub) =>

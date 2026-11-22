@@ -36,6 +36,10 @@
  *        (POST /actions/runs/{id}/rerun-failed-jobs). 409 CI_RUNNING while
  *        its CI still runs; 403 GITHUB_ACTIONS_WRITE_MISSING when the token
  *        cannot write Actions. Records a "Re-ran tests" fix event.
+ *   GET  /v1/admin/ci/jobs/:id/debug, POST …/explain, …/rerun, …/cancel
+ *        Debug one job from the console (ci-job-debug.ts): the screened log excerpt, the
+ *        failing step, annotations, a cached plain-English explanation, and run actions keyed
+ *        by the job's row, not by a fix.
  */
 
 import type { Context, Hono, MiddlewareHandler } from 'npm:hono@4'
@@ -61,6 +65,7 @@ import { buildCiOverview, loadCiOverviewRows } from '../../_shared/ci-overview.t
 import { ciGithub, listRunsForHeadSha, rerunFailedJobs, RERUN_REFUSED_DEDUPE_PREFIX, type CiGithub } from '../../_shared/ci-jobs.ts'
 import { callerCanAccessProject, callerProjectIds, jsonError } from '../shared.ts'
 import { registerRunnerIngestRoute } from './ci-runner-ingest.ts'
+import { defaultCiJobDebugDeps, registerCiJobDebugRoutes, type CiJobDebugDeps } from './ci-job-debug.ts'
 import { denyViewerWrite } from '../viewer-gate.ts'
 import type { Variables } from '../types.ts'
 
@@ -97,6 +102,8 @@ export interface CiRouteDeps {
   logOrgAudit: typeof logOrgAudit
   fetchImpl?: CiGithub['fetchImpl']
   now: () => Date
+  /** The job debug panel's GitHub token, model call and usage log (ci-job-debug.ts); defaults when unset. */
+  debug?: Partial<CiJobDebugDeps>
 }
 
 export const defaultCiRouteDeps: CiRouteDeps = {
@@ -131,6 +138,7 @@ export function registerCiRoutes(app: Hono<{ Variables: Variables }>, deps: CiRo
   app.get('/v1/admin/ci/cost-settings', deps.jwtAuth, (c) => getCostSettings(c, deps))
   app.put('/v1/admin/ci/cost-settings', deps.jwtAuth, (c) => putCostSettings(c, deps))
   app.post('/v1/admin/fixes/:id/ci/rerun', deps.adminOrApiKeyWrite, (c) => rerunFixCi(c, deps))
+  registerCiJobDebugRoutes(app, { ...deps, ...defaultCiJobDebugDeps, ...deps.debug })
 }
 
 async function mintRunnerKey(c: Context, deps: CiRouteDeps): Promise<Response> {
@@ -187,6 +195,27 @@ async function mintRunnerKey(c: Context, deps: CiRouteDeps): Promise<Response> {
   )
 }
 
+/**
+ * The built overview, per scope and window, for a few seconds (2026-11-18). The CI page polls
+ * every 30 s and the Apps page's CI card reads the same thing, so two tabs or two pages paid the
+ * whole build twice; together with the workflow parsing it pushed the function past its CPU
+ * budget (27 of 773 reads ended in 546 in a day). Keyed by the access-checked project list, so a
+ * caller only ever gets a build of projects it may read. `refresh=1` always builds again.
+ * Per route instance (deps), so tests with different fixtures never share an entry.
+ */
+const OVERVIEW_CACHE_MS = 15_000
+const OVERVIEW_CACHE_MAX = 64
+const overviewCaches = new WeakMap<CiRouteDeps, Map<string, { at: number; data: unknown }>>()
+
+function overviewCacheFor(deps: CiRouteDeps): Map<string, { at: number; data: unknown }> {
+  let m = overviewCaches.get(deps)
+  if (!m) {
+    m = new Map()
+    overviewCaches.set(deps, m)
+  }
+  return m
+}
+
 async function ciOverview(c: Context, deps: CiRouteDeps): Promise<Response> {
   const userId = c.get('userId') as string
   const db = deps.getServiceClient()
@@ -211,10 +240,18 @@ async function ciOverview(c: Context, deps: CiRouteDeps): Promise<Response> {
   }
 
   const now = deps.now()
+  const cache = overviewCacheFor(deps)
+  const cacheKey = `${days}|${[...scope].sort().join(',')}`
+  const hit = cache.get(cacheKey)
+  if (!refresh && hit && now.getTime() - hit.at < OVERVIEW_CACHE_MS) return c.json({ ok: true, data: hit.data })
   const from = new Date(now.getTime() - days * 24 * 60 * 60_000)
   try {
     const rows = await loadCiOverviewRows(db as never, scope, from)
-    return c.json({ ok: true, data: buildCiOverview(rows, { now, days, from, refreshedAt: rows.lastLiveSyncAt }) })
+    const data = buildCiOverview(rows, { now, days, from, refreshedAt: rows.lastLiveSyncAt })
+    cache.delete(cacheKey)
+    cache.set(cacheKey, { at: now.getTime(), data })
+    if (cache.size > OVERVIEW_CACHE_MAX) cache.delete(cache.keys().next().value as string)
+    return c.json({ ok: true, data })
   } catch (err) {
     clog.error('ci overview read failed', { err: err instanceof Error ? err.message : String(err) })
     return jsonError(c, 'CI_OVERVIEW_FAILED', 'The CI overview could not be read. Try again in a minute.', 500)
@@ -272,7 +309,7 @@ export const costSettingsSchema = z
 async function callerOrgs(c: Context, deps: CiRouteDeps, db: Db, userId: string): Promise<Array<{ id: string; name: string | null }>> {
   const projectIds = await deps.callerProjectIds(c, db, userId)
   if (projectIds.length === 0) return []
-  const { data, error } = await db.from('projects').select('organization_id, organizations(name)').in('id', projectIds)
+  const { data, error } = await db.from('projects').select('organization_id, organizations!projects_organization_id_fkey(name)').in('id', projectIds)
   if (error) throw new Error(`projects read failed: ${error.message}`)
   const out = new Map<string, string | null>()
   for (const p of (data ?? []) as Array<{ organization_id: string | null; organizations?: { name?: string | null } | null }>) {

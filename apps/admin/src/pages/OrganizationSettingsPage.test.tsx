@@ -13,6 +13,8 @@ import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 
+const mockInvites = vi.hoisted(() => ({ list: [] as unknown[] }))
+
 vi.mock('../lib/track', () => ({
   trackSelf: () => {},
 }))
@@ -71,7 +73,7 @@ vi.mock('../lib/usePageData', () => ({
             plan_id: 'pro',
           },
           currentUserRole: 'owner',
-          invitations: [],
+          invitations: mockInvites.list,
           members: [
             {
               user_id: 'user-self',
@@ -157,11 +159,11 @@ afterEach(() => {
   host.remove()
 })
 
-function render() {
+function render(tab?: string) {
   act(() => {
     root.render(createElement(
       MemoryRouter,
-      { initialEntries: [`/organization/members?org=${ORG}`] },
+      { initialEntries: [`/organization/members?org=${ORG}${tab ? `&tab=${tab}` : ''}`] },
       createElement(OrganizationSettingsPage),
     ))
   })
@@ -181,39 +183,72 @@ function rosterTable(): HTMLTableElement {
 }
 
 describe('team roster at phone width', () => {
-  it('keeps Active in the table and wraps a long email in Member', () => {
+  // 2026-11-18 (fresh eyes, 390px): the wrapped email broke mid-word
+  // ("test@mushim / ushi.dev") and Actions had no header. Below 480px each
+  // member is a stacked row: email on one line with an ellipsis (full address
+  // in the title), then role, Active and remove. From 480px it is a table.
+  it('stacks each member below 480px, email on one line, and names every column', () => {
     render()
     const table = rosterTable()
-    expect(classTokens(table.className)).toContain('table-fixed')
+    expect(classTokens(table.className)).toContain('block')
+    expect(table.className).toContain('min-[480px]:table')
+    expect(table.className).toContain('min-[480px]:table-fixed')
 
     const headers = Array.from(table.querySelectorAll('th'))
     expect(headers.map((th) => th.textContent?.trim())).toEqual(['Member', 'Role', 'Active', 'Actions'])
-    for (const th of headers) {
-      expect(classTokens(th.className)).not.toContain('hidden')
-    }
+    expect(table.querySelector('thead')?.className).toContain('min-[480px]:table-header-group')
+    expect(headers[3].querySelector('.sr-only')).toBeNull()
 
     const neverSeen = Array.from(table.querySelectorAll('td')).find((td) => td.textContent?.includes('Never seen'))
     expect(neverSeen).toBeTruthy()
     expect(classTokens(neverSeen?.className)).not.toContain('hidden')
 
-    const email = Array.from(table.querySelectorAll('td span')).find((el) => el.textContent === LONG_EMAIL)
+    const email = Array.from(table.querySelectorAll('td span')).find((el) => el.textContent?.trim() === LONG_EMAIL)
     expect(email).toBeTruthy()
-    expect(classTokens(email?.className)).toContain('wrap-break-word')
-    expect(classTokens(email?.className)).toContain('min-w-0')
-
-    const actions = headers[3]
-    expect(classTokens(actions?.className)).toContain('w-14')
-    expect(classTokens(actions?.className)).not.toContain('w-24')
-    // w-24 is the sm width, present as a variant, not the phone width.
-    expect(actions?.className).toContain('sm:w-24')
-    // "Actions" is wider than this column. It stays available to assistive
-    // tech and is shown from sm, where the column is wide enough.
-    const actionsLabel = actions?.querySelector('span')
-    expect(classTokens(actionsLabel?.className)).toContain('sr-only')
-    expect(actionsLabel?.className).toContain('sm:not-sr-only')
+    expect(classTokens(email?.className)).toContain('truncate')
+    expect(classTokens(email?.className)).toContain('whitespace-nowrap')
+    expect(classTokens(email?.className)).not.toContain('wrap-break-word')
+    expect(email?.getAttribute('title')).toBe(LONG_EMAIL)
+    // The email cell takes the whole first line of the stacked row.
+    expect(classTokens(email?.closest('td')?.className)).toContain('basis-full')
 
     expect(table.querySelector('button[aria-label="Leave this team"]')).toBeTruthy()
     expect(table.querySelector(`button[aria-label="Remove ${LONG_EMAIL}"]`)).toBeTruthy()
+  })
+
+  // 2026-11-18: each invite's state is a status pill, and the counts are pills too.
+  it('marks each pending invitation with its state', () => {
+    const day = 24 * 60 * 60 * 1000
+    const invite = (id: string, expiresIn: number, seen: boolean) => ({
+      id,
+      email: `${id}@example.com`,
+      role: 'member',
+      token: null,
+      invited_by: 'user-self',
+      invited_by_email: 'ada@example.com',
+      expires_at: new Date(Date.now() + expiresIn).toISOString(),
+      created_at: '2026-11-01T00:00:00Z',
+      last_seen_at: seen ? '2026-11-02T00:00:00Z' : null,
+      resend_count: 0,
+      last_resent_at: null,
+    })
+    mockInvites.list = [invite('fresh', 5 * day, false), invite('opened', 5 * day, true), invite('soon', 2 * 60 * 60 * 1000, true), invite('old', -day, false)]
+    try {
+      render('invites')
+      const pillFor = (email: string) => {
+        const row = Array.from(host.querySelectorAll('li')).find((li) => li.textContent?.includes(email))
+        const p = row?.querySelector('[data-testid="status-pill"]')
+        return [p?.getAttribute('data-status'), p?.textContent]
+      }
+      expect(pillFor('fresh@example.com')).toEqual(['waiting', 'Not opened'])
+      expect(pillFor('opened@example.com')).toEqual(['waiting', 'Opened'])
+      expect(pillFor('soon@example.com')).toEqual(['slow', 'Expires soon'])
+      expect(pillFor('old@example.com')).toEqual(['failed', 'Expired'])
+      const counts = [...host.querySelectorAll('[data-testid="invites-counts"] [data-testid="status-pill"]')].map((p) => p.textContent)
+      expect(counts).toEqual(['3 open', '1 expired'])
+    } finally {
+      mockInvites.list = []
+    }
   })
 
   // The unit job does not install a browser. Skip there; run wherever Chromium is present.

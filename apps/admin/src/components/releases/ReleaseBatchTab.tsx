@@ -19,6 +19,7 @@ import {
   CI_WORDS,
   DEPLOY_WORDS,
   PARTIAL_WORDS,
+  repoIdle,
   trainPrUrl,
   verdictWords,
   type BatchMember,
@@ -117,7 +118,7 @@ function Gates({ b }: { b: RepoBatch }) {
   if (b.mode === 'each' || b.members.length === 0) return null
   return (
     <div data-testid="batch-gates">
-      <h4 className="text-2xs font-semibold uppercase tracking-wide text-fg-muted">Rules to ride</h4>
+      <h4 className="text-2xs font-semibold text-fg-secondary">Rules to ride</h4>
       <ul className="mt-1 space-y-0.5">
         {b.gates.map((g) => (
           <li key={g.id} className="flex items-baseline gap-2 text-xs">
@@ -138,7 +139,7 @@ function Migrations({ b }: { b: RepoBatch }) {
   const where = m.source === 'recipe' ? `the recipe's folder (${m.globs.join(', ')})` : m.globs.join(', ')
   return (
     <div data-testid="batch-migrations">
-      <h4 className="text-2xs font-semibold uppercase tracking-wide text-fg-muted">Database migrations</h4>
+      <h4 className="text-2xs font-semibold text-fg-secondary">Database migrations</h4>
       {m.files.length > 0 ? (
         <div className={`mt-1 rounded-sm px-2.5 py-2 ${CHIP_TONE.warnSubtle}`}>
           <p className="text-xs">
@@ -168,7 +169,7 @@ function Deploy({ b }: { b: RepoBatch }) {
   const d = b.deploy
   return (
     <div data-testid="batch-deploy">
-      <h4 className="text-2xs font-semibold uppercase tracking-wide text-fg-muted">Deploy after the last train</h4>
+      <h4 className="text-2xs font-semibold text-fg-secondary">Deploy after the last train</h4>
       <p className="mt-1 text-xs text-fg-secondary">
         {d.train ? (
           <>
@@ -185,15 +186,19 @@ function Deploy({ b }: { b: RepoBatch }) {
           DEPLOY_WORDS[d.state]
         )}
       </p>
-      {d.setupGapHref ? (
-        <p className="mt-1 text-2xs text-warn-foreground">
-          Mushi Mushi has seen no deploy of this app in 14 days, so reporters are not told when their fix is live.{' '}
-          <Link to={d.setupGapHref} className={LINK_ACCENT}>
-            See the setup gap
-          </Link>
-        </p>
-      ) : null}
     </div>
+  )
+}
+
+/** The card's real problem, first: no deploy seen in 14 days. */
+function DeployGap({ href }: { href: string }) {
+  return (
+    <p className={`mt-1.5 rounded-sm px-2.5 py-1.5 text-xs ${CHIP_TONE.warnSubtle}`} data-testid="batch-deploy-gap">
+      <span aria-hidden="true">◆ </span>No deploy of this app seen in 14 days, so reporters are not told when their fix is live.{' '}
+      <Link to={href} className={`font-semibold ${LINK_ACCENT}`}>
+        See the setup gap
+      </Link>
+    </p>
   )
 }
 
@@ -204,6 +209,14 @@ function RepoCard({ b, showApp }: { b: RepoBatch; showApp: boolean }) {
         <h3 className="min-w-0 break-all font-mono text-sm font-semibold text-fg">{b.repo}</h3>
         {showApp ? <span className="text-2xs text-fg-muted">{b.projectName}</span> : null}
       </div>
+      {b.deploy.setupGapHref ? <DeployGap href={b.deploy.setupGapHref} /> : null}
+      {repoIdle(b) ? (
+        // One quiet line: "nothing ready", "no fix queued" and "no train merged" said the same thing three times.
+        <p className="mt-1.5 text-xs text-fg-muted" data-testid="batch-idle">
+          Nothing is queued to merge in this repo{b.deploy.train ? '' : ', and no train merged in the last 7 days'}.
+        </p>
+      ) : (
+        <>
       <div className="mt-1.5">
         <TrainLine b={b} />
       </div>
@@ -221,6 +234,13 @@ function RepoCard({ b, showApp }: { b: RepoBatch; showApp: boolean }) {
         <Migrations b={b} />
         <Deploy b={b} />
       </div>
+        </>
+      )}
+      {repoIdle(b) && b.deploy.train ? (
+        <div className="mt-2">
+          <Deploy b={b} />
+        </div>
+      ) : null}
     </Card>
   )
 }
@@ -254,7 +274,7 @@ export function ReleaseBatchTab({ projectId }: { projectId: string | null }) {
         tone={status.tone}
         ariaLabel="Release batch status"
         data-testid="batch-status"
-        freshness={{ at: page.data?.generatedAt ?? null, isValidating: page.isValidating }}
+        // No second "Updated": the page's strip above carries the one time (round 3).
         action={
           <HelpPopover label="How trains work" title="How release trains work" align="end">
             <p className="text-xs text-fg-secondary">

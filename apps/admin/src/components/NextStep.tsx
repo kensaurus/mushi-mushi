@@ -135,7 +135,7 @@ export function NextStep(props: NextStepProps) {
         aria-live="polite"
         className={`${props.variant === 'banner' ? 'mb-3 -mt-1' : ''} flex items-center gap-2.5 rounded-md border ${from.ring} ${from.bg} px-3 py-1.5 motion-safe:animate-mushi-fade-in`}
       >
-        <span className={`inline-flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wide ${from.chip}`}>
+        <span className={`inline-flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-0.5 text-3xs font-semibold ${from.chip}`}>
           <IconCheck size={10} />
           Done: {from.label}
         </span>
@@ -156,7 +156,7 @@ export function NextStep(props: NextStepProps) {
         data-next-step="banner"
         className={`mb-3 -mt-1 flex items-center gap-2.5 rounded-md border ${tone.ring} ${tone.bg} px-3 py-1.5 motion-safe:animate-mushi-fade-in`}
       >
-        <span className={`inline-flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wide ${tone.chip}`}>
+        <span className={`inline-flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-0.5 text-3xs font-semibold ${tone.chip}`}>
           <ToneIcon tone={step.tone} size={10} />
           {tone.label}
         </span>
@@ -180,7 +180,7 @@ export function NextStep(props: NextStepProps) {
           <ToneIcon tone={step.tone} size={16} />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-2xs font-semibold uppercase tracking-wider text-fg-muted">Do this next · {tone.label}</p>
+          <p className="text-2xs font-semibold text-fg-secondary">Do this next · {tone.label}</p>
           <p className="mt-0.5 text-sm font-semibold leading-tight text-fg">{step.title}</p>
           {step.why && <p className="mt-0.5 text-xs leading-snug text-fg-muted">{step.why}</p>}
         </div>

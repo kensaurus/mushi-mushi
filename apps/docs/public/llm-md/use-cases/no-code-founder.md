@@ -45,9 +45,9 @@ about 10 seconds.
 
 ## What it costs
 
-Free for one app: 100 diagnoses a month, no card and no AI key of your own. A
+Free for three apps: 300 diagnoses a month, no card and no AI key of your own. A
 diagnosis is one bug explained, and repeat reports of the same bug count once.
-More apps are on [Builder and Studio](/pricing).
+More diagnoses and apps are on [Builder and Studio](/pricing).
 
 ## Next
 

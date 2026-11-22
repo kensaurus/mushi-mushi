@@ -10,7 +10,11 @@
  * connector snapshots (`facts.apps[].appleId` / `.package`), so an app needs no
  * extra setup. The result is stored on `projects` (icon_url, icon_source,
  * icon_checked_at) and refreshed after ICON_REFRESH_MS, so page loads never
- * ask a store.
+ * wait on a store: at most one iTunes and one Play lookup per app per day,
+ * set off by a page view. The Apps page Refresh button asks for a forced
+ * refresh, which re-checks any icon older than ICON_FORCE_MIN_MS (owner,
+ * 2026-11-17: lets-talk shipped a new App Store icon and the console kept
+ * the old one for a week).
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
@@ -19,7 +23,9 @@ import { parseItunesLookup, parsePlayListing, type ProbeFetcher } from './radar/
 
 const log = rootLog.child('app-icon')
 
-export const ICON_REFRESH_MS = 7 * 86_400_000
+export const ICON_REFRESH_MS = 86_400_000
+/** A forced refresh skips icons checked this recently, so repeated clicks cost no store calls. */
+export const ICON_FORCE_MIN_MS = 10 * 60_000
 
 export type AppIconSource = 'app_store' | 'google_play'
 
@@ -62,6 +68,9 @@ export function storeIdsFromSnapshots(rows: ReadonlyArray<{ kind: string; snapsh
   return { appleIds: [...appleIds], packages: [...packages] }
 }
 
+/** Storefronts asked in order; '' is the bare lookup (Apple's stale default), kept last. */
+export const APP_STORE_STOREFRONTS = ['us', 'jp', ''] as const
+
 /**
  * The first store icon found: App Store ids first, then Play packages.
  * `complete` is false when a store could not be read (network error or a
@@ -71,14 +80,19 @@ export async function resolveStoreIcon(ids: StoreIds, fetcher: ProbeFetcher): Pr
   let complete = true
   const transient = (status: number) => status === 429 || status >= 500
   for (const id of ids.appleIds) {
-    try {
-      const res = await fetcher(`https://itunes.apple.com/lookup?id=${encodeURIComponent(id)}`)
-      if (transient(res.status)) complete = false
-      const url = res.status === 200 ? parseItunesLookup(res.text)?.iconUrl : null
-      if (isStoreIconUrl(url)) return { icon: { url, source: 'app_store' }, complete: true }
-    } catch (err) {
-      complete = false
-      log.warn('App Store lookup failed', { appleId: id, err: String(err).slice(0, 160) })
+    // A lookup without `country` answers from a stale cache: on 2026-11-18 it still gave
+    // lets-talk 1.3.2 and its old icon while the us and jp storefronts gave 1.4.0. Ask a
+    // storefront first; the bare lookup is the last try for an app sold elsewhere.
+    for (const storefront of APP_STORE_STOREFRONTS) {
+      try {
+        const res = await fetcher(`https://itunes.apple.com/lookup?id=${encodeURIComponent(id)}${storefront ? `&country=${storefront}` : ''}`)
+        if (transient(res.status)) complete = false
+        const url = res.status === 200 ? parseItunesLookup(res.text)?.iconUrl : null
+        if (isStoreIconUrl(url)) return { icon: { url, source: 'app_store' }, complete: true }
+      } catch (err) {
+        complete = false
+        log.warn('App Store lookup failed', { appleId: id, storefront, err: String(err).slice(0, 160) })
+      }
     }
   }
   for (const pkg of ids.packages) {
@@ -95,10 +109,18 @@ export async function resolveStoreIcon(ids: StoreIds, fetcher: ProbeFetcher): Pr
   return { icon: null, complete }
 }
 
-/** Projects whose icon has never been looked up, or not within ICON_REFRESH_MS. */
-export function iconsDue(rows: ReadonlyArray<{ id: string; icon_checked_at: string | null }>, now: Date): string[] {
+/**
+ * Projects whose icon has never been looked up, or not within ICON_REFRESH_MS
+ * (ICON_FORCE_MIN_MS when `force`, the Refresh button).
+ */
+export function iconsDue(
+  rows: ReadonlyArray<{ id: string; icon_checked_at: string | null }>,
+  now: Date,
+  opts: { force?: boolean } = {},
+): string[] {
+  const maxAge = opts.force ? ICON_FORCE_MIN_MS : ICON_REFRESH_MS
   return rows
-    .filter((r) => !r.icon_checked_at || now.getTime() - Date.parse(r.icon_checked_at) > ICON_REFRESH_MS)
+    .filter((r) => !r.icon_checked_at || now.getTime() - Date.parse(r.icon_checked_at) > maxAge)
     .map((r) => r.id)
 }
 
@@ -106,10 +128,13 @@ export function iconsDue(rows: ReadonlyArray<{ id: string; icon_checked_at: stri
  * Look up and store the icon of each project in `projectIds`. Never throws:
  * an icon is cosmetic, so a failure is logged and the project keeps its old
  * value. icon_checked_at is stamped only when every store read for it
- * finished, so one outage does not hide an icon for a week.
+ * finished, so one outage does not hide an icon for a day. Returns the icon
+ * now stored for each project it saved (null: no icon), so a forced refresh
+ * can show it in the same response.
  */
-export async function refreshAppIcons(db: SupabaseClient, projectIds: readonly string[], fetcher: ProbeFetcher, now: Date): Promise<void> {
-  if (projectIds.length === 0) return
+export async function refreshAppIcons(db: SupabaseClient, projectIds: readonly string[], fetcher: ProbeFetcher, now: Date): Promise<Map<string, string | null>> {
+  const saved = new Map<string, string | null>()
+  if (projectIds.length === 0) return saved
   const { data, error } = await db
     .from('connector_snapshots')
     .select('project_id, kind, snapshot')
@@ -118,7 +143,7 @@ export async function refreshAppIcons(db: SupabaseClient, projectIds: readonly s
     .in('kind', ['app_store_connect', 'play_console'])
   if (error) {
     log.warn('connector snapshots unreadable; icons not refreshed', { err: error.message })
-    return
+    return saved
   }
   const byProject = new Map<string, Array<{ kind: string; snapshot: unknown }>>()
   for (const row of (data ?? []) as Array<{ project_id: string; kind: string; snapshot: unknown }>) {
@@ -137,5 +162,7 @@ export async function refreshAppIcons(db: SupabaseClient, projectIds: readonly s
       : { icon_url: null, icon_source: null, icon_checked_at: now.toISOString() }
     const { error: upErr } = await db.from('projects').update(patch).eq('id', projectId)
     if (upErr) log.warn('icon not saved', { projectId, err: upErr.message })
+    else saved.set(projectId, patch.icon_url)
   }
+  return saved
 }

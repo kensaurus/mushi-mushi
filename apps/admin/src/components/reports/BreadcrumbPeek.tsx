@@ -187,7 +187,7 @@ export function BreadcrumbPeek({
               </p>
             </div>
             {breadcrumbs && breadcrumbs.length > PEEK_LIMIT && (
-              <span className="shrink-0 rounded-full border border-edge-subtle bg-surface-overlay px-1.5 py-0.5 text-2xs text-fg-muted">
+              <span className="shrink-0 rounded-sm bg-surface-overlay px-1.5 py-px text-2xs text-fg-muted">
                 +{breadcrumbs.length - PEEK_LIMIT} earlier
               </span>
             )}
@@ -210,7 +210,7 @@ export function BreadcrumbPeek({
 
           {tagEntries.length > 0 && (
             <div className="mb-2">
-              <div className="mb-1 text-2xs font-medium uppercase tracking-wider text-fg-muted">
+              <div className="mb-1 text-2xs font-semibold text-fg-secondary">
                 Tags
               </div>
               <div className="flex flex-wrap gap-1">
@@ -237,7 +237,7 @@ export function BreadcrumbPeek({
           {trail.length > 0 ? (
             <div>
               <div className="flex items-center justify-between mb-1">
-                <div className="text-2xs font-medium uppercase tracking-wider text-fg-muted">
+                <div className="text-2xs font-semibold text-fg-secondary">
                   Last {trail.length} breadcrumb{trail.length === 1 ? '' : 's'}
                 </div>
               </div>

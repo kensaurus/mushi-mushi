@@ -305,14 +305,28 @@ export function ExploreChatPanel({
     return <ExploreUnderstandEmpty error={fatalError} onRetry={() => setFatalError(null)} />
   }
 
+  // No threads yet: one line instead of a tall empty list beside the chat.
+  const noThreads = !threadsLoading && threads.length === 0
   return (
     <WorkbenchSplit
       sidebarWidth="lg"
-      sidebar={
+      minHeightClass={noThreads ? '' : undefined}
+      sidebar={noThreads ? (
+        <div className="flex items-center justify-between gap-2 px-1 py-1" data-testid="explore-threads-empty">
+          <span className="text-2xs text-fg-secondary">
+            <span className="font-semibold">Threads</span> · No past chats yet.
+          </span>
+          {turns.length > 0 && (
+            <Btn size="sm" variant="ghost" onClick={startNewThread} disabled={loading}>
+              New
+            </Btn>
+          )}
+        </div>
+      ) : (
         <ChatThreadList
           header={
             <div className="flex items-center justify-between gap-2">
-              <span className="text-2xs uppercase tracking-wider text-fg-faint">Threads</span>
+              <span className="text-2xs text-fg-secondary font-semibold">Threads</span>
               <Btn size="sm" variant="ghost" onClick={startNewThread} disabled={loading}>
                 New
               </Btn>
@@ -321,9 +335,6 @@ export function ExploreChatPanel({
         >
           {threadsLoading && threads.length === 0 && (
             <p className="text-2xs text-fg-muted px-2 py-1">Loading…</p>
-          )}
-          {!threadsLoading && threads.length === 0 && (
-            <p className="text-2xs text-fg-muted px-2 py-1">No past chats yet.</p>
           )}
           {threads.map((t) =>
             renamingId === t.id ? (
@@ -400,7 +411,7 @@ export function ExploreChatPanel({
             ),
           )}
         </ChatThreadList>
-      }
+      )}
     >
       <div className="flex min-h-0 flex-1 flex-col gap-2.5">
         {turns.length === 0 && (
@@ -544,7 +555,7 @@ function ChatTurnCard({
               key={`${label}-${ci}`}
               type="button"
               onClick={() => onCitationClick?.(c)}
-              className="text-2xs font-mono px-1.5 py-0.5 rounded border border-edge-subtle bg-surface-raised hover:border-brand/50 hover:text-brand transition-opacity"
+              className="text-2xs font-mono px-1.5 py-px rounded bg-surface-raised hover:text-brand transition-opacity"
               title={c.symbol_name ?? c.file_path}
             >
               {label}

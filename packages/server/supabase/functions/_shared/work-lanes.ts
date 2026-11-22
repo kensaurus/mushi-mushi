@@ -258,6 +258,8 @@ const STATUS_NUMBERS = ['runs', 'prs', 'pushes', 'timeouts', 'errors', 'idle', '
 const STATUS_WORDS: Record<string, readonly string[]> = {
   state: HOST_STATES,
   cursor: ['signed_in', 'signed_out', 'unknown', 'missing'],
+  // The coding agent the lanes run (mushi work --agent): the console names its account.
+  agent: ['cursor', 'claude'],
 }
 
 /**

@@ -72,3 +72,41 @@ describe('evaluateTriageDedupe report_groups error', () => {
     expect(verdict.notify).toBe(true)
   })
 })
+
+describe('notifyOperator Slack routing (Kensaurus Bot channels, 2026-11-17)', () => {
+  const slackCalls = () => fetchMock.mock.calls.filter(([url]) => String(url).startsWith('https://hooks.slack.com/'))
+
+  it('sends payments to #payments and alerts to #alerts, falling back to the single operator webhook', async () => {
+    envVars.SLACK_PAYMENTS_WEBHOOK_URL = 'https://hooks.slack.com/services/payments'
+    envVars.OPERATOR_SLACK_WEBHOOK_URL = 'https://hooks.slack.com/services/operator'
+    await notifyOperator({ level: 'info', title: 'New paid customer', body: 'b', category: 'payments' })
+    await notifyOperator({ level: 'urgent', title: 'Down', body: 'b', category: 'alerts' })
+    expect(slackCalls().map(([url]) => url)).toEqual(['https://hooks.slack.com/services/payments', 'https://hooks.slack.com/services/operator'])
+  })
+
+  it('starts every Slack message with the app name and puts the facts on one line', async () => {
+    envVars.SLACK_PAYMENTS_WEBHOOK_URL = 'https://hooks.slack.com/services/payments'
+    await notifyOperator({ level: 'info', title: 'New paid customer', body: 'a***@acme.com paid for Pro.', category: 'payments', fields: [{ label: 'Plan', value: 'Pro' }] })
+    const body = JSON.parse(String(slackCalls()[0]![1]!.body))
+    expect(body.text).toBe('Mushi Mushi · 💳 New paid customer')
+    expect(JSON.stringify(body)).toContain('*Plan:* Pro')
+  })
+
+  it('sends Slack the personal-data-free version when one is given', async () => {
+    envVars.SLACK_ALERTS_WEBHOOK_URL = 'https://hooks.slack.com/services/alerts'
+    envVars.OPERATOR_DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1/x'
+    await notifyOperator({
+      level: 'urgent',
+      title: 'Support ticket',
+      body: 'from someone@example.com: my card was charged twice',
+      fields: [{ label: 'From', value: 'someone@example.com' }],
+      category: 'alerts',
+      slack: { body: 'A paying customer opened a support ticket about *billing*.' },
+    })
+    const slack = String(slackCalls()[0]![1]!.body)
+    expect(slack).not.toContain('example.com')
+    expect(slack).not.toContain('charged twice')
+    const discord = String(fetchMock.mock.calls.find(([url]) => String(url).startsWith('https://discord.com/'))![1]!.body)
+    expect(discord).toContain('charged twice')
+  })
+})

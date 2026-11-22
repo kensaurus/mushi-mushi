@@ -20,11 +20,12 @@
 //       sync routing across files unnecessarily.
 // ============================================================
 
-import type { Hono } from 'npm:hono@4'
+import type { Context, Hono } from 'npm:hono@4'
 import type { Variables } from '../types.ts'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
-import { apiKeyAuth, requireApiKeyScope } from '../../_shared/auth.ts'
+import { adminOrApiKey, apiKeyAuth, requireApiKeyScope } from '../../_shared/auth.ts'
+import { callerCanAccessProject } from '../shared.ts'
 import { notifyReportStatusTransition } from '../../_shared/report-status-notify.ts'
 import {
   CANONICAL_REPORT_STATUSES,
@@ -596,10 +597,41 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
   // first report). Distinct from GET /v1/admin/projects/:id/preflight which
   // covers dispatch readiness (GitHub, codebase, BYOK, autofix). Powers
   // `mushi connect --wait`, `mushi doctor --ingest`, and MCP diagnose_setup (mode=ingest).
-  app.get('/v1/sync/ingest-setup', apiKeyAuth, async (c) => {
+  app.get('/v1/sync/ingest-setup', apiKeyAuth, (c) =>
+    ingestSetup(c, c.get('projectId') as string, c.get('projectName') as string))
+
+  // ── GET /v1/admin/projects/:id/ingest-setup ───────────────────────────────
+  // The same view for an account key or a console session, which names the
+  // project instead of being one. The SDK route above refuses account keys
+  // (they cannot ingest), so MCP diagnose_setup on an account key used to fail
+  // outright with ORG_KEY_NOT_ALLOWED instead of diagnosing.
+  app.get('/v1/admin/projects/:id/ingest-setup', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
+    const projectId = c.req.param('id')!
+    if (!UUID_RE.test(projectId)) {
+      return c.json({ ok: false, error: { code: 'INVALID_PROJECT_ID', message: 'Project id must be a UUID' } }, 400)
+    }
+    const db = getServiceClient()
+    const access = await callerCanAccessProject(c, db, c.get('userId') as string, projectId)
+    if (!access.allowed) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404)
+    }
+    const { data: project } = await db.from('projects').select('name').eq('id', projectId).maybeSingle()
+    return ingestSetup(c, projectId, (project as { name?: string } | null)?.name ?? '')
+  })
+
+  // ── GET /v1/sync/two-way-health ───────────────────────────────────────────
+  app.get('/v1/sync/two-way-health', apiKeyAuth, requireApiKeyScope('mcp:read'), async (c) => {
     const db = getServiceClient()
     const projectId = c.get('projectId') as string
-    const projectName = c.get('projectName') as string
+    return c.json({ ok: true, data: await computeTwoWayHealth(db, projectId) })
+  })
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** The four required ingest steps for one project (key, SDK heartbeat, first report). */
+async function ingestSetup(c: Context<{ Variables: Variables }>, projectId: string, projectName: string) {
+    const db = getServiceClient()
 
     const adminHost = (() => {
       try {
@@ -720,12 +752,4 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
         },
       },
     })
-  })
-
-  // ── GET /v1/sync/two-way-health ───────────────────────────────────────────
-  app.get('/v1/sync/two-way-health', apiKeyAuth, requireApiKeyScope('mcp:read'), async (c) => {
-    const db = getServiceClient()
-    const projectId = c.get('projectId') as string
-    return c.json({ ok: true, data: await computeTwoWayHealth(db, projectId) })
-  })
 }

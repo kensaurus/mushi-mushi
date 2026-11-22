@@ -46,23 +46,24 @@ export const liveStoreOpsDeps: StoreOpsDeps = {
   async extractClaims(db, projectId, listingText) {
     const { system, user } = buildClaimExtractionPrompt({ listingText })
     const started = Date.now()
-    const { result, usedProvider } = await withAnthropicOrOpenAi(
+    const { result, usedProvider, model: routeModel, fallbackUsed } = await withAnthropicOrOpenAi(
       db as never,
       projectId,
-      (key) => claudeGenerateObject({ apiKey: key.key, model: STORE_REVIEW_MODEL, schema: claimExtractionSchema, effort: STORE_REVIEW_EFFORT, system, messages: [{ role: 'user', content: user }], maxTokens: 4000 }),
+      (key) => claudeGenerateObject({ apiKey: key.key, model: key.model ?? STORE_REVIEW_MODEL, schema: claimExtractionSchema, effort: STORE_REVIEW_EFFORT, system, messages: [{ role: 'user', content: user }], maxTokens: 4000 }),
       async (key) => {
         const { openAiProvider } = await import('./openai-compat.ts')
         const openai = openAiProvider({ apiKey: key.key, baseURL: key.baseUrl })
-        return generateValidatedObject(claimExtractionSchema, { model: openai(STORE_REVIEW_FALLBACK), system, messages: [{ role: 'user', content: user }], maxTokens: 2000 })
+        return generateValidatedObject(claimExtractionSchema, { model: openai(key.model ?? STORE_REVIEW_FALLBACK), system, messages: [{ role: 'user', content: user }], maxTokens: 2000 })
       },
+      { feature: 'store-review', tier: 'fast' },
     )
     void logLlmInvocation(db as never, {
       projectId,
       functionName: 'api',
       stage: 'store-review-claims',
       primaryModel: STORE_REVIEW_MODEL,
-      usedModel: usedProvider === 'openai' ? STORE_REVIEW_FALLBACK : STORE_REVIEW_MODEL,
-      fallbackUsed: usedProvider === 'openai',
+      usedModel: routeModel ?? (usedProvider === 'openai' ? STORE_REVIEW_FALLBACK : STORE_REVIEW_MODEL),
+      fallbackUsed,
       fallbackReason: null,
       status: 'success',
       latencyMs: Date.now() - started,

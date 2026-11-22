@@ -1,0 +1,5 @@
+# Build context filter for deploy/Dockerfile.migrate: the migrations and the
+# migration script only.
+*
+!packages/server/supabase/migrations/**
+!deploy/db/migrate.sh

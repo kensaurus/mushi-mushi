@@ -17,7 +17,6 @@ import { isQueueItemRetryable, parseQueueLaneParam } from '../components/dlq/que
 import {
   Btn,
   FilterSelect,
-  EmptyState,
   ErrorAlert,
   RecommendedAction,
 } from '../components/ui'
@@ -251,8 +250,9 @@ export function DLQPage() {
         ]}
         helpHowToUse="Switch status to find what's failing. Use the stage filter to scope. Retry individual items, or use Retry page after fixing the root cause."
       >
+        {/* FilterSelect prints "All {label}": plural nouns read "All statuses", "All stages". */}
         <FilterSelect
-          label="Status"
+          label="statuses"
           value={filter}
           options={STATUS_OPTIONS as unknown as string[]}
           optionLabel={queueStatusLabel}
@@ -260,7 +260,7 @@ export function DLQPage() {
         />
         {summary && summary.stages.length > 0 && (
           <FilterSelect
-            label="Stage"
+            label="stages"
             value={stage}
             options={summary.stages}
             optionLabel={queueStageLabel}
@@ -289,7 +289,8 @@ export function DLQPage() {
           Flush queued ({stats.reportsQueued})
         </Btn>
         ) : null}
-        {stats.recoverable > 0 && canEditProject ? (
+        {/* A stalled queue puts this button in its banner; two copies of one CTA (audit 2026-11-21). */}
+        {stats.recoverable > 0 && canEditProject && stats.topPriority !== 'stalled' ? (
         <Btn
           size="sm"
           variant="primary"
@@ -375,16 +376,10 @@ export function DLQPage() {
       ) : error ? (
         <ErrorAlert message="Failed to load queue items." onRetry={loadAll} />
       ) : items.length === 0 ? (
-        <div className="space-y-2">
-          <EmptyState
-            title={`No items in ${filter.replace(/_/g, ' ')} queue`}
-            description={
-              filter === 'completed'
-                ? 'Once jobs finish they move out of view; pick another status to see backlog.'
-                : 'Nothing here means the pipeline is healthy — change the status filter to inspect other lanes. Dead-letter is the only lane that needs you after retries run out.'
-            }
-          />
-        </div>
+        // One line: the quiet line above already says 0 dead letter; the 3-line card said it again (round 3).
+        <p className="text-xs text-fg-muted" data-testid="queue-empty-line">
+          Nothing in {filter.replace(/_/g, ' ')} right now.
+        </p>
       ) : (
         <>
           <div className="space-y-1.5">

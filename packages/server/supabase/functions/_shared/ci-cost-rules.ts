@@ -29,7 +29,7 @@
  * Pure apart from the YAML parser.
  */
 
-import { parse as parseYaml } from 'npm:yaml@2'
+import { parseWorkflowYaml as parseYaml } from './workflow-yaml.ts'
 import type { CiCostAutofix, CiOverviewAdvice } from './ci-overview-types.ts'
 import type { RepoVisibility } from './ci-compare-types.ts'
 import { isMushiAgentBranch } from './ci-billing.ts'
@@ -251,9 +251,9 @@ export function adviseCostRules(input: CostRulesInput): CiOverviewAdvice[] {
       severity: severityFor(saving),
       title: `${w.path} runs on a schedule ${Math.round(weekly)} times a week`,
       detail: 'A scheduled workflow runs whether or not anything changed. Checks like audits, freshness and link scans rarely need more than a weekly run.',
-      evidence: `${w.repo}/${w.path}: ${w.crons.map((c) => `cron "${c}"`).join(', ')} is about ${Math.round(weekly)} runs a week; Mushi recorded ${runs} scheduled runs that billed ${mins(billed)} in ${days} days.`,
+      evidence: `${w.repo}/${w.path}: ${w.crons.map((c) => `cron "${c}"`).join(', ')} is about ${Math.round(weekly)} runs a week; Mushi Mushi recorded ${runs} scheduled runs that billed ${mins(billed)} in ${days} days.`,
       fix: w.deploy
-        ? `This workflow looks like it deploys or releases (${w.deploy}), so Mushi offers no one-click change: some daily schedules drive staged rollouts on purpose. If this one does not, run it once a week by hand: keep its minute and hour and name one weekday, e.g. \`'30 4 * * 1'\`.`
+        ? `This workflow looks like it deploys or releases (${w.deploy}), so Mushi Mushi offers no one-click change: some daily schedules drive staged rollouts on purpose. If this one does not, run it once a week by hand: keep its minute and hour and name one weekday, e.g. \`'30 4 * * 1'\`.`
         : "Run it once a week: keep its minute and hour and name one weekday, e.g. `'30 4 * * 1'` for 04:30 UTC on Mondays. Keep `workflow_dispatch:` so you can still run it by hand. Leave release and rollout schedules as they are.",
       repo: w.repo,
       monthSavingUsd: saving,
@@ -284,7 +284,7 @@ export function adviseCostRules(input: CostRulesInput): CiOverviewAdvice[] {
         severity: severityFor(saving),
         title: `Documentation-only pull requests run ${w.path}`,
         detail: 'This workflow runs on every pull request, including ones that change only Markdown or docs, where its builds and tests check nothing new.',
-        evidence: `${docs.length} of the ${checked} pull requests Mushi checked that ran ${w.path} in ${days} days changed only documentation (${docs.slice(0, 5).map((n) => `#${n}`).join(', ')}); they billed ${mins(billed)}.`,
+        evidence: `${docs.length} of the ${checked} pull requests Mushi Mushi checked that ran ${w.path} in ${days} days changed only documentation (${docs.slice(0, 5).map((n) => `#${n}`).join(', ')}); they billed ${mins(billed)}.`,
         fix: "Under `pull_request:` add\npaths-ignore:\n  - '**/*.md'\n  - '**/*.mdx'\n  - 'docs/**'\n  - 'LICENSE*'\n  - '.github/ISSUE_TEMPLATE/**'\nIf a required check must still report, give the skipped case a tiny job instead.",
         repo: w.repo,
         monthSavingUsd: saving,
@@ -317,8 +317,8 @@ export function adviseCostRules(input: CostRulesInput): CiOverviewAdvice[] {
         severity: severityFor(saving),
         title: `${g.workflow} runs the pull request's checks again after the merge`,
         detail: 'These jobs already passed on the pull request, then ran again on the push to the default branch. With one merge at a time the second run tests almost the same code.',
-        evidence: `${[...g.jobs].slice(0, 5).join(', ')}${g.jobs.size > 5 ? ` and ${g.jobs.size - 5} more` : ''} ran on pull requests and again on push to the default branch: ${mins(billed)} on the default branch in ${days} days (jobs Mushi recorded).`,
-        fix: 'Test the merged result once instead: turn on a merge queue (add the `merge_group` trigger, GitHub tests a group of pull requests together) or merge in batches (Mushi release trains run CI once per batch). Then limit `push:` on the default branch to what must run after a merge, such as the deploy.',
+        evidence: `${[...g.jobs].slice(0, 5).join(', ')}${g.jobs.size > 5 ? ` and ${g.jobs.size - 5} more` : ''} ran on pull requests and again on push to the default branch: ${mins(billed)} on the default branch in ${days} days (jobs Mushi Mushi recorded).`,
+        fix: 'Test the merged result once instead: turn on a merge queue (add the `merge_group` trigger, GitHub tests a group of pull requests together) or merge in batches (Mushi Mushi release trains run CI once per batch). Then limit `push:` on the default branch to what must run after a merge, such as the deploy.',
         repo: g.repo,
         monthSavingUsd: saving,
         autofix: null,
@@ -362,7 +362,7 @@ export function adviseCostRules(input: CostRulesInput): CiOverviewAdvice[] {
         severity: severityFor(saving),
         title: `The same check runs twice on ${shared}`,
         detail: 'Two jobs triggered by the same event run the same command, so every such event pays for it twice.',
-        evidence: `\`${cmd.slice(0, 120)}\` runs in ${pair.map((h) => `${h.w.path} · ${h.job.name ?? h.job.id}`).join(' and ')}, both on ${shared}.${saving == null ? ' Mushi has no step times for it yet, so the saving is not priced.' : ''}`,
+        evidence: `\`${cmd.slice(0, 120)}\` runs in ${pair.map((h) => `${h.w.path} · ${h.job.name ?? h.job.id}`).join(' and ')}, both on ${shared}.${saving == null ? ' Mushi Mushi has no step times for it yet, so the saving is not priced.' : ''}`,
         fix: 'Keep the command in one job and delete it from the other. If both workflows need it, make one depend on the other (`needs:`) or turn the shared part into a reusable workflow called once.',
         repo,
         monthSavingUsd: saving,
@@ -392,7 +392,7 @@ export function adviseCostRules(input: CostRulesInput): CiOverviewAdvice[] {
         severity: 'low',
         title: `${w.path} builds every package on each pull request`,
         detail: `This monorepo job runs ${nx ? 'nx run-many' : 'turbo'} over every package. On a pull request only the packages it changed, and the ones that depend on them, need to run.`,
-        evidence: `${w.repo}/${w.path} · ${job.name ?? job.id} runs \`${normalizeRun(cmd).slice(0, 100)}\` on pull requests: ${mins(billed)} in ${days} days (${usd(atStake)} a month at list price). How much --affected saves depends on how many packages a pull request touches, so Mushi does not price it.`,
+        evidence: `${w.repo}/${w.path} · ${job.name ?? job.id} runs \`${normalizeRun(cmd).slice(0, 100)}\` on pull requests: ${mins(billed)} in ${days} days (${usd(atStake)} a month at list price). How much --affected saves depends on how many packages a pull request touches, so Mushi Mushi does not price it.`,
         fix: nx
           ? 'Use `nx affected -t <targets>` on pull requests (with `fetch-depth: 0` and nrwl/nx-set-shas so it knows the base).'
           : 'Use `turbo run <tasks> --affected` on pull requests, with `fetch-depth: 0` on actions/checkout: turbo compares against GITHUB_BASE_REF and runs everything on a shallow clone.',
@@ -427,7 +427,7 @@ export function adviseCostRules(input: CostRulesInput): CiOverviewAdvice[] {
         severity: severityFor(saving),
         title: `Pull requests nobody merged billed ${mins(billed)} on ${repo}`,
         detail: 'Every push to a pull request runs its CI, and a pull request that is closed without merging paid for all of it. Coding agents open many of these.',
-        evidence: `${list.length} pull request${list.length === 1 ? '' : 's'} closed without merging in ${days} days billed ${mins(billed)}${agentMinutes > 0 ? `, ${mins(agentMinutes)} of it on Mushi agent branches` : ''} (${list.slice(0, 6).map((p) => `#${p.number}`).join(', ')}${list.length > 6 ? ', …' : ''}; jobs Mushi recorded).`,
+        evidence: `${list.length} pull request${list.length === 1 ? '' : 's'} closed without merging in ${days} days billed ${mins(billed)}${agentMinutes > 0 ? `, ${mins(agentMinutes)} of it on Mushi agent branches` : ''} (${list.slice(0, 6).map((p) => `#${p.number}`).join(', ')}${list.length > 6 ? ', …' : ''}; jobs Mushi Mushi recorded).`,
         fix: 'Keep agent pull requests as drafts until they are ready and skip drafts in CI (`types: [opened, synchronize, reopened, ready_for_review]` plus `if: github.event.pull_request.draft == false`), cancel superseded runs with a concurrency group, and close a pull request as soon as it is superseded. Release trains then run CI once per batch.',
         repo,
         monthSavingUsd: saving,
@@ -456,7 +456,7 @@ export function adviseCostRules(input: CostRulesInput): CiOverviewAdvice[] {
         severity: severityFor(saving, 20, 3),
         title: `${g.workflow} runs macOS jobs on pull requests`,
         detail: 'A GitHub-hosted macOS minute costs about ten Linux minutes. Pull requests rarely need a macOS build: a Linux job can lint, type-check and unit-test the same code.',
-        evidence: `${[...g.jobs].slice(0, 4).join(', ')} on pull requests billed ${mins(billed)} of macOS in ${days} days (jobs Mushi recorded).`,
+        evidence: `${[...g.jobs].slice(0, 4).join(', ')} on pull requests billed ${mins(billed)} of macOS in ${days} days (jobs Mushi Mushi recorded).`,
         fix: 'Run the macOS jobs only on release intent: a tag, a release branch, `workflow_dispatch`, or a `release` label (`if: contains(github.event.pull_request.labels.*.name, \'release\')`). Keep pull requests on Linux.',
         repo: g.repo,
         monthSavingUsd: saving,

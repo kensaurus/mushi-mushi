@@ -406,13 +406,13 @@ async function handler(req: Request): Promise<Response> {
     billHosted: true,
   }
   try {
-    const { result } = await withAnthropicOrOpenAi(
+    const { result, model: routeModel, usedProvider } = await withAnthropicOrOpenAi(
       db,
       projectId,
       async (anthropicResolved) => {
-        const { object } = await withLlmUsage(db, { ...usageCtx, model: modelId, keySource: anthropicResolved.source }, () => claudeGenerateObject({
+        const { object } = await withLlmUsage(db, { ...usageCtx, model: anthropicResolved.model ?? modelId, keySource: anthropicResolved.source }, () => claudeGenerateObject({
           apiKey: anthropicResolved.key,
-          model: modelId,
+          model: anthropicResolved.model ?? modelId,
           schema: testGenSchema,
           effort: TEST_GEN_EFFORT,
           system: SYSTEM_PROMPT,
@@ -425,8 +425,8 @@ async function handler(req: Request): Promise<Response> {
           apiKey: openaiResolved.key,
           ...(openaiResolved.baseUrl ? { baseURL: openaiResolved.baseUrl } : {}),
         })
-        const { object } = await withLlmUsage(db, { ...usageCtx, model: STAGE2_FALLBACK, keySource: openaiResolved.source }, () => generateObject({
-          model: openai(STAGE2_FALLBACK),
+        const { object } = await withLlmUsage(db, { ...usageCtx, model: openaiResolved.model ?? STAGE2_FALLBACK, keySource: openaiResolved.source }, () => generateObject({
+          model: openai(openaiResolved.model ?? STAGE2_FALLBACK),
           schema: testGenSchema,
           system: SYSTEM_PROMPT,
           prompt: buildUserPrompt(report as unknown as Record<string, unknown>, repo),
@@ -434,9 +434,10 @@ async function handler(req: Request): Promise<Response> {
         }))
         return object
       },
+      { feature: 'test-gen-from-report', tier: 'standard' },
     )
     generated = result
-    llmSpan.end({ model: modelId })
+    llmSpan.end({ model: routeModel ?? (usedProvider === 'openai' ? STAGE2_FALLBACK : modelId) })
     await trace.end()
   } catch (err) {
     llmSpan.end({ model: modelId, error: err instanceof Error ? err.message : String(err) })

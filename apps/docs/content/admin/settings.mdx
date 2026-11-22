@@ -58,6 +58,16 @@ only a short hint of each key. A key can belong to one app or be shared with you
 apps; an app's own key is tried first. The Cursor row also holds spend-down mode (see
 [Spend credits](/admin/credits)).
 
+**Run AI on** picks Claude or OpenAI for every app in the organization. An owner or
+admin can change it.
+
+| Choice | What runs |
+| --- | --- |
+| **Claude** | Your Claude keys first. Your OpenAI keys are used only when Claude has no working key. |
+| **OpenAI** | Everything runs on your OpenAI keys. No Claude key is used, yours or the platform's. |
+
+If you pick OpenAI with no OpenAI key saved, the add-key form opens so you can add one first.
+
 ### Web tools
 
 - **Firecrawl (web pages)**: your Firecrawl key, the websites it may read, and the pages
@@ -73,8 +83,12 @@ Report bugs by voice from your phone, Telegram or Slack. See [Voice intake](/adm
 
 ### SDK & connection
 
-**Check the connection** (whether this browser reaches Mushi Mushi and where your data
-lives), **Install the bug widget** (a link to [Connect](/admin/connect), where the
+On a self-hosted server, **Self-host setup** comes first: a checklist of what your own
+server still needs (API up, deploy stamped, database reachable, cron jobs calling your
+server, background jobs running, screenshots bucket private, AI key, console address),
+each with its status and fix. It runs the same checks as `npx mushi-mushi selfhost doctor`
+and never shows on Mushi Mushi Cloud. Then **Check the connection** (whether this browser
+reaches Mushi Mushi and where your data lives), **Install the bug widget** (a link to [Connect](/admin/connect), where the
 install snippet lives, and the API address to copy), **Send a test bug**, and **Debug
 logging (this browser)**, which logs to the browser console. Debug logging is stored in
 this browser only; it is never sent to the SDK or end users.

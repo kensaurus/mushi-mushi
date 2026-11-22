@@ -74,13 +74,13 @@ describe('DocsBridgePage consent', () => {
     vi.restoreAllMocks()
   })
 
-  async function render(returnOrigin: string) {
+  async function render(returnOrigin: string, nonce = 'n1') {
     const { DocsBridgePage } = await import('./DocsBridgePage')
     await act(async () => {
       root.render(
         createElement(
           MemoryRouter,
-          { initialEntries: [`/docs-bridge?nonce=n1&returnOrigin=${encodeURIComponent(returnOrigin)}`] },
+          { initialEntries: [`/docs-bridge?nonce=${nonce}&returnOrigin=${encodeURIComponent(returnOrigin)}`] },
           createElement(DocsBridgePage),
         ),
       )
@@ -117,7 +117,19 @@ describe('DocsBridgePage consent', () => {
   it('refuses an origin that is not on the allowlist without offering Allow', async () => {
     await render('https://evil.example')
     expect(button('Allow')).toBeUndefined()
-    expect(container.textContent).toContain("isn't on the allowlist")
+    expect(container.textContent).toContain("doesn't recognise")
     expect(postMessage).not.toHaveBeenCalled()
+    // The way back never points at the unvetted site.
+    const back = Array.from(container.querySelectorAll('a')).find((a) => a.textContent?.trim() === 'Back to docs')
+    expect(back).toBeDefined()
+    expect(back!.getAttribute('href')).not.toContain('evil.example')
+  })
+
+  it('a link without a nonce says it expired, in plain words, with a way back', async () => {
+    await render('https://kensaur.us', '')
+    expect(container.textContent).toContain('This sign-in link has expired')
+    expect(container.textContent).not.toContain('nonce')
+    const back = Array.from(container.querySelectorAll('a')).find((a) => a.textContent?.trim() === 'Back to docs')
+    expect(back?.getAttribute('href')).toBe('https://kensaur.us')
   })
 })

@@ -59,7 +59,12 @@ function AppCardBody({ app, projectId, canEdit, onRefreshed }: { app: HomeApp; p
 
   return (
     <div className="flex flex-col">
-      <div className="relative aspect-video w-full overflow-hidden border-b border-edge-subtle bg-surface-overlay">
+      {/* With no picture, one icon row at every width: a 470×265 grey box
+          holding "No screenshot yet." was a giant empty panel (round-2 sweep 2026-11-18). */}
+      <div
+        className={`relative w-full overflow-hidden border-b border-edge-subtle ${shot ? 'aspect-video bg-surface-overlay' : ''}`}
+        data-testid="home-app-picture"
+      >
         {shot ? (
           <img
             src={shot.url}
@@ -69,9 +74,9 @@ function AppCardBody({ app, projectId, canEdit, onRefreshed }: { app: HomeApp; p
             onError={() => setBroken(true)}
           />
         ) : (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-2 p-3 text-center">
+          <div className="flex w-full items-center gap-2 px-3 py-2">
             <ProjectFavicon
-              size={40}
+              size={32}
               project_id={projectId}
               project_name={app.name}
               project_slug={app.slug ?? app.name}
@@ -101,18 +106,18 @@ function AppCardBody({ app, projectId, canEdit, onRefreshed }: { app: HomeApp; p
             </Btn>
           )}
         </div>
+        {/* No version: nothing here. The Release card owns "No deploy seen yet";
+            saying it twice on one page was noise (round-2 sweep 2026-11-18). */}
         <div className="flex flex-wrap items-center gap-1.5">
           {app.platforms.map((p) => (
             <Badge key={p} tone="neutral">
               {PLATFORM_LABEL[p]}
             </Badge>
           ))}
-          {app.version ? (
+          {app.version && (
             <Badge tone="info" title={`Seen live ${new Date(app.version.at).toLocaleString()}`}>
               {app.version.value}
             </Badge>
-          ) : (
-            <span className="text-2xs text-fg-faint">No deploy seen yet</span>
           )}
         </div>
         {shot?.capturedAt && (

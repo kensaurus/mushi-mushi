@@ -39,6 +39,7 @@ import {
   buildSitemap,
   buildStations,
   buildWeek,
+  dailyCounts,
   ciSignal,
   setupSignal,
   type SetupInput,
@@ -81,7 +82,9 @@ import { attachAffects, problemsByProject, type HealthCheck } from '../../_share
 import { tagRootCauses } from '../../_shared/pipeline-view.ts'
 import { readWorkerFlags } from './work-status.ts'
 import { flagsForProject, type WorkerFlag } from '../../_shared/work-flags.ts'
-import { reportWindowStartIso } from '../../_shared/report-list-filters.ts'
+import { combineOrGroups, reportWindowStartIso } from '../../_shared/report-list-filters.ts'
+import { reportSourceKindFilter } from '../../_shared/report-source-kind.ts'
+import { toPublicSupabaseUrl } from '../../_shared/public-url.ts'
 import { dbError, OPEN_REPORT_STATUSES, parseUuidParam, userCanAccessProject } from '../shared.ts'
 
 const hlog = log.child('project-home')
@@ -94,6 +97,12 @@ const DAY = 24 * HOUR
 /** Each section's read budget; a slower section reads `error`. */
 const SECTION_MS = 12_000
 const PAGE_VIEW_SAMPLE = 5000
+/**
+ * Rows read for one week-row sparkline. At or above it the series is left
+ * out (a lower bound would draw a wrong shape). Kept at PostgREST's default
+ * page size, so a server-side row cap can never pass for a complete read.
+ */
+const WEEK_SERIES_ROW_CAP = 1000
 const MEMBER_LOOKUPS = 8
 
 export interface ProjectHomeDeps {
@@ -286,15 +295,26 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
       })
     })().catch((e) => errorSignal('site', 'Site up', SITE_WATCH_HREF, e)),
     (async () => {
-      const [todayCount, yesterdayCount, criticalToday, ever, latest] = await Promise.all([
+      // From a person, not Sentry, an alarm, a setup task or a check.
+      const userOnly = reportSourceKindFilter('user')
+      const userReportsToday = () =>
+        db.from('reports').select('id', { count: 'exact', head: true }).eq('project_id', id)
+          .or(combineOrGroups([NOT_SAMPLE, ...(userOnly.kind === 'or' ? userOnly.groups : [])]) ?? NOT_SAMPLE)
+          .gte('created_at', todayStart)
+      const [todayCount, yesterdayCount, criticalToday, ever, latest, fromUsersToday] = await Promise.all([
         count('reports today', reportCount().gte('created_at', todayStart)),
         count('reports yesterday', reportCount().gte('created_at', yesterdayStart).lt('created_at', todayStart)),
         count('critical today', reportCount().gte('created_at', todayStart).eq('severity', 'critical')),
         count('reports ever', reportCount()),
         one<{ created_at: string }>('latest report', db.from('reports').select('created_at').eq('project_id', id).order('created_at', { ascending: false }).limit(1).maybeSingle()),
+        // A failed count only drops the "where from" note, never the tile
+        // (also when building the query throws).
+        Promise.resolve()
+          .then(() => count('user reports today', userReportsToday()))
+          .catch(() => undefined),
       ])
       const sdkSeen = keys.ok && !!latestSeen(keys.value.filter((k) => isSdkKey(k.scopes)))
-      return errorsSignal({ today: todayCount, yesterday: yesterdayCount, criticalToday, everConnected: ever > 0 || sdkSeen, latestAt: latest?.created_at ?? null, sdkHref })
+      return errorsSignal({ today: todayCount, yesterday: yesterdayCount, criticalToday, everConnected: ever > 0 || sdkSeen, latestAt: latest?.created_at ?? null, sdkHref, fromUsersToday, sdkSeen })
     })().catch((e) => errorSignal('errors', 'Errors today', '/reports?days=1', e)),
     (async () => {
       if (!keys.ok) return errorSignal('sdk', 'SDK sending', sdkHref, keys.error)
@@ -354,6 +374,24 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
   const weekP = settle(
     (async () => {
       const sessions = () => db.from('end_user_sessions').select('id', { count: 'exact', head: true }).eq('project_id', id)
+      // The sparkline beside each row: the same rows per UTC day. Read
+      // apart from the counts (which stay exact), so a failed or capped read
+      // only drops that row's sparkline, never the section.
+      const capped = <T,>(list: T[] | null) => (list && list.length < WEEK_SERIES_ROW_CAP ? list : null)
+      const seriesP = Promise.all([
+        rows<{ created_at: string; severity: string | null }>(
+          'reports series',
+          db.from('reports').select('created_at, severity').eq('project_id', id).or(NOT_SAMPLE).gte('created_at', priorStart).order('created_at', { ascending: true }).limit(WEEK_SERIES_ROW_CAP),
+        ).catch(() => null),
+        rows<{ merged_at: string | null }>(
+          'merged series',
+          db.from('fix_attempts').select('merged_at').eq('project_id', id).gte('merged_at', priorStart).order('merged_at', { ascending: true }).limit(WEEK_SERIES_ROW_CAP),
+        ).catch(() => null),
+        rows<{ started_at: string | null }>(
+          'sessions series',
+          db.from('end_user_sessions').select('started_at').eq('project_id', id).gte('started_at', priorStart).order('started_at', { ascending: true }).limit(WEEK_SERIES_ROW_CAP),
+        ).catch(() => null),
+      ])
       const [r0, r1, c0, c1, m0, m1, s0, s1] = await Promise.all([
         count('reports 7d', reportCount().gte('created_at', weekStart)),
         count('reports prior 7d', reportCount().gte('created_at', priorStart).lt('created_at', weekStart)),
@@ -365,7 +403,22 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
         count('sessions 7d', sessions().gte('started_at', weekStart)).catch(() => null),
         count('sessions prior 7d', sessions().gte('started_at', priorStart).lt('started_at', weekStart)).catch(() => null),
       ])
-      return buildWeek({ reports: [r0, r1], critical: [c0, c1], merged: [m0, m1], sessions: s0 != null && s1 != null && s0 + s1 > 0 ? [s0, s1] : null })
+      const [reportRows, mergedRows, sessionRows] = await seriesP
+      const reportSeries = capped(reportRows)
+      const mergedSeries = capped(mergedRows)
+      const sessionSeries = capped(sessionRows)
+      return buildWeek({
+        reports: [r0, r1],
+        critical: [c0, c1],
+        merged: [m0, m1],
+        sessions: s0 != null && s1 != null && s0 + s1 > 0 ? [s0, s1] : null,
+        daily: {
+          reports: reportSeries ? dailyCounts(reportSeries.map((r) => r.created_at), priorStart) : null,
+          critical: reportSeries ? dailyCounts(reportSeries.filter((r) => r.severity === 'critical').map((r) => r.created_at), priorStart) : null,
+          merged: mergedSeries ? dailyCounts(mergedSeries.map((r) => r.merged_at), priorStart) : null,
+          sessions: sessionSeries ? dailyCounts(sessionSeries.map((r) => r.started_at), priorStart) : null,
+        },
+      })
     })(),
   )
   const activityP = settle(
@@ -469,7 +522,7 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
   let thumbnail: { url: string; capturedAt: string | null; pageUrl: string | null } | null = null
   if (thumb.ok && thumb.value?.storage_path) {
     const { data } = await db.storage.from(THUMBNAIL_BUCKET).createSignedUrl(thumb.value.storage_path, THUMBNAIL_URL_TTL_SEC)
-    if (data?.signedUrl) thumbnail = { url: data.signedUrl, capturedAt: thumb.value.captured_at, pageUrl: thumb.value.page_url }
+    if (data?.signedUrl) thumbnail = { url: toPublicSupabaseUrl(data.signedUrl), capturedAt: thumb.value.captured_at, pageUrl: thumb.value.page_url }
   }
   const ownKey = firecrawl.ok && firecrawl.value?.source === 'byok'
   const thumbnailState = {
@@ -646,7 +699,7 @@ export function registerProjectHomeRoutes(app: Hono<{ Variables: Variables }>, d
       const path = await deps.captureThumbnail(db, id, pageUrl, fc.key)
       await logAudit(db, id, c.get('userId') as string, 'settings.updated', 'home_thumbnail', id, { pageUrl }).catch(() => {})
       const { data } = await db.storage.from(THUMBNAIL_BUCKET).createSignedUrl(path, THUMBNAIL_URL_TTL_SEC)
-      return c.json({ ok: true, data: { url: data?.signedUrl ?? null, capturedAt: now.toISOString(), pageUrl } })
+      return c.json({ ok: true, data: { url: toPublicSupabaseUrl(data?.signedUrl ?? null), capturedAt: now.toISOString(), pageUrl } })
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       hlog.warn('thumbnail capture failed', { projectId: id, err: message.slice(0, 200) })

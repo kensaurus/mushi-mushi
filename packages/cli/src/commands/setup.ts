@@ -4,6 +4,7 @@ import { requireConfig } from '../cli-shared.js';
 import { CONFIG_PATH, loadConfig } from '../config.js';
 import { CLOUD_API_ENDPOINT, CLOUD_MCP_OAUTH_URL, resolveCloudEndpoint } from '../endpoint.js';
 import { runLogin } from '../login.js';
+import { editorKeyCommand } from '../key-scopes.js';
 import {
   buildHostedMcpServerBlock,
   buildMcpServerBlock,
@@ -524,7 +525,13 @@ If you are not signed in yet, setup runs browser sign-in first, then writes the 
                 )
                 rl.close()
                 if (answer === '' || answer === 'y' || answer === 'yes') {
-                  await runLogin({ endpoint: opts.endpoint, upgradeScope: true, suppressPostLoginBanner: true })
+                  // Pass the project so login does not ask which one again.
+                  await runLogin({
+                    endpoint: opts.endpoint,
+                    projectId: config.projectId,
+                    upgradeScope: true,
+                    suppressPostLoginBanner: true,
+                  })
                   const fresh = loadConfig()
                   if (fresh.apiKey && target.format === 'mcp-json' && !allProjectsList) {
                     await writeEntry(
@@ -560,8 +567,16 @@ If you are not signed in yet, setup runs browser sign-in first, then writes the 
                 }
               }
               if (!upgraded && !canPrompt) {
-                console.log('   To upgrade this key, run:\n')
-                console.log('     mushi login --upgrade-scope\n')
+                // One copy-paste command. login mints report:write + mcp:read
+                // into the CLI config, which a stdio entry without an inline
+                // key reads, so a restart is enough.
+                console.log('   To get a key that can read reports, run (approve in the browser):\n')
+                console.log(`     ${editorKeyCommand(config.projectId)}\n`)
+                console.log(
+                  inlineKey
+                    ? '   Then re-run this setup command to write the new key, and restart ' + ideLabel + '.\n'
+                    : '   Then restart ' + ideLabel + '.\n',
+                )
               }
             } else {
               console.log(`⚠  Key probe returned HTTP ${probeRes.status} — check your credentials.`)

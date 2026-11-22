@@ -15,7 +15,13 @@
  *                                          one audit pass (ADR 0050)
  *     POST /v1/worker/claims/:id/renew     extend the lease
  *     POST /v1/worker/claims/:id/done      { outcome, failureKind?, fixId?, prUrl?, detail?, headAfter? }
- *     POST /v1/worker/claims/:id/findings  an audit claim files one reproduced finding (code_audit)
+ *     POST /v1/worker/claims/:id/findings  an audit claim files one reproduced finding (code_audit):
+ *                                          201 filed, 200 merged into an open pattern or regressed,
+ *                                          202 deferred over the app's open cap (ADR 0063)
+ *     GET  /v1/worker/claims/:id/recheck   an audit claim reads the app's open code-audit reports and
+ *                                          the deferred findings that fit (ADR 0063)
+ *     POST /v1/worker/claims/:id/recheck   { sha, base, results, deferredGone } closes what no longer
+ *                                          reproduces on the default branch (ADR 0063)
  *     POST /v1/worker/revoke               the key revokes itself (`mushi worker revoke`)
  *
  *   The console and the CLI:
@@ -28,6 +34,8 @@
  *     PATCH  /v1/admin/work/hosts/:id      host guards (console session, the host's owner)
  *     DELETE /v1/admin/work/hosts/:id      revoke a host and its key (console session, the owner)
  *     POST   /v1/admin/work/key            { projectIds, label? } mint a worker:run key (mcp:write)
+ *     GET    /v1/admin/work/code-audit/backlog, POST …/code-audit/collapse: work-collapse.ts
+ *            (`mushi work --collapse-backlog`, ADR 0065)
  *     GET    /v1/admin/work/stats, POST …/claims/:id/stop, POST …/hosts/:id/recheck: work-status.ts
  *            (worker flags, ADR 0048 amendment 2026-10-28; the lanes answer carries `flags` too)
  *
@@ -47,8 +55,9 @@ import { hashApiKey } from '../../_shared/api-key-mint.ts'
 import { claimTenantRateLimit } from '../../_shared/tenant-observability.ts'
 import { composeFixPacket, fixPacketContextFromReport } from '../../_shared/fix-packet.ts'
 import { activeWorkClaims, enqueueReports, queuedForLocalLanes, QUEUE_MODES, WORK_LEASE_MS, type QueueLane } from '../../_shared/work-claims.ts'
-import { AUDIT_FINDINGS_PER_HOUR, outcomeKindRefusal, parseAuditFinding } from '../../_shared/work-modes.ts'
-import { auditFiledLastHour, fileAuditFinding } from './work-audit.ts'
+import { AUDIT_FINDINGS_PER_HOUR, auditRecheckDue, outcomeKindRefusal, parseAuditFinding } from '../../_shared/work-modes.ts'
+import { registerCodeAuditCollapseRoutes } from './work-collapse.ts'
+import { applyRecheck, auditFiledLastHour, codeAuditBacklog, fileAuditFinding, parseRecheckBody, recheckList } from './work-audit.ts'
 import { claimFreshEyes, endFreshEyesRun, type FreshEyesClaimDeps } from './work-fresh-eyes.ts'
 import { mintSyntheticAccount } from '../../_shared/synthetic-accounts.ts'
 import { isOperatorUser } from '../../_shared/operator-gate.ts'
@@ -616,7 +625,16 @@ async function claimAuditMode(c: Ctx, db: Db, lane: LaneRow, host: HostRow, now:
   if (((running ?? []) as unknown[]).length > 0) return c.json({ ok: true, data: { claim: null, reason: 'An audit lane runs one pass at a time.' } })
   const filed = await auditFiledLastHour(db, lane.project_id, now)
   if (filed === null) return err(c, 'DB_ERROR', "Could not read the audit's hourly count. Try again in a minute.", 503)
-  if (filed >= AUDIT_FINDINGS_PER_HOUR) {
+  // ADR 0063: at the app's open cap the lane only rechecks (once a day, no model); new findings would only wait.
+  const backlog = await codeAuditBacklog(db, lane.project_id)
+  if (!backlog) return err(c, 'DB_ERROR', 'Could not read the open code-audit count. Try again in a minute.', 503)
+  const { data: recheckRow } = await db.from('work_lanes').select('audit_rechecked_at').eq('id', lane.id).maybeSingle()
+  const recheck = auditRecheckDue((recheckRow as { audit_rechecked_at?: string | null } | null)?.audit_rechecked_at, now)
+  const backlogFull = backlog.open >= backlog.cap
+  if (backlogFull && !recheck) {
+    return c.json({ ok: true, data: { claim: null, reason: `This app has ${backlog.open} open code-audit reports (its cap is ${backlog.cap}); the audit waits until some are fixed or closed.` } })
+  }
+  if (filed >= AUDIT_FINDINGS_PER_HOUR && !recheck) {
     return c.json({ ok: true, data: { claim: null, reason: `This app already filed ${AUDIT_FINDINGS_PER_HOUR} code-audit findings in the last hour.` } })
   }
   const { data, error } = await db
@@ -625,6 +643,10 @@ async function claimAuditMode(c: Ctx, db: Db, lane: LaneRow, host: HostRow, now:
     .select('id')
     .single()
   if (error || !data) return err(c, 'DB_ERROR', 'The claim could not be stored. Try again in a minute.', 500)
+  // The recheck is handed out once per 20 h, done or not: a worker older than
+  // ADR 0063 never posts it, and would otherwise get a model pass on every claim
+  // while the backlog is full (its findings only land in code_audit_deferred).
+  if (recheck) await db.from('work_lanes').update({ audit_rechecked_at: now.toISOString() }).eq('id', lane.id)
   return c.json({
     ok: true,
     data: {
@@ -635,7 +657,14 @@ async function claimAuditMode(c: Ctx, db: Db, lane: LaneRow, host: HostRow, now:
         projectId: lane.project_id,
         leaseUntil,
         model: cfg.model,
-        audit: { reviewModel: lane.review_model, findingsLeft: AUDIT_FINDINGS_PER_HOUR - filed },
+        audit: {
+          reviewModel: lane.review_model,
+          findingsLeft: Math.max(0, AUDIT_FINDINGS_PER_HOUR - filed),
+          // The worker rechecks every open finding first; with no room it proposes nothing.
+          recheck,
+          propose: !backlogFull && filed < AUDIT_FINDINGS_PER_HOUR,
+          backlog,
+        },
       },
     },
   })
@@ -758,10 +787,53 @@ async function finding(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
   const lane = laneData as ModeLane
   const res = await deps.fileFinding(db, parsed.value, { lane, ownerUserId: userId, now })
   if (!res.ok) return c.json({ ok: false, error: { code: res.code, message: res.message, ...(res.reportId ? { reportId: res.reportId } : {}) } }, res.status)
-  await deps
-    .logAudit(db, own.project_id, userId, 'report.created', 'report', res.reportId, { source: 'code_audit', lane: lane.name, file: parsed.value.file, rule: parsed.value.rule }, { actorType: 'api_key' })
-    .catch(() => {})
-  return c.json({ ok: true, data: { reportId: res.reportId, queuedLaneId: res.queuedLaneId } }, 201)
+  if (res.outcome === 'deferred') return c.json({ ok: true, data: { outcome: 'deferred', reportId: null, queuedLaneId: null } }, 202)
+  if (res.outcome === 'filed') {
+    await deps
+      .logAudit(db, own.project_id, userId, 'report.created', 'report', res.reportId, { source: 'code_audit', lane: lane.name, file: parsed.value.file, rule: parsed.value.rule }, { actorType: 'api_key' })
+      .catch(() => {})
+  }
+  return c.json({ ok: true, data: { outcome: res.outcome, reportId: res.reportId, queuedLaneId: res.queuedLaneId } }, res.outcome === 'filed' ? 201 : 200)
+}
+
+/** An audit claim and its lane, for the recheck routes; a Refusal otherwise. */
+async function auditClaimLane(c: Ctx, deps: WorkRouteDeps, db: Db, now: Date): Promise<{ own: ClaimRow; lane: ModeLane } | Refusal> {
+  const own = await ownClaim(db, c, c.req.param('id') ?? '')
+  if (own instanceof Refusal) return own
+  if (own.kind !== 'audit') return new Refusal(err(c, 'VALIDATION_ERROR', 'Only an audit claim rechecks findings.', 400))
+  if (own.status !== 'active' || Date.parse(own.lease_until) <= now.getTime()) return new Refusal(err(c, 'CLAIM_ENDED', 'This audit claim already ended; claim again.', 409))
+  const userId = c.get('userId') as string
+  const access = await deps.access(c, db, userId, own.project_id)
+  if (!access.allowed || access.role === 'viewer') return new Refusal(err(c, 'FORBIDDEN', 'This key can no longer change reports for that app.', 403))
+  const { data: laneData, error } = await db.from('work_lanes').select('id, host_id, project_id, name, repo, review_model').eq('id', own.lane_id).maybeSingle()
+  if (error || !laneData) return new Refusal(err(c, 'DB_ERROR', 'Could not read the lane.', 500))
+  return { own, lane: laneData as ModeLane }
+}
+
+/** ADR 0063: what the audit lane's daily recheck reads. */
+async function recheckRead(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
+  const denied = workerOnly(c)
+  if (denied) return denied
+  const db = deps.getServiceClient()
+  const got = await auditClaimLane(c, deps, db, deps.now())
+  if (got instanceof Refusal) return got.response
+  const list = await recheckList(db, got.own.project_id)
+  if (!list) return err(c, 'DB_ERROR', 'Could not read the open code-audit reports. Try again in a minute.', 503)
+  return c.json({ ok: true, data: list })
+}
+
+/** ADR 0063: the audit lane's recheck result. */
+async function recheckWrite(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
+  const denied = workerOnly(c)
+  if (denied) return denied
+  const db = deps.getServiceClient()
+  const now = deps.now()
+  const got = await auditClaimLane(c, deps, db, now)
+  if (got instanceof Refusal) return got.response
+  const parsed = parseRecheckBody(await c.req.json().catch(() => null))
+  if (!parsed.ok) return err(c, 'VALIDATION_ERROR', parsed.message, 400)
+  const out = await applyRecheck(db, { projectId: got.own.project_id, laneId: got.lane.id, laneName: got.lane.name, now }, parsed.value)
+  return c.json({ ok: true, data: out })
 }
 
 async function revokeSelf(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
@@ -1221,6 +1293,8 @@ export function registerWorkRoutes(app: Hono<{ Variables: Variables }>, deps: Wo
   app.post('/v1/worker/claims/:id/renew', deps.workerAuth, (c) => renew(c as Ctx, deps))
   app.post('/v1/worker/claims/:id/done', deps.workerAuth, (c) => done(c as Ctx, deps))
   app.post('/v1/worker/claims/:id/findings', deps.workerAuth, (c) => finding(c as Ctx, deps))
+  app.get('/v1/worker/claims/:id/recheck', deps.workerAuth, (c) => recheckRead(c as Ctx, deps))
+  app.post('/v1/worker/claims/:id/recheck', deps.workerAuth, (c) => recheckWrite(c as Ctx, deps))
   app.post('/v1/worker/revoke', deps.workerAuth, (c) => revokeSelf(c as Ctx, deps))
 
   app.get('/v1/admin/work/lanes', deps.adminOrApiKeyRead, (c) => listLanes(c as Ctx, deps))
@@ -1230,5 +1304,7 @@ export function registerWorkRoutes(app: Hono<{ Variables: Variables }>, deps: Wo
   app.patch('/v1/admin/work/hosts/:id', deps.jwtAuth, (c) => patchHost(c as Ctx, deps))
   app.delete('/v1/admin/work/hosts/:id', deps.jwtAuth, (c) => deleteHost(c as Ctx, deps))
   app.post('/v1/admin/work/key', deps.adminOrApiKeyWrite, (c) => mintWorkerKey(c as Ctx, deps))
+  // ADR 0065: `mushi work --collapse-backlog` (one-shot, reversible by its tag).
+  registerCodeAuditCollapseRoutes(app as never, deps)
   registerWorkStatusRoutes(app, deps)
 }

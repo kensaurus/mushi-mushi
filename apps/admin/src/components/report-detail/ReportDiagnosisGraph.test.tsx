@@ -94,7 +94,9 @@ describe('ReportDiagnosisGraph', () => {
     render()
     expect(panelTitle()).toContain('Root cause: The coupon reducer returns undefined')
     expect(container.querySelector('[data-node-id="cause"]')?.getAttribute('aria-pressed')).toBe('true')
-    expect(container.querySelector('aside')?.textContent).toContain('from stage2_analysis.rootCause')
+    // Round-3 sweep 2026-11-19: the stored field is a tooltip on the title, not page text.
+    expect(container.querySelector('aside')?.textContent).not.toContain('stage2_analysis')
+    expect(container.querySelector('aside h4')?.getAttribute('title')).toBe('Read from stage2_analysis.rootCause')
   })
 
   it('outside operator accounts leaves out the stored field a claim was read from', () => {
@@ -153,10 +155,13 @@ describe('ReportDiagnosisGraph', () => {
     }
   })
 
-  it('a path step, a node and a "Based on" link each move the panel', () => {
+  it('numbers the path on its nodes, once, and a node and a "Based on" link each move the panel', () => {
     render()
-    const steps = Array.from(container.querySelectorAll('ol[aria-label="Path to the diagnosis"] button'))
-    click(steps.find((b) => b.textContent?.startsWith('Symptom')))
+    // The path is numbered on the nodes; no second list repeats their titles (R2 sweep 2026-11-18).
+    expect(container.querySelector('ol[aria-label="Path to the diagnosis"]')).toBeNull()
+    expect(container.querySelector('[data-node-id="report"] [data-testid="diagnosis-step"]')?.textContent).toBe('1.')
+    expect(container.querySelector('[data-node-id="symptom"] [data-testid="diagnosis-step"]')?.textContent).toBe('2.')
+    click(container.querySelector('[data-node-id="symptom"]'))
     expect(panelTitle()).toContain('Symptom: Total shows NaN')
 
     click(container.querySelector('[data-node-id="fixdir"]'))

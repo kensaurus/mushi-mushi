@@ -195,7 +195,7 @@ export function TesterLearnPage() {
       <TesterPointsEconomyStrip />
 
       <nav className={`${TESTER_PANEL} p-4`} aria-label="Guide topics">
-        <p className="mb-2 text-2xs font-semibold uppercase tracking-wide text-fg-muted">Jump to</p>
+        <p className="mb-2 text-2xs font-semibold text-fg-secondary">Jump to</p>
         <div className="flex flex-wrap gap-2">
           {GUIDE.map((s) => (
             <a

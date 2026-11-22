@@ -16,7 +16,7 @@
  * drafts). Merge used to sit on every row, including Opus "hold" PRs.
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge, Btn, Callout, Card, SelectField } from '../ui'
 import { IconExternalLink } from '../icons'
@@ -86,18 +86,46 @@ function openPrGroup(pr: Pick<OpenPullRequest, 'checks' | 'review' | 'draft'>): 
 }
 
 const GROUPS: Array<{ id: OpenPrGroup; title: string; hint: string }> = [
-  { id: 'mergeable', title: 'Mergeable now', hint: 'Required checks passed; a Mushi Mushi fix also has an Opus "merge" on its latest commit.' },
+  { id: 'mergeable', title: 'Ready to merge', hint: 'Required checks passed; a Mushi Mushi fix also has an Opus "merge" on its latest commit.' },
   { id: 'needs_fix', title: 'Needs a fix', hint: 'A required check fails, or Opus said fix first. Open the fix to send it back.' },
   { id: 'hold', title: 'Hold', hint: 'Opus said hold: a person decides. The fix page shows the findings.' },
   { id: 'waiting', title: 'Waiting', hint: 'CI or a review is still running, or the PR is a draft.' },
 ]
 
-export function OpenPullRequests({ projectId }: { projectId: string }) {
+/** "all 1 required checks passed" read as a template; say it for one or for many. @internal Exported for tests. */
+export function checksPassedText(passed: number, total: number, baseRef: string): string {
+  if (total === 0) return `${baseRef} requires no checks`
+  if (total === 1) return passed === 1 ? 'its required check passed' : 'its required check has not passed'
+  return passed === total ? `all ${total} required checks passed` : `${passed} of ${total} required checks passed`
+}
+
+/** How many open PRs can merge now: the page's status line leads with it. @internal Exported for tests. */
+export function countMergeable(prs: ReadonlyArray<Pick<OpenPullRequest, 'checks' | 'review' | 'draft'>>): number {
+  return prs.filter((pr) => openPrGroup(pr) === 'mergeable').length
+}
+
+export function OpenPullRequests({
+  projectId,
+  onCounts,
+  footer,
+}: {
+  projectId: string
+  onCounts?: (c: { open: number; mergeable: number } | null) => void
+  /** One last row inside the card (the page's "No fix branches yet", round 3). */
+  footer?: ReactNode
+}) {
   const list = usePageData<{ pullRequests: OpenPullRequest[]; repos: string[] }>(`/v1/admin/projects/${projectId}/pull-requests`)
   const prs = list.data?.pullRequests ?? []
   const multiRepo = (list.data?.repos.length ?? 0) > 1
   const anyPending = prs.some((p) => uxRequiredChecks(p.checks).some((c) => c.result === 'pending'))
   const { reload } = list
+  const loaded = list.data != null
+  const openCount = prs.length
+  const mergeableCount = countMergeable(prs)
+
+  useEffect(() => {
+    onCounts?.(loaded ? { open: openCount, mergeable: mergeableCount } : null)
+  }, [onCounts, loaded, openCount, mergeableCount])
 
   useEffect(() => {
     if (!anyPending) return
@@ -124,8 +152,11 @@ export function OpenPullRequests({ projectId }: { projectId: string }) {
           if (mine.length === 0) return null
           return (
             <section key={g.id} aria-label={g.title} data-testid={`open-prs-${g.id}`}>
-              <h3 className="text-xs font-semibold text-fg">
-                {g.title} <span className="font-normal tabular-nums text-fg-muted">{mine.length}</span>
+              {/* The page status line already says "N PRs ready to merge": that group's heading is for
+                  screen readers only (round 3: the strip and a "Ready to merge" heading one under the other). */}
+              <h3 className={`text-xs font-semibold text-fg ${g.id === 'mergeable' ? 'sr-only' : ''}`}>
+                {g.title}
+                {g.id !== 'mergeable' ? <> <span className="font-normal tabular-nums text-fg-muted">{mine.length}</span></> : null}
               </h3>
               <p className="text-2xs text-fg-muted">{g.hint}</p>
               <ul className="flex flex-col divide-y divide-edge-subtle">
@@ -136,6 +167,7 @@ export function OpenPullRequests({ projectId }: { projectId: string }) {
             </section>
           )
         })}
+      {footer}
     </Card>
   )
 }
@@ -210,7 +242,7 @@ function OpenPullRequestRow({
           {merged ? (
             <Badge tone="okSubtle">Merged</Badge>
           ) : (
-            <Btn size="sm" variant={primary ? 'success' : 'ghost'} disabled={blocker != null || merging} aria-expanded={confirming} onClick={() => { setConfirming(true); setError(null) }}>
+            <Btn size="sm" variant={primary ? 'primary' : 'ghost'} className="whitespace-nowrap" disabled={blocker != null || merging} aria-expanded={confirming} onClick={() => { setConfirming(true); setError(null) }}>
               Merge
             </Btn>
           )}
@@ -221,7 +253,7 @@ function OpenPullRequestRow({
         {pr.headRef} → {pr.baseRef}
         {pr.author ? ` · ${pr.author}` : ''} · updated {formatRelative(pr.updatedAt)}
         {' · '}
-        {merged ? 'merged' : blocker ?? (checks.length ? `all ${passed} required checks passed` : `${pr.baseRef} requires no checks`)}
+        {merged ? 'merged' : blocker ?? checksPassedText(passed, checks.length, pr.baseRef)}
       </p>
       {confirming && !merged && blocker == null && (
         <Callout tone="warn">

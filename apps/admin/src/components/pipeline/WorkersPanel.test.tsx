@@ -16,7 +16,7 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { WorkerFlagAction, WorkLanesData } from '../../lib/workers'
+import { workersSummary, type WorkerFlagAction, type WorkLanesData } from '../../lib/workers'
 
 const state = vi.hoisted(() => ({
   data: null as unknown,
@@ -39,6 +39,8 @@ vi.mock('../../lib/usePageData', () => ({
 }))
 
 import { WorkersPanel } from './WorkersPanel'
+import { commonLaneSettings, groupRecentRuns, queueDuplicates, recentGroupText } from './WorkerLaneCard'
+import { isWorkersTabLink } from './WorkerFlags'
 import { SendToWorkerButton } from './SendToWorkerButton'
 import { runPipelineAction } from '../../lib/pipeline'
 
@@ -139,6 +141,21 @@ describe('WorkersPanel', () => {
     expect(q('worker-host-h1-switch-account')).toBeNull()
   })
 
+  it('names a Claude Code worker\'s account, with no Cursor account switch (2026-11-20)', async () => {
+    const data = fixture()
+    data.hosts[0] = {
+      ...data.hosts[0]!,
+      status: { ...data.hosts[0]!.status, agent: 'claude', checks: { cursor: { result: 'expected', ageSec: 30, detail: 'Logged in', account: null } } },
+      canSwitchAccount: true,
+    }
+    state.data = data
+    await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
+    expect(q('worker-host-h1-account')!.textContent).toContain('the Claude account Claude Code is signed in to')
+    expect(q('worker-host-h1-switch-account')).toBeNull()
+    expect(q('worker-host-h1-checks')!.textContent).toContain('Claude Code account:')
+    expect(q('worker-host-h1-checks')!.textContent).not.toContain('Cursor account')
+  })
+
   it('reads this app and shows the machine, its lane, what it runs, its queue and its runs', async () => {
     await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
     expect(state.paths[0]).toBe('/v1/admin/work/lanes?projectId=p1')
@@ -151,6 +168,11 @@ describe('WorkersPanel', () => {
     expect(q('worker-lane-l1-queue')!.textContent).toContain('First queued')
     expect(q('worker-lane-l1-recent')!.textContent).toContain('Opened a PR')
     expect(q('worker-lane-l1-recent')!.textContent).toContain('Failed · machine')
+    // States are status pills (2026-11-18): the machine is online, a PR passed,
+    // a machine failure is slow rather than the code's fault.
+    const pills = (id: string) => [...q(id)!.querySelectorAll('[data-testid="status-pill"]')].map((p) => [p.getAttribute('data-status'), p.textContent])
+    expect(pills('worker-host-h1')).toEqual(expect.arrayContaining([['passed', 'online']]))
+    expect(pills('worker-lane-l1-recent')).toEqual(expect.arrayContaining([['passed', 'Opened a PR'], ['slow', 'Failed · machine']]))
   })
 
   it('pausing a lane sends only paused', async () => {
@@ -339,7 +361,9 @@ describe('worker problems are loud and fixable (ADR 0048 amendment 2026-10-28)',
     state.data = withIncident()
     await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
     const list = q('worker-flags')!
-    expect(list.textContent).toContain('2 things stop your local workers from fixing bugs (1 need you now).')
+    // The status, above the cards, counts the problems once (round-2 review, 2026-11-18).
+    expect(q('workers-status')!.textContent).toContain('2 things stop your local workers from fixing bugs (1 needs you now).')
+    expect(q('workers-status')!.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(list.textContent).toContain('An agent space is one coding agent running at a time')
     const stuck = q('worker-flag-run_stuck')!
     expect(stuck.textContent).toContain('Stuck run')
@@ -350,8 +374,9 @@ describe('worker problems are loud and fixable (ADR 0048 amendment 2026-10-28)',
     expect(stuck.textContent).toContain('Find it on the machine, on alienware:')
     expect(stuck.textContent).toContain("ps -eo pid,etime,stat,args")
     expect(stuck.querySelector('a[href="/reports/r9"]')).not.toBeNull()
-    // The status line leads with the worst problem, not "all fine".
-    expect(q('workers-status')!.textContent).toContain('glot: a run has held an agent space for 4 h 10 min.')
+    // The status line counts the problems, never "all fine", and does not restate the first card.
+    expect(q('workers-status')!.textContent).not.toContain('glot: a run has held an agent space')
+    expect(q('workers-status')!.textContent).not.toContain('worker online')
     // The machine card says who holds the spaces, and the account check as it answered.
     expect(q('worker-host-h1-slots')!.textContent).toContain("glot (4 h 10 min, in the repo's commit hook)")
     expect(q('worker-host-h1-checks')!.textContent).toContain('check timed out')
@@ -423,15 +448,19 @@ describe('every worker flag kind renders loud, with its label, title and fix (AD
     state.data = { ...fixture(), flags: [{ ...base, id: `${c.kind}:x`, kind: c.kind, severity: c.severity, title: c.title, actions: c.actions ?? [] }] }
     await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
     const el = q(`worker-flag-${c.kind}`)!
-    expect(el.textContent).toContain(c.label)
+    // The kind label and the duration show once: beside the title only when the title does not say them.
+    expect(el.textContent!.toLowerCase()).toContain(c.label.toLowerCase())
     expect(el.textContent).toContain(c.title)
-    expect(el.textContent).toContain('for 20 min')
+    expect(el.textContent!.split('for 20 min').length - 1).toBeLessThanOrEqual(1)
+    expect(el.textContent).toContain(c.title.includes('for 20 min') ? c.title : 'for 20 min')
     for (const a of c.actions ?? []) {
       if (a.kind === 'copy_command') expect(el.textContent).toContain(a.command)
       else expect(el.textContent).toContain(a.label)
     }
-    // The status line names the problem; it never says all is well.
-    expect(q('workers-status')!.textContent).toContain(c.title)
+    // The status line counts the problem; it never says all is well.
+    expect(q('workers-status')!.textContent).toContain('1 thing stops your local workers from fixing bugs')
+    // Idle credits are a warning, not a failure, whatever the server's severity.
+    if (c.kind === 'credits_idle') expect(el.getAttribute('data-tone')).toBe('warn')
   })
 
   it('Pause this lane sends only paused, and the PR link opens the PR', async () => {
@@ -441,5 +470,161 @@ describe('every worker flag kind renders loud, with its label, title and fix (AD
     expect(q('worker-flag-hook_failures-open_pr')!.getAttribute('href')).toBe('https://github.com/kensaurus/glot.it/pull/12')
     await click(q('worker-flag-hook_failures-pause_lane'))
     expect(state.calls).toEqual([{ path: '/v1/admin/work/lanes/l1', method: 'PATCH', body: { paused: true } }])
+  })
+})
+
+describe('Workers round-2 review (2026-11-18)', () => {
+  it('a lane on an offline machine reads offline, never "idle" and "Taking reports"', async () => {
+    const data = fixture()
+    data.hosts[0]!.online = false
+    data.lanes[0]!.status = { state: 'idle' }
+    state.data = data
+    await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
+    const lane = q('worker-lane-l1')!
+    expect(lane.querySelector('[data-testid="status-pill"]')!.textContent).toBe('offline')
+    expect(lane.textContent).not.toContain('Taking reports')
+    expect(lane.textContent).toContain('Takes reports once alienware is back')
+  })
+
+  it('a lane whose stop date passed says so', async () => {
+    const data = fixture()
+    data.lanes[0]!.config = { ...data.lanes[0]!.config, stop_at: new Date(NOW - 4 * 86_400_000).toISOString() }
+    state.data = data
+    await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
+    expect(q('worker-lane-l1')!.querySelector('[data-testid="status-pill"]')!.textContent).toBe('stopped')
+    expect(q('worker-lane-l1-stopped')!.textContent).toContain('Its stop date passed')
+  })
+
+  it('a long queue shows ten rows and marks a same-title duplicate', async () => {
+    const data = fixture()
+    data.lanes[0]!.queue = Array.from({ length: 14 }, (_, i) => ({ reportId: `q${i}`, title: i === 12 ? 'Title 3' : `Title ${i}`, severity: 'low', status: 'classified', source: 'console', position: i }))
+    state.data = data
+    await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
+    expect(q('worker-lane-l1-queue')!.querySelectorAll('li[data-testid^="worker-lane-l1-queue-q"]').length).toBe(10)
+    await act(async () => q('worker-lane-l1-queue-toggle')!.click())
+    expect(q('worker-lane-l1-queue')!.querySelectorAll('li[data-testid^="worker-lane-l1-queue-q"]').length).toBe(14)
+    expect(q('worker-lane-l1-queue-q12-dupe')!.textContent).toBe('same as #4')
+    expect(q('worker-lane-l1')!.textContent).toContain('Queue (14, 1 with the same title as one above)')
+  })
+})
+
+describe('lane helpers', () => {
+  it('groups last runs with the same outcome and error; a run with no detail stands alone', () => {
+    const run = (id: string, detail: string | null, outcome = 'failed') => ({ claimId: id, reportId: `r-${id}`, title: id, outcome, failureKind: 'infra' as const, prUrl: null, detail, claimedAt: '2026-11-17T00:00:00Z', finishedAt: null, autoRequeued: false })
+    const groups = groupRecentRuns([run('a', 'git fetch failed: bad object'), run('b', 'git fetch failed: bad object'), run('c', null, 'pr_opened'), run('d', 'other')])
+    expect(groups.map((g) => g.runs.map((r) => r.claimId))).toEqual([['a', 'b'], ['c'], ['d']])
+  })
+
+  it('says shared lane settings once, and nothing when lanes differ in all of them', () => {
+    const lane = (model: string, concurrency: number) => ({ config: { ...fixture().lanes[0]!.config, model, concurrency } })
+    expect(commonLaneSettings([lane('m', 1), lane('m', 1)])).toMatchObject({ model: 'm', concurrency: 1 })
+    expect(commonLaneSettings([lane('m', 1), lane('n', 1)])!.model).toBeUndefined()
+    expect(commonLaneSettings([lane('m', 1)])).toBeNull()
+    expect(queueDuplicates([{ reportId: 'a', title: 'X' }, { reportId: 'b', title: ' x ' }, { reportId: 'c', title: 'Y' }])).toEqual([null, 1, null])
+  })
+
+  it('reports queued counts each report once across lanes', () => {
+    const data = fixture()
+    const q = data.lanes[0]!.queue
+    data.lanes.push({ ...data.lanes[0]!, id: 'l2', queue: [q[0]!] })
+    expect(workersSummary(data, NOW).queued).toBe(q.length)
+  })
+})
+
+describe('Workers round-3 review (2026-11-19)', () => {
+  function offlineMachine(): WorkLanesData {
+    const data = fixture()
+    // Last heartbeat 35 h ago; the machine's last word still says it was working.
+    data.hosts[0] = {
+      ...data.hosts[0]!,
+      online: false,
+      lastHeartbeatAt: new Date(NOW - 35 * 3600_000).toISOString(),
+      status: {
+        state: 'working',
+        agents: 2,
+        checks: { cursor: { result: 'expected', ageSec: 1020, detail: '', account: 's***@g***.com' }, gh: { result: 'signed_in', ageSec: 60, detail: '' } },
+        slots: [{ lane: 'glot', runId: 'c9', kind: 'fix', ageSec: 180, stage: 'agent', stageSec: 30 }],
+      },
+    }
+    data.lanes[0]!.status = { state: 'working', inflight: [{ runId: 'c9', kind: 'fix', reportId: 'r9', ageSec: 180, stage: 'agent', stageSec: 30, model: null, log: [] }] }
+    return data
+  }
+  const pills = (el: Element) => [...el.querySelectorAll('[data-testid="status-pill"]')].map((p) => p.getAttribute('data-status'))
+
+  it('an offline machine shows its last word as the past: no "working", no agents in use, no running pill', async () => {
+    state.data = offlineMachine()
+    await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
+    const heartbeat = q('worker-host-h1-heartbeat')!.textContent!
+    expect(heartbeat).toContain('35 h ago')
+    expect(heartbeat).not.toContain('working')
+    expect(heartbeat).not.toContain('agents')
+    expect(q('worker-host-h1-slots')!.textContent).toContain('At its last heartbeat')
+    expect(q('worker-host-h1-slots')!.textContent).not.toContain('in use')
+    expect(q('worker-host-h1-slots')!.textContent).not.toContain('coding agent at work')
+    // The account check's age counts from now, not from the last heartbeat.
+    expect(q('worker-host-h1-checks')!.textContent).toContain('checked 35 h ago')
+    expect(pills(q('worker-host-h1-checks')!)).toEqual(['idle', 'idle'])
+    // The lane: its last heartbeat, never "Working on now" with a pulsing pill.
+    expect(q('worker-lane-l1-now-heading')!.textContent).toContain('At its last heartbeat')
+    const detail = q('worker-lane-l1-run-c9-detail')!
+    expect(pills(detail)).toEqual(['idle'])
+    expect(detail.textContent).not.toContain('under a minute')
+    expect(q('worker-lane-l1')!.querySelector('[data-status="running"]')).toBeNull()
+    // The machine's offline state is said on the machine; the lane's is grey, not a red cross.
+    expect(q('worker-lane-l1')!.querySelector('[data-testid="status-pill"]')!.getAttribute('data-status')).toBe('idle')
+  })
+
+  it('a quiet lane (empty queue, nothing running) is one line until opened', async () => {
+    const data = fixture()
+    data.lanes[0]!.queue = []
+    data.lanes[0]!.active = []
+    state.data = data
+    await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
+    const lane = q('worker-lane-l1')!
+    expect(lane.getAttribute('data-quiet')).toBe('true')
+    expect(lane.textContent).toContain('4 runs, 1 PRs')
+    expect(q('worker-lane-l1-add')).toBeNull()
+    expect(lane.textContent).not.toContain('Drain')
+    await click(q('worker-lane-l1-expand'))
+    expect(q('worker-lane-l1-add')).not.toBeNull()
+    expect(q('worker-lane-l1')!.textContent).toContain('Drain')
+  })
+
+  it('lanes are divider rows in one card, not cards in a card', async () => {
+    await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
+    expect(q('workers-lanes-list')!.className).toContain('divide-y')
+    expect(q('worker-lane-l1')!.className).not.toMatch(/(^|\s)border(\s|$)/)
+    expect(q('worker-lane-l1-queue')!.className).not.toContain('rounded')
+  })
+
+  it('no worker yet is one solid line with its action, not a dashed box', async () => {
+    state.data = { ...fixture(), hosts: [], lanes: [], flags: [] }
+    await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
+    expect(q('workers-first-step')!.tagName).toBe('P')
+    expect(q('workers-first-step')!.className).not.toContain('dashed')
+    expect(q('workers-create-key')!.textContent).toBe('Create a worker key')
+  })
+
+  it('a link back to the Workers tab is dropped from a card on the Workers tab', async () => {
+    state.data = {
+      ...fixture(),
+      flags: [{ id: 'credits_idle:x', kind: 'credits_idle', severity: 'danger', hostId: 'h1', hostname: 'alienware', laneId: null, laneName: null, projectId: 'p1', title: 'Cursor credits idle for 34 h', cause: '', sinceSec: 60, actions: [{ kind: 'open_page', label: 'Open Workers', to: '/pipeline?tab=workers' }, { kind: 'open_page', label: 'Spend credits', to: '/credits' }] }],
+    }
+    await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
+    const card = q('worker-flag-credits_idle')!
+    expect(card.textContent).not.toContain('Open Workers')
+    expect(card.textContent).toContain('Spend credits')
+    expect(isWorkersTabLink({ kind: 'open_page', label: 'x', to: '/pipeline?scope=all&tab=workers' })).toBe(true)
+    expect(isWorkersTabLink({ kind: 'open_page', label: 'x', to: '/pipeline?tab=workers#workers-lanes' })).toBe(true)
+    expect(isWorkersTabLink({ kind: 'open_page', label: 'x', to: '/pipeline' })).toBe(false)
+  })
+
+  it('groups successes by outcome and says what went right', () => {
+    const run = (id: string, outcome: string, detail: string | null) => ({ claimId: id, reportId: `r-${id}`, title: id, outcome, failureKind: null, prUrl: null, detail, claimedAt: '2026-11-17T00:00:00Z', finishedAt: null, autoRequeued: false })
+    const groups = groupRecentRuns([run('a', 'gone', 'fix already on origin/main at abc'), run('b', 'gone', 'fix already on origin/main at def'), run('c', 'pr_opened', 'pull request opened'), run('d', 'pr_opened', 'pull request opened')])
+    expect(groups.map((g) => g.runs.map((r) => r.claimId))).toEqual([['a', 'b'], ['c', 'd']])
+    expect(recentGroupText(groups[1]!.runs)).toBe('2 runs opened a PR')
+    expect(recentGroupText(groups[0]!.runs)).toBe('2 runs were already fixed')
+    expect(recentGroupText([run('x', 'failed', 'e'), run('y', 'failed', 'e')])).toBe('2 runs ended with the same error')
   })
 })

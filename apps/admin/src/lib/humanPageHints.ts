@@ -30,12 +30,6 @@ export function fixesFailedAction(count: number): string {
   return count === 1 ? 'See why it stopped' : `See why (${count})`
 }
 
-export function triageBacklogHint(count: number): string {
-  return count === 1
-    ? 'This report is waiting for triage. Triage it so auto-fix can pick it up.'
-    : 'These reports are waiting for triage. Triage the oldest first so auto-fix can pick them up.'
-}
-
 export function judgeDisagreementHint(ratePct: number): string {
   return `The judge disagreed with the classifier on ${ratePct}% of recent grades. Review mismatches before merging fixes.`
 }
@@ -48,12 +42,6 @@ export function cronErrorsHint(count: number): string {
   return count === 1
     ? 'A scheduled background job failed. Open Cron to see which job broke and when it last ran.'
     : `${count} scheduled jobs failed. Open Cron to see which jobs broke and when they last ran.`
-}
-
-export function qaFailingHint(count: number): string {
-  return count === 1
-    ? 'One user-story test is failing on schedule. Open the run to see screenshots and assertion errors.'
-    : `${count} user-story tests are failing. Open the failing runs to see screenshots and assertion errors.`
 }
 
 export function deadLetterHint(count: number): string {

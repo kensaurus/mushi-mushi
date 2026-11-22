@@ -21,7 +21,8 @@
  *          confident root cause from a guess.
  */
 
-import { NEEDS_LOOK_BELOW, type DiagnosisGraph, type DiagnosisNode } from './reportDiagnosisModel'
+import { NEEDS_LOOK_BELOW, STAGE1_ONLY_DETAIL, type DiagnosisGraph, type DiagnosisNode } from './reportDiagnosisModel'
+import { reportDiagnosisView } from './reportDiagnosis'
 import { checkNodes, diagnosisNodes, evidenceNodes, fixNodes, signalNodes } from './reportDiagnosisNodes'
 import type { ReportDetail } from '../components/report-detail/types'
 
@@ -34,6 +35,9 @@ function verdictFor(report: ReportDetail, byId: Map<string, DiagnosisNode>): Dia
   if (cause?.state === 'failed') return { tone: 'danger', label: 'Diagnosis failed' }
   if (cause?.state === 'pending') return { tone: 'info', label: 'Diagnosis in progress' }
   if (judge?.title.startsWith('Judge disagrees')) return { tone: 'warn', label: 'Judge disagrees: check the triage' }
+  // Only the first check ran: it is sure of the kind of bug, not of a cause.
+  // "Confident diagnosis" over "no full diagnosis" contradicted itself.
+  if (reportDiagnosisView(report).kind === 'stage1_only') return { tone: 'info', label: 'Sorted; cause not diagnosed' }
   const confident = cause?.confidence != null && cause.confidence >= NEEDS_LOOK_BELOW
   if (confident && judge?.state === 'ok') return { tone: 'ok', label: 'Diagnosis confirmed by the judge' }
   if (confident) return { tone: 'info', label: 'Confident diagnosis, not graded yet' }
@@ -76,5 +80,12 @@ export function buildDiagnosisGraph(report: ReportDetail): DiagnosisGraph {
 /** The node to open first: the first marked node on the path, else the root cause. */
 export function initialDiagnosisSelection(graph: DiagnosisGraph): string | null {
   const byId = new Map(graph.nodes.map((n) => [n.id, n]))
-  return graph.path.find((id) => byId.get(id)?.needsLook) ?? (byId.has('cause') ? 'cause' : graph.path[0] ?? null)
+  const flagged = graph.path.find((id) => byId.get(id)?.needsLook)
+  if (flagged) return flagged
+  // A quick summary has no diagnosis to explain, and the page already says
+  // so above the graph: open on the next step instead of repeating it in the
+  // side panel (round-3 sweep 2026-11-19).
+  const cause = byId.get('cause')
+  if (cause && cause.detail === STAGE1_ONLY_DETAIL && byId.has('next')) return 'next'
+  return byId.has('cause') ? 'cause' : graph.path[0] ?? null
 }

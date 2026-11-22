@@ -9,7 +9,7 @@ description: Wire Langfuse LLM tracing and Sentry error tracking into a self-hos
 
 # Observability
 
-Mushi Mushi integrates Langfuse (LLM traces) and Sentry (error tracking). Both are optional and configured as Edge Function secrets.
+**Use this when** you want a trace of every AI call (Langfuse) or the server's errors in Sentry. Both are optional function secrets. Without them `selfhost doctor` prints one `INFO` line and still exits 0; every AI call is recorded in the `llm_invocations` table either way. In Docker Compose, put the Langfuse keys in `deploy/.env`, and add any other secret to the `edge-functions` service's `environment:` block.
 
 ## Langfuse (LLM tracing)
 
@@ -48,7 +48,7 @@ Every Edge Function wraps its handler with `withSentry()` from `_shared/sentry.t
 
 ```bash
 cd packages/server
-npx supabase secrets set SENTRY_DSN_SERVER=https://…@sentry.io/…   # SENTRY_DSN also works
+npx supabase secrets set SENTRY_DSN_SERVER=https://…@sentry.io/…   # preferred; SENTRY_DSN also works
 npx supabase secrets set SUPABASE_ENV=production                     # Sentry environment
 npx supabase secrets set SENTRY_RELEASE=$GIT_SHA
 ```

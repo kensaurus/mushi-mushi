@@ -21,6 +21,7 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
+import { useMarkPageEmpty } from '../lib/pageHelpContext'
 import { useExperimentsUx, resolveQuickExperimentsRedirect, parseVariantWeight } from '../lib/experimentsModeUx'
 import { describeApiError } from '../lib/humanizeApiError'
 import { PageLoadError } from '../components/PageLoadError'
@@ -285,6 +286,19 @@ export function ExperimentsPage() {
         )}
       </PageHeaderBar>
 
+      {/* Tabs sit under the heading on every tab, above the status: an empty state above them
+          moved the strip down on History/Experiments (2026-11-19). */}
+      {!ux.hideTabs && (
+      <SegmentedControl<ExperimentsTabId>
+        size="sm"
+        scrollable
+        ariaLabel="Experiments sections"
+        value={activeTab}
+        options={tabOptions}
+        onChange={setActiveTab}
+      />
+      )}
+
       <PagePosture
         slots={[
           {
@@ -303,7 +317,9 @@ export function ExperimentsPage() {
           },
           {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
-            show: !ux.hideExperimentsSnapshot,
+            // With the New form already open on an empty project, the form is the first
+            // step: a second "Create experiment" card above it would be the same action twice.
+            show: !ux.hideExperimentsSnapshot && !(stats.totalExperiments === 0 && activeTab === 'new'),
             children: (
               <ExperimentsSnapshotStrip
                 stats={stats}
@@ -316,17 +332,6 @@ export function ExperimentsPage() {
           },
         ]}
       />
-
-      {!ux.hideTabs && (
-      <SegmentedControl<ExperimentsTabId>
-        size="sm"
-        scrollable
-        ariaLabel="Experiments sections"
-        value={activeTab}
-        options={tabOptions}
-        onChange={setActiveTab}
-      />
-      )}
 
       {activeTab === 'experiments' && (
         <ExperimentsTab
@@ -341,12 +346,14 @@ export function ExperimentsPage() {
           projectId={projectId ?? ''}
           onCreate={() => setActiveTab('new')}
           showNewButton={ux.hideOverviewChrome}
+          firstStepShown={!ux.hideExperimentsSnapshot && stats.totalExperiments === 0}
         />
       )}
 
       {activeTab === 'new' && (
         <NewExperimentForm
           projectId={projectId ?? ''}
+          firstStep={stats.totalExperiments === 0}
           onCreated={() => { setActiveTab('experiments'); reloadAll() }}
           onCancel={ux.hideTabs && stats.totalExperiments > 0 ? () => setActiveTab('experiments') : undefined}
         />
@@ -374,7 +381,7 @@ export function ExperimentsPage() {
   )
 }
 
-function ExperimentsTab({ experiments, loading, error, errorCode, onRetry, onOpen, onLaunch, onStop, projectId, onCreate, showNewButton }: {
+function ExperimentsTab({ experiments, loading, error, errorCode, onRetry, onOpen, onLaunch, onStop, projectId, onCreate, showNewButton, firstStepShown = false }: {
   experiments: Experiment[]
   loading: boolean
   error: string | null
@@ -387,15 +394,20 @@ function ExperimentsTab({ experiments, loading, error, errorCode, onRetry, onOpe
   onCreate: () => void
   /** Quickstart / beginner hide the header "+ New", so the list carries it. */
   showNewButton: boolean
+  /** The page's first-step card already says "No experiments yet" with its one button. */
+  firstStepShown?: boolean
 }) {
   if (!projectId) return <EmptyState title="Select a project" description="Pick a project from the switcher to manage experiments." />
   if (loading) return <TableSkeleton rows={5} />
   if (error) return <PageLoadError error={error} code={errorCode} resource="experiments" onRetry={onRetry} />
   if (!experiments.length) {
+    // Round-2 sweep 2026-11-18: the first-step card and this empty state were
+    // stacked, each with its own "Create experiment". One says it.
+    if (firstStepShown) return null
     return (
       <EmptyState
         title="No experiments"
-        description="Create your first A/B experiment to start testing variants with SDK assignment."
+        description="Create an A/B experiment to compare two versions of a screen with your users."
         action={<Btn size="sm" variant="primary" onClick={onCreate}>Create experiment</Btn>}
       />
     )
@@ -492,15 +504,22 @@ function ExperimentsTab({ experiments, loading, error, errorCode, onRetry, onOpe
   )
 }
 
-function NewExperimentForm({ projectId, onCreated, onCancel }: { projectId: string; onCreated: () => void; onCancel?: () => void }) {
+/** Default variant names, shown as placeholders so they read as examples, and used when left blank. */
+function variantPlaceholder(index: number): string {
+  return index === 0 ? 'Control' : `Treatment ${String.fromCharCode(65 + index - 1)}`
+}
+
+function NewExperimentForm({ projectId, onCreated, onCancel, firstStep = false }: { projectId: string; onCreated: () => void; onCancel?: () => void; firstStep?: boolean }) {
   const toast = useToast()
+  // On an empty project this form is the page's first step (the first-step card steps aside).
+  useMarkPageEmpty(firstStep)
   const [loading, setLoading] = useState(false)
   const [form, setForm] = useState({ name: '', description: '', hypothesis: '', bandit_enabled: false })
   // Weights stay as typed text; parseVariantWeight validates on submit so an
   // empty field never reaches the API as NaN → null.
   const [variants, setVariants] = useState([
-    { name: 'Control', description: '', traffic_weight: '0.5' },
-    { name: 'Treatment A', description: '', traffic_weight: '0.5' },
+    { name: '', description: '', traffic_weight: '0.5' },
+    { name: '', description: '', traffic_weight: '0.5' },
   ])
 
   const set = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }))
@@ -508,7 +527,7 @@ function NewExperimentForm({ projectId, onCreated, onCancel }: { projectId: stri
   const submit = async () => {
     if (!form.name.trim()) { toast.error('Name required'); return }
     if (!projectId) { toast.error('Select a project'); return }
-    const parsedVariants = variants.map((v) => ({ ...v, name: v.name.trim(), traffic_weight: parseVariantWeight(v.traffic_weight) }))
+    const parsedVariants = variants.map((v, i) => ({ ...v, name: v.name.trim() || variantPlaceholder(i), traffic_weight: parseVariantWeight(v.traffic_weight) }))
     const badVariant = parsedVariants.find((v) => !v.name || v.traffic_weight == null)
     if (badVariant) {
       toast.error('Check the variants', 'Every variant needs a name and a weight between 0 and 1.')
@@ -562,6 +581,9 @@ function NewExperimentForm({ projectId, onCreated, onCancel }: { projectId: stri
   return (
     <Card className="max-w-2xl p-6 space-y-5">
       <h2 className="text-base font-semibold text-fg">New experiment</h2>
+      {firstStep && (
+        <p className="-mt-3 text-sm text-fg-muted">Compare two versions of a screen and see which one more of your users finish.</p>
+      )}
       {!projectId && (
         <p className="text-xs text-warn">Select a project from the switcher before creating an experiment.</p>
       )}
@@ -572,7 +594,7 @@ function NewExperimentForm({ projectId, onCreated, onCancel }: { projectId: stri
         </label>
         <label className="block space-y-1">
           <span className="text-sm font-medium text-fg">Hypothesis</span>
-          <Input value={form.hypothesis} onChange={(e) => set('hypothesis', e.target.value)} placeholder="Changing CTA to orange will increase clicks by 5%" />
+          <Input value={form.hypothesis} onChange={(e) => set('hypothesis', e.target.value)} placeholder="e.g. An orange button gets more clicks" />
         </label>
         <label className="flex items-center gap-2 text-sm text-fg">
           <input type="checkbox" checked={form.bandit_enabled} onChange={(e) => set('bandit_enabled', e.target.checked)} className="h-4 w-4" />
@@ -591,6 +613,7 @@ function NewExperimentForm({ projectId, onCreated, onCancel }: { projectId: stri
               label={i === 0 ? 'Name' : undefined}
               aria-label={i === 0 ? undefined : `Variant ${i + 1} name`}
               value={v.name}
+              placeholder={variantPlaceholder(i)}
               onChange={(e) => setVariants((vs) => vs.map((x, j) => j === i ? { ...x, name: e.target.value } : x))}
             />
             <Input
@@ -608,7 +631,7 @@ function NewExperimentForm({ projectId, onCreated, onCancel }: { projectId: stri
             )}
           </div>
         ))}
-        <Btn size="sm" variant="ghost" onClick={() => setVariants((vs) => [...vs, { name: `Treatment ${String.fromCharCode(64 + vs.length)}`, description: '', traffic_weight: '0.33' }])}>
+        <Btn size="sm" variant="ghost" onClick={() => setVariants((vs) => [...vs, { name: '', description: '', traffic_weight: '0.33' }])}>
           + Add variant
         </Btn>
       </div>
@@ -762,7 +785,7 @@ function ExperimentDrawer({ experiment, open, onClose, onLaunch, onStop, onRefre
         )}
 
         <div>
-          <p className="mb-2 text-xs font-medium text-fg-muted uppercase tracking-wide">Variants</p>
+          <p className="mb-2 text-xs font-semibold text-fg-secondary">Variants</p>
           <div className="space-y-2">
             {variants.map((v) => (
               <div key={v.id} className={`flex items-center gap-3 rounded-md border p-3 ${experiment.winner_variant_id === v.id ? 'border-ok/40 bg-ok/5' : 'border-edge-subtle'}`}>
@@ -785,7 +808,7 @@ function ExperimentDrawer({ experiment, open, onClose, onLaunch, onStop, onRefre
 
         {analysis && (
           <div className="space-y-3">
-            <p className="text-xs font-medium text-fg-muted uppercase tracking-wide">Analysis</p>
+            <p className="text-xs font-semibold text-fg-secondary">Analysis</p>
 
             <div className={`rounded-md border px-4 py-3 text-sm ${analysis.srm_ok ? 'border-ok/30 bg-ok/5' : 'border-danger/40 bg-surface-raised'}`}>
               <div className="font-medium text-fg">

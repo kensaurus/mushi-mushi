@@ -34,7 +34,7 @@ export function FixesFailedSummary({ fixes, onReviewCategory }: Props) {
           type="button"
           onClick={() => onReviewCategory?.(category)}
           title={`Show the ${count} failed ${count === 1 ? 'fix' : 'fixes'} with this cause`}
-          className="inline-flex items-center gap-1 rounded-full border border-danger/25 bg-surface-raised/80 px-2 py-0.5 text-2xs hover:border-danger/40 motion-safe:transition-opacity"
+          className="inline-flex items-center gap-1 rounded-sm bg-surface-raised/80 px-2 py-px text-2xs motion-safe:transition-opacity"
         >
           <span className="font-mono text-danger">{count}</span>
           <span className="text-fg-secondary">{fixCauseLabel(category)}</span>

@@ -60,7 +60,7 @@ mushi init --yes --project-id <uuid> --api-key mushi_xxx --skip-test-report
 MUSHI_API_KEY=mushi_xxx mushi connect --project-id <uuid> --endpoint <url> --wait   # wire a repo, wait for the first SDK heartbeat
 ```
 
-Other `init` flags: `--framework next`, `--cwd apps/web` (monorepos), `--endpoint <url>` (self-hosted), `--skip-install`, `--audit` (check an existing install instead).
+Other `init` flags: `--framework next`, `--cwd apps/web` (monorepos), `--endpoint <url>` (self-hosted), `--skip-install`, `--audit` (check an existing install instead), `--dry-run` (show what it would install and write, change nothing).
 
 **What needs your own key.** Reading reports, diagnoses and fix prompts does not. `mushi fix` hands the report to the built-in fixer by default (`--agent claude_code`): it uses your own Anthropic or OpenAI key when you have added one, and on hosted Mushi Mushi it falls back to Mushi Mushi's key when you have not. `--agent cursor_cloud` needs your own Cursor key. `mushi work` runs the Cursor CLI or Claude Code (`--agent claude`, CLI 0.36.0 or later) on your own computer instead, on the account that tool is signed in to.
 

@@ -4,7 +4,7 @@ import { intervalLabel, isActiveQueueRow, mergeQueueSummary, prLink, trainLine }
 describe('merge queue copy', () => {
   it('summarises the queue in one line, leaving empty parts out', () => {
     expect(mergeQueueSummary([{ state: 'queued' }, { state: 'waiting' }, { state: 'resolving' }, { state: 'blocked' }, { state: 'merged' }])).toBe(
-      '3 to merge · 1 held · 1 merged today',
+      '3 queued to merge · 1 held · 1 merged today',
     )
     expect(mergeQueueSummary([{ state: 'blocked' }, { state: 'blocked' }])).toBe('2 held')
     expect(mergeQueueSummary([{ state: 'removed' }])).toBe('')
@@ -21,8 +21,8 @@ describe('merge queue copy', () => {
     expect(trainLine({ state: 'testing', members: [1, 2, 3], attempt: 1, detail: null })).toBe('3 fixes · CI running')
     expect(trainLine({ state: 'testing', members: [1], attempt: 2, detail: 'Updating the branch.' })).toBe('1 fix · retry 2 · Updating the branch.')
     const now = new Date('2026-10-24T06:00:00Z')
-    expect(trainLine(null, { lastAt: '2026-10-24T04:00:00Z', intervalMinutes: 360, now, ready: 2 })).toBe('2 approved · next train leaves in 4 h')
-    expect(trainLine(null, { lastAt: null, intervalMinutes: 360, now, ready: 1 })).toBe('1 approved · next train leaves within a few minutes')
+    expect(trainLine(null, { lastAt: '2026-10-24T04:00:00Z', intervalMinutes: 360, now, ready: 2 })).toBe('2 queued · next train leaves in 4 h')
+    expect(trainLine(null, { lastAt: null, intervalMinutes: 360, now, ready: 1 })).toBe('1 queued · next train leaves within a few minutes')
     expect(trainLine(null, { lastAt: null, intervalMinutes: 360, now, ready: 0 })).toBe('')
   })
   it('names the interval in words', () => {

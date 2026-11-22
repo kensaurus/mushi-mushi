@@ -43,7 +43,7 @@ snippets.md → Reddit).
 - [ ] `search_mushi_docs` returns zero dead links (curl every URL it emits).
 - [x] VS Code extension published (`VSCE_PAT` / `OVSX_PAT` + `publish-vscode-extension.yml`) **or** marked "deferred" in `GTM-DISTRIBUTION.md` and not mentioned on HN (2026-09-21: deferred, with the reason and the un-defer steps; the Show HN copy in snippets.md does not mention it).
 - [ ] Privacy policy and terms return 200.
-- [ ] `CONTRIBUTING.md` carries the issue SLA (first reply within 24 h on weekdays).
+- [ ] `.github/CONTRIBUTING.md` carries the issue SLA (first reply within 24 h on weekdays).
 - [x] `apps/docs/content/launch-week.mdx` tells the truth (2026-09-21).
 - [x] JSON-LD `sameAs` lists only accounts that exist (2026-09-21).
 - [x] Bluesky queue has no enabled, unposted item with a `scheduled_for` in the past (2026-09-21: the four April items are `disabled` with a `disabled_reason`, and `post-bluesky.mjs` now refuses any item more than three days overdue).

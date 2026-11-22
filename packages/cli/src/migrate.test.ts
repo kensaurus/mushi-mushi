@@ -72,7 +72,7 @@ describe('detectMigrations — competitor SDK paths', () => {
     expect(matches.map((m) => m.guide.slug)).toEqual(['sentry-to-mushi'])
     /* Pin the coexistence framing: the summary must invite keeping Sentry,
      * not replacing it. If someone rewrites this into a rip-out pitch, the
-     * VISION.md "standalone OR enrich" drift guard fails here first. */
+     * docs/VISION.md "standalone OR enrich" drift guard fails here first. */
     expect(matches[0].guide.summary).toContain('Keep it')
   })
 

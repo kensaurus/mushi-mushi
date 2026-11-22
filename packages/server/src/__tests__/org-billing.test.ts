@@ -1,7 +1,7 @@
 /**
  * FILE: packages/server/src/__tests__/org-billing.test.ts
  * PURPOSE: A paid plan belongs to the TEAM (organization), not to one app
- *          (VISION.md §2.2). Found 2026-11-11: checkout, the Stripe customer
+ *          (docs/VISION.md §2.2). Found 2026-11-11: checkout, the Stripe customer
  *          and the subscription were keyed per app, so one $79 Studio
  *          checkout left every other app in the team on 100 diagnoses with a
  *          hard stop, and nothing wrote organizations.plan_id, so the seat

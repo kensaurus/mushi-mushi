@@ -18,7 +18,7 @@ Teams are available on Studio and Enterprise.
 
 | Plan | Teams |
 | --- | --- |
-| Free | Solo workspace, 1 app |
+| Free | Solo workspace, 3 apps |
 | Builder | Solo workspace, 3 apps |
 | Studio | 5 seats (you and up to 4 teammates; pending invitations count) and 10 apps |
 | Enterprise | Teams plus SSO and SOC 2 controls, no app limit |

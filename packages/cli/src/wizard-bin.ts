@@ -127,7 +127,24 @@ async function main(argv: readonly string[], opts: WizardBinOptions): Promise<vo
     endpoint: parsed.endpoint,
     sendTestReport: parsed.skipTestReport ? false : undefined,
     audit: parsed.audit,
+    dryRun: parsed.dryRun,
+    // Compare this bin's own version with its own latest on npm; the CLI's
+    // version (0.x) against the launcher's (1.x) warned on every run.
+    freshness: {
+      packageName: opts.bin,
+      version: opts.version,
+      upgradeCommand: wizardUpgradeCommand(opts.bin),
+    },
   })
+}
+
+/**
+ * How to run the newest wizard from a given bin: `create-mushi-mushi` runs
+ * through `npm create`, the others through `npx`.
+ * @internal Exported for tests only.
+ */
+export function wizardUpgradeCommand(bin: string): string {
+  return bin.startsWith('create-') ? `npm create ${bin.slice('create-'.length)}@latest` : `npx ${bin}@latest`
 }
 
 /** Run a bin's argv (`process.argv.slice(2)`), printing failures and exiting 1. */

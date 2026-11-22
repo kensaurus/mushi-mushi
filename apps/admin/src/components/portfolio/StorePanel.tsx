@@ -9,7 +9,8 @@
  */
 
 import { useState } from 'react'
-import { Badge, Btn, Callout, CopyButton, Loading, Section, type BadgeTone } from '../ui'
+import { Badge, Btn, Callout, CopyButton, Section, type BadgeTone } from '../ui'
+import { TimedLoading } from './TimedLoading'
 import { PageLoadError } from '../PageLoadError'
 import { usePageData } from '../../lib/usePageData'
 import { apiFetchMutate } from '../../lib/supabase'
@@ -68,7 +69,7 @@ export function StorePanel({ projectId }: { projectId: string }) {
         </Callout>
       )}
       {error && <PageLoadError error={error} resource="store listings" endpoint={path} onRetry={reload} />}
-      {loading && !data && <Loading text="Reading the store review…" />}
+      <TimedLoading waiting={loading && !data && !error} text="Reading the store review…" what="Store review" onRetry={reload} testId="portfolio-store-not-checked" />
       {data && data.status === 'never_run' && <p className="text-sm text-fg-muted">Not checked yet.</p>}
       {data && data.status !== 'never_run' && (
         <div className="flex flex-col gap-3">

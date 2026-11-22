@@ -22,6 +22,7 @@ import type { RecipeElementDetail, RecipeElementSummary } from '../../lib/recipe
 import { RecipeStateChip } from './RecipeStateChip'
 import { RecipeLinkList } from './RecipeLinks'
 import { RecipeDetailValue } from './RecipeDetailValue'
+import { recipeReasonText } from './recipeState'
 import { describeLastChecked, ELEMENT_CHECKED_BY, elementStateMeta } from './recipeState'
 import { hasChangeTab, RecipeChangeTab } from './RecipeChangeTab'
 import { detailWithoutView, pickElementView, RecipeElementView } from './RecipeElementViews'
@@ -78,7 +79,7 @@ export function RecipeSidePanel({ projectId, element, onClose }: RecipeSidePanel
         </Btn>
       </div>
 
-      <p className="text-xs text-fg-secondary">{element.reason}</p>
+      <p className="text-xs text-fg-secondary">{recipeReasonText(element.reason)}</p>
       <p className="text-2xs text-fg-faint">How it is checked: {ELEMENT_CHECKED_BY[element.key]}</p>
 
       <SegmentedControl<PanelTab>

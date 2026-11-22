@@ -6,7 +6,7 @@
 
 import { useCallback, useMemo, useState } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { usePageData } from '../lib/usePageData'
 import { usePageCopy } from '../lib/copy'
 import { usePublishPageContext } from '../lib/pageContext'
@@ -25,14 +25,7 @@ import {
   type AuditTabId,
 } from '../components/audit/types'
 import { PageLoadError } from '../components/PageLoadError'
-import {
-  agentActorsDetail,
-  agentActorsTooltip,
-  humanActorsDetail,
-  humanActorsTooltip,
-  systemActorsDetail,
-  systemActorsTooltip,
-} from '../lib/statTooltips/audit'
+import { agentActorsDetail, humanActorsDetail, systemActorsDetail } from '../lib/statTooltips/audit'
 import { auditLinks } from '../lib/statCardLinks'
 import { useToast } from '../lib/toast'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
@@ -41,19 +34,16 @@ import {
   Card,
   Badge,
   Btn,
-  FilterSelect,
   Input,
   SelectField,
   EmptyState,
   LogBlock,
   CodeValue,
-  StatCard,
   SegmentedControl,
 } from '../components/ui'
 import {
   ActionPill,
   ActionPillRow,
-  ContainedBlock,
   InlineProof,
   SignalChip,
 } from '../components/report-detail/ReportSurface'
@@ -63,6 +53,15 @@ import { DataTable, type ColumnDef } from '../components/DataTable'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { HeroSearch } from '../components/illustrations/HeroIllustrations'
 import { CHIP_TONE } from '../lib/chipTone'
+import { BarCell } from '../components/signal/BarCell'
+import {
+  AUDIT_OVERVIEW_ROWS,
+  auditActorLabel,
+  auditCountTone,
+  auditPagerVisible,
+  groupAuditRuns,
+  type AuditGroup,
+} from '../lib/auditView'
 
 interface AuditEntry {
   id: string
@@ -173,28 +172,84 @@ function sinceToIso(since: string): string | null {
   return new Date(now - ms).toISOString()
 }
 
+/**
+ * Red only for a failure, amber only for the warning actions (revoked keys,
+ * removed plugins, disconnected integrations); every other action is a
+ * neutral record, not a status (round-2 review 2026-11-18).
+ */
 function actionTone(action: string): string {
+  if (action.endsWith('.failed')) return CHIP_TONE.dangerSubtle
   if (
-    action.endsWith('.failed') ||
     action.endsWith('.deleted') ||
     action.endsWith('.revoked') ||
-    action.endsWith('.dismissed')
+    action.endsWith('.uninstalled') ||
+    action.endsWith('.disconnected')
   ) {
-    return CHIP_TONE.dangerSubtle
-  }
-  if (
-    action.endsWith('.applied') ||
-    action.endsWith('.created') ||
-    action.endsWith('.minted') ||
-    action.endsWith('.installed') ||
-    action.endsWith('.fulfilled')
-  ) {
-    return 'bg-ok-muted/50 text-ok-foreground border border-ok/25'
-  }
-  if (action.endsWith('.dispatched') || action.endsWith('.classified') || action.endsWith('.connected')) {
-    return 'bg-brand/12 text-brand border border-brand/28'
+    return CHIP_TONE.warnSubtle
   }
   return 'bg-surface-overlay text-fg-secondary'
+}
+
+function auditResourceLabel(e: AuditEntry): string {
+  return `${e.resource_type}${e.resource_id ? `:${e.resource_id.slice(0, 8)}` : ''}`
+}
+
+function isExpandable(g: AuditGroup<AuditEntry>): boolean {
+  return g.entries.length > 1 || Boolean(g.first.metadata && Object.keys(g.first.metadata).length > 0)
+}
+
+/** Newest time; a run of several shows its span ("10/30 11:33 AM – 4:09 PM"). */
+function AuditGroupTime({ group }: { group: AuditGroup<AuditEntry> }) {
+  const newest = new Date(group.first.created_at)
+  const oldest = new Date(group.entries[group.entries.length - 1].created_at)
+  const text =
+    group.entries.length > 1 && newest.toDateString() === oldest.toDateString()
+      ? `${newest.toLocaleDateString()} ${oldest.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} – ${newest.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
+      : group.entries.length > 1
+        ? `${oldest.toLocaleDateString()} – ${newest.toLocaleDateString()}`
+        : newest.toLocaleString()
+  return (
+    <time dateTime={group.first.created_at} className="text-2xs text-fg-muted tabular-nums whitespace-nowrap">
+      {text}
+    </time>
+  )
+}
+
+function AuditGroupAction({ group }: { group: AuditGroup<AuditEntry> }) {
+  return (
+    <span className="inline-flex min-w-0 items-center gap-1.5">
+      <Badge className={`${actionTone(group.first.action)} font-mono`}>{group.first.action}</Badge>
+      {group.entries.length > 1 ? (
+        <span className="text-2xs font-semibold text-fg-secondary tabular-nums" title={`${group.entries.length} identical changes in a row`}>
+          ×{group.entries.length}
+        </span>
+      ) : null}
+    </span>
+  )
+}
+
+/** Each change in the run, newest first, with its metadata. */
+function AuditGroupDetail({ group }: { group: AuditGroup<AuditEntry> }) {
+  return (
+    <div className="space-y-2">
+      {group.entries.map((entry) => (
+        <div key={entry.id} className="space-y-1">
+          {group.entries.length > 1 ? (
+            <div className="text-2xs text-fg-muted tabular-nums">{new Date(entry.created_at).toLocaleString()}</div>
+          ) : null}
+          {entry.metadata && Object.keys(entry.metadata).length > 0 ? (
+            <LogBlock value={JSON.stringify(entry.metadata, null, 2)} label="Metadata" />
+          ) : null}
+        </div>
+      ))}
+      {group.first.resource_id ? (
+        <div className="space-y-1">
+          <div className="text-2xs text-fg-muted">Full resource ID</div>
+          <CodeValue value={group.first.resource_id} tone="id" />
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 export function AuditPage() {
@@ -296,7 +351,11 @@ export function AuditPage() {
   const total = data?.count ?? 0
   const totalPages = Math.max(Math.ceil(total / PAGE_SIZE), 1)
 
+  // Consecutive identical rows collapse into one ("settings.updated ×4").
+  const groups = useMemo(() => groupAuditRuns(logs), [logs])
   const [expanded, setExpanded] = useState<string | null>(null)
+  // Phone: the six filters sit behind one "Filter" button (they took ~360px).
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [searchDraft, setSearchDraft] = useState(q)
   const [actorDraft, setActorDraft] = useState(actor)
 
@@ -344,53 +403,41 @@ export function AuditPage() {
 
   const activeFilterCount = [action, resourceType, actor, actorType, outcome, since, q].filter(Boolean).length
 
-  const columns = useMemo<ColumnDef<AuditEntry, unknown>[]>(
+  const columns = useMemo<ColumnDef<AuditGroup<AuditEntry>, unknown>[]>(
     () => [
       {
         id: 'time',
         header: 'Time',
-        accessorFn: (e) => e.created_at,
+        accessorFn: (g) => g.first.created_at,
         enableSorting: true,
-        cell: ({ row }) => (
-          <SignalChip tone="neutral" className="font-mono tabular-nums whitespace-nowrap">
-            {new Date(row.original.created_at).toLocaleString()}
-          </SignalChip>
-        ),
+        cell: ({ row }) => <AuditGroupTime group={row.original} />,
       },
       {
         id: 'action',
         header: 'Action',
         enableSorting: true,
-        accessorFn: (e) => e.action,
-        cell: ({ row }) => (
-          <Badge className={`${actionTone(row.original.action)} font-mono`}>{row.original.action}</Badge>
-        ),
+        accessorFn: (g) => g.first.action,
+        cell: ({ row }) => <AuditGroupAction group={row.original} />,
       },
       {
         id: 'actor',
         header: 'Actor',
         enableSorting: true,
-        accessorFn: (e) => e.actor_name ?? e.actor_display_email ?? e.actor_email ?? (e.actor_id ? 'Unnamed actor' : 'system'),
+        accessorFn: (g) => auditActorLabel(g.first),
         // A name or email, never a raw id; the id stays in the tooltip.
         cell: ({ row }) => (
-          <span
-            className="truncate text-xs text-fg-muted block max-w-56"
-            title={row.original.actor_id ?? undefined}
-          >
-            {row.original.actor_name ?? row.original.actor_display_email ?? row.original.actor_email ?? (row.original.actor_id ? 'Unnamed actor' : 'system')}
+          <span className="truncate text-xs text-fg-muted block max-w-56" title={row.original.first.actor_id ?? undefined}>
+            {auditActorLabel(row.original.first)}
           </span>
         ),
       },
       {
         id: 'resource',
         header: 'Resource',
-        accessorFn: (e) => `${e.resource_type}${e.resource_id ? `:${e.resource_id}` : ''}`,
+        accessorFn: (g) => `${g.first.resource_type}${g.first.resource_id ? `:${g.first.resource_id}` : ''}`,
         enableSorting: true,
         cell: ({ row }) => (
-          <SignalChip tone="neutral" className="font-mono whitespace-nowrap">
-            {row.original.resource_type}
-            {row.original.resource_id ? `:${row.original.resource_id.slice(0, 8)}` : ''}
-          </SignalChip>
+          <span className="font-mono text-2xs text-fg-secondary whitespace-nowrap">{auditResourceLabel(row.original.first)}</span>
         ),
       },
       {
@@ -398,8 +445,7 @@ export function AuditPage() {
         header: '',
         enableSorting: false,
         cell: ({ row }) => {
-          const has = row.original.metadata && Object.keys(row.original.metadata).length > 0
-          if (!has) return null
+          if (!isExpandable(row.original)) return null
           return (
             <span aria-hidden className="text-2xs text-fg-faint block text-center w-3">
               {expanded === row.original.id ? '▾' : '▸'}
@@ -457,20 +503,39 @@ export function AuditPage() {
   )
 
   const filterPanel = (
-    <Card className="p-3 space-y-2">
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-2" data-dav-anchor="audit:decide">
-        <FilterSelect
-          label="Action"
-          value={action}
-          options={ACTION_OPTIONS}
-          onChange={(e) => updateParam('action', e.currentTarget.value)}
-        />
-        <FilterSelect
+    <div className="space-y-2">
+    <Btn
+      variant="ghost"
+      size="sm"
+      className="md:hidden"
+      aria-expanded={filtersOpen}
+      aria-controls="audit-filters"
+      onClick={() => setFiltersOpen((v) => !v)}
+    >
+      {filtersOpen ? 'Hide filters' : activeFilterCount > 0 ? `Filter (${activeFilterCount})` : 'Filter'}
+    </Btn>
+    <Card id="audit-filters" className={`p-3 space-y-2 ${filtersOpen ? '' : 'hidden md:block'}`}>
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-2 items-end" data-dav-anchor="audit:decide">
+        <SelectField label="Action" value={action} onChange={(e) => updateParam('action', e.currentTarget.value)}>
+          <option value="">All actions</option>
+          {ACTION_OPTIONS.filter(Boolean).map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </SelectField>
+        <SelectField
           label="Resource"
           value={resourceType}
-          options={RESOURCE_OPTIONS}
           onChange={(e) => updateParam('resource_type', e.currentTarget.value)}
-        />
+        >
+          <option value="">All resources</option>
+          {RESOURCE_OPTIONS.filter(Boolean).map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </SelectField>
         <SelectField
           label="Actor type"
           value={actorType}
@@ -585,7 +650,12 @@ export function AuditPage() {
         </div>
       )}
     </Card>
+    </div>
   )
+
+  // Overview: the newest few groups only; the Log tab has filters and the pager.
+  const overviewOnly = activeTab === 'overview'
+  const shownGroups = overviewOnly ? groups.slice(0, AUDIT_OVERVIEW_ROWS) : groups
 
   const logTable = loading ? (
     <TableSkeleton rows={10} columns={5} showFilters={false} label="Loading audit logs" />
@@ -603,56 +673,87 @@ export function AuditPage() {
     />
   ) : (
     <>
-      <div data-dav-anchor="audit:verify">
-        <DataTable<AuditEntry>
-          data={logs}
+      <div data-dav-anchor="audit:verify" className="hidden md:block">
+        <DataTable<AuditGroup<AuditEntry>>
+          data={shownGroups}
           columns={columns}
-          getRowId={(e) => e.id}
+          getRowId={(g) => g.id}
           density="compact"
           ariaLabel="Audit log entries"
           expandedIds={expandedIds}
-          onRowClick={(entry) => {
-            const hasMeta = entry.metadata && Object.keys(entry.metadata).length > 0
-            if (!hasMeta) return
-            setExpanded(expanded === entry.id ? null : entry.id)
+          onRowClick={(group) => {
+            if (!isExpandable(group)) return
+            setExpanded(expanded === group.id ? null : group.id)
           }}
-          renderExpanded={(entry) => (
-            <div className="space-y-2">
-              <LogBlock value={JSON.stringify(entry.metadata ?? {}, null, 2)} label="Metadata" />
-              {entry.resource_id && (
-                <ContainedBlock tone="muted" className="space-y-1">
-                  <InlineProof className="border-0 bg-transparent px-0 py-0">Full resource ID</InlineProof>
-                  <CodeValue value={entry.resource_id} tone="id" />
-                </ContainedBlock>
-              )}
-            </div>
-          )}
+          renderExpanded={(group) => <AuditGroupDetail group={group} />}
         />
       </div>
-      <ContainedBlock tone="muted" className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between">
-        <InlineProof>
-          Showing {offset + 1}–{Math.min(offset + logs.length, total)} of {total.toLocaleString()}
-        </InlineProof>
-        <ActionPillRow>
-          <ActionPill
-            tone="neutral"
-            {...(page > 1 ? { onClick: () => updateParam('page', String(page - 1)) } : {})}
-            className={page <= 1 ? 'opacity-40' : undefined}
-          >
-            ← Prev
-          </ActionPill>
-          <SignalChip tone="neutral">
-            Page {page} / {totalPages}
-          </SignalChip>
-          <ActionPill
-            tone="neutral"
-            {...(page < totalPages ? { onClick: () => updateParam('page', String(page + 1)) } : {})}
-            className={page >= totalPages ? 'opacity-40' : undefined}
-          >
-            Next →
-          </ActionPill>
-        </ActionPillRow>
-      </ContainedBlock>
+      {/* Phone: one stacked card per row, so Actor and Resource never hide behind a sideways scroll. */}
+      <ul className="space-y-2 md:hidden" aria-label="Audit log entries" data-testid="audit-log-cards">
+        {shownGroups.map((group) => {
+          const open = expanded === group.id
+          return (
+            <li key={group.id}
+              // mushi-mushi-allowlist: a list row in a grouped list, not a card
+              className="rounded-md border border-edge-subtle bg-surface-raised px-3 py-2 text-xs">
+              <button
+                type="button"
+                className="flex w-full min-w-0 flex-col items-start gap-1 text-left"
+                aria-expanded={isExpandable(group) ? open : undefined}
+                onClick={() => {
+                  if (isExpandable(group)) setExpanded(open ? null : group.id)
+                }}
+              >
+                <span className="flex w-full min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                  <AuditGroupAction group={group} />
+                  <AuditGroupTime group={group} />
+                </span>
+                <span className="w-full truncate text-fg-muted">{auditActorLabel(group.first)}</span>
+                <span className="w-full truncate font-mono text-2xs text-fg-secondary">{auditResourceLabel(group.first)}</span>
+              </button>
+              {open ? (
+                <div className="mt-2">
+                  <AuditGroupDetail group={group} />
+                </div>
+              ) : null}
+            </li>
+          )
+        })}
+      </ul>
+      {overviewOnly ? (
+        groups.length > AUDIT_OVERVIEW_ROWS || total > logs.length ? (
+          <div>
+            <Btn variant="ghost" size="sm" onClick={() => setActiveTab('log')}>
+              Open the full log
+            </Btn>
+          </div>
+        ) : null
+      ) : auditPagerVisible(totalPages) ? (
+        <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between">
+          <InlineProof>
+            Showing {offset + 1}–{Math.min(offset + logs.length, total)} of {total.toLocaleString()}
+          </InlineProof>
+          <ActionPillRow>
+            <ActionPill
+              tone="neutral"
+              {...(page > 1 ? { onClick: () => updateParam('page', String(page - 1)) } : {})}
+              className={page <= 1 ? 'opacity-40' : undefined}
+            >
+              ← Prev
+            </ActionPill>
+            <SignalChip tone="neutral">
+              Page {page} / {totalPages}
+            </SignalChip>
+            <ActionPill
+              tone="neutral"
+              {...(page < totalPages ? { onClick: () => updateParam('page', String(page + 1)) } : {})}
+              className={page >= totalPages ? 'opacity-40' : undefined}
+            >
+              Next →
+            </ActionPill>
+          </ActionPillRow>
+        </div>
+      ) : null}
     </>
   )
 
@@ -725,7 +826,7 @@ export function AuditPage() {
           <Badge tone="warnSubtle">{stats.planDisplayName} — upgrade for audit</Badge>
         )}
         <Btn variant="primary" size="sm" onClick={exportCsv} disabled={logs.length === 0} data-dav-anchor="audit:act">
-          Export CSV ({logs.length})
+          Export CSV
         </Btn>
       </PageHeaderBar>
 
@@ -748,6 +849,7 @@ export function AuditPage() {
             children: (
               <AuditSnapshotStrip
                 stats={stats}
+                latestActor={logs[0] && logs[0].action === stats.latestAction ? auditActorLabel(logs[0]) : null}
                 statsFetchedAt={statsFetchedAt ?? lastFetchedAt}
                 statsValidating={statsValidating || isValidating}
               />
@@ -766,13 +868,12 @@ export function AuditPage() {
 
       {activeTab === 'overview' && (
         <>
+          {logTable}
           <AuditReadout
             stats={stats}
             fetchedAt={statsFetchedAt ?? lastFetchedAt}
             isValidating={statsValidating || isValidating}
           />
-          {filterPanel}
-          {logTable}
         </>
       )}
 
@@ -784,62 +885,61 @@ export function AuditPage() {
       )}
 
       {activeTab === 'breakdown' && (
-        <Card className="p-5 space-y-4">
-          {/* 24h, not 7-day: every card below renders a *Count24h value, and
-              this tab's own description says "24h actor mix". The heading was
-              the outlier and made a week of activity read ~7x under-reported. */}
-          <div className="text-xs font-medium uppercase tracking-wider">24h actor mix</div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <StatCard
-              label="Human actors"
-              value={stats.humanCount24h}
-              accent="text-ok"
-              tooltip={humanActorsTooltip(stats)}
-              detail={humanActorsDetail()}
-              to={auditLinks.humanActors}
-            />
-            <StatCard
-              label="Agent actors"
-              value={stats.agentCount24h}
-              accent={stats.agentCount24h > 0 ? 'text-info' : undefined}
-              tooltip={agentActorsTooltip(stats)}
-              detail={agentActorsDetail()}
-              to={auditLinks.agentActors}
-            />
-            <StatCard
-              label="System actors"
-              value={stats.systemCount24h}
-              accent={stats.systemCount24h > 0 ? 'text-warn' : undefined}
-              tooltip={systemActorsTooltip(stats)}
-              detail={systemActorsDetail()}
-              to={auditLinks.systemActors}
-            />
-          </div>
-          {stats.topAction7d ? (
-            <ContainedBlock tone="muted" className="space-y-2">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <SignalChip tone="brand">Most frequent (7d)</SignalChip>
+        <Card className="p-4 space-y-4">
+          {/* 24h, not 7-day: every count below is a *Count24h value. One list
+              with bars, not three tiles in a card; a zero row reads dim. */}
+          <section className="space-y-2" aria-labelledby="audit-actor-mix">
+            <h3 id="audit-actor-mix" className="text-xs font-semibold">Who made changes (24h)</h3>
+            <ul className="space-y-1.5">
+              {[
+                { key: 'human', label: 'People', value: stats.humanCount24h, detail: humanActorsDetail(), to: auditLinks.humanActors },
+                { key: 'agent', label: 'Agents', value: stats.agentCount24h, detail: agentActorsDetail(), to: auditLinks.agentActors },
+                { key: 'system', label: 'System', value: stats.systemCount24h, detail: systemActorsDetail(), to: auditLinks.systemActors },
+              ].map((r) => {
+                const max = Math.max(stats.humanCount24h, stats.agentCount24h, stats.systemCount24h)
+                return (
+                  <li key={r.key}
+                    // mushi-mushi-allowlist: label / bar / value columns shared by the three rows
+                    className={`grid grid-cols-[5rem_auto_1fr] items-center gap-3 text-xs ${r.value === 0 ? 'text-fg-faint' : 'text-fg'}`}>
+                    <Link to={r.to} className="font-medium underline decoration-edge underline-offset-4 hover:decoration-brand">{r.label}</Link>
+                    <BarCell value={r.value} max={max} text={r.value.toLocaleString()} widthClass="w-24" />
+                    <span className="min-w-0 truncate text-2xs text-fg-muted">{r.detail}</span>
+                  </li>
+                )
+              })}
+            </ul>
+          </section>
+          <section className="space-y-1.5 border-t border-edge-subtle pt-3" aria-labelledby="audit-top-action">
+            <h3 id="audit-top-action" className="text-xs font-semibold">Most frequent action (7d)</h3>
+            {stats.topAction7d ? (
+              <div className="flex flex-wrap items-center gap-2 text-xs">
                 <Badge className={`${actionTone(stats.topAction7d)} font-mono`}>{stats.topAction7d}</Badge>
+                <span className="text-fg-muted">{topActionLabel(stats)}</span>
+                <ActionPill
+                  tone="neutral"
+                  onClick={() => applyPreset({ tab: 'log', action: stats.topAction7d ?? '', since: '7d' })}
+                >
+                  Filter log to this action
+                </ActionPill>
               </div>
-              <InlineProof>{topActionLabel(stats)}</InlineProof>
-              <ActionPill
-                tone="neutral"
-                onClick={() => applyPreset({ tab: 'log', action: stats.topAction7d ?? '', since: '7d' })}
-              >
-                Filter log to this action
-              </ActionPill>
-            </ContainedBlock>
-          ) : (
-            <EmptySectionMessage
-              text="No 7-day activity"
-              hint="Broaden the window on the Log tab or wait for the next mutation."
-            />
-          )}
-          <ActionPillRow className="pt-1">
-            <ActionPill tone="danger" onClick={() => applyPreset({ tab: 'log', since: '24h', outcome: 'failure' })}>
+            ) : (
+              <EmptySectionMessage
+                text="No 7-day activity"
+                hint="Broaden the window on the Log tab or wait for the next mutation."
+              />
+            )}
+          </section>
+          <ActionPillRow className="border-t border-edge-subtle pt-3">
+            <ActionPill
+              tone={auditCountTone('failure', stats.failCount24h)}
+              onClick={() => applyPreset({ tab: 'log', since: '24h', outcome: 'failure' })}
+            >
               Failures (24h): {stats.failCount24h.toLocaleString()}
             </ActionPill>
-            <ActionPill tone="warn" onClick={() => applyPreset({ tab: 'log', since: '24h', outcome: 'warning' })}>
+            <ActionPill
+              tone={auditCountTone('warning', stats.warnCount24h)}
+              onClick={() => applyPreset({ tab: 'log', since: '24h', outcome: 'warning' })}
+            >
               Warnings (24h): {stats.warnCount24h.toLocaleString()}
             </ActionPill>
             <ActionPill tone="neutral" onClick={() => applyPreset({ tab: 'log', actor_type: 'system', since: '24h' })}>

@@ -7,6 +7,10 @@
 
 import { describe, expect, it } from 'vitest'
 import {
+  DEFAULT_REPORT_STATUS,
+  resolveStatusParam,
+  statusChipShown,
+  statusParamValue,
   PLATFORM_FILTER_OPTIONS,
   SDK_FILTER_OPTIONS,
   SEVERITY_CHIPS,
@@ -111,17 +115,58 @@ describe('sanitizeListFilters (stale bookmarks)', () => {
   })
 
   it('drops values the list cannot apply instead of failing the page', () => {
-    expect(sanitizeListFilters({ platform: 'playstation', sdkPackage: 'left-pad', days: '400', origin: 'moon' })).toEqual({
+    expect(sanitizeListFilters({ platform: 'playstation', sdkPackage: 'left-pad', days: '400', origin: 'moon', source: 'carrier-pigeon' })).toEqual({
       platform: '',
       sdkPackage: '',
       days: '',
       origin: '',
+      source: '',
     })
-    expect(sanitizeListFilters({ platform: 'ios', sdkPackage: '@mushi-mushi/react-native', days: '14', origin: 'local' })).toEqual({
+    expect(sanitizeListFilters({ platform: 'ios', sdkPackage: '@mushi-mushi/react-native', days: '14', origin: 'local', source: 'alarm' })).toEqual({
       platform: 'ios',
       sdkPackage: '@mushi-mushi/react-native',
       days: '14',
       origin: 'local',
+      source: 'alarm',
     })
+  })
+})
+
+describe('default status (R2 sweep 2026-11-18)', () => {
+  it('opens on Open; ?status=all lists every bug', () => {
+    expect(resolveStatusParam(null)).toBe(DEFAULT_REPORT_STATUS)
+    expect(resolveStatusParam('')).toBe('open')
+    expect(resolveStatusParam('all')).toBe('')
+    expect(resolveStatusParam('fixed')).toBe('fixed')
+  })
+
+  it('round-trips through the URL', () => {
+    expect(statusParamValue('open')).toBeNull()
+    expect(statusParamValue('')).toBe('all')
+    expect(statusParamValue('new')).toBe('new')
+    for (const v of ['open', '', 'new', 'dismissed']) {
+      expect(resolveStatusParam(statusParamValue(v))).toBe(v)
+    }
+  })
+
+  it('no status chip is amber or violet: counts are not warnings or selections', () => {
+    for (const value of ['open', 'new', 'classified']) {
+      expect(STATUS_CHIPS.find((c) => c.value === value)?.tone).toBe('default')
+    }
+  })
+})
+
+describe('statusChipShown', () => {
+  const stats = { total: 10, openCount: 4, byStatus: { new: 2, fixed: 6, verified: 0, reopened: 0 } }
+  it('hides empty buckets ("Verified 0", "Reopened 0")', () => {
+    expect(statusChipShown('verified', false, stats)).toBe(false)
+    expect(statusChipShown('reopened', false, stats)).toBe(false)
+    expect(statusChipShown('fixed', false, stats)).toBe(true)
+  })
+  it('always shows All, Open and the active chip, and everything before counts load', () => {
+    expect(statusChipShown('', false, { total: 0 })).toBe(true)
+    expect(statusChipShown('open', false, { openCount: 0 })).toBe(true)
+    expect(statusChipShown('verified', true, stats)).toBe(true)
+    expect(statusChipShown('verified', false, null)).toBe(true)
   })
 })

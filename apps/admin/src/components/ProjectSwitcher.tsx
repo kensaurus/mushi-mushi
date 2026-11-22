@@ -524,7 +524,7 @@ export function ProjectSwitcher() {
         >
           <div className="max-h-96 overflow-y-auto">
           {otherTeams.length > 0 && (
-            <p className="px-2.5 pt-2 pb-1 text-3xs font-medium uppercase tracking-wide text-fg-faint">
+            <p className="px-2.5 pt-2 pb-1 text-3xs font-semibold text-fg-secondary">
               {currentTeamName ? `${currentTeamName} (this team)` : 'This team'}
             </p>
           )}
@@ -542,7 +542,7 @@ export function ProjectSwitcher() {
                       setGroupFilter(slug)
                       writeActiveGroup(slug)
                     }}
-                    className={`rounded-full border px-2 py-0.5 text-2xs ${selected ? SELECTED_TONE : SELECTED_TONE_IDLE}`}
+                    className={`rounded-sm px-2 py-px text-2xs ${selected ? SELECTED_TONE : SELECTED_TONE_IDLE}`}
                   >
                     {g ? g.name : 'All'}
                   </button>
@@ -633,7 +633,7 @@ export function ProjectSwitcher() {
           </ul>
           {otherTeams.map(({ team, projects: teamProjects }) => (
             <div key={team.id} className="border-t border-edge-subtle">
-              <p className="px-2.5 pt-2 pb-1 text-3xs font-medium uppercase tracking-wide text-fg-faint">
+              <p className="px-2.5 pt-2 pb-1 text-3xs font-semibold text-fg-secondary">
                 {team.name}
               </p>
               <ul role="listbox" aria-label={`Projects in ${team.name}`} className="pb-1">

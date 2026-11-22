@@ -15,7 +15,7 @@
  *     editor. Mushi never runs them.
  */
 
-import { parse as parseYaml } from 'npm:yaml@2'
+import { parseWorkflowYaml as parseYaml } from './workflow-yaml.ts'
 
 export type DriftGate = 'ci_drift' | 'deploy_drift' | 'env_drift' | 'schema_drift' | 'code_health'
 export type DriftSeverity = 'info' | 'warn' | 'error'

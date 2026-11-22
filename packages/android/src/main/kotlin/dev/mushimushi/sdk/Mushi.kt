@@ -126,11 +126,22 @@ object Mushi {
         view.setOnClickListener { showWidget() }
     }
 
-    /** Submit a report. Auto-attaches device context, breadcrumbs (PII-scrubbed), and screenshot. */
+    /**
+     * Submit a report. Attaches device context and breadcrumbs (PII-scrubbed).
+     *
+     * Screenshot: pass [screenshot] (raw base64 JPEG/PNG) to send an image the
+     * reporter has already seen; nothing is captured then. Pass
+     * `captureScreenshot = false` to send none. Left `null`, a screenshot is
+     * captured now when `config.captureScreenshot` is on, without the reporter
+     * seeing it, so do that only for reports your app files itself.
+     */
+    @JvmOverloads
     fun report(
         description: String,
         category: String = "bug",
-        metadata: Map<String, Any?>? = null
+        metadata: Map<String, Any?>? = null,
+        screenshot: String? = null,
+        captureScreenshot: Boolean? = null
     ) {
         val cfg = config ?: return
         val client = apiClient ?: return
@@ -156,7 +167,9 @@ object Mushi {
 
         breadcrumbs.add(MushiBreadcrumb.Category.LIFECYCLE, message = "report submitted: $category")
 
-        if (cfg.captureScreenshot) {
+        if (screenshot != null) {
+            payload["screenshot"] = screenshot
+        } else if (captureScreenshot ?: cfg.captureScreenshot) {
             currentActivity?.let { act ->
                 ScreenshotCapture.captureBase64(act)?.let { payload["screenshot"] = it }
             }

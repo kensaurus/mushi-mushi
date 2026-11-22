@@ -39,6 +39,7 @@ vi.mock('../../lib/usePageData', () => ({
 }))
 
 import { StoreReviewsPanel } from './StoreReviewsPanel'
+import { pullBlocker } from './storeReviewsView'
 
 async function flush(): Promise<void> {
   for (let i = 0; i < 6; i += 1) await Promise.resolve()
@@ -76,6 +77,8 @@ describe('StoreReviewsPanel', () => {
   it('is off by default: pulling is disabled and switching on saves the setting', async () => {
     await render()
     expect(pullButton().disabled).toBe(true)
+    // The reason stands beside the button, one line.
+    expect(container.querySelector('[data-testid="store-pull-blocker"]')?.textContent).toBe('Turn on "File new store reviews as reports" first.')
     const toggle = container.querySelector<HTMLInputElement>('input[type="checkbox"]')!
     expect(toggle.checked).toBe(false)
     await act(async () => {
@@ -108,6 +111,7 @@ describe('StoreReviewsPanel', () => {
     expect(toggle.closest('fieldset')?.disabled).toBe(true)
     expect(container.textContent).toContain('Owners and admins only.')
     expect(pullButton().disabled).toBe(false)
+    expect(container.querySelector('[data-testid="store-pull-blocker"]')).toBeNull()
   })
 
   it('a viewer cannot pull', async () => {
@@ -117,5 +121,17 @@ describe('StoreReviewsPanel', () => {
     await render()
     expect(pullButton().disabled).toBe(true)
     expect(pullButton().title).toBe('Viewers cannot pull store reviews.')
+    expect(container.querySelector('[data-testid="store-pull-blocker"]')?.textContent).toBe('Viewers cannot pull store reviews.')
+  })
+
+  it('disables Pull now only for a real reason', () => {
+    const on = { settings: { enabled: true }, sources: [{ connected: true }], canPull: true }
+    expect(pullBlocker(on)).toBeNull()
+    expect(pullBlocker(null)).toBe('Reading the settings…')
+    expect(pullBlocker({ ...on, canPull: false })).toBe('Viewers cannot pull store reviews.')
+    expect(pullBlocker({ ...on, settings: { enabled: false } })).toContain('Turn on')
+    // Nothing to pull from: no source, or only sources whose key could not be read.
+    expect(pullBlocker({ ...on, sources: [] })).toBe('Connect App Store Connect or Google Play first.')
+    expect(pullBlocker({ ...on, sources: [{ connected: false }] })).toBe('Connect App Store Connect or Google Play first.')
   })
 })

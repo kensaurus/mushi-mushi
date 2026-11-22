@@ -28,6 +28,7 @@ vi.mock('../../supabase/functions/_shared/plans.ts', () => ({
 }))
 
 import {
+  byokLiftsFreeCap,
   decideDiagnosisQuota,
   type DiagnosisQuotaVerdict,
 } from '../../supabase/functions/_shared/quota.ts'
@@ -139,6 +140,27 @@ describe('decideDiagnosisQuota — Free Cloud (hard stop at 50)', () => {
     expect(v.allowed).toBe(false)
     expect(v.reason).toBe('NO_SUBSCRIPTION_OVER_FREE')
     expect(v.overage).toBe(false)
+  })
+})
+
+describe('byokLiftsFreeCap — a free project with its own LLM key is not capped', () => {
+  it('lifts the free cap when the project brings its own key', () => {
+    const over = decide({ plan: FREE_CLOUD, used: 50, hasSubscription: false })
+    const v = byokLiftsFreeCap(over, true)
+    expect(v.allowed).toBe(true)
+    expect(v.reason).toBeUndefined()
+  })
+
+  it("keeps the free cap when the project uses Mushi Mushi's key", () => {
+    const over = decide({ plan: FREE_CLOUD, used: 50, hasSubscription: false })
+    expect(byokLiftsFreeCap(over, false)).toEqual(over)
+  })
+
+  it("never lifts a paid plan's cap or a spend cap", () => {
+    const paidStop = { ...decide({ plan: FREE_CLOUD, used: 50, hasSubscription: true }), reason: 'OVER_INCLUDED_NO_OVERAGE' as const }
+    expect(byokLiftsFreeCap(paidStop, true).allowed).toBe(false)
+    const capped = { ...paidStop, reason: 'SPEND_CAP_REACHED' as const }
+    expect(byokLiftsFreeCap(capped, true).allowed).toBe(false)
   })
 })
 

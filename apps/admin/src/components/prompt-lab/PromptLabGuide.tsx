@@ -62,7 +62,7 @@ export function PromptLabGuide({ topPriority, stats }: Props) {
         })}
       </div>
       <div>
-        <p className="mb-1 text-3xs font-semibold uppercase tracking-wider text-fg-faint">
+        <p className="mb-1 text-3xs font-semibold text-fg-secondary">
           Pipeline stages
         </p>
         <ul className="list-disc pl-4 space-y-0.5 text-2xs text-fg-muted">

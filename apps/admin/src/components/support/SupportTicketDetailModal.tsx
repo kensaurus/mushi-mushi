@@ -76,7 +76,7 @@ export function SupportTicketDetailModal({
       ariaLabel={`Support ticket: ${ticket.subject}`}
       title={<span className="truncate">{ticket.subject}</span>}
       headerAction={
-        <span className={`inline-flex items-center rounded-sm border px-2 py-0.5 text-2xs font-medium ${TICKET_STATUS_TONE[ticket.status]}`}>
+        <span className={`inline-flex items-center rounded-sm px-2 py-px text-2xs font-medium ${TICKET_STATUS_TONE[ticket.status]}`}>
           {TICKET_STATUS_LABEL[ticket.status]}
         </span>
       }
@@ -106,7 +106,7 @@ export function SupportTicketDetailModal({
       <div className="space-y-3 text-xs">
         {release && release.status === 'published' && (
           <ContainedBlock tone="ok" className="space-y-1">
-            <p className="text-2xs font-semibold uppercase tracking-wider">
+            <p className="text-2xs font-semibold">
               Shipped in release
             </p>
             <p className="text-sm font-mono font-bold tabular-nums">
@@ -138,7 +138,7 @@ export function SupportTicketDetailModal({
         />
 
         <section>
-          <h4 className="text-2xs uppercase tracking-wider text-fg-faint mb-1.5">Your message</h4>
+          <h4 className="text-2xs text-fg-secondary mb-1.5 font-semibold">Your message</h4>
           <ContainedBlock tone="muted">
             <p className="text-fg-secondary leading-relaxed whitespace-pre-wrap break-words">
               {ticket.body?.trim() || <span className="italic text-fg-faint">No message recorded.</span>}
@@ -148,7 +148,7 @@ export function SupportTicketDetailModal({
 
         {ticket.admin_response?.trim() ? (
           <section>
-            <h4 className="text-2xs uppercase tracking-wider text-brand mb-1.5 flex items-center gap-2">
+            <h4 className="text-2xs text-brand mb-1.5 flex items-center gap-2 font-semibold">
               <span aria-hidden>↩</span>
               <span>Reply from the team</span>
               {ticket.admin_responded_at && (

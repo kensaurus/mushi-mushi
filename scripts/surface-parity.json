@@ -77,12 +77,16 @@
     "GET /v1/admin/byok/review-followups": {"allow": "jwt-only", "note": "Review follow-up settings, the organization's Cursor keys and the latest follow-ups (ADR 0032). The scoreboard reaches MCP and the CLI through GET /v1/admin/byok/spend-down (reviewFollowups). Per-app settings with CLI/MCP are BL-100."},
     "GET /v1/admin/byok/spend-down": {"mcp": ["get_spend_down_status"], "cli": ["keys spend-down"]},
     "GET /v1/admin/ci/overview": {"mcp": ["get_ci_overview"], "cli": ["runner status"]},
+    "GET /v1/admin/ci/jobs/:id/debug": {"allow": "parity-debt", "note": "Console-first CI debugging (2026-11-19); an MCP tool and a mushi runner command can follow."},
     "GET /v1/admin/ci/compare": {"mcp": ["get_ci_costs"], "cli": ["runner compare"]},
     "GET /v1/admin/ci/bill": {"mcp": ["get_ci_bill"], "cli": ["runner bill"], "note": "The CLI reads the bill straight from GitHub with the user's own gh login; `runner bill --push` uploads it (POST /v1/admin/ci/bill)."},
     "GET /v1/admin/doctor": {"cli": ["doctor"], "note": "mushi doctor --server prints the same checks; super-admins also get the platform secret checks (present or missing)."},
     "GET /v1/admin/projects/:id/github/stack": {"allow": "console-ui", "note": "The repo's package.json for the install snippet (framework tab, env vars); the CLI reads the local package.json itself."},
     "GET /v1/admin/release-batch": {"allow": "jwt-only", "note": "Console /releases Batch tab, read-only. The editor reads the same merge queue and trains with the fix and CI tools; a later phase may add a get_release_batch tool."},
     "GET /v1/admin/setup-gaps": {"allow": "jwt-only", "note": "Console Set up page, read-only. mushi doctor covers the CLI side of setup; a later phase may add the gaps to it."},
+    "POST /v1/admin/ci/jobs/:id/cancel": {"allow": "parity-debt", "note": "Console-first CI debugging (2026-11-19); an MCP tool and a mushi runner command can follow."},
+    "POST /v1/admin/ci/jobs/:id/explain": {"allow": "parity-debt", "note": "Console-first CI debugging (2026-11-19); an MCP tool and a mushi runner command can follow."},
+    "POST /v1/admin/ci/jobs/:id/rerun": {"allow": "parity-debt", "note": "Console-first CI debugging (2026-11-19); an MCP tool and a mushi runner command can follow."},
     "POST /v1/admin/ci/bill": {"cli": ["runner bill"], "note": "Matched through the bill card's path literal; the console only reads. `mushi runner bill --push` is the writer: it uploads a month the user read with their own gh login."},
     "GET /v1/admin/ci/placement": {"cli": ["runner placement show"]},
     "GET /v1/admin/merge-queue": {"allow": "jwt-only"},
@@ -131,6 +135,13 @@
     "PUT /v1/admin/ci/policy": {"allow": "jwt-only", "note": "ADR 0037: owners and admins save it in the console; only an owner lifts the no-spend rule."},
     "GET /v1/admin/ci/cost-settings": {"allow": "jwt-only", "note": "The organization's CI cost figures (electricity, wear, GitHub plan, machines) for Settings → CI cost. The figures reach MCP and the CLI inside GET /v1/admin/ci/compare (settings)."},
     "PUT /v1/admin/ci/cost-settings": {"allow": "jwt-only", "note": "Console session only, non-viewers, audited (ADR 0037)."},
+    "GET /v1/admin/ops/events": {"allow": "jwt-only", "note": "The Ops hub feed (docs/execplans/ops-hub-slack.md). Teams read it in Slack through their own bot's slash command (status, alerts, releases, sales)."},
+    "POST /v1/admin/ops/events/:id/ack": {"allow": "jwt-only", "note": "Acknowledge from the console; Slack's Acknowledge button does the same through /v1/ops/slack/interactions."},
+    "GET /v1/admin/ops/coverage": {"allow": "jwt-only", "note": "Which app is silent, for the Ops page; the bot's `apps` command answers the same question in Slack."},
+    "GET /v1/admin/ops/slack-settings": {"allow": "credentials", "note": "The team's Slack bot settings (secrets as set / not set)."},
+    "PUT /v1/admin/ops/slack-settings": {"allow": "credentials", "note": "Saves the bot token and signing secret into Vault; owners and admins only."},
+    "POST /v1/admin/ops/slack-settings/test": {"allow": "credentials", "note": "Posts one test message per channel with the saved bot token."},
+    "POST /v1/admin/projects/:id/ops-key": {"allow": "credentials", "note": "Mints an ops:write key for an app server, shown once (like the runner key)."},
     "POST /v1/admin/fixes/:id/ci/rerun": {"cli": ["fixes rerun-ci"]},
     "GET /v1/admin/chart-events": {"allow": "jwt-only"},
     "GET /v1/admin/clusters": {"allow": "jwt-only"},
@@ -185,6 +196,8 @@
     "GET /v1/admin/groups": {"allow": "jwt-only"},
     "GET /v1/admin/growth/daily": {"cli": ["funnel daily"]},
     "GET /v1/admin/growth/funnel": {"cli": ["funnel growth"]},
+    "GET /v1/admin/kensaurus/ops": {"allow": "jwt-only", "note": "Operator only: the shared AI provider accounts, spend and model routes from kensaurus-ops (Providers & AI routes page)."},
+    "POST /v1/admin/kensaurus/ops": {"allow": "jwt-only", "note": "Operator only: one route or provider change, audited upstream with the operator as actor."},
     "GET /v1/admin/health/cron": {"allow": "jwt-only"},
     "GET /v1/admin/health/history": {"allow": "jwt-only"},
     "GET /v1/admin/health/llm": {"allow": "jwt-only"},
@@ -317,6 +330,8 @@
     "POST /v1/admin/projects/:pid/fresh-eyes": {"cli": ["ux"], "note": "Run now on the First-time user test page (ADR 0053 amendment) queues the test for the user's own local worker. In a terminal the same test runs directly: `mushi ux fresh-eyes --url <start page> --goal <text> --sync`."},
     "POST /v1/admin/projects/:pid/fresh-eyes/:runId/cancel": {"allow": "jwt-only", "note": "Cancels a test the console queued that no computer started yet. A terminal run is stopped with Ctrl-C."},
     "GET /v1/admin/projects/:pid/ux-runs/:runId": {"cli": ["ux-runs show"]},
+    "GET /v1/admin/projects/:pid/ux-scorecard": {"cli": ["ux"], "note": "The UX scorecard (ADR 0067): `mushi ux scorecard` writes scorecard.md and scorecard.json on the machine that ran it; the console shows the synced runs, worst page first."},
+    "PATCH /v1/admin/projects/:pid/ux-scorecard": {"cli": ["ux"], "note": "The viewport the next scorecard run of this app uses. A terminal run sets it per run with `mushi ux scorecard --viewport 1440x900`."},
     "GET /v1/admin/projects/:pid/ux-runs/:runId/pull-request": {"allow": "editor-equivalent", "note": "Live state of the PR a UX run opened, for the console's Merge button. In a terminal or editor the same PR is `gh pr view` / `gh pr checks`."},
     "GET /v1/admin/projects/:pid/pull-requests": {"allow": "editor-equivalent", "note": "Open PRs of the project's connected repos with their required checks, for the Pull requests page's Merge button. In a terminal or editor: `gh pr list` / `gh pr checks`."},
     "GET /v1/admin/projects/:projectId/support-tickets/linkable": {"allow": "jwt-only"},
@@ -349,6 +364,7 @@
     "GET /v1/admin/reports/:id": {"mcp": ["get_fix_context", "get_report_detail", "get_report_evidence", "suggest_fix", "triage_issue"]},
     "GET /v1/admin/reports/:id/replay-url": {"allow": "parity-debt"},
     "GET /v1/admin/reports/:id/reporter-view": {"allow": "jwt-only"},
+    "GET /v1/admin/reports/:id/pipeline": {"allow": "jwt-only", "note": "The report page's Pipeline strip (report-pipeline.ts)."},
     "GET /v1/admin/reports/:id/timeline": {"mcp": ["get_report_evidence"]},
     "GET /v1/admin/reports/severity-stats": {"allow": "jwt-only"},
     "GET /v1/admin/reports/stats": {"allow": "jwt-only"},
@@ -595,6 +611,7 @@
     "POST /v1/admin/repo/repos": {"allow": "jwt-only"},
     "POST /v1/admin/reporter-outbox/:id/discard": {"mcp": ["release_reporter_update"], "cli": ["outbox discard"]},
     "POST /v1/admin/reporter-outbox/:id/release": {"mcp": ["release_reporter_update"], "cli": ["outbox release"]},
+    "POST /v1/admin/reports/:id/pipeline/retry": {"allow": "jwt-only", "note": "Retry a stuck triage from the report page (report-pipeline.ts)."},
     "POST /v1/admin/reports/:id/known-issues": {"allow": "jwt-only"},
     "POST /v1/admin/reports/:id/sentry/close": {"allow": "jwt-only"},
     "POST /v1/admin/reports/:id/request-info": {"mcp": ["request_reporter_info"]},
@@ -696,6 +713,12 @@
     "PUT /v1/tester/me": {"allow": "jwt-only"}
   },
   "dynamicCalls": {
+    "apps/admin/src/pages/InboxPage.tsx": {
+      "activeProjectId ? `${LANES_PATH}?projectId=${encodeURIComponent(activeProjectId)}` : LANES_PATH": "LANES_PATH is '/v1/admin/work/lanes' (lib/workers.ts; mapped as GET /v1/admin/work/lanes); the projectId query narrows it to the active app, as Pipeline > This app does."
+    },
+    "apps/admin/src/pages/PipelinePage.tsx": {
+      "lanesPath": "LANES_PATH ('/v1/admin/work/lanes', mapped as GET /v1/admin/work/lanes), with ?projectId= on the This app view."
+    },
     "apps/admin/src/components/reports/ReportPicker.tsx": {
       "value ? null : reportPickerPath(debounced, limit, query)": "reportPickerPath builds GET /v1/admin/reports with search and sort parameters (mapped as GET /v1/admin/reports); null while a report is picked."
     },

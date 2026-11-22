@@ -446,7 +446,7 @@ jobs:
         run: pnpm check:docs-stats
 
       - name: Check edge-function deploy docs
-        # Fail when SELF_HOSTED.md / edge-functions.mdx deploy a name that is
+        # Fail when docs/SELF_HOSTED.md / edge-functions.mdx deploy a name that is
         # not a directory under packages/server/supabase/functions/.
         run: pnpm check:edge-fn-deploy-docs
 
@@ -456,9 +456,9 @@ jobs:
         run: pnpm check:admin-docs-coverage
 
       - name: Check narrative & positioning consistency
-        # Anti-drift guard for the VISION.md constitution: the v2 hero must lead
+        # Anti-drift guard for the docs/VISION.md constitution: the v2 hero must lead
         # every primary README (no stale taglines), the north-star / category /
-        # buyer / "will not"s must stay aligned across VISION.md, AGENTS.md,
+        # buyer / "will not"s must stay aligned across docs/VISION.md, AGENTS.md,
         # README.md, and package.json, and every publishable package must keep
         # its canonical homepage/repository cross-links. Canonical copy lives in
         # packages/brand (MUSHI_TAGLINE_V2) and /VISION.md.

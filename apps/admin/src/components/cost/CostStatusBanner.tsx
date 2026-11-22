@@ -8,6 +8,7 @@ import { usePageCopy } from '../../lib/copy'
 import { OperationChip } from '../OperationChip'
 import { StatusBannerShell } from '../StatusBannerShell'
 import type { CostStats, CostTabId } from './types'
+import { formatSpendUsd as fmtUsd, usesPlatformKeysOnly } from '../../lib/costView'
 
 interface Props {
   stats: CostStats
@@ -17,11 +18,6 @@ interface Props {
   plainBanner?: boolean
 }
 
-function fmtUsd(n: number): string {
-  if (n >= 1) return `$${n.toFixed(2)}`
-  if (n >= 0.01) return `$${n.toFixed(4)}`
-  return `$${n.toFixed(6)}`
-}
 
 export function CostStatusBanner({ stats, onTab, onViewFailures, plainBanner = false }: Props) {
   const copy = usePageCopy('/cost')
@@ -113,7 +109,9 @@ export function CostStatusBanner({ stats, onTab, onViewFailures, plainBanner = f
     )
   }
 
-  if (!stats.byokAnthropicConfigured && stats.platformKeyCalls24h > 0) {
+  // Calls that ran on your own key mean a key is set; the legacy
+  // byokAnthropicConfigured flag only sees an Anthropic key (review 2026-11-18).
+  if (usesPlatformKeysOnly(stats)) {
     return (
       <StatusBannerShell
         tone="warn"
@@ -122,7 +120,7 @@ export function CostStatusBanner({ stats, onTab, onViewFailures, plainBanner = f
             ? 'Using Mushi Mushi platform keys'
             : `Using platform keys — ${stats.platformKeyCalls24h} call${stats.platformKeyCalls24h === 1 ? '' : 's'} in 24h`
         }
-        subtitle={`${fmtUsd(stats.spend24hUsd)} in 24h on platform keys — add your own Anthropic key in Settings to control billing.`}
+        subtitle={`${fmtUsd(stats.spend24hUsd)} in 24h on platform keys — add your own AI key in Settings to control billing.`}
         action={
           <Btn to="/settings?tab=byok" size="sm" variant="ghost">{actions.byok ?? 'Add BYOK'}</Btn>
         }
@@ -143,23 +141,16 @@ export function CostStatusBanner({ stats, onTab, onViewFailures, plainBanner = f
   return (
     <StatusBannerShell
       tone="ok"
-      title={plainBanner ? 'AI spend tracking is active' : `Telemetry active for ${projectLabel}`}
+      // A state, not a sentence: the green mark says "on", the words say what (2026-11-19).
+      title={plainBanner ? 'Tracking' : `Tracking ${projectLabel}`}
+      // The spend, call and key counts are the tiles right below: the banner
+      // only adds what they don't say (review 2026-11-18).
       subtitle={
-        <>
-          {fmtUsd(stats.spend24hUsd)} in 24h · {stats.calls24h} calls
-          {stats.lastCallAt ? (
-            <> · last call&nbsp;<RelativeTime value={stats.lastCallAt} /></>
-          ) : null}
-          {stats.byokCalls24h > 0 ? ` · ${stats.byokCalls24h} BYOK` : ''}
-        </>
-      }
-      action={
-        onTab ? (
-          <Btn size="sm" variant="ghost" onClick={() => onTab('breakdown')}>
-            {actions.breakdown ?? 'View breakdown'}
-          </Btn>
+        stats.lastCallAt ? (
+          <>Last call&nbsp;<RelativeTime value={stats.lastCallAt} /></>
         ) : null
       }
+      // No "View breakdown" button: the Breakdown tab sits right below (2026-11-19).
     />
   )
 }

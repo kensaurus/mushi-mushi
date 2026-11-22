@@ -186,7 +186,7 @@ function PdcaGradientEdgeInner({
               pointerEvents: 'none',
               borderColor: edgeData.sourceColor ?? flowInfo,
             }}
-            className="rounded-full border bg-surface-overlay/95 px-2 py-0.5 text-3xs font-semibold uppercase tracking-wider shadow-sm"
+            className="rounded-sm bg-surface-overlay/95 px-2 py-px text-3xs font-semibold shadow-sm"
           >
             <span style={{ color: edgeData.sourceColor ?? flowInfo }}>{edgeData.edgeLabel}</span>
           </div>

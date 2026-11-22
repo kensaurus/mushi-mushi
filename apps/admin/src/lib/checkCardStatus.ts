@@ -28,6 +28,10 @@ export interface CheckCardView {
   detail: string | null
   setupTo: string | null
   tone: 'neutral' | 'okSubtle' | 'warnSubtle' | 'dangerSubtle'
+  /** When the run behind this state finished (ISO), when one was stored: grades staleness. */
+  lastRunAt?: string | null
+  /** How many findings the state counts (findings only). */
+  count?: number
 }
 
 /** One recipe / design / CI element, already reduced to the fields the card needs. */
@@ -117,6 +121,17 @@ export interface CheckCardsInput {
       detail?: string | null
     }>
   }
+  /**
+   * Providers & AI routes (operators only; absent for everyone else): enabled
+   * accounts down or warning and open critical incidents, from kensaurus-ops.
+   */
+  providers?: {
+    phase: 'loading' | 'error' | 'not_set_up' | 'ready'
+    down: number
+    warn: number
+    critIncidents: number
+    generatedAt: string | null
+  }
 }
 
 /** Matches the inbox: a judge run older than this is not a fresh pass. */
@@ -135,6 +150,24 @@ const NOT_CHECKED: CheckCardView = {
   detail: null,
   setupTo: null,
   tone: 'neutral',
+}
+
+/** Health: a platform job (judge batch, weekly summary, retention) errored. Not this app's failed run. */
+const PLATFORM_JOB_ERROR: CheckCardView = {
+  state: 'unavailable',
+  chip: "Couldn't run: platform job error",
+  detail: null,
+  setupTo: null,
+  tone: 'dangerSubtle',
+}
+
+/** Health: a platform job is late. Not this app's failed run. */
+const PLATFORM_JOB_LATE: CheckCardView = {
+  state: 'unavailable',
+  chip: 'Platform job is late',
+  detail: null,
+  setupTo: null,
+  tone: 'warnSubtle',
 }
 
 /** The check's data could not be read. This is not a failed run. */
@@ -161,7 +194,7 @@ function ran(iso: string | null | undefined, now: number): string | null {
 
 function withTime(view: CheckCardView, iso: string | null | undefined, now: number): CheckCardView {
   const detail = ran(iso, now)
-  return detail ? { ...view, detail } : view
+  return detail ? { ...view, detail, lastRunAt: iso ?? null } : view
 }
 
 function notSetUp(setupTo: string): CheckCardView {
@@ -177,6 +210,7 @@ function findings(count: number, iso: string | null | undefined, now: number): C
       detail: null,
       setupTo: null,
       tone: 'warnSubtle',
+      count: n,
     },
     iso,
     now,
@@ -186,7 +220,7 @@ function findings(count: number, iso: string | null | undefined, now: number): C
 function pass(iso: string, now: number): CheckCardView {
   const detail = ran(iso, now)
   if (!detail) return NOT_CHECKED
-  return { state: 'pass', chip: 'Pass', detail, setupTo: null, tone: 'okSubtle' }
+  return { state: 'pass', chip: 'Pass', detail, setupTo: null, tone: 'okSubtle', lastRunAt: iso }
 }
 
 function failed(iso: string | null | undefined, now: number): CheckCardView {
@@ -206,8 +240,11 @@ function fromQa(qa: CheckCardsInput['qa'], now: number): CheckCardView {
   if (qa.topPriority === 'no_stories' || stories === 0) return notSetUp('/qa-coverage')
   if (qa.topPriority === 'disabled_all') return notSetUp('/qa-coverage')
   if (failing > 0) return findings(failing, qa.lastRunAt, now)
-  if (qa.topPriority === 'healthy' && qa.lastRunAt && (qa.pendingRuns ?? 0) === 0) return pass(qa.lastRunAt, now)
-  return withTime(NOT_CHECKED, qa.lastRunAt, now)
+  // A run in progress does not undo the last finished one. The card read "Not run
+  // yet" while /qa-coverage showed 7 of 7 passing 3 h earlier (audit 2026-11-21).
+  if ((qa.topPriority === 'healthy' || qa.topPriority === 'pending') && qa.lastRunAt) return pass(qa.lastRunAt, now)
+  // "Not run yet" with "Last run 3h ago" under it said two things; nothing ran means no time.
+  return NOT_CHECKED
 }
 
 function fromHealth(health: CheckCardsInput['health'], now: number): CheckCardView {
@@ -219,7 +256,10 @@ function fromHealth(health: CheckCardsInput['health'], now: number): CheckCardVi
   const at = health.lastLlmCallAt ?? null
   const priority = health.topPriority
   if (priority === 'no_project' || priority === 'idle') return NOT_CHECKED
-  if (priority === 'cron_error' || priority === 'cron_stale' || priority === 'cron_warn') return NOT_CHECKED
+  // A platform job that errored or is late is not this app's failed run (never Failed, never
+  // Pass), but "Not run yet" claimed nothing had run (console audit 2026-11-21). Say what happened.
+  if (priority === 'cron_error') return PLATFORM_JOB_ERROR
+  if (priority === 'cron_stale' || priority === 'cron_warn') return PLATFORM_JOB_LATE
   if (priority === 'llm_errors' || priority === 'llm_fallbacks') return findings(1, at, now)
   if (priority === 'healthy' && at) return pass(at, now)
   return NOT_CHECKED
@@ -353,6 +393,16 @@ function statusFromElements(elements: ObservedElement[], fallbackSetup: string, 
   return withTime(NOT_CHECKED, at, now)
 }
 
+/** Providers: a provider down is Failed; a warning or a critical incident is a finding. */
+function fromProviders(p: NonNullable<CheckCardsInput['providers']>, now: number): CheckCardView | null {
+  if (p.phase === 'loading') return null
+  if (p.phase === 'error') return UNAVAILABLE
+  if (p.phase === 'not_set_up') return notSetUp('/providers')
+  if (p.down > 0) return failed(p.generatedAt, now)
+  if (p.warn + p.critIncidents > 0) return findings(p.warn + p.critIncidents, p.generatedAt, now)
+  return p.generatedAt ? pass(p.generatedAt, now) : NOT_CHECKED
+}
+
 /** One view per checks-page path. Null while that card's read has not finished. */
 export function buildCheckCardViews(input: CheckCardsInput, now = Date.now()): Record<string, CheckCardView | null> {
   const pending = input.recipePhase === 'loading'
@@ -373,5 +423,6 @@ export function buildCheckCardViews(input: CheckCardsInput, now = Date.now()): R
     '/lessons': slice(input.lessons, (lessons) => fromLessons(lessons)),
     '/prompt-lab': slice(input.prompts, (prompts) => fromPrompts(prompts)),
     '/first-user-test': input.firstUserTest ? fromFirstUserTest(input.firstUserTest, now) : null,
+    '/providers': input.providers ? fromProviders(input.providers, now) : null,
   }
 }

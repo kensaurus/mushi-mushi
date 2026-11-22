@@ -68,16 +68,37 @@ async function render(stats: ExperimentsStats) {
 }
 
 describe('ExperimentsPage empty state', () => {
-  it('opens on one first-step card, not a banner over zero tiles', async () => {
+  it('opens on the New form as its one first step, with one Create button', async () => {
     await render({ ...EMPTY_EXPERIMENTS_STATS, hasAnyProject: true, projectName: 'App', topPriority: 'no_experiments' })
-    const card = host.querySelector('[data-testid="page-first-step"]')
-    expect(card).not.toBeNull()
-    expect(card?.textContent).toContain('No experiments yet')
-    expect(card?.textContent).toContain('Create experiment')
-    // No status tiles and no second "No experiments" banner above it.
+    // 2026-11-18: the first-step card's "Create experiment" duplicated the open form's own
+    // button. With the form open, the card steps aside and the form carries the sentence.
+    expect(host.querySelector('[data-testid="page-first-step"]')).toBeNull()
     expect(host.querySelector('[data-testid="page-status"]')).toBeNull()
-    expect(host.textContent?.match(/No experiments/g)).toHaveLength(1)
+    const creates = [...host.querySelectorAll('button')].filter((b) => b.textContent?.trim() === 'Create experiment')
+    expect(creates).toHaveLength(1)
+    expect(host.textContent).toContain('Compare two versions of a screen')
     expect(host.querySelector('[data-testid="empty-probe"]')?.textContent).toBe('empty')
+  })
+
+  it('keeps the first-step card on the list tab of an empty project', async () => {
+    await act(async () => { root.unmount() })
+    root = createRoot(host)
+    mocks.stats = { ...EMPTY_EXPERIMENTS_STATS, hasAnyProject: true, projectName: 'App', topPriority: 'no_experiments' }
+    await act(async () => {
+      root.render(
+        createElement(
+          MemoryRouter,
+          { initialEntries: ['/experiments?tab=experiments'] },
+          createElement(ToastProvider, null, createElement(PageHelpProvider, null, createElement(ExperimentsPage), createElement(EmptyProbe))),
+        ),
+      )
+    })
+    const card = host.querySelector('[data-testid="page-first-step"]')
+    expect(card?.textContent).toContain('No experiments yet')
+    expect(host.querySelector('[data-testid="empty-probe"]')?.textContent).toBe('empty')
+    // Round-2 sweep: one empty state, one Create button (the list's own empty card steps aside).
+    expect([...host.querySelectorAll('button, a')].filter((b) => b.textContent?.trim() === 'Create experiment')).toHaveLength(1)
+    expect(host.textContent).not.toContain('SDK assignment')
   })
 
   it('shows the status sentence once an experiment exists', async () => {
@@ -100,14 +121,16 @@ function implicitLabel(input: HTMLInputElement): string {
 }
 
 describe('New experiment variant fields', () => {
-  it('names the default Control and Treatment name and weight inputs', async () => {
+  it('names the variant inputs and shows Control / Treatment as placeholders, not values', async () => {
     await render({ ...EMPTY_EXPERIMENTS_STATS, hasAnyProject: true, projectName: 'App', topPriority: 'no_experiments' })
     const heading = [...host.querySelectorAll('h2')].find((h) => h.textContent === 'New experiment')
     const card = heading?.parentElement
     expect(card).toBeTruthy()
 
-    const control = card!.querySelector('input[value="Control"]') as HTMLInputElement
-    const treatment = card!.querySelector('input[value="Treatment A"]') as HTMLInputElement
+    const control = card!.querySelector('input[placeholder="Control"]') as HTMLInputElement
+    const treatment = card!.querySelector('input[placeholder="Treatment A"]') as HTMLInputElement
+    expect(control.value).toBe('')
+    expect(treatment.value).toBe('')
     expect(implicitLabel(control)).toBe('Name')
     expect(implicitLabel(treatment)).toBe('Variant 2 name')
 
@@ -118,7 +141,7 @@ describe('New experiment variant fields', () => {
     expect(add).toBeTruthy()
     await act(async () => { add!.click() })
 
-    const added = card!.querySelector('input[value="Treatment B"]') as HTMLInputElement
+    const added = card!.querySelector('input[placeholder="Treatment B"]') as HTMLInputElement
     expect(implicitLabel(added)).toBe('Variant 3 name')
     const weightsAfter = [...card!.querySelectorAll('input[type="number"]')] as HTMLInputElement[]
     expect(weightsAfter.map(implicitLabel)).toEqual([

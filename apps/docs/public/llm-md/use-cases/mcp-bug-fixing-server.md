@@ -43,7 +43,7 @@ worst one."* The full tool list and configuration options live in the
 
 ## Hosted or self-hosted
 
-Point the server at Mushi Mushi Cloud (one app and 100 diagnoses a month free) or at your own
+Point the server at Mushi Mushi Cloud (three apps and 300 diagnoses a month free) or at your own
 self-hosted stack — the MCP surface is identical. Reports come from the
 [SDKs](/sdks) your users already trigger; install those with:
 

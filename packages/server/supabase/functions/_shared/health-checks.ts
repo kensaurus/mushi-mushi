@@ -284,9 +284,11 @@ export function bannerCheck(projectId: string, settings: { bannerEnabled: boolea
 
 export interface DoctorCheckLike {
   name: string
-  status: 'pass' | 'warn' | 'fail'
+  /** `info` is an optional thing not set up: never a problem. */
+  status: 'pass' | 'info' | 'warn' | 'fail'
   summary: string
   hint?: string
+  label?: string
 }
 
 /**
@@ -295,10 +297,10 @@ export interface DoctorCheckLike {
  */
 export function fromDoctorCheck(projectId: string | null, check: DoctorCheckLike, checkedAt: string | null): HealthCheck {
   const unread = /^could not read/i.test(check.summary)
-  const status: HealthStatus = check.status === 'pass' ? 'ok' : unread ? 'unknown' : 'problem'
+  const status: HealthStatus = check.status === 'pass' || check.status === 'info' ? 'ok' : unread ? 'unknown' : 'problem'
   const severity: HealthSeverity | undefined = check.status === 'warn' && metaOf(check.name).severity === 'critical' ? 'warn' : undefined
   const fix: HealthFix | null = status === 'problem' && check.hint ? { kind: 'guided', label: 'How to fix', steps: [check.hint] } : null
-  return make(check.name, projectId, 'doctor', status, check.name.replace(/_/g, ' '), check.summary, fix, checkedAt, severity)
+  return make(check.name, projectId, 'doctor', status, check.label ?? check.name.replace(/_/g, ' '), check.summary, fix, checkedAt, severity)
 }
 
 // ── Lists ───────────────────────────────────────────────────────────────────

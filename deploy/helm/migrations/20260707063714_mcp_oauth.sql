@@ -6,7 +6,7 @@ PURPOSE: Real OAuth 2.1 authorization-code flow (with PKCE) for the hosted MCP
          hand-copying an API key into a config file.
 
 OVERVIEW:
-  Until now /oauth/* on the mcp function was a Smithery publisher-scan stub:
+  Until now /oauth/ routes on the mcp function was a Smithery publisher-scan stub:
   it only accepted smithery.ai redirect URIs and minted a scan-only token.
   `claude mcp login mushi` therefore could not work. This migration adds the
   two tables backing the real flow:

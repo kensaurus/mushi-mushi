@@ -72,7 +72,7 @@ export const MUSHI_TAGLINE_LEGACY = {
  */
 const PROMISE = 'Fix bugs, smooth user journeys and clean up the code'
 
-/** The category we own (VISION.md §1.5) — shared by `category` and `pitch`. */
+/** The category we own (docs/VISION.md §1.5) — shared by `category` and `pitch`. */
 const CATEGORY = 'One place to improve AI-built apps' // ADR 0058 (was "Bug fixing for AI-built apps", ADR 0056; "The bug mediator for AI-built apps", ADR 0004)
 
 /**
@@ -84,7 +84,7 @@ const CATEGORY = 'One place to improve AI-built apps' // ADR 0058 (was "Bug fixi
  */
 export const MUSHI_TAGLINE_V2 = {
   /**
-   * North star — the full sentence (VISION.md §1.3). Every other field below is
+   * North star — the full sentence (docs/VISION.md §1.3). Every other field below is
    * a compression of this. Use on the about/concept pages where there's room.
    */
   northStar:
@@ -112,7 +112,7 @@ export const MUSHI_TAGLINE_V2 = {
   /** Lead paragraph directly under hero. */
   subHero:
     'Mushi Mushi checks your live site, shows where people get stuck, and reviews your code. Your users can tap a button to report a bug. Each problem comes with a plain-English explanation and a fix that Lovable, Cursor or Claude Code can apply.',
-  /** Eyebrow, npm category line, llms.txt. The category we own (VISION.md §1.5). */
+  /** Eyebrow, npm category line, llms.txt. The category we own (docs/VISION.md §1.5). */
   category: CATEGORY,
   /**
    * The one-sentence pitch: category + promise. It closes every primary npm

@@ -21,7 +21,7 @@ export function PromptLabStatusBanner({ stats, onTab, onRefresh, refreshing }: P
     return (
       <StatusBannerShell
         tone="info"
-        title="No projects — prompt lab idle"
+        title="No projects yet: AI prompts are idle"
         subtitle="Create a project before authoring prompt candidates."
         action={
           <Btn to="/onboarding" size="sm" variant="ghost">Go to Setup</Btn>
@@ -51,10 +51,12 @@ export function PromptLabStatusBanner({ stats, onTab, onRefresh, refreshing }: P
 
   if (stats.topPriority === 'untested_ab') {
     return (
+      // A running test waiting for grades is work in progress, not a warning (blue, pulsing);
+      // the subtitle names each step, so it cannot disagree with the "Steps with a test" tile.
       <StatusBannerShell
-        tone="warn"
+        tone="info"
         pulseDot
-        title="A/B running — no judge scores yet"
+        title="Test running, waiting for its first grades"
         subtitle={stats.topPriorityLabel}
         action={
           stats.topPriorityTo ? (
@@ -91,8 +93,8 @@ export function PromptLabStatusBanner({ stats, onTab, onRefresh, refreshing }: P
   if (stats.topPriority === 'candidates_idle') {
     return (
       <StatusBannerShell
-        tone="brand"
-        title="Candidates waiting for traffic"
+        tone="warn"
+        title="Tests not started: 0% of traffic"
         subtitle={stats.topPriorityLabel}
         action={
           stats.topPriorityTo ? (
@@ -130,7 +132,7 @@ export function PromptLabStatusBanner({ stats, onTab, onRefresh, refreshing }: P
   return (
     <StatusBannerShell
       tone="ok"
-      title={`Prompt lab healthy on ${projectLabel}`}
+      title={`AI prompts healthy on ${projectLabel}`}
       subtitle={stats.topPriorityLabel}
       action={
         onRefresh ? (

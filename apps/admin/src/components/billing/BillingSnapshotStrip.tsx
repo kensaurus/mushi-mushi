@@ -34,11 +34,17 @@ const VALUE: Record<MeterTone, string> = {
   neutral: 'text-fg',
 }
 
-export function BillingSnapshotStrip({ stats, fetchedAt, isValidating, sectionTitle = 'Usage this period', seats = null }: Props) {
+/** One row of meters at xl, however many the plan has (3 or 4). */
+const XL_COLS: Record<number, string> = { 2: 'xl:grid-cols-2', 3: 'xl:grid-cols-3', 4: 'xl:grid-cols-4', 5: 'xl:grid-cols-5' }
+
+// The counts are the whole team's (billing/stats), so the heading says so:
+// the app card below has this app's own counts (review 2026-11-18).
+export function BillingSnapshotStrip({ stats, fetchedAt, isValidating, sectionTitle = 'Team usage this period', seats = null }: Props) {
   const meters = billingMeters(stats, seats)
   return (
     <Section title={sectionTitle} freshness={{ at: fetchedAt, isValidating }}>
-      <ul aria-label="Usage this period" className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+      {/* Flat meters in the one card: no bordered tile inside the card. */}
+      <ul aria-label={sectionTitle} className={`grid min-w-0 grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2 ${XL_COLS[meters.length] ?? 'xl:grid-cols-4'}`}>
         {meters.map((m) => (
           <MeterCard key={m.id} meter={m} />
         ))}
@@ -56,7 +62,7 @@ function MeterCard({ meter }: { meter: UsageMeter }) {
     meter.label
   )
   return (
-    <li className="min-w-0 rounded-sm border border-edge-subtle bg-surface px-3 py-2.5" data-testid={`billing-meter-${meter.id}`}>
+    <li className="min-w-0 py-0.5" data-testid={`billing-meter-${meter.id}`}>
       <p className="text-2xs font-medium text-fg-muted">{label}</p>
       <p className={`mt-0.5 text-base font-semibold tabular-nums leading-tight ${VALUE[meter.tone]}`}>{meter.value}</p>
       {meter.pct != null ? (

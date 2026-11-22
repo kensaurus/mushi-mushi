@@ -211,7 +211,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
   // delivering with its org slug and auth token, which live on Integrations.
   const sentryDsnSaved = Boolean(saved.sentry_dsn)
   const sentrySavedHint: RowStatusValue = !sentryDsnSaved
-    ? { state: 'not_connected', detail: 'Add your Sentry DSN to turn production errors into reports.' }
+    ? { state: 'not_connected' }
     : saved.sentry_webhook_secret_set !== true
       ? { state: 'attention', detail: "Add the webhook secret below, or Mushi Mushi can't accept Sentry's deliveries." }
       : { state: 'checking', detail: 'Saved. The Integrations page shows when Sentry sends its first error.' }
@@ -226,7 +226,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
     emptyDetail: 'Add a read-only token under AI keys → Supabase.',
   })
   const supabaseStatus: RowStatusValue = !supabaseRefSaved
-    ? { state: 'not_connected', detail: 'Save your project ref below, then add a read-only token under AI keys.' }
+    ? { state: 'not_connected' }
     : supabaseKeyView
 
   const branchExample = fixBranchExample(settings.fix_branch_template ?? DEFAULT_BRANCH_TEMPLATE)
@@ -268,7 +268,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
           <p className="text-xs text-fg-muted">
             {slackInput.botSet || slackCanPost
               ? "In Slack, open the channel's details and copy the channel ID at the bottom. Then invite the Mushi Mushi bot to the channel."
-              : "Mushi Mushi's Slack bot isn't connected to this app, so a channel ID alone can't post. Connect it on Integrations, or use the webhook below."}
+              : 'Bug alerts need the Mushi Mushi Slack app on Integrations, or the webhook below. The team Slack bot further down posts payments, releases and ops alerts only.'}
           </p>
           <SettingsChangeHint current={settings.slack_channel_id ?? ''} saved={saved.slack_channel_id ?? ''} kind="text" />
           {slackTest && (
@@ -285,7 +285,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
           status={
             saved.slack_webhook_url_set
               ? { state: 'checking', detail: 'Saved.' }
-              : { state: 'not_connected', detail: 'Not used.' }
+              : { state: 'not_connected' }
           }
           action={
             <Btn
@@ -325,7 +325,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
         </SettingsRow>
       </SettingsList>
 
-      <SettingsList title="Error tracking" description="Bring errors your monitoring already catches into the same bug list.">
+      <SettingsList id="error-tracking" title="Error tracking" description="Bring errors your monitoring already catches into the same bug list.">
         <SettingsRow
           icon={<BrandIcon brand="sentry" size={18} decorative />}
           title="Sentry"
@@ -347,13 +347,13 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
             helpId="settings.general.sentry_webhook_secret"
             value={settings.sentry_webhook_secret ?? ''}
             onChange={(e) => update({ sentry_webhook_secret: e.target.value })}
-            placeholder={
-              saved.sentry_webhook_secret_set
-                ? 'Saved. Paste a new secret to replace it.'
-                : 'From Sentry → Settings → Integrations → your integration → Client Secret'
-            }
+            placeholder={saved.sentry_webhook_secret_set ? 'Saved. Paste a new secret to replace it.' : 'Client Secret'}
             validate={token({ minLength: 16 })}
           />
+          {/* Where it comes from, as helper text: as a placeholder it was cut to "From Sentry → Settings → Integra" on a phone. */}
+          {!saved.sentry_webhook_secret_set && (
+            <p className="-mt-1 text-2xs text-fg-muted">In Sentry: Settings → Integrations → your integration → Client Secret.</p>
+          )}
           <SettingsChangeHint current={settings.sentry_webhook_secret ?? ''} saved={saved.sentry_webhook_secret ?? ''} kind="secret" />
           <StoredSecretStatus
             column="sentry_webhook_secret"
@@ -410,7 +410,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
         </SettingsRow>
       </SettingsList>
 
-      <SettingsList title="Bug sorting" description="How the AI scores, groups and fixes incoming bugs.">
+      <SettingsList id="bug-sorting" title="Bug sorting" description="How the AI scores, groups and fixes incoming bugs.">
         <SettingsRow
           icon={<IconJudge size={16} />}
           title="AI models"
@@ -561,10 +561,11 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
       </SettingsList>
 
       <SettingsList
+        id="daily-limits"
         title="Daily limits"
         description="Caps on automatic work each day. When one is reached, new runs wait until midnight UTC instead of running up a bill."
       >
-        <SettingsRow icon={<IconCost size={16} />} title="Web pages read per day" purpose="Pages Firecrawl may read across all crawls.">
+        <SettingsRow title="Web pages read per day" purpose="Pages Firecrawl may read across all crawls.">
           <RangeField
             label="Pages per day"
             min={10}
@@ -581,7 +582,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
           />
           <SettingsChangeHint current={settings.crawl_max_pages_per_day ?? 150} saved={saved.crawl_max_pages_per_day ?? 150} kind="number" />
         </SettingsRow>
-        <SettingsRow icon={<IconCost size={16} />} title="Crawls per day" purpose="How many separate crawls of your app may start.">
+        <SettingsRow title="Crawls per day" purpose="How many separate crawls of your app may start.">
           <RangeField
             label="Crawls per day"
             min={1}
@@ -598,7 +599,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
           />
           <SettingsChangeHint current={settings.crawl_max_runs_per_day ?? 8} saved={saved.crawl_max_runs_per_day ?? 8} kind="number" />
         </SettingsRow>
-        <SettingsRow icon={<IconCost size={16} />} title="Tests written per day" purpose="How many browser tests Mushi Mushi may write from your user stories.">
+        <SettingsRow title="Tests written per day" purpose="How many browser tests Mushi Mushi may write from your user stories.">
           <RangeField
             label="Tests per day"
             min={1}
@@ -629,7 +630,8 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
             value={brandFooterToChoice(settings.widget_brand_footer)}
             onChange={(e) => update({ widget_brand_footer: choiceToBrandFooter(e.target.value as BrandFooterChoice) })}
           >
-            <option value="default">Plan default (on for Free, off for paid and self-host)</option>
+            {/* The row's purpose says what the plan default is; the long label was cut off on a phone. */}
+            <option value="default">Plan default</option>
             <option value="on">Always show</option>
             <option value="off">Never show</option>
           </SelectField>
@@ -672,7 +674,7 @@ function Slider({ label, value, onChange, helpId }: SliderProps) {
   return (
     <label className="block space-y-1">
       <span className="flex items-center gap-1 text-sm text-fg-secondary">
-        {label}: <span className="font-mono text-fg">{Math.round(value * 100)}%</span>
+        {label}: <span className="font-medium tabular-nums text-fg">{Math.round(value * 100)}%</span>
         {helpId && <ConfigHelp helpId={helpId} />}
       </span>
       <input
@@ -681,7 +683,7 @@ function Slider({ label, value, onChange, helpId }: SliderProps) {
         min="0.5"
         max="0.99"
         step="0.01"
-        className="w-full accent-brand"
+        className="w-full max-w-sm accent-brand"
         value={value}
         onChange={(e) => onChange(parseFloat(e.target.value))}
       />
@@ -707,7 +709,7 @@ function RangeField({
   return (
     <label className="block space-y-1">
       <span className="text-sm text-fg-secondary">
-        {label}: <span className="font-mono text-fg">{value}</span>
+        {label}: <span className="font-medium tabular-nums text-fg">{value}</span>
       </span>
       <input
         type="range"
@@ -715,7 +717,7 @@ function RangeField({
         min={min}
         max={max}
         step={step}
-        className="w-full accent-brand"
+        className="w-full max-w-sm accent-brand"
         value={value}
         onChange={(e) => onChange(parseInt(e.target.value, 10))}
       />

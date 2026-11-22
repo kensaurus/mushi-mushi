@@ -160,6 +160,55 @@ Don't invent "healthy", "active", "validation needed" or other synonyms.
   disagree.
 - If data is missing, say "Not checked yet". Never fake "healthy" or "0".
 
+### Draw the state: the signal kit
+
+A page shows a state as a mark and a number as a bar. It doesn't describe either
+in a sentence. The parts live in `apps/admin/src/components/signal/` and every
+page uses the same ones. The CI runners page (`/ci`) is the reference build.
+
+| You have | Use | It draws |
+| --- | --- | --- |
+| Problems that need the user | `AlertCards` | Worst first: severity shape, the app, the problem, one big number, one action |
+| A run state | `StatusMark`, `StatusPill`, `RunBar` | running, passed, failed, waiting, slow, idle or cancelled, each with its own colour and glyph; running also pulses |
+| A severity with no run state | `StatusGlyph` | ▲ critical, ◆ serious, ● ok, ■ info, ○ off |
+| Rows × columns of numbers | `HeatGrid` | Each cell graded on its column's scale, with the number inside and a legend |
+| A duration, share or progress | `BarCell`, `ThresholdBar` | A bar beside the number; the number stays as text |
+| An age | `AgeCell`, `StuckAgeBar` | Darker as it gets older, split into 0–3 d, 3–7 d, 7–30 d and 30 d+ |
+| A change since the last visit | `ChangeChip` | ▲ +3 or ▼ −2, red when worse |
+| Stages with counts | `StageTrain` | Drafted 4 → CI 2 → Ready 1; only a stuck stage takes a colour |
+| A Web Vital | `VitalBadge`, `VitalText` | LCP 7.4 s graded good, needs work or poor against Google's thresholds |
+| A name that is not a state | `Chip` | A provider, an app or a parameter |
+| More than one action on a row | `MoreActionsMenu` | One primary button, the rest under **More** |
+
+Rules:
+
+- **Red means a failure, nothing else (2026-11-18).** On the light console `--color-brand`
+  is ink, so primary buttons, links, active tabs and crumbs are near-black. Selection (a
+  selected segment, an on switch, an unread dot) uses the violet `accent`. Vermillion stays
+  the docs, marketing and widget colour. A red element that is not a failure is a bug.
+- **Colour never works alone.** Every status has a shape or glyph too, so it
+  reads without colour vision. Motion stops under `prefers-reduced-motion`.
+- **Say a state once.** If a mark shows it, no sentence repeats it. Group
+  repeated rows instead of listing them.
+- **Unknown is not zero.** A cell with no data is hatched and says "no data".
+- **Link the panels.** Wrap the page in `HighlightProvider` and give each row
+  `useLinked(keys, primary)`. Pointing at a row lights the same app or job in
+  every panel; a click pins it and Escape clears it.
+- **Grade with `scale.ts`.** `heatClass`, `failClass`, `divergeClass` and
+  `badnessClass` map a number to a colour step from the ramps in
+  `styles/theme-tokens.css`. Don't pick colours per page.
+- **Stay dense.** Contrast, weight and edges make a page readable. Bigger
+  pills, padding and cards don't.
+
+```tsx
+<HighlightProvider>
+  <AlertCards alerts={alerts} label="Apps that need you" emptyText="No app needs you right now." testIdPrefix="portfolio" />
+  <HeatGrid columns={columns} rows={rows} />
+</HighlightProvider>
+```
+
+The caller ranks the alerts; `AlertCards` only lays them out.
+
 ### Real service icons
 
 - `BrandIcon` (`components/ui/BrandIcon.tsx`) takes an id, a name or a domain

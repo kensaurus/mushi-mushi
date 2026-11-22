@@ -2,8 +2,8 @@
 import UIKit
 
 /// Modal bottom sheet for collecting a free-form bug description plus an
-/// optional category tag. Auto-attaches the most recent screenshot taken
-/// when the controller was instantiated.
+/// optional category tag. The screenshot taken when the sheet opened is shown
+/// as a preview the reporter can remove; only what is still shown is sent.
 final class MushiWidgetController: UIViewController, UITextViewDelegate {
     private let config: MushiConfig
     private let onSubmit: ([String: Any]) -> Void
@@ -11,7 +11,9 @@ final class MushiWidgetController: UIViewController, UITextViewDelegate {
     private let placeholderLabel = UILabel()
     private let submitButton = UIButton(type: .system)
     private let segmented = UISegmentedControl(items: ["Bug", "Slow", "Visual", "Confusing"])
-    private let attachedScreenshot: String?
+    /// Raw base64 JPEG. `nil` once the reporter removes it.
+    private var attachedScreenshot: String?
+    private let screenshotRow = UIStackView()
     private let initialCategory: String?
 
     init(config: MushiConfig, screenshot: String?, initialCategory: String? = nil, onSubmit: @escaping ([String: Any]) -> Void) {
@@ -84,6 +86,16 @@ final class MushiWidgetController: UIViewController, UITextViewDelegate {
         textContainer.addSubview(placeholderLabel)
 
         stack.addArrangedSubview(textContainer)
+
+        if let shot = attachedScreenshot,
+           let data = Data(base64Encoded: shot),
+           let image = UIImage(data: data) {
+            buildScreenshotRow(image: image)
+            stack.addArrangedSubview(screenshotRow)
+        } else {
+            // Never send an image the reporter cannot see.
+            attachedScreenshot = nil
+        }
 
         submitButton.setTitle("Submit", for: .normal)
         submitButton.titleLabel?.font = .systemFont(ofSize: 16, weight: .semibold)
@@ -169,6 +181,55 @@ final class MushiWidgetController: UIViewController, UITextViewDelegate {
     }
 
     @objc private func cancel() { dismiss(animated: true) }
+
+    private func buildScreenshotRow(image: UIImage) {
+        screenshotRow.axis = .horizontal
+        screenshotRow.spacing = 12
+        screenshotRow.alignment = .center
+
+        let preview = UIImageView(image: image)
+        preview.contentMode = .scaleAspectFit
+        preview.layer.cornerRadius = 6
+        preview.layer.borderWidth = 1
+        preview.layer.borderColor = UIColor.separator.cgColor
+        preview.clipsToBounds = true
+        preview.isAccessibilityElement = true
+        preview.accessibilityLabel = "Screenshot that will be sent with this report"
+        preview.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            preview.heightAnchor.constraint(equalToConstant: 120),
+            preview.widthAnchor.constraint(equalTo: preview.heightAnchor,
+                                           multiplier: image.size.height > 0 ? image.size.width / image.size.height : 0.5)
+        ])
+
+        let title = UILabel()
+        title.text = "Screenshot attached"
+        title.font = .preferredFont(forTextStyle: .subheadline)
+        let hint = UILabel()
+        hint.text = "Check it, and remove it if anything private is visible."
+        hint.font = .preferredFont(forTextStyle: .footnote)
+        hint.textColor = .secondaryLabel
+        hint.numberOfLines = 0
+        let remove = UIButton(type: .system)
+        remove.setTitle("Remove", for: .normal)
+        remove.contentHorizontalAlignment = .leading
+        remove.accessibilityLabel = "Remove screenshot"
+        remove.addTarget(self, action: #selector(removeScreenshot), for: .touchUpInside)
+
+        let text = UIStackView(arrangedSubviews: [title, hint, remove])
+        text.axis = .vertical
+        text.spacing = 4
+        text.alignment = .leading
+
+        screenshotRow.addArrangedSubview(preview)
+        screenshotRow.addArrangedSubview(text)
+    }
+
+    @objc private func removeScreenshot() {
+        attachedScreenshot = nil
+        screenshotRow.isHidden = true
+        UIAccessibility.post(notification: .announcement, argument: "Screenshot removed")
+    }
 
     private static func categoryIndex(for category: String?) -> Int {
         guard let category else { return 0 }

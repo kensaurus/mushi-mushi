@@ -188,3 +188,31 @@ describe('Home while a required setup step is open', () => {
     expect(container.querySelector('[data-testid="home-how-this-works"] button')!.getAttribute('aria-expanded')).toBe('false')
   })
 })
+
+// Fresh-eyes sweep 2026-11-18: "Needs you" sat in row 3, under the hero and four green lights.
+describe('Home: problems first', () => {
+  let container: HTMLDivElement
+  let root: Root
+  beforeEach(() => {
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+  afterEach(() => {
+    act(() => root.unmount())
+    container.remove()
+  })
+
+  it('puts the Needs you row above the health lights while something needs the owner', async () => {
+    const { DashboardPage, homeNeedsFirst } = await import('./DashboardPage')
+    expect(homeNeedsFirst(home as never)).toBe(true)
+    expect(homeNeedsFirst({ needsYou: section([]), fixFirst: section([]) } as never)).toBe(false)
+    act(() => {
+      root.render(createElement(MemoryRouter, null, createElement(DashboardPage)))
+    })
+    await flush()
+    const needs = container.querySelector('[data-testid="home-needs-row"]')!
+    const health = container.querySelector('[data-testid="home-health"]')!
+    expect(needs.compareDocumentPosition(health) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+})

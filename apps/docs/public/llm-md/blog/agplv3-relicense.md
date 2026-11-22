@@ -34,7 +34,7 @@ The server (`@mushi-mushi/server`, `@mushi-mushi/agents`, `@mushi-mushi/verify`)
 - Self-hosting is and always will be free.
 - The AGPLv3 network use provision (Section 13) means if you run a modified server as a SaaS, you publish your changes. This isn't punitive — it's the copyleft that keeps the ecosystem honest.
 - The SDK packages (`@mushi-mushi/react`, `@mushi-mushi/vue`, etc.) remain **MIT** — embed them in anything, open or closed.
-- Companies that need a non-copyleft path for hosted SaaS can obtain a [commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/COMMERCIAL-LICENSE.md) (dual licensing).
+- Companies that need a non-copyleft path for hosted SaaS can obtain a [commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/docs/legal/COMMERCIAL-LICENSE.md) (dual licensing).
 
 **Self-hosters:** nothing changes operationally. You were already allowed to do everything you're doing. The new license just makes that legally unambiguous and removes the 2029 date anxiety.
 

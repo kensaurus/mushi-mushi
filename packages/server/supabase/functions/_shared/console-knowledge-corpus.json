@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-13T03:29:51.884Z",
+  "generatedAt": "2026-11-18T14:40:30.302Z",
   "docs": [
     {
       "doc_path": "recipes/connect-github-and-sdk.md",
@@ -282,6 +282,15 @@
       "content_hash": "065ce88af30e0b627cb54bb0c2eede80d67aa943f55991482936336b946740a3"
     },
     {
+      "doc_path": "pages/providers.md",
+      "section": "main",
+      "title": "Providers & AI routes",
+      "body": "# Providers & AI routes\n\nThe AI provider accounts behind every app: health and balance, spend against sales, the model each app tries first, and who changed what.\n\nRoute: /providers\nSection: Check\n\nKeywords: providers, ai providers, ai routes, model routes, routing, llm providers, provider health, balance, spend, margin, kensaurus, provider watch, models\n\nUse this page when the user asks about: providers, ai providers, ai routes, model routes, routing, llm providers",
+      "route_path": "/providers",
+      "kind": "page",
+      "content_hash": "de790f9111ac9abad23f81c9af80db3cd6a10419258fe9cc5ef8ca3aba4b88a8"
+    },
+    {
       "doc_path": "pages/health.md",
       "section": "main",
       "title": "Mushi Mushi health",
@@ -352,6 +361,15 @@
       "route_path": "/releases",
       "kind": "page",
       "content_hash": "00b17b17a8185717f1a7cd2482649791d750dccbea185d03a5e34096ed070f0b"
+    },
+    {
+      "doc_path": "pages/ops.md",
+      "section": "main",
+      "title": "Ops",
+      "body": "# Ops\n\nPayments, releases and alerts from every app in one feed, which app is not reporting, and your team's Slack bot.\n\nRoute: /ops\nSection: Act\n\nKeywords: ops, ops hub, payments, sales, revenue, releases, deploys, alerts, incidents, slack bot, slash command, uptime, is everything connected\n\nUse this page when the user asks about: ops, ops hub, payments, sales, revenue, releases",
+      "route_path": "/ops",
+      "kind": "page",
+      "content_hash": "eeef1657eb4d6cb97f71a5d8009f472d8b6e618adec2657e06c8c7c534c3345a"
     },
     {
       "doc_path": "pages/notifications.md",
@@ -645,10 +663,10 @@
       "doc_path": "pages/skills--tab-catalog.md",
       "section": "main",
       "title": "Skill catalog",
-      "body": "# Skill catalog\n\nBrowse 70+ agent skills from kenji skills by category.\n\nRoute: /skills?tab=catalog\nSection: Start\n\nKeywords: catalog, skill catalog, cursor-kenji, kenji skills\n\nUse this page when the user asks about: catalog, skill catalog, cursor-kenji, kenji skills",
+      "body": "# Skill catalog\n\nBrowse the agent skills catalog by category.\n\nRoute: /skills?tab=catalog\nSection: Start\n\nKeywords: catalog, skill catalog, cursor-kenji, kenji skills\n\nUse this page when the user asks about: catalog, skill catalog, cursor-kenji, kenji skills",
       "route_path": "/skills",
       "kind": "page",
-      "content_hash": "a97f6622ed17368768609a68095290c7170c7b9c8e70e2135b307b532545a10c"
+      "content_hash": "ebb220b33e9ac04b342c16df1dc70c13cff6b7f9bfa544fcb6ea07b87f9cd9be"
     },
     {
       "doc_path": "pages/skills--tab-pipelines.md",

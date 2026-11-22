@@ -29,6 +29,7 @@ import { CLASSIFIER_REPORT_CATEGORIES, featureRequestDispatchBlock } from '../..
 import { CLOSED_REASONS, bulkClosedReason, closedReasonAllowed } from '../../_shared/report-close-reasons.ts';
 import { isSdkKey } from '../../_shared/setup-signals.ts';
 import { REPORT_ORIGIN_FILTERS, reportOriginFilter } from '../../_shared/report-origin.ts';
+import { REPORT_SOURCE_KINDS, isReportSourceKind, reportSourceKindFilter } from '../../_shared/report-source-kind.ts';
 import {
   NEW_BUCKET_STATUSES,
   REPORT_LIST_PLATFORMS,
@@ -513,6 +514,15 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
         400,
       );
     }
+    // `source=user|sentry|alarm|task|test|check`: where the report came from
+    // (owner's walkthrough 2026-11-17: alarms read as user bugs).
+    const sourceKindParam = c.req.query('source')?.trim() ?? '';
+    if (sourceKindParam && !isReportSourceKind(sourceKindParam)) {
+      return c.json(
+        { ok: false, error: { code: 'VALIDATION_ERROR', message: `source must be one of: ${REPORT_SOURCE_KINDS.join(', ')}` } },
+        400,
+      );
+    }
     if (platformParam && !REPORT_LIST_PLATFORMS.includes(platformParam)) {
       return c.json(
         { ok: false, error: { code: 'VALIDATION_ERROR', message: `platform must be one of: ${REPORT_LIST_PLATFORMS.join(', ')}` } },
@@ -587,6 +597,12 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     const originFilter = originParam ? reportOriginFilter(originParam) : null;
     if (originFilter?.kind === 'or') orGroups.push(originFilter.clause);
     else if (originFilter) query = query.filter(originFilter.column, originFilter.operator, originFilter.value);
+    if (sourceKindParam && isReportSourceKind(sourceKindParam)) {
+      const sourceFilter = reportSourceKindFilter(sourceKindParam);
+      if (sourceFilter.kind === 'in') query = query.in('source', [...sourceFilter.values]);
+      else if (sourceFilter.kind === 'eq_meta') query = query.eq('custom_metadata->>source', sourceFilter.value);
+      else orGroups.push(...sourceFilter.groups);
+    }
     const orFilter = combineOrGroups(orGroups);
     if (orFilter) query = query.or(orFilter);
     if (tagParam) {

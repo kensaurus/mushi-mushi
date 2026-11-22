@@ -286,7 +286,15 @@ export function buildManifestTools(deps: {
         }
 
         if (spec.transform === 'diagnose_connection') {
-          const ingest = (await apiCall('/v1/sync/ingest-setup', { headers: ctx.authHeaders })) as {
+          // An account key is refused on the SDK route (it cannot ingest):
+          // name the project on the admin route instead, as diagnose_setup does.
+          const ingest = (await apiCall('/v1/sync/ingest-setup', { headers: ctx.authHeaders }).catch((err) => {
+            const code = (err as { data?: { code?: string } } | null)?.data?.code;
+            if (code !== 'ORG_KEY_NOT_ALLOWED' || !ctx.projectIdHint) throw err;
+            return apiCall(`/v1/admin/projects/${encodeURIComponent(ctx.projectIdHint)}/ingest-setup`, {
+              headers: ctx.authHeaders,
+            });
+          })) as {
             ready?: boolean;
             steps?: Array<{ label: string; complete: boolean; required: boolean; hint: string }>;
           };

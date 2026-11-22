@@ -5,8 +5,9 @@
  *          All mutations bubble back to the page through callbacks.
  *
  *          Group collapse: when `groupBy === 'fingerprint'`, rows sharing a
- *          report_group_id are collapsed under a single canonical row with a
- *          "+N variants" chip + expand chevron. Singletons render unchanged.
+ *          report_group_id (or one check's headline across apps) collapse
+ *          under a single canonical row with a "+N similar" chip + expand
+ *          chevron (reportDisplayRows.ts). Singletons render unchanged.
  *          Expand state lives in URL params so the back-button restores it.
  */
 
@@ -15,12 +16,16 @@ import { useAutoAnimate } from '@formkit/auto-animate/react'
 import { Btn, Kbd } from '../ui'
 import { ResponsiveTable } from '../ResponsiveTable'
 import { ReportRowView } from './ReportRowView'
+import { ReportRowCard } from './ReportRowCard'
 import { SortHeader } from './SortHeader'
 import type { ReportRow, SortDir, SortField } from './types'
 import { PAGE_SIZE } from './types'
 import type { PreflightState } from '../../lib/useDispatchPreflight'
 import { preflightForReportRow } from './allAppsRowActions'
+import { buildDisplayRows, type DisplayRow } from './reportDisplayRows'
 import { REPORTS_TABLE_COL, REPORTS_STICKY_LEAD, REPORTS_TABLE_MIN_W, TABLE_CELL } from './reportsTableLayout'
+import { AppGroupSection } from '../ui/app-group'
+import { REPORT_COUNT_LABELS, reportAppCounts, reportAppGroups } from '../../lib/reportsByApp'
 
 interface Props {
   reports: ReportRow[]
@@ -60,17 +65,12 @@ interface Props {
    * apps get an explanation instead of that checklist. Null in one-app mode.
    */
   preflightProjectId?: string | null
-}
-
-interface DisplayRow {
-  row: ReportRow
-  /** Total siblings in this group, including the canonical (>=1). Only set
-   *  for canonical rows when group-collapse is on. */
-  variantCount?: number
-  /** Whether this canonical row's siblings are currently expanded. */
-  expanded?: boolean
-  /** True when this row is a sibling rendered under an expanded canonical. */
-  isVariantOf?: string
+  /**
+   * All apps: one block per app (AppGroupSection), worst app first. The page passes
+   * `reports` already in that order (orderReportsByApp) so the keyboard cursor walks
+   * the rows as drawn. Fingerprint collapse then works inside each app.
+   */
+  groupedByApp?: boolean
 }
 
 export function ReportsTable({
@@ -99,85 +99,92 @@ export function ReportsTable({
   onDispatchFix,
   preflight,
   preflightProjectId = null,
+  groupedByApp = false,
 }: Props) {
   const [tbodyParent] = useAutoAnimate({
     duration: 220,
     easing: 'ease-out',
   })
 
-  // Build the display list: when group-collapse is on, sibling rows that
-  // share a report_group_id collapse behind their canonical (newest) row.
-  // Singletons are unaffected. We preserve the BE-supplied sort by walking
-  // the array in order and only emitting the *first* row of each group.
-  const displayRows: DisplayRow[] = useMemo(() => {
-    if (!groupCollapse) return reports.map((r) => ({ row: r }))
-
-    const seen = new Set<string>()
-    const groupMembers = new Map<string, ReportRow[]>()
-    for (const r of reports) {
-      const gid = r.report_group_id
-      if (!gid) continue
-      const arr = groupMembers.get(gid) ?? []
-      arr.push(r)
-      groupMembers.set(gid, arr)
-    }
-
-    const out: DisplayRow[] = []
-    for (const r of reports) {
-      const gid = r.report_group_id
-      if (!gid) {
-        out.push({ row: r })
-        continue
-      }
-      if (seen.has(gid)) continue
-      seen.add(gid)
-      const members = groupMembers.get(gid) ?? [r]
-      const variantCount = members.length
-      const expanded = expandedGroups.has(gid)
-      out.push({ row: r, variantCount, expanded })
-      if (expanded && members.length > 1) {
-        for (const sib of members.slice(1)) {
-          out.push({ row: sib, isVariantOf: gid })
-        }
-      }
-    }
-    return out
-  }, [reports, groupCollapse, expandedGroups])
+  // Group-collapse: rows of one fingerprint (and a check filed in several
+  // apps) collapse behind their first row (reportDisplayRows.ts).
+  // All apps: one block per app, each with its own display rows; `start` is the block's first
+  // row index in the page-wide order the cursor uses.
+  const blocks = useMemo(() => {
+    if (!groupedByApp) return null
+    let start = 0
+    return reportAppGroups(reports).map((app) => {
+      const rows = buildDisplayRows(app.items, groupCollapse, expandedGroups)
+      const block = { app, rows, start }
+      start += rows.length
+      return block
+    })
+  }, [groupedByApp, reports, groupCollapse, expandedGroups])
+  const displayRows: DisplayRow[] = useMemo(
+    () => (blocks ? blocks.flatMap((b) => b.rows) : buildDisplayRows(reports, groupCollapse, expandedGroups)),
+    [blocks, reports, groupCollapse, expandedGroups],
+  )
 
   const visibleGroupCount = useMemo(
     () => displayRows.filter((d) => !d.isVariantOf).length,
     [displayRows],
   )
 
-  return (
-    <div className="border border-edge-subtle rounded-md overflow-hidden bg-surface-raised">
-      <div className="px-3 py-1.5 border-b border-edge-subtle bg-surface-raised">
-        <span className="block text-2xs text-fg-muted min-w-0 truncate">
-          {total} report{total === 1 ? '' : 's'} — click a row to triage; scroll for status & actions
-        </span>
-      </div>
-      <ResponsiveTable
-        ariaLabel="Bug reports"
-        stickyLeadColumns={3}
-        stickyOffsets={REPORTS_STICKY_LEAD}
-      >
-        <table
-          className={`reports-triage-table w-full ${REPORTS_TABLE_MIN_W} table-fixed border-collapse text-sm`}
-          aria-label="Bug reports"
-        >
-          <colgroup>
-            <col className={REPORTS_TABLE_COL.stripe} />
-            <col className={REPORTS_TABLE_COL.checkbox} />
-            <col className={REPORTS_TABLE_COL.summary} />
-            <col className={REPORTS_TABLE_COL.status} />
-            <col className={REPORTS_TABLE_COL.severity} />
-            <col className={REPORTS_TABLE_COL.confidence} />
-            <col className={REPORTS_TABLE_COL.action} />
-          </colgroup>
-          <thead className="bg-surface-raised text-2xs uppercase tracking-wider text-fg-faint sticky top-0 z-10">
+  const card = (d: DisplayRow) => {
+    const rowPreflight = preflightForReportRow(preflight, preflightProjectId, d.row)
+    return (
+            <ReportRowCard
+              key={d.row.id}
+              row={d.row}
+              isSelected={selected.has(d.row.id)}
+              dispatchBusy={dispatching.has(d.row.id)}
+              variantCount={d.variantCount}
+              appCount={d.appCount}
+              onToggleSelect={() => onToggleSelect(d.row.id)}
+              onOpen={() => onOpen(d.row)}
+              onDispatchFix={() => onDispatchFix(d.row)}
+              preflight={rowPreflight.preflight}
+              dispatchScopeNote={rowPreflight.dispatchScopeNote}
+            />
+    )
+  }
+  const row = (d: DisplayRow, i: number) => {
+    const rowPreflight = preflightForReportRow(preflight, preflightProjectId, d.row)
+    return (
+              <ReportRowView
+                key={d.row.id}
+                row={d.row}
+                index={i}
+                isSelected={selected.has(d.row.id)}
+                isCursor={i === cursor}
+                dispatchBusy={dispatching.has(d.row.id)}
+                variantCount={d.variantCount}
+                appCount={d.appCount}
+                expanded={d.expanded}
+                isVariant={Boolean(d.isVariantOf)}
+                onToggleGroup={
+                  d.groupKey && d.variantCount && d.variantCount > 1
+                    ? () => onToggleGroup(d.groupKey as string)
+                    : undefined
+                }
+                onToggleSelect={() => onToggleSelect(d.row.id)}
+                onFocus={() => onSetCursor(i)}
+                onOpen={() => onOpen(d.row)}
+                onCopyLink={() => onCopyLink(d.row)}
+                onDismiss={() => onDismiss(d.row)}
+                onDispatchFix={() => onDispatchFix(d.row)}
+                preflight={rowPreflight.preflight}
+                dispatchScopeNote={rowPreflight.dispatchScopeNote}
+              />
+    )
+  }
+  /** The column headers; a later app block keeps them for screen readers only (one visible header row). */
+  const head = (srOnly: boolean) => (
+          <thead className={srOnly ? 'sr-only' : 'bg-surface-raised text-2xs text-fg-secondary sticky top-0 z-10 font-semibold'}>
             <tr>
               <th scope="col" className={`${REPORTS_TABLE_COL.stripe} p-0`} aria-label="Severity stripe" />
               <th scope="col" className={`${REPORTS_TABLE_COL.checkbox} ${TABLE_CELL.pxLead} py-2 text-left pl-3`}>
+                {srOnly ? null : (
                 <input
                   type="checkbox"
                   aria-label={allSelected ? 'Deselect all on page' : 'Select all on page'}
@@ -188,6 +195,7 @@ export function ReportsTable({
                   onChange={onToggleSelectAll}
                   className="h-3.5 w-3.5 accent-brand"
                 />
+                )}
               </th>
               {/* Summary text isn't a sortable field — the column shows the
                   free-form summary as primary content with component as a
@@ -218,7 +226,7 @@ export function ReportsTable({
               />
               <SortHeader
                 label="Conf."
-                fullLabel="Confidence"
+                fullLabel="Confidence: how sure Mushi Mushi is about the severity and category"
                 field="confidence"
                 current={sort}
                 dir={dir}
@@ -228,8 +236,8 @@ export function ReportsTable({
                 className={REPORTS_TABLE_COL.confidence}
               />
               <SortHeader
-                label="Action"
-                fullLabel="Action (sort by age)"
+                label="Action · age"
+                fullLabel="Action, and how long ago it came in (sort by age)"
                 field="created_at"
                 current={sort}
                 dir={dir}
@@ -240,52 +248,86 @@ export function ReportsTable({
               />
             </tr>
           </thead>
-          <tbody ref={tbodyParent}>
-            {displayRows.map((d, i) => {
-              const rowPreflight = preflightForReportRow(preflight, preflightProjectId, d.row)
-              return (
-              <ReportRowView
-                key={d.row.id}
-                row={d.row}
-                index={i}
-                isSelected={selected.has(d.row.id)}
-                isCursor={i === cursor}
-                dispatchBusy={dispatching.has(d.row.id)}
-                variantCount={d.variantCount}
-                expanded={d.expanded}
-                isVariant={Boolean(d.isVariantOf)}
-                onToggleGroup={
-                  d.row.report_group_id && d.variantCount && d.variantCount > 1
-                    ? () => onToggleGroup(d.row.report_group_id as string)
-                    : undefined
-                }
-                onToggleSelect={() => onToggleSelect(d.row.id)}
-                onFocus={() => onSetCursor(i)}
-                onOpen={() => onOpen(d.row)}
-                onCopyLink={() => onCopyLink(d.row)}
-                onDismiss={() => onDismiss(d.row)}
-                onDispatchFix={() => onDispatchFix(d.row)}
-                preflight={rowPreflight.preflight}
-                dispatchScopeNote={rowPreflight.dispatchScopeNote}
-              />
-              )
-            })}
+  )
+  const table = (rows: DisplayRow[], start: number, srOnlyHead: boolean, label: string, animated: boolean) => (
+      <ResponsiveTable
+        ariaLabel={label}
+        stickyLeadColumns={3}
+        stickyOffsets={REPORTS_STICKY_LEAD}
+      >
+        <table
+          className={`reports-triage-table w-full ${REPORTS_TABLE_MIN_W} table-fixed border-collapse text-sm`}
+          aria-label={label}
+        >
+          <colgroup>
+            <col className={REPORTS_TABLE_COL.stripe} />
+            <col className={REPORTS_TABLE_COL.checkbox} />
+            <col className={REPORTS_TABLE_COL.summary} />
+            <col className={REPORTS_TABLE_COL.status} />
+            <col className={REPORTS_TABLE_COL.severity} />
+            <col className={REPORTS_TABLE_COL.confidence} />
+            <col className={REPORTS_TABLE_COL.action} />
+          </colgroup>
+          {head(srOnlyHead)}
+          <tbody ref={animated ? tbodyParent : undefined}>
+            {rows.map((d, j) => row(d, start + j))}
           </tbody>
         </table>
       </ResponsiveTable>
+  )
 
-      <div className="flex items-center justify-between gap-2 px-3 py-2 border-t border-edge-subtle text-2xs text-fg-muted">
-        <span>
-          Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total}
+  return (
+    <div className="border border-edge-subtle rounded-md overflow-hidden bg-surface-raised">
+      <div className="px-3 py-1.5 border-b border-edge-subtle bg-surface-raised">
+        <span className="block text-2xs text-fg-muted min-w-0 truncate">
+          {/* The count is on the Open chip and in the pager (round-3 sweep 2026-11-19). */}
+          Click a row to triage<span className="hidden sm:inline">; scroll for status & actions</span>
+        </span>
+      </div>
+      {blocks ? (
+        // All apps: one block per app, worst app first, with its counts and "Open →" (2026-11-19).
+        <div className="px-2" data-testid="reports-app-groups">
+          {blocks.map((b, k) => (
+            <AppGroupSection
+              key={b.app.id}
+              app={b.app}
+              counts={reportAppCounts(b.app.items)}
+              countLabels={REPORT_COUNT_LABELS}
+              summary={`${b.app.items.length} on this page`}
+              to={`/reports?project=${encodeURIComponent(b.app.id)}`}
+              data-testid={`reports-app-group-${b.app.id}`}
+            >
+              <ul className="divide-y divide-edge-subtle sm:hidden" aria-label={`Bug reports in ${b.app.name}`}>
+                {b.rows.map(card)}
+              </ul>
+              <div className="hidden sm:block">{table(b.rows, b.start, k > 0, `Bug reports in ${b.app.name}`, false)}</div>
+            </AppGroupSection>
+          ))}
+        </div>
+      ) : (
+        <>
+          {/* Phone: stacked rows with status and severity inline; the table
+              scrolled sideways and hid them (fresh-eyes sweep 2026-11-18). */}
+          <ul className="divide-y divide-edge-subtle sm:hidden" aria-label="Bug reports" data-testid="reports-card-list">
+            {displayRows.map(card)}
+          </ul>
+          <div className="hidden sm:block">{table(displayRows, 0, false, 'Bug reports', true)}</div>
+        </>
+      )}
+
+      <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-t border-edge-subtle text-2xs text-fg-muted">
+        <span className="min-w-0">
+          Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total.toLocaleString('en-US')}
           {groupCollapse && visibleGroupCount !== reports.length && (
             <span className="ml-2 text-fg-faint">· grouped into {visibleGroupCount} fingerprint{visibleGroupCount === 1 ? '' : 's'}</span>
           )}
         </span>
-        <div className="flex items-center gap-1">
+        {/* The pager stays on one line: "1 / 43" wrapped to three at 390px. */}
+        <div className="ml-auto flex shrink-0 items-center gap-1 whitespace-nowrap" data-testid="reports-pager">
           <Btn variant="ghost" size="sm" disabled={page === 0} onClick={() => onSetPage(page - 1)}>
             <Kbd>[</Kbd> Prev
           </Btn>
-          <span className="font-mono px-2">
+          <span className="whitespace-nowrap font-mono px-2">
             {page + 1} / {totalPages}
           </span>
           <Btn

@@ -38,7 +38,7 @@ export function ProjectsHubGuide({ topPriority, stats }: Props) {
 
   return (
     <FeatureExplainPanel
-      title="What makes a project healthy"
+      title="What makes an app healthy"
       summary={PROJECTS_EXPLAINER_SUMMARY}
       defaultOpen={isProjectsGuideExpanded(topPriority)}
     >

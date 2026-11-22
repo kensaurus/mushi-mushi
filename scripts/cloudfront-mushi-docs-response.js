@@ -65,6 +65,7 @@ var NOINDEX_TWINS = {
   'admin/iterate': 1,
   'admin/judge': 1,
   'admin/prompt-lab': 1,
+  'admin/providers': 1,
   'admin/query': 1,
   'admin/queue': 1,
   'admin/research': 1,

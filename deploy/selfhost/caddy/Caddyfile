@@ -1,0 +1,25 @@
+# The one origin of a self-hosted Mushi Mushi (deploy/selfhost). The console is
+# at /, Supabase's APIs at /*/v1/ through the kit's gateway, so the browser,
+# SDK, CLI and MCP all use MUSHI_PUBLIC_URL and no CORS setup is needed.
+# MUSHI_SITE_ADDRESS is ":3000" (plain http) until `sh mushi.sh https <domain>`
+# sets your domain; then Caddy gets and renews the certificate.
+{$MUSHI_SITE_ADDRESS::3000} {
+	encode zstd gzip
+	@api path /rest/v1/* /auth/v1/* /storage/v1/* /realtime/v1/* /functions/v1/* /graphql/v1/*
+	handle @api {
+		reverse_proxy api-gw:8000 {
+			flush_interval -1
+		}
+	}
+	handle {
+		reverse_proxy mushi-admin:3000
+	}
+	request_body {
+		max_size 25MB
+	}
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+}

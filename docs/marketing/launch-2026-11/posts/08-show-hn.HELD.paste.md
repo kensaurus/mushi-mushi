@@ -14,7 +14,7 @@ What you can try right now, without signing up, is the check. Paste a live URL a
 
 The numbers from my own apps over the last 60 days: people pressed the report button 35 times. About 2,050 reports came from automatic checks and my own testing. 526 fixes merged. Before merging, a second model reviews the fix against the report; it made 1,803 reviews and said "hold" 596 times.
 
-The honest limits: I'm still most of its users. Setup has more steps than it should. The free plan covers one app and 100 diagnoses a month, and I pay for the model on those; the hourly site watch and the code audits need your own model keys or a local agent.
+The honest limits: I'm still most of its users. Setup has more steps than it should. The free plan covers three apps and 300 diagnoses a month, and I pay for the model on those; the hourly site watch and the code audits need your own model keys or a local agent.
 
 The SDKs are MIT and the server is AGPLv3; a separate enterprise folder is source-available. Self-hosting is free.
 

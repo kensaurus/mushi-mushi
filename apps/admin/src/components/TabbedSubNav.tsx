@@ -30,6 +30,7 @@
 
 import type { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
+import { useEdgeFade } from '../lib/useEdgeFade'
 
 interface TabbedSubNavTab {
   to: string
@@ -53,6 +54,8 @@ export interface TabbedSubNavProps {
 }
 
 export function TabbedSubNav({ ariaLabel, tabs, trailing }: TabbedSubNavProps) {
+  // A right-edge fade while more tabs sit past the edge (lib/useEdgeFade).
+  const fade = useEdgeFade<HTMLUListElement>(tabs.length)
   const location = useLocation()
   return (
     <nav
@@ -63,7 +66,7 @@ export function TabbedSubNav({ ariaLabel, tabs, trailing }: TabbedSubNavProps) {
       {/* overflow-x-auto alone also lets the strip scroll a pixel vertically (the active tab's -mb-px), which drew a stray scrollbar (2026-11-06). */}
       {/* At 390px "Speed and cost" wrapped to three lines, Settings was cut off and a native
           scrollbar with arrows showed (2026-11-07): tabs stay one line, the strip still swipes. */}
-      <ul className="flex min-w-0 items-center gap-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist">
+      <ul ref={fade.ref} data-more={fade.more || undefined} className={`flex min-w-0 items-center gap-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${fade.className}`} role="tablist">
         {tabs.map((tab) => {
           const isActive = (tab.match ?? defaultMatch(tab.to))({
             pathname: location.pathname,

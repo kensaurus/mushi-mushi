@@ -1,0 +1,91 @@
+---
+title: Mushi Mushi in Replit
+description: Add the Mushi Mushi report button to a Replit app with one prompt, then connect Replit Agent over MCP so it reads the plain-English diagnosis and fixes the bug.
+---
+
+import { Callout } from 'nextra/components'
+
+# Mushi Mushi in Replit
+
+Two parts, about five minutes each. First your app gets a report button.
+Then Replit Agent gets Mushi Mushi as an MCP server, so you can ask it what
+broke and have it fix the code.
+
+<InThirtySeconds>
+- Ask Replit Agent to add one script tag: your app gets a report button.
+- Add Mushi Mushi under Integrations as a custom MCP server: one URL, sign in, approve.
+- Ask Agent: "what did my users report?"
+</InThirtySeconds>
+
+## Add the report button
+
+1. [Sign up free](https://kensaur.us/mushi-mushi/admin/signup?src=quickstart-replit) and create a project.
+2. In the console, open **Set up** → **Install widget** → **Script tag** and copy the line.
+3. Send this to Replit Agent, with your line in place of the example:
+
+```text
+Add this script tag inside the <head> of the app's main HTML page exactly as written, and change nothing else:
+<script async src="https://cdn.jsdelivr.net/npm/@mushi-mushi/web@1/dist/mushi.loader.global.js" data-project="YOUR_PROJECT_ID" data-key="YOUR_SDK_KEY"></script>
+```
+
+4. Open the app, tap the report button and send one sentence.
+
+<YouWillSee>**You'll see:** the report in your [Mushi Mushi console](https://kensaur.us/mushi-mushi/admin/reports) with a title, how serious it is and the likely cause.</YouWillSee>
+
+What your users see, what it collects and how to remove it: the same as in
+[Lovable or Bolt](/quickstart/lovable-bolt#what-your-users-will-see).
+
+## Connect Replit Agent
+
+<Steps>
+
+### Add the server
+
+One click: [Add Mushi Mushi to Replit](https://replit.com/integrations?mcp=eyJkaXNwbGF5TmFtZSI6Ik11c2hpIE11c2hpIiwiYmFzZVVybCI6Imh0dHBzOi8va2Vuc2F1ci51cy9tdXNoaS1tdXNoaS9ob3N0ZWQtbWNwLz9mZWF0dXJlcz12aWJlIn0=).
+
+Or by hand ([Replit docs](https://docs.replit.com/build/connect-via-mcp#add-a-custom-mcp-server)):
+open **Settings** → **Integrations** → **Your integrations**, choose
+**Add custom** → **Add personal MCP server**, and fill in:
+
+| Field | Value |
+| --- | --- |
+| **Display name** | `Mushi Mushi` |
+| **Server URL** | `https://kensaur.us/mushi-mushi/hosted-mcp/?features=vibe` |
+
+Leave **Advanced settings** empty. Click **Test & save**.
+
+### Sign in and approve
+
+A Mushi Mushi page opens. Sign in, choose which projects Replit may see, and
+click **Approve**. You never copy a key.
+
+<YouWillSee>**You'll see:** Mushi Mushi under **MCP Servers** with a connected status.</YouWillSee>
+
+### Ask Agent
+
+```text
+Use the Mushi Mushi MCP server: what did my users report this week?
+```
+
+```text
+Use Mushi Mushi to get the fix context for the top report, then fix it.
+```
+
+<YouWillSee>**You'll see:** the report, the likely cause in plain English and the files to change, then Agent's edit.</YouWillSee>
+
+</Steps>
+
+<Callout type="info">
+  Custom MCP servers depend on your Replit plan and workspace permissions. If
+  **Add custom** is missing, ask your workspace admin.
+</Callout>
+
+## If it does not connect
+
+- **Use the `kensaur.us` URL above.** The sign-in needs it; a `supabase.co`
+  URL fails the OAuth lookup.
+- **Signing in is not an option?** Open **Advanced settings** and add the
+  header `X-Mushi-Api-Key` with an `mcp:read` key (**Manage apps** →
+  **Generate API key** → **MCP read-only**). Never use the key from your
+  script tag here.
+- **Still stuck:** ask Agent to call `diagnose_setup`. It says what is missing.

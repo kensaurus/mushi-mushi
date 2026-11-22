@@ -81,9 +81,8 @@ test.describe('Projects enhanced shell', () => {
     await page.goto(`${ADMIN_URL}/projects`, { waitUntil: 'domcontentloaded' })
     await page.getByRole('button', { name: 'Dismiss' }).click({ timeout: 3000 }).catch(() => {})
     await expect(page.getByTestId('mushi-page-projects')).toBeVisible({ timeout: 15000 })
-    await expect(
-      page.getByTestId('mushi-page-projects').getByText('PROJECTS SNAPSHOT', { exact: true }),
-    ).toBeVisible({ timeout: 15000 })
+    // The snapshot is one flat strip of figures (2026-11-18), no "PROJECTS SNAPSHOT" heading.
+    await expect(page.getByTestId('projects-snapshot')).toBeVisible({ timeout: 15000 })
     await expect(page.getByLabel('Projects sections')).toBeVisible()
     await expect(
       page.getByLabel('Projects sections').getByRole('radio', { name: 'Overview' }),

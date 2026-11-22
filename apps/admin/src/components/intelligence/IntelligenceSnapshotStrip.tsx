@@ -6,8 +6,8 @@
 
 import { PageStatus } from '../ui'
 import type { IntelligenceStats } from './IntelligenceStatsTypes'
-import { pluralizeWithCount } from '../../lib/format'
 import { intelligenceLinks } from '../../lib/statCardLinks'
+import { formatDigestWeek, insightsTone } from '../../lib/intelligenceView'
 
 interface Props {
   stats: IntelligenceStats
@@ -16,18 +16,13 @@ interface Props {
   statLabels?: Record<string, string>
 }
 
-function weekOf(iso: string | null): string | null {
-  if (!iso) return null
-  const d = new Date(iso)
-  return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-}
-
 function insightsSentence(stats: IntelligenceStats): string {
   if (stats.reportCount === 0) {
     return stats.activeJobCount > 0 ? 'Your first weekly summary is being written.' : 'No weekly summary yet.'
   }
-  const week = weekOf(stats.latestWeekStart)
-  const latest = `The latest summary covers ${week ? `the week of ${week}` : 'last week'}: ${pluralizeWithCount(stats.totalReportsInLatest, 'bug')} reported`
+  const week = formatDigestWeek(stats.latestWeekStart)
+  // The bug count is the tile beside this sentence; "0 bugs reported" said it twice (round-2 sweep 2026-11-18).
+  const latest = `The latest summary covers ${week ? `the week of ${week}` : 'last week'}`
   // Only the latest run counts: an old failure a later summary replaced is not
   // news, and the green banner said "up to date" beside it (2026-10-28).
   const failed = stats.topPriority === 'job_failed' ? ' The last summary run failed.' : ''
@@ -38,7 +33,8 @@ export function IntelligenceSnapshotStrip({ stats, statsFetchedAt, statsValidati
   return (
     <PageStatus
       ariaLabel="Weekly insights status"
-      tone={stats.topPriority === 'job_failed' ? 'danger' : stats.pendingFindings > 0 ? 'warn' : stats.reportCount > 0 ? 'ok' : 'neutral'}
+      // Amber while the summary is over a week old: a green dot beside "Summary is 9 days old" contradicted it.
+      tone={insightsTone(stats)}
       sentence={insightsSentence(stats)}
       freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
       metrics={[

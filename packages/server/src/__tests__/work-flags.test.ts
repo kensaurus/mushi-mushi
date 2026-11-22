@@ -17,7 +17,7 @@
 import { describe, expect, it } from 'vitest'
 import { cleanStatus, parseHeartbeat, type LaneConfig } from '../../supabase/functions/_shared/work-lanes.ts'
 import { cleanLogLine } from '../../supabase/functions/_shared/work-telemetry.ts'
-import { deriveWorkerFlags, durationText, flagsForProject, flagSummary, type FlagClaim, type FlagHost, type FlagLane, type FlagInput } from '../../supabase/functions/_shared/work-flags.ts'
+import { deriveWorkerFlags, durationText, hookFailureSummary, flagsForProject, flagSummary, type FlagClaim, type FlagHost, type FlagLane, type FlagInput } from '../../supabase/functions/_shared/work-flags.ts'
 
 const NOW = new Date('2026-10-28T12:00:00Z')
 const P1 = '1000000a-0000-4000-8000-000000000000'
@@ -271,8 +271,19 @@ describe('deriveWorkerFlags: each other failure', () => {
       }),
     )
     const f = flags.find((x) => x.kind === 'hook_failures')!
-    expect(f.title).toBe("lane-1: 2 runs failed in the repo's git hooks in 24 h")
+    expect(f.title).toBe("lane-1: 2 runs failed in the repo's git hooks in 24 h (commit checks, pre-push checks)")
     expect(f.actions.map((a) => a.kind)).toEqual(['pause_lane', 'open_report'])
+  })
+
+  it('names the failing hook steps, most frequent first, and says when a check crashed', () => {
+    expect(
+      hookFailureSummary([
+        'failed (code): git commit failed: hook steps failed: eslint, typecheck-changed. eslint: Segmentation fault | exit status 139',
+        'failed (code): git commit failed: hook steps failed: typecheck-changed. typecheck-changed: ...',
+        'failed (code): git push failed: pre-push checks',
+      ]),
+    ).toEqual({ steps: ['typecheck-changed', 'eslint', 'pre-push checks'], crashed: true })
+    expect(hookFailureSummary(['git commit failed: hook steps failed: readme-counts. readme-counts: - line 864'])).toEqual({ steps: ['readme-counts'], crashed: false })
   })
 
   it('a local mushi work run no worker claims (lane-v4 on 2026-10-28)', () => {
@@ -334,5 +345,13 @@ describe('durationText', () => {
     expect(durationText(4 * HOUR + 20 * 60)).toBe('4 h 20 min')
     expect(durationText(30 * HOUR)).toBe('30 h')
     expect(durationText(4 * 86_400)).toBe('4 d')
+  })
+})
+
+describe('the agent a worker runs (2026-11-20)', () => {
+  it('keeps the agent word so the console names a Claude Code account, and drops unknown agents', () => {
+    expect(cleanStatus({ state: 'working', agent: 'claude' })).toMatchObject({ agent: 'claude' })
+    expect(cleanStatus({ state: 'working', agent: 'cursor' })).toMatchObject({ agent: 'cursor' })
+    expect(cleanStatus({ state: 'working', agent: 'rm -rf /' })).not.toHaveProperty('agent')
   })
 })

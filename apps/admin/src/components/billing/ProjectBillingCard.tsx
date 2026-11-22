@@ -32,6 +32,15 @@ export interface ProjectBillingCardProps {
   onPickPlan: (planId: string, billingInterval: 'monthly' | 'annual') => void
   onManage: () => void
   onReload?: () => void
+  /**
+   * The team meters at the top of the page already show the diagnoses quota,
+   * its % and its reset: the card does not draw them again.
+   */
+  quotaInStrip?: boolean
+  /** The seat limit the Seats meter uses (members stats), for the entitlements. */
+  seatLimit?: number | null
+  /** seatLimit came from members stats, where null means no limit. */
+  seatLimitKnown?: boolean
 }
 
 export function ProjectBillingCard({
@@ -43,6 +52,9 @@ export function ProjectBillingCard({
   onPickPlan,
   onManage,
   onReload,
+  quotaInStrip = false,
+  seatLimit = null,
+  seatLimitKnown = false,
 }: ProjectBillingCardProps) {
   const subscribed = !!project.subscription && ['active', 'trialing', 'past_due'].includes(project.subscription.status ?? '')
   const tier = project.tier
@@ -99,19 +111,9 @@ export function ProjectBillingCard({
                   <span aria-hidden="true" className="mr-1 leading-none">◆</span>
                   Admin
                 </Badge>
-                <InlineProof className="inline-flex flex-wrap items-center gap-1 border-0 bg-transparent px-0 py-0">
-                  <SignalChip tone="neutral" className="font-mono uppercase tracking-wider">
-                    tier
-                  </SignalChip>
-                  <span className="font-medium text-fg-secondary">{planLabel}</span>
-                  <SignalChip tone="neutral">entitlements</SignalChip>
-                </InlineProof>
-                <Badge
-                  className="bg-surface-overlay text-fg-muted border border-edge-subtle"
-                  title="No Stripe customer or invoice exists for this org. Entitlements are honoured at the platform level."
-                >
-                  No charges
-                </Badge>
+                {/* Plain text, sans: the mono "TIER" chip and the "No charges"
+                    badge restated the banner (review 2026-11-18). */}
+                <span className="text-2xs font-medium text-fg-secondary">{planLabel} features</span>
               </>
             ) : (
               <>
@@ -145,13 +147,16 @@ export function ProjectBillingCard({
                 so the chip and the bar are co-located — fixes the dup-datum
                 fold issue and gives the severity signal a proper home next to
                 the number it grades. */}
+            {/* A price, not a warning: neutral. */}
             {overageRate != null && !isComplimentary && !isAnnual && (
-              <SignalChip tone="warn" className="font-mono">
+              <SignalChip tone="neutral" className="tabular-nums">
                 Overage ${Number(overageRate).toFixed(4)} / report
               </SignalChip>
             )}
           </div>
-          {project.subscription?.current_period_end && (
+          {/* The team meters above already say when the quota resets: the
+              period end showed a third time here (review 2026-11-18). */}
+          {!quotaInStrip && project.subscription?.current_period_end && (
             <InlineProof className="mt-1 border-0 bg-transparent px-0 py-0">
               Period ends <RelativeTime value={project.subscription.current_period_end} />
             </InlineProof>
@@ -205,6 +210,7 @@ export function ProjectBillingCard({
         }
         llmCostUsd={project.llm_cost_usd_this_month}
         overQuota={project.over_diagnosis_quota ?? project.over_quota}
+        byokUncapped={project.byok_uncapped ?? false}
         overageRate={isAnnual ? null : (overageRate ?? null)}
         overageRateDiagnoses={isAnnual ? null : (tier?.overage_unit_amount_decimal_diagnoses ?? null)}
         basePriceUsd={tier?.monthly_price_usd ?? 0}
@@ -214,6 +220,9 @@ export function ProjectBillingCard({
         diagnosesUsed={project.diagnoses_used ?? null}
         diagnosesLimit={project.limit_diagnoses ?? null}
         complimentary={isComplimentary}
+        quotaInStrip={quotaInStrip}
+        appName={project.project_name}
+        projectId={project.project_id}
       />
 
       {!isComplimentary && (
@@ -234,7 +243,10 @@ export function ProjectBillingCard({
           planName={tier.display_name}
           flags={tier.feature_flags as Parameters<typeof PlanBenefitsList>[0]['flags']}
           retentionDays={tier.retention_days}
-          seatLimit={(tier as { seat_limit?: number | null }).seat_limit ?? null}
+          // The tier from /v1/admin/billing has no seat_limit (server): use
+          // the members-stats limit the Seats meter shows, one source.
+          seatLimit={seatLimit ?? (tier as { seat_limit?: number | null }).seat_limit ?? null}
+          seatLimitKnown={seatLimitKnown || (tier as { seat_limit?: number | null }).seat_limit != null}
         />
       )}
 
@@ -290,7 +302,7 @@ function PlanPicker({ plans, currentPlanId, currentInterval, busy, onPick }: Pla
             <article key={p.id} className="rounded-md border border-edge-subtle p-3 bg-surface">
               <header className="flex items-baseline justify-between gap-2">
                 <h5 className="text-sm font-semibold text-fg">{p.display_name}</h5>
-                <span className="text-sm font-mono text-fg-secondary">
+                <span className="text-sm tabular-nums text-fg-secondary">
                   {billingInterval === 'annual' && annualMonthlyPrice != null
                     ? <>${annualMonthlyPrice}/mo</>
                     : <>${monthlyPrice}/mo</>}
@@ -365,13 +377,9 @@ function InvoicesSection({ projectId, hasCustomer, isComplimentary }: InvoicesSe
       : null,
   )
 
-  if (isComplimentary) {
-    return (
-      <EmptySectionMessage
-        text="Complimentary account — no Stripe invoices are issued for this organization."
-      />
-    )
-  }
+  // No invoices section on a complimentary account: the banner says nothing
+  // is billed (it said so four ways, review 2026-11-18).
+  if (isComplimentary) return null
 
   if (!hasCustomer) {
     return (

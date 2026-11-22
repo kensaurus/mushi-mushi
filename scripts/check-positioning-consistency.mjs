@@ -2,7 +2,7 @@
 /**
  * check-positioning-consistency.mjs
  *
- * The anti-drift guard for the *constitution* (VISION.md §1). The tagline guard
+ * The anti-drift guard for the *constitution* (docs/VISION.md §1). The tagline guard
  * (check-tagline-consistency.mjs) keeps the hero line honest; this one keeps the
  * deeper positioning — north-star sentence, the category we own, the primary
  * buyer, and the three "will not"s — identical across the surfaces that an LLM
@@ -80,11 +80,11 @@ if (rootPkg.description !== V2.oneLiner) {
 }
 
 // 2. North-star sentence — the source + the agent guidance must carry it verbatim.
-mustContain('VISION.md', V2.northStar, 'north-star sentence (MUSHI_TAGLINE_V2.northStar)')
+mustContain('docs/VISION.md', V2.northStar, 'north-star sentence (MUSHI_TAGLINE_V2.northStar)')
 mustContain('AGENTS.md', V2.northStar, 'north-star sentence (MUSHI_TAGLINE_V2.northStar)')
 
 // 3. The category we own — verbatim where positioning is declared.
-mustContain('VISION.md', V2.category, 'category line (MUSHI_TAGLINE_V2.category)')
+mustContain('docs/VISION.md', V2.category, 'category line (MUSHI_TAGLINE_V2.category)')
 mustContain('AGENTS.md', V2.category, 'category line (MUSHI_TAGLINE_V2.category)')
 
 // 4. The v2 hero must lead primary surfaces (reinforces the tagline guard).
@@ -107,11 +107,11 @@ mustContain('README.md', V2.hero, 'v2 hero (MUSHI_TAGLINE_V2.hero)')
 mustContainHero('apps/docs/content/index.mdx', 'v2 hero on docs landing')
 
 // 5. Primary-buyer anchor — every positioning surface names the buyer.
-for (const f of ['VISION.md', 'AGENTS.md', 'README.md']) {
+for (const f of ['docs/VISION.md', 'AGENTS.md', 'README.md']) {
   mustContain(f, 'vibe coder', 'primary-buyer anchor ("vibe coder")')
 }
 
-// 6. The three "will not"s — the drift tripwires from VISION.md §1.7, mirrored
+// 6. The three "will not"s — the drift tripwires from docs/VISION.md §1.7, mirrored
 //    into the agent constitution.
 const WILL_NOTS = [
   'will not require a monitoring stack',
@@ -119,13 +119,13 @@ const WILL_NOTS = [
   'will not let the surfaces diverge',
 ]
 for (const w of WILL_NOTS) {
-  mustContain('VISION.md', w, `"will not" tripwire`)
+  mustContain('docs/VISION.md', w, `"will not" tripwire`)
   mustContain('AGENTS.md', w, `"will not" tripwire`)
 }
 
 if (failures.length === 0) {
   console.log(
-    '\u2713  Positioning consistency: north-star, category, buyer, and the three "will not"s are aligned across VISION.md, AGENTS.md, README.md, and package.json.',
+    '\u2713  Positioning consistency: north-star, category, buyer, and the three "will not"s are aligned across docs/VISION.md, AGENTS.md, README.md, and package.json.',
   )
   process.exit(0)
 }

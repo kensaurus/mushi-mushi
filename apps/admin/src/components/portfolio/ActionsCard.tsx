@@ -10,7 +10,8 @@
  */
 
 import { useState } from 'react'
-import { Badge, Btn, Callout, DisclosurePanel, Loading, Section, SelectField, Textarea, type BadgeTone } from '../ui'
+import { Badge, Btn, Callout, DisclosurePanel, Section, SelectField, Textarea, type BadgeTone } from '../ui'
+import { TimedLoading } from './TimedLoading'
 import { usePageData } from '../../lib/usePageData'
 import { apiFetchMutate } from '../../lib/supabase'
 import { actionErrorText } from '../../lib/actionErrorText'
@@ -91,7 +92,7 @@ export function ActionsCard({ orgId, connectors }: { orgId: string; connectors: 
     <Section title="Store and payment actions">
       <p className="mb-3 text-xs text-fg-muted">Nothing here runs on its own. Each action needs your approval, covers exactly the payload shown, expires after an hour, and runs once.</p>
       {error && <PageLoadError error={error} resource="actions" endpoint={path} onRetry={reload} />}
-      {loading && !data && <Loading text="Reading actions…" />}
+      <TimedLoading waiting={loading && !data && !error} text="Reading actions…" what="Actions" onRetry={reload} testId="portfolio-actions-not-checked" />
       {notice && (
         <Callout tone={notice.tone}>
           <span role="status">{notice.text}</span>
@@ -123,7 +124,7 @@ export function ActionsCard({ orgId, connectors }: { orgId: string; connectors: 
       {actable.length > 0 && (
         <DisclosurePanel title="Ask for an action">
           <div className="flex flex-col gap-2 p-3">
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <SelectField label="Connector" value={connectorId} onChange={(e) => { setConnectorId(e.target.value); setAction('') }}>
                 <option value="">Choose…</option>
                 {actable.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}

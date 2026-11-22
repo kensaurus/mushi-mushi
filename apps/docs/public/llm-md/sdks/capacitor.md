@@ -34,7 +34,7 @@ await Mushi.configure({
   endpoint:  'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api',
 
   triggerMode: 'shake',         // default; 'shake' | 'button' | 'both' | 'none'
-  captureScreenshot: true,      // base64 JPEG of the screen, via the native bridge
+  captureScreenshot: true,      // the native sheet's screenshot, shown with Remove
   triggerInsetPreset: 'tabBarSafe',  // or 'dockSafe'
   // useNativeWidget: true       // present the native iOS/Android bottom sheet
 })
@@ -51,6 +51,19 @@ await Mushi.report({
   metadata:    { lessonId: 'l_42' },
 })
 ```
+
+`report()` sends a screenshot only when you pass one, so the reporter always
+sees it first. Take it before your form opens, show it there with a way to
+remove it, and pass what they keep:
+
+```ts
+const { image } = await Mushi.captureScreenshot() // before the form covers the screen
+// ...show `image` in your form; set it to null if the reporter removes it
+await Mushi.report({ description, category: 'bug', ...(image ? { screenshot: image } : {}) })
+```
+
+Before 1.2.0, `report()` on iOS and Android captured a screenshot at submit
+without showing it.
 
 ## Programmatic widget + listeners
 

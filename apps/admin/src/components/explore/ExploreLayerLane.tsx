@@ -140,15 +140,18 @@ export function ExploreLayerLane({ nodes, edges, selectedId, highlightIds, onSel
       role="region"
       aria-label={`Layer breakdown with ${nodes.length} files across ${columns.length} architectural layers.`}
     >
+      {/* A phone stacks the lanes, one under the other: side by side they scrolled and only UI showed
+          at 390 (round 3). From sm up the lanes sit in a row with their import edges. */}
       <div
         ref={innerRef}
-        className="relative flex items-stretch gap-8 px-6 py-5 min-h-[380px] w-max min-w-full"
+        // mushi-mushi-allowlist: canvas minimum height (380 px) shared with the container style above
+        className="relative flex flex-col gap-5 px-3 py-4 sm:flex-row sm:items-stretch sm:gap-8 sm:px-6 sm:py-5 min-h-[380px] w-full sm:w-max sm:min-w-full"
         onClick={(e) => { if (e.target === e.currentTarget) onClear() }}
       >
         {/* SVG overlay for bezier import edges */}
         {innerSize.w > 0 && (
           <svg
-            className="absolute inset-0 pointer-events-none"
+            className="absolute inset-0 pointer-events-none hidden sm:block"
             width={innerSize.w}
             height={innerSize.h}
             style={{ zIndex: 0 }}
@@ -177,7 +180,8 @@ export function ExploreLayerLane({ nodes, edges, selectedId, highlightIds, onSel
         {columns.map((col) => {
           const pct = Math.round((col.nodes.length / maxColSize) * 100)
           return (
-            <div key={col.layer} className="flex flex-col gap-2.5 min-w-40 max-w-[13rem]" style={{ zIndex: 1 }}>
+            // mushi-mushi-allowlist: lane width on a wide screen (13rem), full width when stacked
+            <div key={col.layer} className="flex flex-col gap-2.5 min-w-0 w-full sm:w-auto sm:min-w-40 sm:max-w-[13rem]" style={{ zIndex: 1 }}>
               {/* Column header */}
               <div className="space-y-1.5">
                 <div className="flex items-center gap-1.5">
@@ -245,9 +249,12 @@ export function ExploreLayerLane({ nodes, edges, selectedId, highlightIds, onSel
                       ].join(' ')}
                       aria-pressed={isSelected}
                     >
-                      <div className="font-mono truncate leading-tight flex items-center gap-1">
-                        <span className="truncate flex-1">{node.label}</span>
-                        {ext && (
+                      {/* File names wrap (at any character: they have no spaces) instead of
+                          being cut mid-word ("account-format.test.m…"). */}
+                      <div className="font-mono leading-tight flex items-start gap-1">
+                        <span className="min-w-0 flex-1 wrap-anywhere">{node.label}</span>
+                        {/* The extension chip only when the name does not already end with it ("main.tsx" + ".tsx", round 3). */}
+                        {ext && !node.label.toLowerCase().endsWith(`.${ext.toLowerCase()}`) && (
                           <span className="text-3xs text-fg-faint shrink-0">.{ext}</span>
                         )}
                       </div>

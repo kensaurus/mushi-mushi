@@ -9,6 +9,7 @@
 import { useState } from 'react'
 import { FindingSeverityBadge } from '../ui'
 import type { RecipeIssue } from '../../lib/recipeTypes'
+import { issueCodeLabel } from './recipeIssueLabels'
 
 const SEVERITY_ORDER: Record<string, number> = { error: 0, warn: 1, info: 2 }
 
@@ -34,18 +35,18 @@ export function RecipeIssueList({ issues, empty }: { issues: RecipeIssue[]; empt
             {groups.size > 1 || list.length > PER_CODE ? (
               <p className="flex items-center gap-2 text-2xs text-fg-muted">
                 <FindingSeverityBadge severity={list[0]!.severity} />
-                <span className="font-mono">{code}</span>
-                <span>× {list.length}</span>
+                {/* Plain words lead; the code is the tooltip (2026-11-19: "legacy_color_string ×43"). */}
+                <span className="font-semibold text-fg-secondary" title={code}>{issueCodeLabel(code)}</span>
+                <span className="font-mono tabular-nums">× {list.length}</span>
               </p>
             ) : null}
             <ul className="flex flex-col gap-1.5">
               {shown.map((issue, i) => {
                 const where = [issue.file, issue.path].filter(Boolean).join(' · ')
                 return (
-                  <li key={`${issue.code}:${i}`} className="flex flex-wrap items-start gap-x-2 gap-y-0.5 text-xs">
+                  <li key={`${issue.code}:${i}`} className="flex flex-wrap items-start gap-x-2 gap-y-0.5 text-xs" title={issue.code}>
                     <FindingSeverityBadge severity={issue.severity} />
                     <span className="min-w-0 flex-1 wrap-break-word text-fg-secondary">{issue.message}</span>
-                    <span className="shrink-0 font-mono text-2xs text-fg-faint">{issue.code}</span>
                     {where && (
                       <span className="min-w-0 basis-full wrap-break-word font-mono text-2xs text-fg-faint">{where}</span>
                     )}

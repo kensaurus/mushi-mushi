@@ -295,6 +295,7 @@ export function problemLines(p: UxProbe | null): string[] {
   if (p.overflowX) lines.push('Scrolls sideways')
   if (p.smallTargets) lines.push(`${p.smallTargets} tap target(s) under 24 px`)
   if (p.consoleErrors) lines.push(`${p.consoleErrors} console error(s)`)
-  if (p.cls > 0.1) lines.push(`Layout shift ${p.cls}`)
+  // "CLS 0.23" so the screen shows it as a graded vital badge (components/reports/VitalText).
+  if (p.cls > 0.1) lines.push(`Layout shift: CLS ${p.cls}`)
   return lines
 }

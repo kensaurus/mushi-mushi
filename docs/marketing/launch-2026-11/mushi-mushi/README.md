@@ -39,7 +39,7 @@ Re-run the scoreboard on the day you post:
 | Reports from automatic checks and own testing                                | 2,049 ("about 2,050")         | public scoreboard                           |
 | Fixes merged / of those from a person's report                               | 526 / 2                       | public scoreboard                           |
 | AI reviews / "hold" verdicts                                                 | 1,803 / 596                   | public scoreboard                           |
-| Free plan: one app, 100 diagnoses a month, no card                           |                               | https://kensaur.us/mushi-mushi/docs/pricing |
+| Free plan: three apps, 300 diagnoses a month, no card                        |                               | https://kensaur.us/mushi-mushi/docs/pricing |
 | Builder $29/mo (3 apps), Studio $79/mo (10 apps), self-host free             |                               | pricing page                                |
 | Free check: home page plus three linked pages, public pages only, no sign-up |                               | `/docs/check` page description              |
 | SDKs MIT, server AGPLv3, `packages/server/ee/` source-available              |                               | root `LICENSE`                              |

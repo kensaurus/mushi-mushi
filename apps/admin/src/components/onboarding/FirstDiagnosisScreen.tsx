@@ -170,7 +170,7 @@ function DiagnosisCard({
     <Card className="p-4 border-ok/30 bg-ok/5 space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-2" data-testid="first-diagnosis-card">
         <div className="min-w-0 flex-1">
-          <SignalChip tone="ok" className="uppercase tracking-wider text-3xs">
+          <SignalChip tone="ok" className="text-3xs font-semibold">
             Your first diagnosis
           </SignalChip>
           <h3 className="mt-1.5 text-sm font-semibold text-fg text-pretty">{diagnosis.title}</h3>
@@ -189,7 +189,7 @@ function DiagnosisCard({
 
       {diagnosis.rootCause && (
         <div>
-          <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">Likely root cause</p>
+          <p className="text-3xs font-semibold text-fg-secondary">Likely root cause</p>
           <p className="mt-0.5 text-xs leading-relaxed text-fg-secondary">{diagnosis.rootCause}</p>
         </div>
       )}
@@ -324,7 +324,7 @@ export function FirstDiagnosisScreen({
     <div className="space-y-4" data-testid="onboarding-first-diagnosis">
       <Card className="p-5 space-y-4">
         <div>
-          <SignalChip tone="brand" className="uppercase tracking-wider text-3xs">
+          <SignalChip tone="brand" className="text-3xs font-semibold">
             Step 2 of 2
           </SignalChip>
           <h2 className="mt-1.5 text-base font-semibold text-fg">See your first diagnosis</h2>

@@ -30,7 +30,7 @@ export interface ReleaseTrainNow {
 
 /** The pipeline stages each station adds up (server: STATION_STAGES). */
 const STATION_STAGES: Array<{ id: ReleaseStationId; label: string; stages: string[] }> = [
-  { id: 'fix', label: 'Fix ready', stages: ['pr', 'review'] },
+  { id: 'fix', label: 'Fix PRs', stages: ['pr', 'review'] },
   { id: 'ci', label: 'CI', stages: ['ci'] },
   { id: 'train', label: 'In train', stages: ['train'] },
   { id: 'merged', label: 'Merged', stages: ['merged'] },

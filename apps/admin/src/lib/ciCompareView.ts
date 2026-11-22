@@ -36,6 +36,15 @@ export function formatPercent(n: number | null | undefined): string {
   return typeof n === 'number' && Number.isFinite(n) ? `${Math.round(n * 100)}%` : '—'
 }
 
+/**
+ * A row's PR pass rate in words. Jobs nobody picked up never ran a test, so their rate is
+ * "not run", not the server's 0% (2026-11-18: "Never picked up · PR pass rate 0%").
+ */
+export function passRateText(r: Pick<CiCompareRow, 'runnerClass' | 'prPassRate'>): string {
+  if (r.runnerClass === 'unknown') return 'not run'
+  return formatPercent(r.prPassRate)
+}
+
 /** Where a row runs, in words. */
 export function runsOnText(r: Pick<CiCompareRow, 'runnerClass' | 'labels' | 'runner' | 'machine' | 'os'>): { title: string; detail: string | null } {
   const labels = r.labels.filter((l) => l.toLowerCase() !== 'self-hosted').join(', ')

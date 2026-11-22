@@ -20,22 +20,18 @@ interface Props {
   action?: ReactNode
 }
 
-function rewardsSentence(stats: RewardsStats): string {
+/** @internal Exported for tests. States the program's state; the counts sit in the metrics (2026-11-18). */
+export function rewardsSentence(stats: RewardsStats): string {
+  // Off is about this app's new activity: points already earned still count (report 5f2ab6c5),
+  // and the team's other apps keep earning, so the counts below are not this app's (2026-11-19:
+  // "Rewards are off" over a feed earning +41 pts from other apps).
   if (!stats.projectRewardsEnabled) {
-    // Off is about new activity: points already earned still count (report 5f2ab6c5).
-    const earned =
-      stats.activeContributors30d > 0
-        ? ` In the last 30 days ${pluralizeWithCount(stats.activeContributors30d, 'tester')} earned ${stats.pointsAwarded30d.toLocaleString()} points.`
-        : ''
-    return `Rewards are off for this app. New activity earns no points.${earned}`
+    return `Rewards are off for ${stats.projectName ?? 'this app'}, so its new activity earns no points. The counts cover all your apps.`
   }
-  const earned =
-    stats.activeContributors30d > 0
-      ? `${pluralizeWithCount(stats.activeContributors30d, 'tester')} earned ${stats.pointsAwarded30d.toLocaleString()} points in the last 30 days`
-      : 'Rewards are on; nobody earned points in the last 30 days'
-  const owed = stats.pendingPayoutLiabilityUsd > 0 ? `; $${stats.pendingPayoutLiabilityUsd.toFixed(2)} in payouts waiting` : ''
-  const failing = stats.webhooksFailing > 0 ? `; ${pluralizeWithCount(stats.webhooksFailing, 'webhook')} failing` : ''
-  return `${earned}${owed}${failing}.`
+  const parts = [stats.activeContributors30d > 0 ? 'Rewards are on' : 'Rewards are on; nobody earned points in the last 30 days']
+  if (stats.pendingPayoutLiabilityUsd > 0) parts.push('payouts are waiting')
+  if (stats.webhooksFailing > 0) parts.push(`${pluralizeWithCount(stats.webhooksFailing, 'webhook')} failing`)
+  return `${parts.join('; ')}.`
 }
 
 export function RewardsSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels, action }: Props) {
@@ -48,19 +44,20 @@ export function RewardsSnapshotStrip({ stats, statsFetchedAt, statsValidating, s
       freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
       metrics={[
         {
-          label: statLabels?.contributors30d ?? 'Testers (30 days)',
+          // Short labels: "Testers (30 / days)" wrapped at 390 (2026-11-19).
+          label: statLabels?.contributors30d ?? 'Testers · 30d',
           value: stats.activeContributors30d,
-          hint: 'People who earned points in the last 30 days.',
+          hint: 'People in any of your apps who earned points in the last 30 days.',
           to: rewardsLinks.contributors30d,
         },
         {
-          label: statLabels?.points30d ?? 'Points (30 days)',
+          label: statLabels?.points30d ?? 'Points · 30d',
           value: stats.pointsAwarded30d.toLocaleString(),
-          hint: 'Points awarded for reports, quests and other actions in the last 30 days.',
+          hint: 'Points awarded across all your apps for reports, quests and other actions in the last 30 days.',
           to: rewardsLinks.points30d,
         },
         {
-          label: statLabels?.pendingPayout ?? 'Payouts waiting',
+          label: statLabels?.pendingPayout ?? 'Payouts due',
           value: `$${stats.pendingPayoutLiabilityUsd.toFixed(2)}`,
           tone: stats.pendingPayoutLiabilityUsd > 0 ? 'warn' : 'neutral',
           hint: 'Money earned by testers and not paid out yet.',

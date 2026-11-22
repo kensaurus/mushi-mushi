@@ -74,6 +74,12 @@ describe('FixesFirstView', () => {
     expect(container.querySelector('[data-testid="fixes-ready-empty"]')).toBeNull()
     expect(container.querySelector('[data-testid="fixes-ready-fix-839"]')?.textContent).toContain('Pass rate label is wrong')
     expect(container.textContent).toContain('Ready to merge: 1')
+    // The verdict and CI are passed marks, not words on a grey chip.
+    const pills = [...container.querySelectorAll('[data-testid="fixes-ready-fix-839"] [data-testid="status-pill"]')]
+    expect(pills.map((p) => [p.getAttribute('data-status'), p.textContent])).toEqual([
+      ['passed', 'Opus: merge'],
+      ['passed', 'CI passed'],
+    ])
   })
 
   // /pipeline also files a PR whose Opus review was skipped (no key) as
@@ -94,6 +100,8 @@ describe('FixesFirstView', () => {
     const stopped = attempt({ id: 'f1', report_fix_state: 'failed', is_latest_attempt: true, status: 'failed', error: 'boom' } as Partial<FixAttempt> & { id: string })
     await render([stopped], null, 2)
     expect(container.textContent).toContain('Stopped: 2 reports')
-    expect(container.textContent).toContain('The reasons below cover the 1 in the newest attempts loaded on this page.')
+    expect(container.textContent).toContain('Reasons for the newest 1.')
+    // Each reason's count is a bar beside its number.
+    expect(container.querySelector('[data-testid="fixes-stopped-reasons"] [data-testid="bar-cell-fill"]')).not.toBeNull()
   })
 })

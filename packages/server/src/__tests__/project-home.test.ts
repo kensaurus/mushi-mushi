@@ -17,6 +17,7 @@ import {
   buildSitemap,
   buildStations,
   buildWeek,
+  dailyCounts,
   ciSignal,
   currentTrain,
   detectPlatforms,
@@ -85,6 +86,18 @@ describe('errorsSignal', () => {
   it('is amber when reports at least double (5 or more)', () => {
     expect(errorsSignal({ ...base, today: 6, yesterday: 2, criticalToday: 0 }).light).toBe('warn')
     expect(errorsSignal({ ...base, today: 4, yesterday: 1, criticalToday: 0 }).light).toBe('good')
+  })
+  // Owner's walkthrough, 2026-11-17: "1 new · Good" beside "Report button: Never
+  // checked in" read as a contradiction. Say where the bugs came from.
+  it("says where today's reports came from when not all were from users", () => {
+    const noSdk = errorsSignal({ ...base, today: 3, yesterday: 0, criticalToday: 0, fromUsersToday: 0, sdkSeen: false })
+    expect(noSdk.detail).toBe('3 from Sentry, alarms or Mushi Mushi checks · no reports from users yet. 0 yesterday.')
+    expect(errorsSignal({ ...base, today: 3, yesterday: 1, criticalToday: 0, fromUsersToday: 1, sdkSeen: true }).detail).toBe(
+      '2 from Sentry, alarms or Mushi Mushi checks · 1 from users. 1 yesterday.',
+    )
+    // All from users, or not counted: no note.
+    expect(errorsSignal({ ...base, today: 3, yesterday: 1, criticalToday: 0, fromUsersToday: 3 }).detail).toBe('1 yesterday.')
+    expect(errorsSignal({ ...base, today: 3, yesterday: 1, criticalToday: 0 }).detail).toBe('1 yesterday.')
   })
 })
 
@@ -338,6 +351,24 @@ describe('week and activity', () => {
     expect(buildWeek({ reports: [3, 5], critical: [0, 1], merged: [2, 0], sessions: null }).map((r) => r.id)).toEqual(['reports', 'critical', 'merged'])
     const withVisits = buildWeek({ reports: [3, 5], critical: [0, 1], merged: [2, 0], sessions: [40, 30] })
     expect(withVisits.at(-1)).toMatchObject({ id: 'sessions', thisWeek: 40, lastWeek: 30, moreIsBetter: true })
+  })
+
+  it('buckets timestamps per UTC day from the first midnight, oldest first', () => {
+    const start = '2026-10-14T00:00:00.000Z'
+    const d = dailyCounts(['2026-10-14T00:00:00Z', '2026-10-14T23:59:59Z', '2026-10-27T11:00:00Z', '2026-10-13T23:59:59Z', '2026-10-28T00:00:00Z', null, 'not a date'], start)
+    expect(d).toHaveLength(14)
+    expect(d[0]).toBe(2)
+    expect(d[13]).toBe(1)
+    // Before the window, past it, missing or broken: not counted.
+    expect(d.reduce((a, b) => a + b, 0)).toBe(3)
+  })
+
+  it('carries a daily series only on rows that have one', () => {
+    const daily = Array.from({ length: 14 }, (_, i) => (i === 13 ? 2 : 0))
+    const rows = buildWeek({ reports: [2, 0], critical: [0, 0], merged: [1, 0], sessions: null, daily: { reports: daily, merged: null } })
+    expect(rows.find((r) => r.id === 'reports')!.daily).toEqual(daily)
+    expect('daily' in rows.find((r) => r.id === 'merged')!).toBe(false)
+    expect('daily' in rows.find((r) => r.id === 'critical')!).toBe(false)
   })
 
   it('says today when something happened today, else this week, and drops zeros', () => {

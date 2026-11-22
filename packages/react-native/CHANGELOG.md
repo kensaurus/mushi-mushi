@@ -1,5 +1,32 @@
 # @mushi-mushi/react-native
 
+## 0.25.0
+
+### Minor Changes
+
+- fd05f9a: **`setDiagnosticsProvider()`** attaches your app's own diagnostics (load timings, recent errors, connection) at the moment the reporter presses Send. The function gets 300 ms, its strings are scrubbed for personal data, and the result is size-capped. A slow or throwing provider never blocks or drops the report. Its keys merge into the report's metadata, and triage now reads `screenLoading` / `timings` lines as evidence.
+
+  React Native also gets:
+  - **App version.** `reports.app_version` now comes from the new `appVersion` option, then `expo-application` (version and build) or `react-native-device-info`. It never falls back to the OS version, which made Expo apps report Android's `36`.
+  - **`loadMyReports()`.** It resolves `null` when the list could not be loaded, so the report sheet shows an error with Retry instead of "no reports". `listMyReports()` keeps returning `[]` on failure.
+
+### Patch Changes
+
+- Updated dependencies [fd05f9a]
+  - @mushi-mushi/core@1.37.0
+  - @mushi-mushi/web@1.37.0
+
+## 0.24.7
+
+### Patch Changes
+
+- 1c49a9a: Reporter history and the offline queue work again on React Native. The SDK passed `@mushi:reporter_token` and `@mushi:queue_aes_key` to `expo-secure-store`, which accepts only letters, digits, `.`, `-` and `_`, so every call threw. As a result:
+
+  - each launch made a new, unsaved reporter token, so **Your reports** emptied after a restart;
+  - a report whose send failed could not be queued and was lost.
+
+  The SecureStore keys are now `mushi.reporter_token` and `mushi.queue_aes_key`. A token SecureStore refuses is kept in AsyncStorage. A queue key SecureStore refuses stores the report unencrypted instead of dropping it.
+
 ## 0.24.6
 
 ### Patch Changes

@@ -21,7 +21,7 @@ post. If it fails, do not post that day.
 
 ## Title (pick one, under 80 characters)
 
-- `Show HN: Mushi – bug reports from your users, explained in plain English`
+- `Show HN: Mushi Mushi – bug reports from your users, explained in plain English`
 - `Show HN: A bug widget that tells you why your AI-written app broke`
 
 ## First comment (post it yourself right after submitting)
@@ -30,11 +30,11 @@ post. If it fails, do not post that day.
 Hi HN, I'm Kenji. I build this alone.
 
 I ship apps that Cursor and Claude Code wrote most of. When a user writes
-"it's broken", I lose an afternoon reading code I didn't write. Mushi is my
+"it's broken", I lose an afternoon reading code I didn't write. Mushi Mushi is my
 attempt to have the report arrive already explained.
 
 How it works: a widget in your app (web, React Native, Capacitor) lets a user
-report a bug in a sentence. Mushi attaches the screenshot and the console and
+report a bug in a sentence. Mushi Mushi attaches the screenshot and the console and
 network tail, and a model writes a diagnosis: a plain-English title, a
 severity, the likely cause and a suggested fix. Your coding agent pulls it
 over MCP: get_recent_reports, then get_fix_context returns one fix prompt.
@@ -48,7 +48,7 @@ model output.
 Open source: SDKs MIT, server AGPLv3, self-hosting is one command. Hosted
 free tier: 1 app, 100 diagnoses a month, no card.
 
-If you already run Sentry: it starts from what the code threw. Mushi starts
+If you already run Sentry: it starts from what the code threw. Mushi Mushi starts
 from what the user reported, can take Sentry's errors into the same queue
 through an issue-alert webhook, and resolves the Sentry issue when the fix
 merges. Use it instead or alongside.
@@ -68,7 +68,7 @@ Repo: https://github.com/kensaurus/mushi-mushi
 ## While it is up
 
 - Reply to every comment for the first two hours, then hourly. Never "we".
-- Sentry comparisons get the canonical answer from VISION.md §1.6, word for
+- Sentry comparisons get the canonical answer from docs/VISION.md §1.6, word for
   word.
 - Questions about users get the scorecard number of the day, not a feeling.
 - Do not resubmit if it falls off. The thread is the asset either way.

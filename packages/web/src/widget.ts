@@ -117,6 +117,8 @@ export class MushiWidget {
   /** The reporter asked for (or marked up) the screenshot — an auto-capture on open doesn't count as saying something. */
   private screenshotByUser = false;
   private previewOpen = false;
+  /** Send just captured the screenshot: it stays open for review until a second Send. */
+  private screenshotReview = false;
   private allowScreenshotRemove = true;
   /** Unusable tools are hidden — a button whose handler no-ops reads as a bug. */
   private screenshotAvailable = true;
@@ -406,6 +408,7 @@ export class MushiWidget {
     this.screenshotPreview = null;
     this.screenshotByUser = false;
     this.previewOpen = false;
+    this.screenshotReview = false;
     this.elementSelected = false;
     this.elementCapturing = false;
     this.elementError = false;
@@ -576,6 +579,7 @@ export class MushiWidget {
       this.screenshotPreview = null;
       this.screenshotByUser = false;
       this.previewOpen = false;
+      this.screenshotReview = false;
     }
     if (this.isOpen) this.render();
   }
@@ -1822,6 +1826,7 @@ export class MushiWidget {
       screenshotAttached: this.screenshotAttached,
       screenshotPreview: this.screenshotPreview,
       previewOpen: this.previewOpen,
+      screenshotReview: this.screenshotReview,
       screenshotHint: this.resolveScreenshotHint(),
       screenshotAvailable: this.screenshotAvailable,
       elementAvailable: this.elementAvailable,
@@ -2057,7 +2062,7 @@ export class MushiWidget {
 
   // ─── Report submit ─────────────────────────────────────────────────
 
-  private submitReport(): void {
+  private async submitReport(): Promise<void> {
     if (this.submitting) return;
     const live = this.panel.querySelector<HTMLTextAreaElement>('[data-role="description"]');
     if (live) this.drafts.description = live.value;
@@ -2066,6 +2071,27 @@ export class MushiWidget {
       live?.focus();
       return;
     }
+    // A screenshot taken by this Send (on-report) is shown first, never sent unseen.
+    if (this.callbacks.onBeforeSubmit) {
+      this.submitting = true;
+      this.render();
+      let review = false;
+      try {
+        review = await this.callbacks.onBeforeSubmit();
+      } catch {
+        review = false;
+      }
+      this.submitting = false;
+      if (!this.isOpen || this.step !== 'report') return;
+      if (review && this.screenshotAttached && this.screenshotPreview) {
+        this.screenshotReview = true;
+        this.previewOpen = true;
+        this.render();
+        this.announce(this.locale.step3.screenshotReview);
+        return;
+      }
+    }
+    this.screenshotReview = false;
     const description = (this.drafts.description ?? '').trim();
     const chip = this.chip;
     const custom = chip ? this.resolveCustomCategory(chip) : undefined;

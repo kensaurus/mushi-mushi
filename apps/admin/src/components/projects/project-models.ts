@@ -5,7 +5,7 @@
 import { CHIP_TONE } from '../../lib/chipTone'
 import type { SdkStatus } from '../SdkVersionBadge'
 
-export type ScopePresetId = 'sdk' | 'mcp-read' | 'mcp-write' | 'voice' | 'runner' | 'worker'
+export type ScopePresetId = 'sdk' | 'mcp-read' | 'mcp-write' | 'voice' | 'runner' | 'worker' | 'ops'
 
 export const SCOPE_PRESETS: Array<{ id: ScopePresetId; label: string; scopes: string[]; hint: string }> = [
   {
@@ -44,6 +44,12 @@ export const SCOPE_PRESETS: Array<{ id: ScopePresetId; label: string; scopes: st
     scopes: ['worker:run'],
     hint: 'For mushi work --daemon on your own machine. It can take reports for its lanes and record their fixes; it cannot merge, change settings or read keys.',
   },
+  {
+    id: 'ops',
+    label: 'Ops events',
+    scopes: ['ops:write'],
+    hint: "For your app's server: it can only send payments, releases and alerts to Ops. Refused from a web page.",
+  },
 ]
 
 export function isScopePresetId(value: string | null | undefined): value is ScopePresetId {
@@ -54,7 +60,7 @@ export function scopeBadgeTone(scope: string): string {
   if (scope === 'mcp:write') return CHIP_TONE.dangerSubtle
   if (scope === 'mcp:read') return CHIP_TONE.infoSubtle
   // Narrow write-only keys (a phone, a CI machine) share one tone.
-  if (scope === 'voice:write' || scope === 'runner:write' || scope === 'worker:run') return CHIP_TONE.warnSubtle
+  if (scope === 'voice:write' || scope === 'runner:write' || scope === 'worker:run' || scope === 'ops:write') return CHIP_TONE.warnSubtle
   return CHIP_TONE.neutral
 }
 
@@ -274,4 +280,19 @@ export const INDEX_HEALTH_CHIP_TONE: Record<IndexHealth, 'ok' | 'warn' | 'danger
   off: 'neutral',
   never: 'neutral',
   partial: 'warn',
+}
+
+/** "+2 reports, 7d": the change against the week before, with its unit (2026-11-18 round 2: "+2 7d" had none). */
+export function trendLabel(trend: { direction: 'up' | 'down' | 'flat'; delta: number }): string {
+  const n = Math.abs(trend.delta)
+  const sign = trend.direction === 'up' ? '+' : trend.direction === 'down' ? '−' : ''
+  return `${sign}${n} ${n === 1 ? 'report' : 'reports'}, 7d`
+}
+
+/**
+ * The install guide opens on its own only while the app still needs it: an app whose SDK is
+ * up to date gets it collapsed (2026-11-18 round 2: the full guide sat open under "SDK up to date").
+ */
+export function installGuideOpenByDefault(project: Pick<Project, 'sdk_status'>): boolean {
+  return project.sdk_status !== 'up-to-date'
 }

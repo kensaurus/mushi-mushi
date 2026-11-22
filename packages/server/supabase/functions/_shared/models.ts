@@ -61,13 +61,15 @@ export const ANTHROPIC_HAIKU_LATEST = 'claude-haiku-5-5'
 
 // --- OpenAI (cross-vendor fallback) -----------------------------------------
 
-/** GPT-6.1 Sol ($2/$10 per MTok, 1M context, structured outputs, reasoning
- *  effort low…max; OpenAI pricing and model pages, read 2026-10-31). OpenAI's
+/** GPT-6.2 Sol (launched 2026-11-17; $2/$10 per MTok, the same as GPT-6.1
+ *  Sol, which this replaced on 2026-11-21 for the code tier; priced on kenji).
+ *  GPT-6.1 Sol was: $2/$10 per MTok, 1M context, structured outputs, reasoning
+ *  effort low…max (OpenAI pricing and model pages, read 2026-10-31). OpenAI's
  *  pick for the hardest coding work below GPT-6 Astra, and the closest to
  *  Claude Opus 5.5 ($4/$20) at half its price: the fix-worker fallback and the
  *  PR review's model when an organization runs AI on OpenAI. Classification
  *  and judging use Terra, and chat and summaries use Luna (2026-11-07). */
-export const OPENAI_PRIMARY = 'gpt-6.1-sol'
+export const OPENAI_PRIMARY = 'gpt-6.2-sol'
 
 /** GPT-6.1 Terra ($1/$5 per MTok, 1.05M context, structured outputs; OpenAI
  *  model page and Terra launch post, read 2026-11-07). OpenAI's mid tier, which
@@ -143,9 +145,14 @@ export const RELEASE_NOTES_FALLBACK = OPENAI_MINI
 
 /** story-mapper: crawled pages → a draft inventory.yaml. */
 export const STORY_MAP_MODEL = ANTHROPIC_SONNET_LATEST
+/** story-mapper on the OpenAI pool (Sonnet tier → Terra). */
+export const STORY_MAP_FALLBACK = OPENAI_TERRA
 
 /** inventory-propose: SDK observations → a draft inventory.yaml. */
 export const INVENTORY_PROPOSE_MODEL = ANTHROPIC_SONNET_LATEST
+/** inventory-propose on the app's own OpenAI key: Terra is the Sonnet-tier
+ *  model. Platform calls take the route's model (kensaurus_ai_routes). */
+export const INVENTORY_PROPOSE_FALLBACK = OPENAI_TERRA
 
 /** mistake-clusterer coherence check and mistake-summarizer lessons. */
 export const MISTAKE_MODEL = ANTHROPIC_HAIKU_LATEST
@@ -306,5 +313,6 @@ export const ALL_ACTIVE_CHAT_MODELS: readonly string[] = [
   ANTHROPIC_OPUS,
   ANTHROPIC_OPUS_LATEST,
   OPENAI_PRIMARY,
+  OPENAI_TERRA,
   OPENAI_MINI,
 ] as const

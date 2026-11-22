@@ -25,7 +25,12 @@ import { MCP_QUICKSTART_LEDE, PUBLIC_FAQ_MCP } from '@/lib/public-copy'
 
 ### Add the Mushi Mushi server [#add-the-mushi-server]
 
-One click: pick your editor on the [Connect page](https://kensaur.us/mushi-mushi/docs/connect).
+One click:
+
+[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](cursor://anysphere.cursor-deeplink/mcp/install?name=mushi&config=eyJ1cmwiOiJodHRwczovL2tlbnNhdXIudXMvbXVzaGktbXVzaGkvaG9zdGVkLW1jcC8ifQ%3D%3D)
+[![Add to VS Code](https://img.shields.io/badge/VS_Code-Add_Mushi_Mushi-0098FF?logo=visualstudiocode&logoColor=white)](vscode:mcp/install?%7B%22name%22%3A%22mushi%22%2C%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fkensaur.us%2Fmushi-mushi%2Fhosted-mcp%2F%22%7D)
+
+Other editors: pick yours on the [Connect page](https://kensaur.us/mushi-mushi/docs/connect).
 No signup needed for the read-only demo. Or run one command:
 
 ```bash
@@ -51,6 +56,18 @@ Try *"list mushi tools"*, then *"Get the latest Mushi Mushi report and fix it."*
 <YouWillSee>**You'll see:** the Mushi Mushi tools in the list, then a fix brief: the cause, the files to change and how to check it.</YouWillSee>
 
 </Steps>
+
+**Prefer your AI editor to do it?** Paste this into Cursor or Claude Code:
+
+```text
+Set up Mushi Mushi in this app. In the project folder, first run
+`npx mushi-mushi --dry-run` and tell me what it will change. Then run
+`npx mushi-mushi --yes`. It prints a sign-in link: show it to me and wait while
+I approve it. It sends a test report at the end. If it prints code and names a
+file, add the code there. Then run `npx mushi-mushi doctor` and tell me what it
+reports. Last, run `npx mushi-mushi setup --ide cursor` (or `--ide claude`) so
+you can read Mushi Mushi reports over MCP.
+```
 
 The rest of this page is detail: how sign-in works, manual config files,
 the hosted transport for headless agents, and the tool list.
@@ -160,7 +177,7 @@ Add to `.cursor/mcp.json` in your repo root:
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.31.2"],
+      "args": ["-y", "@mushi-mushi/mcp@0.31.8"],
       "env": {
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
         "MUSHI_API_KEY": "mushi_..."
@@ -192,7 +209,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.31.2"],
+      "args": ["-y", "@mushi-mushi/mcp@0.31.8"],
       "env": {
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
         "MUSHI_API_KEY": "mushi_..."

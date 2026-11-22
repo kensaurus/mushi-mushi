@@ -26,6 +26,12 @@ interface FixBranchFieldState {
   blocksSave: boolean
 }
 
+/** True when the saved pattern breaks the current rule (empty means the default, which is fine). */
+export function savedFixBranchInvalid(saved: string | null | undefined): boolean {
+  const value = (saved ?? '').trim()
+  return value !== '' && Boolean(fixBranchTemplate()(value))
+}
+
 export function fixBranchFieldState(input: {
   current: string | null | undefined
   saved: string | null | undefined

@@ -47,10 +47,10 @@ export function CodePanel({ label, language, code, onCopy, copied, maxHeight }: 
           <span aria-hidden="true" className="mushi-code-glyph font-mono text-2xs leading-none select-none">
             {'</>'}
           </span>
-          <span className="text-2xs uppercase tracking-wider font-medium text-code-surface-fg-muted truncate">
+          <span className="text-2xs font-semibold text-code-surface-fg-muted truncate">
             {label}
           </span>
-          <span className="mushi-code-lang text-3xs font-mono uppercase tracking-wider px-1.5 py-0.5 rounded-sm border">
+          <span className="mushi-code-lang text-3xs font-mono px-1.5 py-px rounded-sm">
             {language}
           </span>
         </div>

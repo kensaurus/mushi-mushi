@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { creditCountdowns, expiryLabel, firecrawlPace, paceLine, type CountdownCursorKey } from './creditPlan'
+import { creditCountdowns, expiryLabel, firecrawlPace, paceLine, shortKeyHint, type CountdownCursorKey } from './creditPlan'
 
 const NOW = new Date('2026-10-23T02:00:00Z')
 
@@ -76,15 +76,18 @@ describe('creditCountdowns', () => {
     expect(cards[0].usedLine).toBe('4 of 30 fixes sent today · 52 in the last 7 days')
     expect(cards[0].leftLine).toBe('Room for up to 176 more fixes before they expire.')
     expect(cards[0].usedLine).not.toMatch(/credit|\$/)
-    expect(cards[1].usedLine).toBe('35,825 of 100,000 credits used')
-    expect(cards[1].leftLine).toBe('64,175 credits left until the reset.')
+    expect(cards[1].usedLine).toBe('64,175 credits left until the reset.')
+    expect(cards[1].meterLabel).toBe('35,825 of 100,000 credits used')
+    // One credits line for Firecrawl (2026-11-19: used and left said the same fact twice).
+    expect(cards[1].leftLine).toBe('')
   })
 
   it('marks a key with spend-down off as idle, red in its last 3 days', () => {
     expect(creditCountdowns({ cursorKeys: [key({ enabled: false, state: 'off' })], firecrawl: null, now: NOW })[0]).toMatchObject({
       idle: true,
       tone: 'warn',
-      leftLine: 'Spend-down is off, so nothing is spending these credits.',
+      // The status line's nudge says spend-down is off, once.
+      leftLine: '',
     })
     const soon = creditCountdowns({ cursorKeys: [key({ enabled: false, state: 'off', creditsExpireAt: '2026-10-25T00:00:00Z' })], firecrawl: null, now: NOW })
     expect(soon[0].tone).toBe('danger')
@@ -94,5 +97,25 @@ describe('creditCountdowns', () => {
     expect(creditCountdowns({ cursorKeys: [key({ creditsExpireAt: null })], firecrawl: null, now: NOW })).toEqual([])
     const expired = creditCountdowns({ cursorKeys: [key({ enabled: false, creditsExpireAt: '2026-10-01T00:00:00Z' })], firecrawl: null, now: NOW })[0]
     expect(expired).toMatchObject({ daysLeft: 0, idle: false, tone: 'neutral', leftLine: 'These credits have expired.' })
+  })
+})
+
+describe('one value source on /credits (2026-11-19)', () => {
+  it('shortens a key hint to its prefix and last characters', () => {
+    expect(shortKeyHint('crsr_8821bf7...2487')).toBe('crsr_…2487')
+    expect(shortKeyHint('crsr_e76…c203')).toBe('crsr_…c203')
+    expect(shortKeyHint('custom-label')).toBe('custom-label')
+  })
+
+  it('counts hours under two days the way the worker flag rounds them', () => {
+    const now = new Date('2026-11-18T00:00:00Z')
+    // 32 h 40 min left: the flag says "32 h", so does the card.
+    const [card] = creditCountdowns({
+      cursorKeys: [{ id: 'k', label: 'kensaurus', keyHint: null, enabled: false, creditsExpireAt: '2026-11-19T08:40:00Z', dailyLimit: 40, dispatchedToday: 0, state: 'off', scoreboard: null }],
+      firecrawl: null,
+      now,
+    })
+    expect(card.hoursLeft).toBe(32)
+    expect(card.daysLeft).toBe(2)
   })
 })

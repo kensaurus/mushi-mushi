@@ -18,10 +18,18 @@
 import { useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { routeFallbackTitle } from './navRegistry'
+import { hubViewLabel } from './pageHubs'
 import { usePageContext } from './pageContext'
 
 const APP_SUFFIX = 'Mushi Mushi'
 const DEFAULT_TITLE = 'Mushi Mushi — Bug Intelligence for Software Teams'
+
+/** The route's sidebar name, plus the hub view when it is not the first ("Team · Billing"). */
+function fallbackTitle(pathname: string, search: string): string | null {
+  const page = routeFallbackTitle(pathname)
+  const view = page ? hubViewLabel(pathname, search) : null
+  return page && view ? `${page} · ${view}` : page
+}
 
 function composeTitle(primary: string | null, summary?: string | null): string {
   if (!primary) return DEFAULT_TITLE
@@ -40,7 +48,7 @@ function composeTitle(primary: string | null, summary?: string | null): string {
  */
 export function useDocumentTitle(): void {
   const ctx = usePageContext()
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
   const frameRef = useRef<number | null>(null)
 
   useEffect(() => {
@@ -48,7 +56,7 @@ export function useDocumentTitle(): void {
     // current pathname — this guards against a brief stale frame right
     // after navigation where the old page's context is still resident.
     const ctxMatches = ctx && (ctx.route === pathname || pathname.startsWith(ctx.route + '/'))
-    const primary = ctxMatches ? ctx.title : routeFallbackTitle(pathname)
+    const primary = ctxMatches ? ctx.title : fallbackTitle(pathname, search)
     const summary = ctxMatches ? ctx.summary : undefined
     const next = composeTitle(primary, summary)
 
@@ -64,7 +72,7 @@ export function useDocumentTitle(): void {
         frameRef.current = null
       }
     }
-  }, [ctx, pathname])
+  }, [ctx, pathname, search])
 
   // Restore the document default on unmount of whatever component (Layout)
   // calls this hook. Practically this only runs on full sign-out / route

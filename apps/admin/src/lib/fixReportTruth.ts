@@ -18,6 +18,7 @@ import { isAgentOutOfUsageError } from './agentOutOfUsage'
 import { isFixMerged } from './mergeFix'
 import { fixFailureBucket } from './pdcaAct'
 import type { FixAttempt } from '../components/fixes/types'
+import { reportHeadline } from './format'
 
 const PROVIDER_LABEL: Record<string, string> = {
   openai: 'OpenAI',
@@ -172,7 +173,7 @@ export function failureCause(fix: FixAttempt): string {
 
 /** Report title for a row, never a raw id. */
 export function fixReportLabel(fix: FixAttempt): string {
-  return fix.report_title?.trim() || 'Untitled report'
+  return reportHeadline(fix.report_title?.trim() ?? '') || 'Untitled report'
 }
 
 /**

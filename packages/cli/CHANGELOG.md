@@ -1,5 +1,79 @@
 # @mushi-mushi/cli
 
+## 0.41.0
+
+### Minor Changes
+
+- e5f813d: - **The code-read audit files fewer, truer reports** — it asks for 0 to 3 findings per screen, and none when nothing would matter to a real user. Every finding needs a severity, a confidence (under 0.6 is dropped) and what the user sees. When what a "missing" check looks for is in a shared component around the line, the finding is rooted at that component, so every screen it wraps is one report. Each finding carries its root, the shared component or route kind one fix lands in, so the server keeps one report per root cause (ADR 0065).
+  - **The audit lane rechecks its open findings once a day** — on the default branch, with no model. What no longer reproduces is closed with the commit it checked. When the app is at its open cap, the lane only rechecks.
+  - **`mushi work --recheck --dry-run --json` shows the pattern plan** — how the open findings would collapse into one report per pattern.
+  - **`mushi work --collapse-backlog [--apply]` collapses the findings filed before** — a dry run unless `--apply`; each group's other reports become duplicates of one, a report with a live PR stays open, and every changed row is tagged so the SQL it prints reverts it. With `--apply-cap` it then keeps only the best reports up to the app's open cap; the rest wait and come back as slots free.
+
+### Patch Changes
+
+- 11c99a5: - **A Claude Code worker's account check reads properly** — `claude auth status` answers in JSON, so the console showed `checked 2 min ago: "{"`. It now reads "logged in (claude.ai)" or "logged out", and never includes the account's e-mail.
+
+## 0.40.5
+
+### Patch Changes
+
+- 5ae5804: - **`mushi worker install` on Windows without administrator rights** — the logon task (`schtasks /SC ONLOGON`) answered "Access is denied" and the worker was left with no service. The installer now falls back to a hidden launcher in your Startup folder, starts the worker straight away, and logs to `~/.cache/mushi-work/logs/worker.log`. `mushi worker status` shows it, and `mushi worker revoke` removes it.
+  - **pnpm repos on a Windows worker** — the worker looked for pnpm only beside `node.exe`, so a global `npm i -g pnpm` was never found and pnpm repos ran with no dependencies (no tests, failing commit hooks). It now also looks on PATH, including a standalone `pnpm.exe`.
+  - **The worker's stop hint** — on Windows it no longer says `systemctl`.
+  - **`mushi login` outside an app folder** — run from a folder with no `package.json` or `.git` (your home folder, say) by an account that already has projects, it no longer creates a new project named after the folder. It lists your projects with their `--project-id` instead.
+- 5ae5804: - **The worker's heartbeat names its coding agent** — `mushi work --daemon` now sends which agent its lanes run (`cursor` or `claude`). The console uses it to show a Claude Code worker's account. Before, it read "Cursor account: not checked yet" and offered a Cursor account switch that does nothing for Claude Code.
+
+## 0.40.4
+
+### Patch Changes
+
+- fa71919: Self-hosting is easier to follow and to check:
+
+  - `mushi selfhost doctor` exits 0 on a healthy minimal install. Optional extras that are not set up (Langfuse, Sentry, an AI key, a console address) print as `INFO` and never change the exit code; `WARN` exits 2 and `FAIL` exits 1 as before.
+  - The doctor now also checks that the console answers at the saved address (and warns when the CLI would sign you in on Mushi Mushi Cloud instead), that `/health` reports a stamped, self-hosted deploy, and, on the server, the AI key, that cron jobs no longer call Mushi Mushi Cloud, and that the private screenshots bucket exists. Lines lead with a plain name and the app's name, never `codebase_index:<uuid>`. `--console-url` checks another address.
+  - `mushi selfhost up` stamps the deploy with your commit (using the clone's own `scripts/deploy-edge-function.mjs` helper), so `/health` no longer reports `"dev"`, and sets `MUSHI_INSTANCE_MODE=self-hosted` so the server and console agree on what the instance is.
+  - With `--console-url`, `up` also sets `MUSHI_ADMIN_ORIGIN_ALLOWLIST` to the console's origin, so the API answers a console served on your own domain (before, only Mushi Mushi Cloud and localhost dev ports were allowed). The server now sends `mushi login` to that console (`ADMIN_BASE_URL`) on a self-host, instead of Mushi Mushi Cloud's.
+  - The no-key note points at Settings → AI keys (it said API Keys).
+  - The MCP docs index includes the new self-hosting pages (Environment variables, Operate and upgrade).
+
+## 0.40.3
+
+### Patch Changes
+
+- 141c554: The setup wizard's first run is easier:
+
+  - No more false "newer version 0.40.2 → 1.37.0" line on every run. The wizard now checks the package you ran (`mushi-mushi`, `create-mushi-mushi`, or the CLI for `mushi init`) against its own latest version, and says nothing when you are on it.
+  - `--yes` now adds the init snippet to your entry file, the same safe way the interactive run does (a marker block a re-run updates in place, only for plain-import entry files). When it can't, it names the one file to paste the snippet into.
+  - New `--dry-run`: prints what the wizard would install and write, then stops. No sign-in, no install, no file changes.
+  - When a run ends with only the app's ingest key (a pasted or `--api-key` key, or a reused one), the wizard says your editor's MCP server needs a key that can read reports, and offers one browser approval to make it (or prints `npx mushi-mushi login --project-id <id>` under `--yes`). `mushi setup` prints the same one command in a non-interactive shell, and no longer asks for the project again when it upgrades the key.
+  - After the test report, the wizard prints the one call that sends a sample bug from your own app, for your framework, plus `npx mushi-mushi test` for no code change.
+
+- 141c554: `mushi selfhost up` now deploys a working self-hosted instance:
+
+  - Cron jobs call your project, not Mushi Mushi Cloud. `up` writes `supabase_url`, `service_role_key` and `internal_caller_token` into `mushi_runtime_config`, using the same secret it sets as `MUSHI_INTERNAL_CALLER_SECRET`. Before this, the migrations' Mushi Mushi Cloud URL stayed in place and no token was written.
+  - Works with Supabase CLI 3.x. `db push` and `db query` target the linked project (`--remote`; `--linked` on 2.x), and `up` asks once for consent (or takes `--yes`), so the CLI's own consent prompts don't fail when output is piped.
+  - No Mushi Mushi Cloud plan limits on your instance. `up` updates every `pricing_plans` row on your project: unlimited diagnoses, apps and seats, retention of at least 3650 days, and the `byok`, `sso`, `plugins`, `intelligence_reports`, `audit_log`, `self_hosted` and `teams` feature flags on. Before, a new org stopped at 100 diagnoses a month (reports went to `quota_exceeded`), with 1 app and 14-day retention. `inventory_v2` and `soc2` are left as the plan has them, because they start background jobs.
+  - `up` refuses to run against the Mushi Mushi Cloud project, including a checkout already linked to it.
+  - The broken `supabase storage create` step is gone, along with the "fine if it already exists" message that hid its failure. The private `screenshots` bucket is checked with SQL.
+  - Every edge function is deployed, with `verify_jwt` taken from `config.toml` as in production. Before, only six were deployed.
+  - The LLM key is optional. Pass `--anthropic-key` or `--openai-key` (either provider works), set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, or paste one at the prompt. If you skip it, `up` says what won't work.
+  - Secrets go through 0600 temp files, never argv. `MUSHI_INTERNAL_CALLER_SECRET` from your shell is reused.
+  - `--console-url` sets `ADMIN_BASE_URL` and saves the console URL to the CLI config, so `mushi login` signs in on your console instead of Mushi Mushi Cloud. The endpoint is saved too, unless the config holds a key for another endpoint.
+  - The `/v1/admin/bootstrap` call was removed. It always returned 401.
+  - New command: `mushi selfhost secrets` writes a `.env` for `deploy/docker-compose.yml`. It contains a random Postgres password, JWT secret and internal caller secret, plus anon and service_role JWTs signed with the JWT secret.
+
+## 0.40.2
+
+### Patch Changes
+
+- 0a9359f: Source comments now point at `docs/SELF_HOSTED.md` and `docs/VISION.md`, where those files moved when the repository root was tidied. No behaviour change.
+
+## 0.40.1
+
+### Patch Changes
+
+- e94362a: `mushi work --daemon`: lanes now take turns for agent spaces. Each tick asks the lane served longest ago first, so the first lanes in worker.json can no longer take every freed space while the rest wait.
+
 ## 0.40.0
 
 ### Minor Changes
