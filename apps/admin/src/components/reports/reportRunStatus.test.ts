@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { reportRunStatus } from './reportRunStatus'
-import { confidenceBarTone, confidenceCellTint, confidenceTextTone } from './reportMetricViz'
+import { confidenceBarTone, confidenceTextTone } from './reportMetricViz'
 import { severityTileSparkAccent } from './ReportsKpiStrip'
 import { SEVERITY_TRAFFIC } from '../../lib/severityTraffic'
 
@@ -21,7 +21,7 @@ describe('confidence colour', () => {
   // A red "55%" read as a failure (R2 sweep 2026-11-18).
   it('is never red; low confidence is the amber warning', () => {
     for (const c of [0.1, 0.55, 0.7, 0.95]) {
-      expect(`${confidenceBarTone(c)} ${confidenceCellTint(c)} ${confidenceTextTone(Math.round(c * 100))}`).not.toMatch(/danger/)
+      expect(`${confidenceBarTone(c)} ${confidenceTextTone(Math.round(c * 100))}`).not.toMatch(/danger/)
     }
     expect(confidenceBarTone(0.55)).toBe('bg-warn')
     expect(confidenceBarTone(0.95)).not.toMatch(/warn|ok/)

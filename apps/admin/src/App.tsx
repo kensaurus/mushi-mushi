@@ -1,5 +1,5 @@
 import { legacyHubRoutes } from './lib/pageHubs'
-import { ReportsHomeRedirect } from './lib/reportsHomeRedirect'
+import { ConsoleRootRedirect } from './lib/consoleRootRedirect'
 import { FirstRunGate } from './components/FirstRunGate'
 import { OperatorRoute } from './components/OperatorRoute'
 import { HubRedirect } from './components/PageHubView'
@@ -325,7 +325,7 @@ export function App() {
             to /login when unauthenticated.
             (Retired PublicHomePage so the noindex admin shell no longer duplicates
             the indexable landing.) */}
-        <Route path="/" element={<ReportsHomeRedirect />} />
+        <Route path="/" element={<ConsoleRootRedirect />} />
         <Route path="/login" element={<LoginPage />} />
         {/* Bare /signup lands directly on the signup form instead of bouncing
             through ProtectedRoute -> /login (see docs/pricing.mdx CTA and

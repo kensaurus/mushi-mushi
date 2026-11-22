@@ -11,6 +11,7 @@
  */
 
 import { Link } from 'react-router-dom'
+import { appLink, openApp } from '../../lib/openApp'
 import type { Project } from './project-models'
 import { rankProjectNeeds, type ProjectVerdictTone } from './projectNextSteps'
 import { BulkUpgradeToolbar, SdkUpgradeCell, useBulkSdkUpgrade, type BulkUpgradeProject } from './BulkSdkUpgradePanel'
@@ -136,9 +137,17 @@ export function ProjectNextStepsPanel({ projects }: { projects: Project[] }) {
                     repo_url={project.primary_repo?.repo_url ?? null}
                     size={14}
                   />
-                  <span className="min-w-0 font-medium wrap-break-word text-fg" title={project.name}>
+                  {/* The name opens that app's Home, as the Apps cards do: it was plain
+                      text, so the row named an app you could not reach (2026-11-22). */}
+                  <Link
+                    to={appLink('/dashboard', project.id)}
+                    onClick={() => openApp(project.id)}
+                    className="min-w-0 rounded-sm font-medium wrap-break-word text-fg hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+                    title={`Open ${project.name}`}
+                    data-testid={`project-needs-open-${project.id}`}
+                  >
                     {project.name}
-                  </span>
+                  </Link>
                   {/* The demo app's name already says "(sample data)": no chip saying it again (round 3). */}
                   {status.tone === 'sample' && !/\(sample data\)\s*$/i.test(project.name) && <Chip className="shrink-0 whitespace-nowrap">sample data</Chip>}
                 </span>

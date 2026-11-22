@@ -256,8 +256,11 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
             ) : null
           }
         >
+          {/* Short values get short fields: an 11-character channel ID in a
+              1000px box read as a form that wanted a paragraph (2026-11-22). */}
           <Input
             label="Channel ID"
+            containerClassName="max-w-xs"
             helpId="settings.general.slack_channel_id"
             type="text"
             value={settings.slack_channel_id ?? ''}
@@ -390,6 +393,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
         >
           <Input
             label="Supabase project ref"
+            containerClassName="max-w-xs"
             helpId="settings.general.supabase_project_ref"
             type="text"
             value={settings.supabase_project_ref ?? ''}
@@ -535,6 +539,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
         >
           <Input
             label="Branch name pattern"
+            containerClassName="max-w-lg"
             helpId="settings.general.fix_branch_template"
             type="text"
             value={settings.fix_branch_template ?? DEFAULT_BRANCH_TEMPLATE}
