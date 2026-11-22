@@ -14,8 +14,9 @@ and hands your AI editor the fix. This page shows each step on real screens:
 what to press, and where the bug goes next.
 
 The console clips use Mushi Mushi's own app, so every bug and pull request in
-them is real and public. The first clip uses a made-up shop, because it shows
-what *your* users see.
+them is real and public. The free check runs on glot.it, one of my own live
+apps. The report-button clip uses a made-up shop, because it shows what *your*
+users see.
 
 ## The four steps
 
@@ -30,6 +31,12 @@ what *your* users see.
 
 **You don't need other tools.** If you already use an error tracker such as
 Sentry, you can connect it, but you don't have to.
+
+## Before you install: check your live app free
+
+[Check your own app](/check). There is no sign-up and nothing to add to your
+app. An address is checked at most once every 24 hours; checking it again
+sooner shows that report, as in the clip.
 
 ## 1. Your user reports a bug
 

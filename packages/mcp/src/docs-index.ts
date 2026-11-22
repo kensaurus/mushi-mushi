@@ -1047,7 +1047,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/how-it-works",
     markdown: "how-it-works.md",
     keywords: ["how-it-works", "works", "shown", "real", "screens"],
-    headings: ["The four steps", "1. Your user reports a bug", "2. From the report to a merged fix", "What it fixes about bug tracking today", "For developers", "How a bug moves", "Connect your AI editor", "Watch every fix ship"],
+    headings: ["The four steps", "Before you install: check your live app free", "1. Your user reports a bug", "2. From the report to a merged fix", "What it fixes about bug tracking today", "For developers", "How a bug moves", "Connect your AI editor"],
     excerpt: "Watch a bug go from a user's report to a fix: what you do at each step, what Mushi Mushi does, and the real screens from report button to fix prompt.",
   },
   {
