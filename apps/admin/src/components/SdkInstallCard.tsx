@@ -149,6 +149,10 @@ export function SdkInstallCard({
         const nextEnabled = res.data.enabled !== false
         setEnabled(nextEnabled)
         setSavedEnabled(nextEnabled)
+        // Members read the settings since 2026-11-22; saving stays with owners and admins.
+        if (res.data.canEdit === false) {
+          setSaveMessage('Read-only: only project owners and admins can save these settings.')
+        }
       } else {
         setSaveMessage(res.error?.message ?? 'Could not load saved SDK config')
       }
@@ -214,6 +218,7 @@ export function SdkInstallCard({
     config.theme === DEFAULT_SDK_CONFIG.theme &&
     config.trigger === DEFAULT_SDK_CONFIG.trigger &&
     config.triggerText === DEFAULT_SDK_CONFIG.triggerText &&
+    config.accent === DEFAULT_SDK_CONFIG.accent &&
     config.attachToSelector === DEFAULT_SDK_CONFIG.attachToSelector &&
     config.bannerVariant === DEFAULT_SDK_CONFIG.bannerVariant &&
     config.bannerPosition === DEFAULT_SDK_CONFIG.bannerPosition &&

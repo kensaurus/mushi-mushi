@@ -169,6 +169,15 @@ import { CANONICAL_REPORT_STATUSES } from '../_shared/report-status.ts'
 import { emitProductEvent } from '../_shared/product-events.ts'
 import { attachTraceparent, childTraceparent } from '../_shared/trace.ts'
 import {
+  changedWidgetKeys,
+  WIDGET_LAUNCHERS,
+  WIDGET_POSITIONS,
+  WIDGET_THEMES,
+  widgetSettingsBody,
+  widgetSettingsView,
+  type WidgetSettingsInput,
+} from '../_shared/widget-settings.ts'
+import {
   ERR_MISSING_CLIENT_CAPABILITY,
   LEGACY_DEFAULT_PROTOCOL_VERSION,
   MODERN_REMOVED_METHODS,
@@ -716,6 +725,48 @@ const BASE_TOOLS: Record<string, HostedTool> = {
       if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required for set_design_settings')
       const body = { threshold: args.threshold, failCi: args.failCi, autofix: args.autofix }
       return apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/design/settings`, { method: 'PUT', headers: ctx.authHeaders, body: JSON.stringify(body) })
+    },
+  },
+  // The console's widget editor (GET|PUT …/sdk-config, adminOrApiKey).
+  get_widget_settings: {
+    scope: 'mcp:read',
+    handler: async (args, ctx) => {
+      const pid = (args.projectId as string | undefined) ?? ctx.projectIdHint
+      if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required for get_widget_settings')
+      return widgetSettingsView(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/sdk-config`, { headers: ctx.authHeaders }))
+    },
+  },
+  set_widget_settings: {
+    scope: 'mcp:write',
+    handler: async (args, ctx) => {
+      const pid = (args.projectId as string | undefined) ?? ctx.projectIdHint
+      if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required for set_widget_settings')
+      const input: WidgetSettingsInput = {}
+      for (const key of ['accent', 'triggerText'] as const) {
+        if (args[key] !== undefined) {
+          if (typeof args[key] !== 'string') throw new McpError(ERR_INVALID_PARAMS, `${key} must be a string`)
+          input[key] = args[key] as string
+        }
+      }
+      const pick = <T extends readonly string[]>(key: string, allowed: T): T[number] | undefined => {
+        const v = args[key]
+        if (v === undefined) return undefined
+        if (typeof v !== 'string' || !(allowed as readonly string[]).includes(v)) {
+          throw new McpError(ERR_INVALID_PARAMS, `${key} must be one of ${allowed.join(', ')}`)
+        }
+        return v as T[number]
+      }
+      input.position = pick('position', WIDGET_POSITIONS)
+      input.theme = pick('theme', WIDGET_THEMES)
+      input.launcher = pick('launcher', WIDGET_LAUNCHERS)
+      const body = widgetSettingsBody(input)
+      if (Object.keys(body.widget).length === 0) {
+        throw new McpError(ERR_INVALID_PARAMS, 'Send at least one of accent, position, theme, triggerText or launcher.')
+      }
+      const path = `/v1/admin/projects/${encodeURIComponent(pid)}/sdk-config`
+      const before = widgetSettingsView(await apiCall(path, { headers: ctx.authHeaders }))
+      const after = widgetSettingsView(await apiCall(path, { method: 'PUT', headers: ctx.authHeaders, body: JSON.stringify(body) }))
+      return { before, after, changed: changedWidgetKeys(before, after) }
     },
   },
   get_recipe_sources: {
@@ -1687,7 +1738,7 @@ const BASE_TOOLS: Record<string, HostedTool> = {
         },
         setup: {
           label: 'Set up Mushi',
-          tools: ['diagnose_setup', 'check_sdk_version', 'activation_status', 'get_backend_health', 'list_byok_keys', 'add_byok_key', 'test_byok_key', 'remove_byok_key'],
+          tools: ['diagnose_setup', 'check_sdk_version', 'activation_status', 'get_backend_health', 'list_byok_keys', 'add_byok_key', 'test_byok_key', 'remove_byok_key', 'get_widget_settings', 'set_widget_settings'],
           hint: 'Call diagnose_setup first — it diagnoses setup gaps and returns the next action to take.',
         },
         qa: {

@@ -118,6 +118,8 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   // setup
   diagnose_setup: 'setup',
   check_sdk_version: 'setup',
+  get_widget_settings: 'setup',
+  set_widget_settings: 'setup',
   activation_status: 'setup',
   get_two_way_comms_health: 'setup',
 

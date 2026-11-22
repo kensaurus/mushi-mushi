@@ -101,4 +101,21 @@ describe('SdkInstallPreview — mirrors the one-screen report', () => {
     mount({ theme: 'dark' })
     expect(q<HTMLElement>('[data-testid="sdk-install-preview"]')!.style.colorScheme).toBe('dark')
   })
+
+  it('fills Send and the launcher underline with the chosen colour, with the checked text colour', () => {
+    // mushi-mushi-allowlist: widget colour values under test, not console UI colours.
+    mount({ accent: '#1e3a8a' })
+    const trigger = q<HTMLElement>('[aria-label^="Mock bug-capture trigger"]')!
+    expect(trigger.style.boxShadow).toMatch(/rgb\(30, 58, 138\)|#1e3a8a/)
+    click(trigger)
+    const send = q<HTMLElement>('[data-testid="preview-send"]')!
+    expect(send.style.background).toMatch(/rgb\(30, 58, 138\)|#1e3a8a/)
+    expect(send.style.color).toMatch(/rgb\(255, 255, 255\)|#ffffff/)
+  })
+
+  it('keeps Send in the ink colour on Auto', () => {
+    mount({ accent: '' })
+    click(q('[aria-label^="Mock bug-capture trigger"]'))
+    expect(q<HTMLElement>('[data-testid="preview-send"]')!.style.background).toBe('canvastext')
+  })
 })

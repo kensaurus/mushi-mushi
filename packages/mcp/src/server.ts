@@ -40,6 +40,7 @@ import { findMushiDoc, mushiDocMarkdownUrl, searchMushiDocs } from './docs-index
 import { wrapUntrustedJson, type UntrustedContentRole } from './wrap-untrusted.js';
 import { installStdoutGuard } from './stdout-guard.js';
 import { sdkKeyNextAction, type SdkKeyFixContext } from './key-scopes.js';
+import { changedWidgetKeys, WIDGET_LAUNCHERS, WIDGET_POSITIONS, WIDGET_THEMES, widgetSettingsBody, widgetSettingsView } from './widget-settings.js';
 import { normalizeArgAliases, snakeAliasOf } from './arg-aliases.js';
 import {
   JOURNEY_FINDING_KINDS,
@@ -2049,6 +2050,48 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       const pid = await resolveProjectId(args.projectId);
       const body = { threshold: args.threshold, failCi: args.failCi, autofix: args.autofix };
       return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/design/settings`, { method: 'PUT', body: JSON.stringify(body) }));
+    },
+  );
+
+  server.registerTool(
+    'get_widget_settings',
+    {
+      title: titleOf('get_widget_settings'),
+      description: descOf('get_widget_settings'),
+      annotations: annotationsFor('get_widget_settings'),
+      inputSchema: PROJECT_ID_INPUT,
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(widgetSettingsView(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/sdk-config`)));
+    },
+  );
+
+  server.registerTool(
+    'set_widget_settings',
+    {
+      title: titleOf('set_widget_settings'),
+      description: descOf('set_widget_settings'),
+      annotations: annotationsFor('set_widget_settings'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+        accent: z.string().max(20).optional().describe('Hex colour like #3b5bdb, or "auto" to match the site'),
+        position: z.enum(WIDGET_POSITIONS).optional().describe('Corner of the launcher'),
+        theme: z.enum(WIDGET_THEMES).optional().describe('auto follows the OS; inherit follows the page'),
+        triggerText: z.string().max(24).optional().describe('Launcher label, up to 24 characters; "" restores the default icon'),
+        launcher: z.enum(WIDGET_LAUNCHERS).optional().describe('How the widget opens'),
+      }),
+    },
+    async (args) => {
+      const body = widgetSettingsBody(args);
+      if (Object.keys(body.widget).length === 0) {
+        throw new MushiApiError(400, 'VALIDATION_ERROR', 'Send at least one of accent, position, theme, triggerText or launcher.');
+      }
+      const pid = await resolveProjectId(args.projectId);
+      const path = `/v1/admin/projects/${encodeURIComponent(pid)}/sdk-config`;
+      const before = widgetSettingsView(await apiCall(path));
+      const after = widgetSettingsView(await apiCall(path, { method: 'PUT', body: JSON.stringify(body) }));
+      return jsonText({ before, after, changed: changedWidgetKeys(before, after) });
     },
   );
 

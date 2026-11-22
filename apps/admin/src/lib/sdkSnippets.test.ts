@@ -391,6 +391,32 @@ describe('renderSnippet — Script tag loader', () => {
   })
 })
 
+describe('renderSnippet — Script tag trigger text and colour', () => {
+  it('emits data-trigger-text (escaped) and data-accent only when set, with the code-wins note', () => {
+    // mushi-mushi-allowlist: widget colour values under test, not console UI colours.
+    const out = renderSnippet('loader', PROJECT, KEY, { ...DEFAULT_SDK_CONFIG, triggerText: 'Say "hi"', accent: '#3B5BDB' })
+    expect(out).toContain('data-trigger-text="Say &quot;hi&quot;"')
+    expect(out).toContain('data-accent="#3b5bdb"')
+    expect(out).toContain('win over the console')
+  })
+
+  it('leaves both out on the defaults, blank text or auto colour', () => {
+    for (const cfg of [DEFAULT_SDK_CONFIG, { ...DEFAULT_SDK_CONFIG, triggerText: '  ', accent: '' }]) {
+      const out = renderSnippet('loader', PROJECT, KEY, cfg)
+      expect(out).not.toContain('data-trigger-text')
+      expect(out).not.toContain('data-accent')
+      expect(out).not.toContain('win over the console')
+    }
+  })
+
+  it('never bakes the colour into the framework snippets (the console keeps deciding it)', () => {
+    for (const fw of ['react', 'vue', 'svelte', 'vanilla'] as const) {
+      // mushi-mushi-allowlist: widget colour values under test, not console UI colours.
+      expect(renderSnippet(fw, PROJECT, KEY, { ...DEFAULT_SDK_CONFIG, accent: '#3b5bdb' }), fw).not.toContain('accent')
+    }
+  })
+})
+
 describe('renderSnippet — empty triggerText (WYSIWYG with the preview)', () => {
   for (const fw of ['react', 'vue', 'svelte', 'vanilla'] as const) {
     it(`omits triggerText entirely when the input is empty (${fw})`, () => {

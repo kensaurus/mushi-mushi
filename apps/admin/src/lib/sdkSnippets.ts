@@ -15,12 +15,18 @@
 
 import type { ProjectMushiEnvVars } from './projectMushiEnv'
 import { mushiEnvVarsForProjectSlug } from './projectMushiEnv'
+import { parseAccentColour } from './widgetAccent'
+
+/** Escape text for a double-quoted HTML attribute in a pasted snippet. */
+function escapeHtmlAttr(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
 
 /** Mirror of `MushiWidgetConfig.position` from packages/core. */
 export type WidgetPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 
-/** Mirror of `MushiWidgetConfig.theme`. */
-export type WidgetTheme = 'auto' | 'light' | 'dark'
+/** Mirror of `MushiWidgetConfig.theme`. `inherit` follows the host page's own light/dark marker. */
+export type WidgetTheme = 'auto' | 'light' | 'dark' | 'inherit'
 
 /** Mirror of `MushiWidgetConfig.trigger`. */
 export type WidgetTrigger = 'auto' | 'banner' | 'edge-tab' | 'attach' | 'manual' | 'hidden'
@@ -41,6 +47,13 @@ export interface SdkPreviewConfig {
   theme: WidgetTheme
   trigger: WidgetTrigger
   triggerText: string
+  /**
+   * Brand colour of the widget's one filled action (Send), focus rings and
+   * the launcher underline, as `#rrggbb`. '' = auto: the widget matches the
+   * host site. Served at runtime (`widget.accent`), never baked into the
+   * framework snippets (code would win over the console, ADR 0068).
+   */
+  accent: string
   /** CSS selector used when trigger === 'attach'. Only emitted in the
    *  snippet when non-empty. Defaults to '' so omitted = pick at runtime. */
   attachToSelector: string
@@ -77,6 +90,7 @@ export const DEFAULT_SDK_CONFIG: SdkPreviewConfig = {
   theme: 'auto',
   trigger: 'auto',
   triggerText: '\u{1F41B}',
+  accent: '',
   attachToSelector: '',
   bannerVariant: 'brand',
   bannerPosition: 'top',
@@ -351,7 +365,18 @@ export function renderSnippet(
       if (cfg.bannerVariant !== DEFAULT_SDK_CONFIG.bannerVariant) attrs.push(`  data-banner-variant="${cfg.bannerVariant}"`)
       if (cfg.bannerPosition !== DEFAULT_SDK_CONFIG.bannerPosition) attrs.push(`  data-banner-position="${cfg.bannerPosition}"`)
     }
-    return `<!-- Paste into your <head>. No build step, no npm install. -->
+    // Same trim-then-default rule as widgetLines: blank means the default icon.
+    if (cfg.triggerText.trim() && cfg.triggerText !== DEFAULT_SDK_CONFIG.triggerText) {
+      attrs.push(`  data-trigger-text="${escapeHtmlAttr(cfg.triggerText)}"`)
+    }
+    const accent = parseAccentColour(cfg.accent)
+    if (accent) attrs.push(`  data-accent="${accent}"`)
+    // Attributes are code: they win over the console's widget settings (ADR 0068).
+    const pinNote =
+      attrs.length > 3
+        ? `\n<!-- These data-* settings win over the console. Delete one to let the console decide it. -->`
+        : ''
+    return `<!-- Paste into your <head>. No build step, no npm install. -->${pinNote}
 <script async
 ${attrs.join('\n')}
 ></script>`

@@ -7,6 +7,7 @@ export function fromRemoteConfig(remote: RemoteSdkConfig): SdkPreviewConfig {
     theme: remote.widget?.theme ?? DEFAULT_SDK_CONFIG.theme,
     trigger: remote.widget?.launcher ?? remote.widget?.trigger ?? DEFAULT_SDK_CONFIG.trigger,
     triggerText: remote.widget?.triggerText ?? DEFAULT_SDK_CONFIG.triggerText,
+    accent: remote.widget?.accent ?? DEFAULT_SDK_CONFIG.accent,
     attachToSelector: remote.widget?.attachToSelector ?? DEFAULT_SDK_CONFIG.attachToSelector,
     bannerVariant: remote.widget?.bannerVariant ?? DEFAULT_SDK_CONFIG.bannerVariant,
     bannerPosition: remote.widget?.bannerPosition ?? DEFAULT_SDK_CONFIG.bannerPosition,
@@ -40,6 +41,8 @@ export function toRemoteConfig(config: SdkPreviewConfig, enabled: boolean): Remo
       trigger: config.trigger,
       launcher: config.trigger,
       triggerText: config.triggerText.trim() || null,
+      // '' is auto (match the site): null clears a saved colour.
+      accent: config.accent.trim() || null,
       attachToSelector: config.attachToSelector.trim() || null,
       bannerVariant: config.bannerVariant,
       bannerPosition: config.bannerPosition,

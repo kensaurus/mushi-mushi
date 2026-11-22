@@ -179,6 +179,7 @@ describe('MCP protocol handshake', () => {
       'record_journeys',
       // Console parity: settings, the store review pull, and the operator records.
       'set_design_settings',
+      'set_widget_settings',
       'pull_store_reviews',
       'set_store_review_intake',
       'save_register_account',

@@ -1,4 +1,5 @@
 import { ConfigHelp } from '../ConfigHelp'
+import { AccentField } from './AccentField'
 import { MUSHI_COPY } from '@mushi-mushi/core'
 import { SELECTED_TONE, SELECTED_TONE_IDLE } from '../../lib/chipTone'
 import {
@@ -14,7 +15,17 @@ import {
 } from '../../lib/sdkSnippets'
 
 const POSITIONS: WidgetPosition[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
-const THEMES: WidgetTheme[] = ['auto', 'light', 'dark']
+const THEMES: WidgetTheme[] = ['auto', 'light', 'dark', 'inherit']
+
+const THEME_TITLE: Record<WidgetTheme, string> = {
+  auto: "Follows the visitor's system light/dark setting",
+  light: 'Always light',
+  dark: 'Always dark',
+  inherit: "Follows your page's own light/dark class or color-scheme",
+}
+
+/** ADR 0068: an explicit value in the app's code beats the console. */
+const CODE_WINS = "If your app's code sets this, your code's value wins."
 const SCREENSHOT_MODES: ScreenshotMode[] = ['on-report', 'auto', 'off']
 const NATIVE_TRIGGER_MODES = ['shake', 'button', 'both', 'none'] as const
 
@@ -270,6 +281,7 @@ export function SdkInstallConfigurator({
                 type="button"
                 role="radio"
                 aria-checked={config.theme === t}
+                title={THEME_TITLE[t]}
                 onClick={() => update('theme', t)}
                 className={`px-2 py-1 rounded-sm capitalize transition-opacity ${
                   config.theme === t
@@ -299,6 +311,11 @@ export function SdkInstallConfigurator({
           />
         </label>
       </div>
+
+      <AccentField value={config.accent} onChange={(next) => update('accent', next)} />
+      <p className="text-2xs text-fg-faint -mt-1" data-testid="code-wins-note">
+        Position, theme, trigger and colour: {CODE_WINS}
+      </p>
 
       {/* Capture options */}
       <fieldset>
