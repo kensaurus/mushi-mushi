@@ -1,8 +1,13 @@
 /**
  * Scannable fix attempts table with expandable detail rows.
+ *
+ * Progressive rows (console polish 2026-11-22): /fixes loads up to 200 attempts per request,
+ * and drawing all 200 rows at once made the page slow to open and long to scroll. The table
+ * draws the first `FIXES_FIRST_ROWS` and adds that many more per "Show more"; "Show all" draws
+ * the rest. A row opened by a deep link is always drawn, however far down it sits.
  */
 
-import { Fragment } from 'react'
+import { Fragment, useState } from 'react'
 import type { FixTimelineEvent } from '../FixGitGraph'
 import { ResponsiveTable } from '../ResponsiveTable'
 import { FixRowView } from './FixRowView'
@@ -11,6 +16,19 @@ import type { FixAttempt } from './types'
 import { pluralizeWithCount } from '../../lib/format'
 import { useMediaQuery } from '../../lib/useMediaQuery'
 import { FIXES_STICKY_LEAD, FIXES_TABLE_COL, TABLE_CELL } from './fixesTableLayout'
+import { Btn } from '../ui'
+
+/** Rows drawn first, and added per "Show more". */
+const FIXES_FIRST_ROWS = 50
+
+/**
+ * How many rows to draw: the requested count, stretched to include the expanded row.
+ *
+ * @internal Exported for tests.
+ */
+export function fixRowsToDraw(total: number, requested: number, expandedIndex: number): number {
+  return Math.min(total, Math.max(requested, expandedIndex + 1))
+}
 
 interface InventoryActionNodeLike {
   actionNodeId?: string
@@ -76,6 +94,9 @@ export function FixesTable({
   // the time moves under the agent, the summary wraps, and the row fits.
   const phone = useMediaQuery('(max-width: 639.98px)')
   const columnCount = (compactTable ? 5 : 7) - (phone ? 1 : 0)
+  const [requested, setRequested] = useState(FIXES_FIRST_ROWS)
+  const drawn = fixRowsToDraw(fixes.length, requested, expandedId ? fixes.findIndex((f) => f.id === expandedId) : -1)
+  const notShown = fixes.length - drawn
   return (
     <div className="border border-edge-subtle rounded-md overflow-hidden bg-surface-raised/30">
       {!hideTableChrome ? (
@@ -129,7 +150,7 @@ export function FixesTable({
             </tr>
           </thead>
           <tbody>
-            {fixes.map((fix, idx) => {
+            {fixes.slice(0, drawn).map((fix, idx) => {
               const isExpanded = expandedId === fix.id
               const nodeId = fix.inventory_action_node_id
               const rawInv = nodeId ? inventoryActions[nodeId] : undefined
@@ -186,6 +207,26 @@ export function FixesTable({
           </tbody>
         </table>
       </ResponsiveTable>
+      {notShown > 0 ? (
+        <div
+          className="flex flex-wrap items-center justify-between gap-2 border-t border-edge-subtle px-3 py-1.5 text-2xs text-fg-muted"
+          data-testid="fixes-table-more"
+        >
+          <span>
+            Showing {drawn} of {pluralizeWithCount(fixes.length, 'attempt')}.
+          </span>
+          <span className="flex items-center gap-1">
+            <Btn size="sm" variant="ghost" className="pointer-coarse:min-h-11" onClick={() => setRequested(drawn + FIXES_FIRST_ROWS)}>
+              Show {Math.min(FIXES_FIRST_ROWS, notShown)} more
+            </Btn>
+            {notShown > FIXES_FIRST_ROWS ? (
+              <Btn size="sm" variant="ghost" className="pointer-coarse:min-h-11" onClick={() => setRequested(fixes.length)}>
+                Show all {fixes.length}
+              </Btn>
+            ) : null}
+          </span>
+        </div>
+      ) : null}
     </div>
   )
 }
