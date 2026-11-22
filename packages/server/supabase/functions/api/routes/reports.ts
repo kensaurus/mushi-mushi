@@ -1026,14 +1026,21 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       // The Sentry issues this report came from. resolved_at is stamped only
       // after Sentry answered a resolve (sentry-resolve-back.ts), so the page
       // can say "resolves when the fix merges" vs "resolved in Sentry".
-      db
-        .from('report_external_issues')
-        .select('external_id, external_url, resolved_at, archived_at')
-        .eq('report_id', reportId)
-        .eq('project_id', data.project_id as string)
-        .eq('system', 'sentry')
-        .order('created_at', { ascending: true })
-        .limit(10),
+      // last_seen_at: when Sentry last saw the issue (sentry-ingest.ts
+      // recordSentryLastSeen); read without it while its migration is pending.
+      (async () => {
+        const read = (cols: string) =>
+          db
+            .from('report_external_issues')
+            .select(cols)
+            .eq('report_id', reportId)
+            .eq('project_id', data.project_id as string)
+            .eq('system', 'sentry')
+            .order('created_at', { ascending: true })
+            .limit(10);
+        const res = await read('external_id, external_url, resolved_at, archived_at, last_seen_at');
+        return res.error?.code === '42703' ? await read('external_id, external_url, resolved_at, archived_at') : res;
+      })(),
     ]);
     // true / false from project_settings; null when unknown (no row, the
     // column not migrated yet, or a failed read), so the page never claims
