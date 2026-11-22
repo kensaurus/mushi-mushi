@@ -65,6 +65,21 @@ describe('SentryContextPanel for an imported Sentry issue', () => {
     expect(out).toContain('Sentry may have seen newer events')
     expect(html({ sentryIssueUrl: 'https://acme.sentry.io/issues/4501/' })).not.toContain('sentry-last-event')
   })
+
+  it("says when Sentry last saw the issue once a link carries it, ahead of Mushi Mushi's own time", () => {
+    const lastEventAt = new Date(Date.now() - 4 * 86_400_000).toISOString()
+    const seen = html({
+      sentryLinks: [{ external_id: '4501', external_url: null, resolved_at: null, last_seen_at: new Date(Date.now() - 2 * 3_600_000).toISOString() } as never],
+      lastEventAt,
+    })
+    expect(seen).toContain('Last seen in Sentry:')
+    expect(seen).toContain('2 hours ago')
+    expect(seen).not.toContain('Mushi Mushi received')
+    // Not recorded yet: the old wording, never a guess.
+    const fallback = html({ sentryLinks: [{ external_id: '4501', external_url: null, resolved_at: null, last_seen_at: null } as never], lastEventAt })
+    expect(fallback).toContain('Last Sentry event Mushi Mushi received:')
+    expect(fallback).not.toContain('Last seen in Sentry')
+  })
 })
 
 describe('breadcrumb data scroll region', () => {
