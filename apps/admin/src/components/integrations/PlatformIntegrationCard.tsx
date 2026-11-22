@@ -549,6 +549,10 @@ export function PlatformIntegrationCard({
             </p>
           )}
           {def.fields.map((field) => {
+            // The catalog belongs to the saved Cursor key; an unsaved key may not offer it.
+            const cursorKeyChanged =
+              def.kind === 'cursor_cloud' &&
+              (draft.cursor_api_key_ref ?? '') !== String(config.cursor_api_key_ref ?? '')
             const fieldSource = sourceByField?.[field.name]
             const isDraftEmpty = !(draft[field.name] ?? '').trim()
             return (
@@ -563,7 +567,20 @@ export function PlatformIntegrationCard({
                 {/* Secrets use SecretInput (type="text", CSS-masked, reveal
                     toggle) so password managers never offer to save an API
                     token as the site login. */}
-                {field.name === 'cursor_default_model' ? (
+                {field.name === 'cursor_default_model' && cursorKeyChanged ? (
+                  <div>
+                    <Input
+                      aria-label={field.label}
+                      value={draft[field.name] ?? ''}
+                      placeholder="e.g. grok-4.7?reasoning_effort=xhigh"
+                      onChange={(e) => onChangeField(field.name, e.target.value)}
+                      autoComplete="off"
+                    />
+                    <p className="mt-1 text-2xs text-fg-muted" data-testid="cursor-model-after-save">
+                      The model list is for the saved key. Save the new key to pick from its models, or type a model id now.
+                    </p>
+                  </div>
+                ) : field.name === 'cursor_default_model' ? (
                   <CursorModelPicker
                     value={draft[field.name] ?? ''}
                     onChange={(spec) => onChangeField(field.name, spec)}

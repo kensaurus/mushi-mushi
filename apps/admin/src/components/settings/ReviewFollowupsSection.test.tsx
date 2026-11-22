@@ -47,6 +47,7 @@ vi.mock('../../lib/usePageData', () => ({
 }))
 
 import { ReviewFollowupsSection } from './ReviewFollowupsSection'
+import { CURSOR_MODEL_OTHER } from './cursorModelSpec'
 
 const BASE: ReviewFollowupsResponse = {
   available: true,
@@ -188,6 +189,38 @@ describe('ReviewFollowupsSection', () => {
       model: 'grok-4.7?reasoning_effort=xhigh',
       escalationModel: 'claude-opus-5-5',
     })
+  })
+
+  // Review of PR #1140: Other used to clear the model, so saving right after
+  // it reset follow-ups to each app's model without a word.
+  it('choosing Other keeps the saved model until an id is typed', async () => {
+    mocks.data = { ...BASE, settings: { ...BASE.settings, model: 'grok-4.7?reasoning_effort=xhigh' } }
+    await render()
+    await act(async () => button('Change review follow-ups').click())
+    await act(async () => change(selectByLabel('Model'), CURSOR_MODEL_OTHER))
+    const typed = Array.from(document.body.querySelectorAll('label'))
+      .find((l) => l.textContent?.includes('Model id'))
+      ?.querySelector('input') as HTMLInputElement
+    expect(typed.value).toBe('grok-4.7?reasoning_effort=xhigh')
+    await act(async () => button('Save').click())
+    const call = mocks.apiFetch.mock.calls.find(([url]) => url === '/v1/admin/byok/review-followups')!
+    expect(JSON.parse(String((call[1] as RequestInit).body))).toMatchObject({
+      model: 'grok-4.7?reasoning_effort=xhigh',
+    })
+  })
+
+  it('choosing Other and typing an id saves that id', async () => {
+    mocks.data = { ...BASE, settings: { ...BASE.settings, model: 'grok-4.7' } }
+    await render()
+    await act(async () => button('Change review follow-ups').click())
+    await act(async () => change(selectByLabel('Model'), CURSOR_MODEL_OTHER))
+    const typed = Array.from(document.body.querySelectorAll('label'))
+      .find((l) => l.textContent?.includes('Model id'))
+      ?.querySelector('input') as HTMLInputElement
+    await act(async () => change(typed, 'custom-1?effort=high'))
+    await act(async () => button('Save').click())
+    const call = mocks.apiFetch.mock.calls.find(([url]) => url === '/v1/admin/byok/review-followups')!
+    expect(JSON.parse(String((call[1] as RequestInit).body))).toMatchObject({ model: 'custom-1?effort=high' })
   })
 
   it('says why Mushi turned it off, and shows a refused Cursor request', async () => {

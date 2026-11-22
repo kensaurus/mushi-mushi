@@ -216,11 +216,13 @@ describe('PlatformIntegrationCard — Cursor model', () => {
 
   function Editor({ initial }: { initial: string }) {
     const [model, setModel] = useState(initial)
+    const [key, setKey] = useState('…abcd')
     return createElement(PlatformIntegrationCard, baseProps({
       isEditing: true,
-      draft: { cursor_api_key_ref: '…abcd', cursor_default_model: model },
+      draft: { cursor_api_key_ref: key, cursor_default_model: model },
       onChangeField: (name: string, value: string) => {
         if (name === 'cursor_default_model') setModel(value)
+        if (name === 'cursor_api_key_ref') setKey(value)
       },
     }) as never)
   }
@@ -290,6 +292,25 @@ describe('PlatformIntegrationCard — Cursor model', () => {
       .find((label) => label.textContent?.includes('Reasoning effort'))
       ?.querySelector('select') as HTMLSelectElement | undefined
     expect(effortSelect?.value).toBe('xhigh')
+  })
+
+  // Review of PR #1140: the list is the saved key's, so a key being replaced
+  // in the same form must not offer the old account's models.
+  it('stops offering the saved key models while a new key is typed', async () => {
+    await act(async () => {
+      root.render(createElement(Editor, { initial: 'grok-4.7?reasoning_effort=xhigh' }))
+    })
+    expect(modelSelect().value).toBe('grok-4.7')
+    const keyInput = Array.from(container.querySelectorAll('input')).find((i) => i.value === '…abcd')
+    if (!keyInput) throw new Error('no key input')
+    await act(async () => change(keyInput, 'crsr_new'))
+    expect(container.querySelector('select[aria-label="Default model"]')).toBeNull()
+    expect(container.textContent).not.toContain('Reasoning effort')
+    expect(container.querySelector('[data-testid="cursor-model-after-save"]')).not.toBeNull()
+    const manual = container.querySelector<HTMLInputElement>('input[aria-label="Default model"]')
+    expect(manual?.value).toBe('grok-4.7?reasoning_effort=xhigh')
+    await act(async () => change(manual!, 'composer-2.5'))
+    expect(container.querySelector<HTMLInputElement>('input[aria-label="Default model"]')?.value).toBe('composer-2.5')
   })
 
   it('types a spec when the model list does not load', async () => {
