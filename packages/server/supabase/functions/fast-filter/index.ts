@@ -34,6 +34,7 @@ import { isEarlyRealReport, type OldestReportRow } from '../_shared/first-report
 import { isFirstActivationCandidate, type ActivationCandidateRow } from '../_shared/activation.ts'
 import { clipAtWord } from '../_shared/text-clip.ts'
 import { isFeatureRequest, reporterCategoryHint, respectReporterCategory } from '../_shared/report-category.ts'
+import { isQuotaCheckDeferral } from '../_shared/quota-deferral.ts'
 
 const stage1Schema = z.object({
   symptom: z.string().describe('What the user observed'),
@@ -700,6 +701,15 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}${appDiagnosti
             status: stage2Res.status,
             detail,
           })
+        } else if (isQuotaCheckDeferral(stage2Res.status, detail)) {
+          // classify-report could not read the diagnosis quota and deferred
+          // (it already logged the cause). Record it so recovery retries; a
+          // warn, so one failed read is not a second Sentry issue.
+          log.warn('Stage 2 deferred: diagnosis quota check unavailable', { reportId })
+          await db
+            .from('reports')
+            .update({ processing_error: `stage2 handoff failed: HTTP ${stage2Res.status}` })
+            .eq('id', reportId)
         } else {
           log.error('Stage 2 returned non-2xx', { reportId, status: stage2Res.status, detail })
           await db

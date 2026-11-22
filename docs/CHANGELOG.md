@@ -10,11 +10,24 @@ For per-package, per-bullet detail see each package's `CHANGELOG.md`.
 
 ### Highlights
 
+- **A disabled Dispatch fix says what it needs.** — Thanks to [Adam](https://x.com/adamdotenv) for this and the four changes below. Under both Dispatch fix buttons on a report, the setup still missing is written out, each step a link, with a count: "To dispatch a fix: Connect GitHub · Index your code · Turn on Autofix (1 of 4 done)". "The story so far" names the same steps instead of telling you to click a button you can't click, and the setup card on the report no longer calls them optional.
+- **One setup count everywhere.** — The first-run screens said "Step 1 of 2" and "Step 2 of 2", the sidebar said "2 required setup steps remaining" and Home said "3 of 4 done". The first-run screens and the sidebar now use Home's 4-step count and words: "Set up · 2 of 4 done".
+- **Journeys says what needs a key.** — The map from real visits needs no key; only "Scan my site", which also maps pages nobody has visited yet, needs your own Firecrawl key. The page now says so.
+- **A clean Free Check shows what passed.** — It used to say only "Nothing to fix on the pages Mushi Mushi could read". It now says "No problems found on 3 pages", lists every check with a tick, a cross or "not checked", and names each page it read and any page it could not read, with the reason.
+- **Self-host is easier to find in the README.** — The top links say "Self-host with Docker", and the self-host section starts with the one-command Docker install.
+- **`search_mushi_docs` finds the new Theming page** — the widget's colour, language and route attributes for the script tag, the `--mushi-*` design tokens and the contrast rule.
+- **Closing the panel mid-screenshot sends nothing.** — Thanks to [PeepSo](https://peepso.com), whose question led to these tests. With a host `screenshotProvider` the panel stays on screen while it captures, so the reporter can close it before the capture returns. The late screenshot then went out unseen with their next report, and a Send pressed in the closed panel could still post whatever they had started typing after reopening it. Every report now opens with no screenshot attached, a capture that lands after its panel closed (automatic, button, tab share or Mark up) is thrown away, and a Send from a closed panel stops there.
 - **A scorecard run keeps its top 60 root causes** — causes that span pages or contradict come first, then the rest by rank, so a large app's run syncs and files instead of failing with "at most 60" (the first real run on Mushi's console grouped 235). `scorecard.json` on your machine still lists every cause.
 - **A server-scored run keeps its screenshots** — `--score-via server` sends the screenshot names it uploaded with the final sync, so the console no longer loses them.
 - **`mushi-ux scorecard` scores every page of a live app** — each page gets a 1–10 score on eight written dimensions (clarity, hierarchy, consistency, states, truthfulness, copy, accessibility, speed), its top problems with quoted evidence and a fix, and the overall score follows its worst dimension. It reads the page as a person meets it: the tab title, the text, a screenshot early in the load and one once it settles, the settle time and axe. The settle time and axe cap the speed and accessibility scores (ADR 0067).
 - **Problems that repeat across pages become one root cause** — the same shared component, banner or status rule on ten pages is one cause with ten pages, and two pages that disagree about the same fact are flagged. `--file` files the top causes as Mushi reports, one per cause and at most five a run; a cause already open only gets its pages refreshed.
 - **Score on Mushi or on your machine** — `--score-via server` (the default) uses your app's AI key, then Mushi's; `claude-code`, `cursor` and `anthropic-api` score locally. `--sync` puts the scorecard on the console (UX runs → Scorecard) with each page's trend across runs. Pages come from `--path` / `--paths-file`, your source (`--routes-from`) or a crawl; `/team?view=sso` counts as its own page. `--from-captures` scores captures another browser driver made, so no second browser opens on a profile already in use.
+- **More settings on the script tag** — `data-accent`, `data-accent-text`, `data-locale` and `data-hide-on-routes` (comma-separated), so Lovable, Bolt and plain HTML sites can brand the widget without code.
+- **Script tag typos no longer slip through** — every attribute is checked. A value the widget does not take is skipped with one console warning naming the attribute and the values it accepts; it never throws or breaks the page.
+- **Route rules take simple globs** — `hideOnRoutes: ['/admin/*', '/blog/**']`. An entry without `*` still matches anywhere in the path, exactly as before.
+- **Text on your accent stays readable** — when `accentText`, `data-accent-text` or a CSS `--mushi-accent-fg` is under 3:1 contrast on the accent, the widget uses black or white instead and says so in `Mushi.diagnose().warnings` (and in the console with `debug: true`). Your accent colour itself is never changed. A CSS `--mushi-accent` now also gets matching text colour instead of the panel background.
+- **oklch and lab accents are measured correctly** — for these contrast checks.
+- **The wizard names the entry file your app has.** — In a JavaScript React app it said to paste the snippet into `src/main.tsx` even though the file is `src/main.jsx`. It now names the file that exists (`.tsx`, `.jsx`, `.ts` or `.js`), in `--dry-run` too.
 
 ## v1.38.x
 
@@ -22,6 +35,7 @@ Latest tag: `v1.38.0`
 
 ### Highlights
 
+- **A screenshot is never sent without the reporter seeing it.** — With `capture.screenshot: 'on-report'`, pressing Send took the screenshot and sent it in the same moment, so the reporter never saw it. Send now takes it, shows it with Mark up and Remove and the line "Check the screenshot below, then press Send again", and the second Send sends it. Thanks to [PeepSo](https://peepso.com) for flagging this.
 - **A removed screenshot stays removed.** — With `'auto'` or `'on-report'`, pressing Remove and then Send took a new screenshot and sent it. Remove now holds until that report is sent or closed.
 - **The selected element's text follows the privacy rules.** — Pointing at an element sent up to 200 characters of its text unscrubbed, even inside `data-private`. Text from inside (or around) a redacted, masked or blocked area is now left out, and the rest goes through the PII scrubber.
 
@@ -83,6 +97,10 @@ Latest tag: `v1.34.1`
 ## v1.33.x
 
 Latest tag: `v1.33.8`
+
+### Highlights
+
+- **Six new server events in the analytics vocabulary** — `sdk_seen_localhost`, `sdk_seen_live`, `first_real_report`, `first_diagnosis_viewed`, `first_fix_dispatched` and `first_fix_merged` mark the new-user path, once per project. Only Mushi Mushi's server sends them; nothing changes for apps that call `Mushi.track()`.
 
 ### Packages bumped
 
@@ -231,6 +249,7 @@ Latest tag: `v1.22.5`
 
 ### Highlights
 
+- **Crypto-strong session ids** — the SDK now derives its session correlation id from the WebCrypto capability ladder (CSPRNG) the same way `newUuid()` does, instead of `Math.random()` — falling back to `Math.random` only on runtimes without WebCrypto. Resolves CodeQL `js/insecure-randomness`; a session id is a correlation identifier, not a secret, so behaviour is unchanged. `@mushi-mushi/web` is bumped because its `<script>`-tag global loader inlines `@mushi-mushi/core` and must be rebuilt to ship the fix.
 - **SSR / non-DOM safety:** — `Mushi.init()` returns a no-op instance when `document`/`window` are unavailable (Next.js / Remix / Nuxt server components, plain Node SSR) instead of throwing when the widget constructs DOM nodes. A stray server-side init no longer takes down the host page.
 - **Public-API error isolation:** — every public method is wrapped so a throw or rejection is logged + breadcrumbed and swallowed with a type-safe fallback. A malformed build or unexpected SDK state can never crash the host (including `diagnose()`, which still resolves to a valid result on the error path).
 - **Screenshot provider fallback:** — a custom `screenshotProvider` that returns `null` now falls through to the built-in DOM capturer instead of silently producing no screenshot.
@@ -497,6 +516,10 @@ Latest tag: `v1.4.0`
 
 Latest tag: `v1.3.7`
 
+### Highlights
+
+- **Hono and Fastify reports drop URL query values** — the error handlers scrub query values (tokens, emails) from the request URL before putting it into the report description, as the Express handler already did.
+
 ### Packages bumped
 
 - `@mushi-mushi/node` → 1.3.7
@@ -508,6 +531,7 @@ Latest tag: `v1.2.1`
 
 ### Highlights
 
+- **`report()` no longer sends a screenshot the reporter never saw.** — On iOS and Android it captured the screen at submit. It now sends only the `screenshot` you pass: take one with `captureScreenshot()` before your form opens, show it there, and pass what the reporter keeps. Thanks to [PeepSo](https://peepso.com) for flagging this.
 - **`captureScreenshot()` works on Android.** — It always returned `null`; it now returns a base64 JPEG of the current screen.
 - **The native bottom sheet (`useNativeWidget`) shows its screenshot** — with a Remove button; only a screenshot still shown is sent.
 - **`mushi sync-lessons`** — pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs.
@@ -571,9 +595,11 @@ Latest tag: `v0.41.0`
 
 ### Highlights
 
+- **The code-read audit files fewer, truer reports** — it asks for 0 to 3 findings per screen, and none when nothing would matter to a real user. Every finding needs a severity, a confidence (under 0.6 is dropped) and what the user sees. When what a "missing" check looks for is in a shared component around the line, the finding is rooted at that component, so every screen it wraps is one report. Each finding carries its root, the shared component or route kind one fix lands in, so the server keeps one report per root cause (ADR 0065).
 - **The audit lane rechecks its open findings once a day** — on the default branch, with no model. What no longer reproduces is closed with the commit it checked. When the app is at its open cap, the lane only rechecks.
 - **`mushi work --recheck --dry-run --json` shows the pattern plan** — how the open findings would collapse into one report per pattern.
 - **`mushi work --collapse-backlog [--apply]` collapses the findings filed before** — a dry run unless `--apply`; each group's other reports become duplicates of one, a report with a live PR stays open, and every changed row is tagged so the SQL it prints reverts it. With `--apply-cap` it then keeps only the best reports up to the app's open cap; the rest wait and come back as slots free.
+- **A Claude Code worker's account check reads properly** — `claude auth status` answers in JSON, so the console showed `checked 2 min ago: "{"`. It now reads "logged in (claude.ai)" or "logged out", and never includes the account's e-mail.
 
 ### Packages bumped
 
@@ -585,9 +611,11 @@ Latest tag: `v0.40.5`
 
 ### Highlights
 
+- **`mushi worker install` on Windows without administrator rights** — the logon task (`schtasks /SC ONLOGON`) answered "Access is denied" and the worker was left with no service. The installer now falls back to a hidden launcher in your Startup folder, starts the worker straight away, and logs to `~/.cache/mushi-work/logs/worker.log`. `mushi worker status` shows it, and `mushi worker revoke` removes it.
 - **pnpm repos on a Windows worker** — the worker looked for pnpm only beside `node.exe`, so a global `npm i -g pnpm` was never found and pnpm repos ran with no dependencies (no tests, failing commit hooks). It now also looks on PATH, including a standalone `pnpm.exe`.
 - **The worker's stop hint** — on Windows it no longer says `systemctl`.
 - **`mushi login` outside an app folder** — run from a folder with no `package.json` or `.git` (your home folder, say) by an account that already has projects, it no longer creates a new project named after the folder. It lists your projects with their `--project-id` instead.
+- **The worker's heartbeat names its coding agent** — `mushi work --daemon` now sends which agent its lanes run (`cursor` or `claude`). The console uses it to show a Claude Code worker's account. Before, it read "Cursor account: not checked yet" and offered a Cursor account switch that does nothing for Claude Code.
 
 ### Packages bumped
 
@@ -631,6 +659,11 @@ Latest tag: `v0.35.7`
 
 ### Highlights
 
+- **`mushi work --daemon` rides out a server blip** — a single 401 on its key no longer stops the worker for good. It stops when the key is refused on 3 heartbeats in a row, or at once on an explicit revoke (a 403 naming a revoke or a missing scope). On 2026-10-30 a one-second server error was read as "key revoked", and the worker stayed offline for 11 hours because its service does not restart after exit code 2.
+- **`mushi work` no longer loops on a half-made worktree** — a run killed inside `git worktree add` left git's record locked as "initializing" with no folder, and every later run of that report failed with "already used by worktree" within seconds. The worker now unlocks and prunes that record (the path is its own cache) before it adds the worktree again.
+- **`mushi runner placement preview|request` takes CI_PROFILE and a time box** — `--variable CI_PROFILE --value economy|thorough` asks to switch a repo's checks on fix pull requests (only where a workflow reads `vars.CI_PROFILE`), and `--revert-after <hours>` (1-168) makes a move to GitHub-hosted runners switch back on its own when the time is up.
+- **`mushi connect` uses your saved key** — when you pass no key, it uses the one `npx mushi-mushi` or `mushi login` already saved, so the command the setup wizard prints works as it is. The wizard's last checklist names the console tab by its current label, "Test it".
+- **`mushi doctor` shows the app's Health check** — it reads the server's Health check (setup gaps, SDK health, the report button) and prints each problem once as a warning, with how many items wait on it and its fix. It does not change whether `mushi doctor` passes. A check the server could not read shows as not checked. Older servers without the route are skipped.
 - **Resolve merge conflicts** — (`conflicts`): takes a merge-queue PR of the lane's own repository that waits for a conflict agent. It merges the base branch into the commit Mushi saw, and lets the agent change only the conflicted files. It refuses the result when a conflict marker is left or any other file changed. Then it commits with your hooks and pushes the merge commit, fast-forward only.
 - **Audit the code, screen by screen** — (`audit`): a model proposes bugs in read-only mode. Each comes with the line, the code there and a check (a pattern, or one of the repo's lint, typecheck, test or check scripts). The machine runs the check itself, an optional second model may only veto, and only reproduced findings are filed.
 - **Run skill runs** — (`skill`): runs only the rounds of skill runs started on /credits with this lane.
@@ -667,6 +700,11 @@ Latest tag: `v0.32.0`
 
 Latest tag: `v0.31.8`
 
+### Highlights
+
+- **`search_mushi_docs` finds the new "What leaves the browser" page** — what the web SDK sends with a report, where each part is filtered, and how to keep private pages out of reports.
+- **`diagnose_setup` with an account key** — it now diagnoses instead of failing with `ORG_KEY_NOT_ALLOWED`. An account key (from `mushi setup` in account mode) cannot ingest, so the SDK ingest check refused it and the whole tool errored in `full` and `ingest` mode. The ingest steps are now read for the named project (`projectId`, or the configured one) from the new `GET /v1/admin/projects/:id/ingest-setup`. Without a project, the tool asks for `projectId`.
+
 ### Packages bumped
 
 - `@mushi-mushi/cli` → 0.31.0
@@ -675,6 +713,12 @@ Latest tag: `v0.31.8`
 ## v0.30.x
 
 Latest tag: `v0.30.7`
+
+### Highlights
+
+- **`request_ci_placement_change` takes CI_PROFILE and `revertAfterHours`** — CI_PROFILE (economy, the default, or thorough) is accepted where a workflow reads it, and a move to GitHub-hosted runners can carry `revertAfterHours` (1-168) so it switches back on its own.
+- **`diagnose_setup` names the root cause first** — in full mode it reads the app's Health check and returns its "Fix these first" list as `health`; when the connection, ingest and dispatch checks pass, `nextAction` is the first root cause and its fix.
+- **Docs answers match the product** — the docs index behind `search_mushi_docs` is rebuilt from the proofread docs.
 
 ### Packages bumped
 
@@ -902,6 +946,7 @@ Latest tag: `v0.17.2`
 - **New — screenshot annotation:** — the report panel's "Mark up" button opens an interactive overlay (highlight / blur / arrow) so reporters can circle the problem and redact sensitive regions before submitting. The annotation session stays open until the reporter confirms with "Done"; touch strokes now resolve correctly on lift (`touchend`).
 - **New — screenshot compression** — before upload to keep payloads small.
 - **Hardening:** — oversized reports are progressively degraded — drop the replay buffer, then the screenshot — before being dropped entirely with a `report:failed` event, so the offline queue is never wedged. The replay capture is now torn down on `Mushi.destroy()` (no observer/listener leak) and guarded against an init/`updateConfig` race that could install a stale capture.
+- **ReDoS fix in MCP branding** — `mcpIconUrl()` now trims trailing slashes with a linear character scan instead of the `/\/+$/` regex, which degraded to quadratic backtracking on a long all-slash input (CodeQL `js/polynomial-redos`). The returned icon URL is unchanged.
 
 ### Packages bumped
 
@@ -1147,6 +1192,7 @@ Latest tag: `v0.6.18`
 
 - **`mushi sync-lessons`** — pulls promoted lessons from `/v1/admin/lessons` and writes `.mushi/lessons.json` into the connected repo (supports `--dry-run` and `--json`). Designed for CI and scheduled refresh PRs.
 - **MCP** — `lessons.query(diff_text, max_tokens)` tool for token-budget-ranked lesson injection into agent / PR-review flows; expanded catalog surface for Migration Hub and closed-loop resources.
+- **Supply-chain hardening** — workspace-wide 7-day cooldown on new dep versions (pnpm `minimumReleaseAge` + npm `min-release-age` + Dependabot `cooldown`), plus PR-time `dependency-review-action`, post-publish `npm audit signatures`, `strictDepBuilds`, and `blockExoticSubdeps`. Closes the window real-world npm attacks operate in (Axios 1.14.x: ~5h to detection; Shai-Hulud worm: ~12h) — every publicly-disclosed 2025–2026 npm supply-chain attack would have been blocked by these defaults.
 - **Launcher README** — adds a Socket.dev badge and a new "Supply-chain & verification" section that explains, up front, what each external scanner reports about `mushi-mushi` (npm provenance, Socket.dev alerts, Bundlephobia `EntryPointError`, Snyk Advisor crawler lag) and why none of them are actionable bugs.
 - **CLI** — bumped `@clack/prompts` from `^0.11.0` to `^1.2.0`. v1 widened the `text({ validate })` callback parameter to `string | undefined`; the `requireSecret()` helper was updated to handle the new signature explicitly. No user-visible change; the v1 spinner-API breaking change isn't used here.
 - **npm keyword arrays expanded across all 14 publishable packages.** — Added discoverability terms developers actually type into npm search: `user-report`, `feedback-widget`, `sentry-alternative`, `auto-fix`, `llm-ops`, `ai-agent`, plus framework-appropriate specifics (e.g. `claude-code`, `codex`, `copilot` on `@mushi-mushi/mcp`). Keyword counts after the pass: 14–32 per package.
@@ -1156,7 +1202,6 @@ Latest tag: `v0.6.18`
 - **cli** — bump `commander` to **v15** (ESM-only; the CLI is already pure ESM, so the change is transparent to consumers).
 - **mcp-ci** — bump `@actions/core` to **v3** (ESM-only, Node 24-ready; bundled via tsup).
 - **react-native** — build and test against **react-native 0.86**. `StyleSheet.absoluteFillObject` was dropped from RN 0.86's TypeScript types, so the backdrop style now inlines the equivalent absolute-fill literal — runtime behavior is identical and it compiles against all supported `react-native >= 0.72`.
-- **cli** — bump `commander` to **v15** (now ESM-only; the CLI is already pure ESM, so the change is transparent to consumers).
 
 ### Packages bumped
 
@@ -1176,6 +1221,7 @@ Latest tag: `v0.5.22`
 
 ### Highlights
 
+- **Supply-chain hardening** — workspace-wide 7-day cooldown on new dep versions (pnpm `minimumReleaseAge` + npm `min-release-age` + Dependabot `cooldown`), plus PR-time `dependency-review-action`, post-publish `npm audit signatures`, `strictDepBuilds`, and `blockExoticSubdeps`. Closes the window real-world npm attacks operate in (Axios 1.14.x: ~5h to detection; Shai-Hulud worm: ~12h) — every publicly-disclosed 2025–2026 npm supply-chain attack would have been blocked by these defaults.
 - **Launcher README** — adds a Socket.dev badge and a new "Supply-chain & verification" section that explains, up front, what each external scanner reports about `mushi-mushi` (npm provenance, Socket.dev alerts, Bundlephobia `EntryPointError`, Snyk Advisor crawler lag) and why none of them are actionable bugs.
 - **CLI** — bumped `@clack/prompts` from `^0.11.0` to `^1.2.0`. v1 widened the `text({ validate })` callback parameter to `string | undefined`; the `requireSecret()` helper was updated to handle the new signature explicitly. No user-visible change; the v1 spinner-API breaking change isn't used here.
 - **npm keyword arrays expanded across all 14 publishable packages.** — Added discoverability terms developers actually type into npm search: `user-report`, `feedback-widget`, `sentry-alternative`, `auto-fix`, `llm-ops`, `ai-agent`, plus framework-appropriate specifics (e.g. `claude-code`, `codex`, `copilot` on `@mushi-mushi/mcp`). Keyword counts after the pass: 14–32 per package.
@@ -1187,7 +1233,6 @@ Latest tag: `v0.5.22`
 - **Hero image up top.** — `docs/screenshots/report-detail-dark.png` is now embedded (via absolute `raw.githubusercontent.com` URL so npmjs.com renders it), linking to the live admin demo.
 - **15-word tagline.** — "Ship a shake-to-report button. Get AI-classified, deduped, ready-to-fix bug reports." Frameworks listed directly under.
 - **"What you get"** — 6 benefit bullets with emoji, each tied to a capability, not a wizard step.
-- **"Who it's for"** — 4 personas (solo dev, PM/designer, AI-native team, enterprise) so visitors self-identify in 10 seconds.
 
 ### Packages bumped
 

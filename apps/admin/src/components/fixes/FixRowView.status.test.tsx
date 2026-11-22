@@ -79,3 +79,52 @@ describe('fix states as marks', () => {
     expect(host.querySelector('[data-testid="vital-LCP"]')).not.toBeNull()
   })
 })
+
+describe('row layout (2026-11-22 design pass)', () => {
+  function renderRow(props: { phone?: boolean; selectable?: boolean }) {
+    act(() => {
+      root.render(
+        createElement(
+          MemoryRouter,
+          null,
+          createElement(
+            'table',
+            null,
+            createElement(
+              'tbody',
+              null,
+              createElement(FixRowView, {
+                fix: fix({ status: 'merged' }),
+                index: 0,
+                isExpanded: false,
+                isInFlight: false,
+                onToggle: vi.fn(),
+                onRetry: vi.fn(),
+                phone: props.phone,
+                onSelectChange: props.selectable ? vi.fn() : undefined,
+              }),
+            ),
+          ),
+        ),
+      )
+    })
+  }
+
+  it('puts the checkbox on the same line as the state it selects', () => {
+    renderRow({ selectable: true })
+    const box = host.querySelector('input[type="checkbox"]')
+    const pill = host.querySelector('[data-testid="status-pill"]')
+    expect(box).not.toBeNull()
+    // Same flex row: the pill and the checkbox's label share a parent.
+    expect(box!.closest('label')!.parentElement).toBe(pill!.parentElement)
+  })
+
+  it('on a phone drops the Started column and shows the time under the agent', () => {
+    renderRow({})
+    expect(host.querySelectorAll('td')).toHaveLength(7)
+    expect(host.querySelector('[data-testid="fix-row-started-phone"]')).toBeNull()
+    renderRow({ phone: true })
+    expect(host.querySelectorAll('td')).toHaveLength(6)
+    expect(host.querySelector('[data-testid="fix-row-started-phone"]')).not.toBeNull()
+  })
+})

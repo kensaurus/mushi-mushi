@@ -6,6 +6,7 @@ import { initSentry } from './lib/sentry'
 import { hydrateDensity } from './lib/useDensity'
 import { hydrateTheme } from './lib/useTheme'
 import { sanitizeTenantUrlParams } from './lib/tenantUrlSanitize'
+import { adoptLinkedAppScope } from './lib/projectScope'
 import { routerBasename } from './lib/appPath'
 import { MotionProvider } from './components/providers/MotionProvider'
 import './index.css'
@@ -14,6 +15,8 @@ initSentry()
 hydrateDensity()
 hydrateTheme()
 sanitizeTenantUrlParams()
+// After the sanitiser, so only a valid `?project=` can leave All apps.
+adoptLinkedAppScope(window.location.search)
 
 // Defer web-vitals observation until after first paint so it has zero cost
 // on the critical render path. The dynamic import is intentional — the

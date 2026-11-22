@@ -325,6 +325,21 @@ export function isNotSentOutcome(
   return outcome?.failureKind === 'blocked' || outcome?.failureKind === 'throttled';
 }
 
+/**
+ * One `hideOnRoutes` entry against a pathname. An entry without `*` is a
+ * substring match, as it always was (`/checkout` also hides
+ * `/checkout/done`). With `*` it is a glob over the whole path: `*` is one
+ * segment, `**` any depth, and a trailing `/**` also matches the path itself
+ * (`/blog/**` hides `/blog` and everything under it). A trailing `/` on the
+ * pathname is ignored.
+ */
+export function routeMatches(pathname: string, entry: string): boolean {
+  if (!entry.includes('*')) return pathname.includes(entry);
+  const re = entry.replace(/\/\*\*$|\*\*|\*|[.+?^${}()|[\]\\]/g, (t) =>
+    t === '/**' ? '(/.*)?' : t === '**' ? '.*' : t === '*' ? '[^/]*' : `\\${t}`);
+  return new RegExp(`^${re}$`).test(pathname.length > 1 ? pathname.replace(/\/$/, '') : pathname);
+}
+
 export interface WidgetCallbacks {
   /**
    * Returns the outcome of the submission so the widget can render a
@@ -349,6 +364,8 @@ export interface WidgetCallbacks {
   onBeforeSubmit?(): boolean | Promise<boolean>;
   onOpen(): void;
   onClose(): void;
+  /** A setup problem the widget worked around (e.g. unreadable accent text); logged with `debug: true`. */
+  onWarning?(message: string): void;
   /** "Bug reports by Mushi Mushi" mark: impression once per widget instance, click per activation → loop_* events. */
   onBrandFooterImpression?(): void;
   onBrandFooterClick?(): void;

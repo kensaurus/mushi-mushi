@@ -30,9 +30,18 @@ type ReportDiagnosisView =
   /** Stage 2 never ran: the stage-1 classifier was confident enough. */
   | { kind: 'stage1_only' }
   | { kind: 'failed'; message: string }
+  /**
+   * No model read this report and none will: it was filed already sorted
+   * (vuln-watch's plain-English template, the SDK health check, …) or a
+   * person sorted it. The Pipeline strip calls both AI stages "not needed"
+   * for the same rows (server `report-pipeline-trail.ts`, TRIAGED_STATUSES).
+   */
+  | { kind: 'no_model'; source: string | null }
   | { kind: 'pending' }
 
 interface DiagnosisSource {
+  status?: string | null
+  source?: string | null
   stage2_analysis?: Record<string, unknown> | null
   stage2_partial?: Record<string, unknown> | null
   stage2_model?: string | null
@@ -77,6 +86,9 @@ function hasContent(d: Stage2Diagnosis): boolean {
   return Boolean(d.rootCause || d.suggestedFix || d.reproductionSteps.length > 0)
 }
 
+/** Statuses a report only reaches after the pipeline (or a person) classified it. */
+const CLASSIFIED_STATUSES = new Set(['classified', 'triaged', 'grouped', 'fixing', 'fixed', 'verified', 'resolved'])
+
 export function reportDiagnosisView(report: DiagnosisSource): ReportDiagnosisView {
   if (isObject(report.stage2_analysis)) {
     const diagnosis = readStage2(report.stage2_analysis, report)
@@ -90,11 +102,12 @@ export function reportDiagnosisView(report: DiagnosisSource): ReportDiagnosisVie
   const error = text(report.processing_error)
   if (error && !error.startsWith('autofix_blocked:')) return { kind: 'failed', message: error }
   if (report.stage1_classification != null) return { kind: 'stage1_only' }
+  // Sorted with no stage-1 and no stage-2 result: nothing is "in progress".
+  if (!isObject(report.stage2_analysis) && report.status && CLASSIFIED_STATUSES.has(report.status.toLowerCase())) {
+    return { kind: 'no_model', source: text(report.source) }
+  }
   return { kind: 'pending' }
 }
-
-/** Statuses a report only reaches after the pipeline (or a person) classified it. */
-const CLASSIFIED_STATUSES = new Set(['classified', 'triaged', 'grouped', 'fixing', 'fixed', 'verified', 'resolved'])
 
 /**
  * The one answer to "is this report classified?" for every surface on the

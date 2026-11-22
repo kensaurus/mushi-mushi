@@ -53,6 +53,8 @@ interface Props {
   onSentryClosed?: () => void
   /** The page lists missing breadcrumbs on its one "Not captured" line. */
   hideNoBreadcrumbsNote?: boolean
+  /** The newest Sentry event Mushi received for this report (sentryLastEventAt), so an old error does not read as live. */
+  lastEventAt?: string | null
 }
 
 /** What closing a report's open Sentry issues does: mirrors sentryCloseKind in api/routes/report-sentry.ts. */
@@ -223,6 +225,7 @@ export function SentryContextPanel({
   reportStatus,
   onSentryClosed,
   hideNoBreadcrumbsNote = false,
+  lastEventAt = null,
 }: Props) {
   const toast = useToast()
   const [closing, setClosing] = useState(false)
@@ -277,7 +280,7 @@ export function SentryContextPanel({
 
   // A report imported from Sentry often carries only the issue link: it still
   // needs this card, for the link and for "resolves when the fix merges".
-  if (!hasSentry && unified.length === 0 && !hasTags && !issueUrl && links.length === 0) {
+  if (!hasSentry && unified.length === 0 && !hasTags && !issueUrl && links.length === 0 && !lastEventAt) {
     // Don't render an empty card — the report didn't carry any
     // observability extras. The detail page already has enough chrome.
     return null
@@ -302,6 +305,17 @@ export function SentryContextPanel({
         ) : undefined
       }
     >
+      {lastEventAt && (
+        <p
+          className="mb-2 flex flex-wrap items-center gap-1.5 text-2xs text-fg-muted"
+          data-testid="sentry-last-event"
+          title={`${new Date(lastEventAt).toLocaleString()}. Mushi Mushi records the event it filed this from, and a later one only when it reopens a fixed report; Sentry may have seen newer events.`}
+        >
+          <IconClock className="size-3 shrink-0" aria-hidden="true" />
+          <span>Last Sentry event Mushi Mushi received:</span>
+          <span className="font-medium text-fg-secondary">{formatAgo(lastEventAt)}</span>
+        </p>
+      )}
       {links.length > 0 && (
         <ul className="mb-3 space-y-1 text-2xs" aria-label="Sentry issues">
           {links.map((link) => (

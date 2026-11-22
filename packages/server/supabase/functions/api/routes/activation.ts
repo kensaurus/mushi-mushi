@@ -60,8 +60,8 @@ export function registerActivationRoutes(app: Hono<{ Variables: Variables }>): v
           phase: 'ingest' as const,
           top_priority: buildTopPriority({
             setupDone: false,
-            nextStepId: 'project_created',
-            nextStepLabel: 'Create your first project',
+            nextStepId: emptyStats.nextStepId,
+            nextStepLabel: emptyStats.nextStepLabel,
             reportCount: 0,
           }),
           feature_flags: { activation_cockpit_v2: true },
@@ -183,6 +183,7 @@ async function buildOnboardingStatsForProject(
       hasGithub,
       hasSentry,
       hasByok,
+      hasSlack: sig?.hasSlack ?? false,
       hasQaPassing,
       reportCount,
       fixCount,

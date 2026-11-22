@@ -43,4 +43,15 @@ describe('failingLanesFirst', () => {
     ])
     expect(out.map((l) => l.id)).toEqual(['broke', 'died', 'busy', 'quiet', 'none'])
   })
+
+  it('puts machines running or waiting on a job now above everything else', () => {
+    const out = failingLanesFirst([
+      lane('busy', ['passed']),
+      lane('broke', ['code_failure']),
+      lane('live', ['passed', 'running']),
+      lane('none', ['waiting'], true),
+      lane('queued', ['waiting']),
+    ])
+    expect(out.map((l) => l.id)).toEqual(['live', 'queued', 'broke', 'busy', 'none'])
+  })
 })

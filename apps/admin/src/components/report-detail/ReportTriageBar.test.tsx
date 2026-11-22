@@ -176,6 +176,49 @@ describe('ReportTriageBar dispatch gate (#19)', () => {
     expect(onDispatch).not.toHaveBeenCalled()
   })
 
+  // A new user's first report: a disabled button and a tooltip only on hover (feedback 2026-11-22).
+  it('says what to set up under the button, with links and a count, and keeps the hover text reachable', async () => {
+    const check = (key: string, label: string, ready: boolean, fixHref: string) => ({ key, label, ready, hint: '', fixHref })
+    const checks = [
+      check('github', 'GitHub repo connected', false, '/integrations/config#platform-card-github'),
+      check('codebase', 'Codebase indexed', false, '/integrations/config#integrations-codebase'),
+      check('agent', 'AI key for writing fixes', true, '/settings/keys'),
+      check('autofix', 'Autofix enabled', false, '/integrations/config#integrations-codebase'),
+    ]
+    await render(choice([FRONTEND], 'repo-front'), vi.fn(), {
+      preflight: {
+        loading: false,
+        ready: false,
+        checks,
+        failing: checks.filter((c) => !c.ready),
+        error: null,
+        repoUrl: null,
+        baseBranch: null,
+        reload: () => {},
+      } as unknown as PreflightState,
+    })
+    const btn = buttonByText('Dispatch fix')
+    expect(btn?.disabled).toBe(true)
+    const line = container.querySelector('[data-testid="report-dispatch-setup"]')
+    expect(line?.textContent).toBe('To dispatch a fix: Connect GitHub, · Index your code, · Turn on Autofix (1 of 4 done)')
+    expect(Array.from(line!.querySelectorAll('a')).map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
+      ['Connect GitHub', '/integrations/config#platform-card-github'],
+      ['Index your code', '/integrations/config#integrations-codebase'],
+      ['Turn on Autofix', '/integrations/config#integrations-codebase'],
+    ])
+    expect(btn?.getAttribute('aria-describedby')).toBe(line?.id)
+    // The disabled Btn takes no pointer events; its wrapper carries the hover text.
+    expect(container.querySelector('[data-testid="report-dispatch-wrap"]')?.getAttribute('title')).toBe(
+      'Set up first: GitHub repo connected, Codebase indexed, Autofix enabled.',
+    )
+  })
+
+  it('shows no setup line when the setup is done', async () => {
+    await render(choice([FRONTEND], 'repo-front'))
+    expect(container.querySelector('[data-testid="report-dispatch-setup"]')).toBeNull()
+    expect(container.querySelector('[data-testid="report-dispatch-wrap"]')?.getAttribute('title')).toBeNull()
+  })
+
   it('cancel in the confirm sends nothing', async () => {
     const onDispatch = vi.fn()
     await render(choice([FRONTEND], 'repo-front'), onDispatch)

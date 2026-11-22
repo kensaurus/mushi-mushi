@@ -11,7 +11,7 @@ import { createRoot } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { PipelineGroup, PipelineItem } from '../../lib/pipeline'
-import { PipelineGroups, actionSections, groupSignalTone, sectionBlocks } from './PipelineGroups'
+import { PipelineGroups, actionSections, groupAgeBucket, groupSignalTone, sectionBlocks, sectionOf, sectionRun } from './PipelineGroups'
 import { appBadgeName } from './TrainHistory'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -95,7 +95,8 @@ describe('PipelineGroups header row', () => {
     const toggle = q(host, 'pipeline-group-review_changes-toggle')!
     const side = q(host, 'pipeline-group-review_changes-side')!
     expect(Array.from(head.children)).toEqual([toggle, side])
-    expect(toggle.textContent).toBe(group.label)
+    // The one group to start with also carries a "Start here" label before its title.
+    expect(toggle.textContent).toBe(`Start here: ${group.label}`)
     expect(toggle.className).not.toMatch(/(^|\s)flex-1(\s|$)/)
     expect(side.textContent).toContain('oldest 17 d')
     expect(side.contains(q(host, 'pipeline-group-review_changes-settings'))).toBe(true)
@@ -206,5 +207,89 @@ describe('PipelineGroups round-3 review (2026-11-19)', () => {
     const host = mount([a, g('held_b', ['update_branch'], 2)])
     expect(q(host, 'pipeline-action-section-update_branch-run')!.textContent).toBe('Update branch (3)')
     expect(q(host, 'pipeline-action-section-update_branch-head')!.textContent).toBe("Update branch: 2 groups, 3 items (1 more can't take it now)")
+  })
+})
+
+describe('PipelineGroups age grading and sections (2026-11-22)', () => {
+  const DAY = 86_400_000
+  const aged = (id: string, days: number): PipelineGroup => ({ ...g(id, ['re_review']), oldestAt: new Date(NOW - days * DAY).toISOString() })
+
+  it('buckets a group by its oldest item, else by the oldest server bucket', () => {
+    expect(groupAgeBucket({ oldestAt: new Date(NOW - 1 * DAY).toISOString() }, NOW)).toBe(0)
+    expect(groupAgeBucket({ oldestAt: new Date(NOW - 5 * DAY).toISOString() }, NOW)).toBe(1)
+    expect(groupAgeBucket({ oldestAt: new Date(NOW - 12 * DAY).toISOString() }, NOW)).toBe(2)
+    expect(groupAgeBucket({ oldestAt: new Date(NOW - 45 * DAY).toISOString() }, NOW)).toBe(3)
+    expect(groupAgeBucket({ oldestAt: null, ages: [4, 2, 0, 0] }, NOW)).toBe(1)
+    expect(groupAgeBucket({ oldestAt: null }, NOW)).toBe(0)
+  })
+
+  it('grades the left edge by age (neutral, amber, red, deep red) and always prints the age', () => {
+    const host = mount([aged('fresh', 1), aged('week', 5), aged('month', 12), aged('ancient', 45)], 'month')
+    const card = (id: string) => q(host, `pipeline-group-${id}`)!
+    expect(card('fresh').className).toContain('border-l-edge')
+    expect(card('week').className).toContain('border-l-warn')
+    expect(card('month').className).toContain('border-l-danger/60')
+    expect(card('ancient').className).toMatch(/(^|\s)border-l-danger(\s|$)/)
+    expect(card('fresh').getAttribute('data-age')).toBe('0–3 d')
+    expect(card('ancient').getAttribute('data-age')).toBe('30 d+')
+    expect(q(host, 'pipeline-group-ancient-age')!.textContent).toBe('oldest 45 d')
+  })
+
+  it('emphasises only the group to start with: a ring and a visible "Start here" label', () => {
+    const host = mount([aged('a', 12), aged('b', 45), aged('c', 2)], 'a')
+    expect(host.querySelectorAll('[data-start-here="true"]').length).toBe(1)
+    expect(q(host, 'pipeline-group-a')!.className).toContain('ring-2')
+    expect(q(host, 'pipeline-group-b')!.className).not.toContain('ring-2')
+    expect(q(host, 'pipeline-group-a-start-here')!.textContent).toContain('Start here')
+    expect(q(host, 'pipeline-group-b-start-here')).toBeNull()
+  })
+
+  it('never gathers groups under a closing action, and puts the agent no-PR groups under "Agent couldn\'t fix"', () => {
+    const groups = [
+      { ...g('agent_failed', ['dismiss'], 34), label: '34 reports: the agent failed, no PR opened' },
+      g('ci_red', ['rerun_ci'], 10),
+      { ...g('agent_failed_person', ['dismiss'], 3), label: '3 reports: the agent says a person must do it, no PR opened' },
+      g('held', ['close'], 2),
+      g('held_b', ['close'], 1),
+    ]
+    const blocks = sectionBlocks(groups)
+    expect(blocks.map((b) => (b.kind === 'action' ? `action:${b.action}` : b.kind === 'reason' ? `reason:${b.label}` : `other:${b.headed}`))).toEqual([
+      "reason:Agent couldn't fix",
+      'other:true',
+    ])
+    expect(blocks[0]!.groups.map((x) => x.id)).toEqual(['agent_failed', 'agent_failed_person'])
+    const host = mount(groups, 'agent_failed')
+    expect(q(host, 'pipeline-agent-outcome-section')!.textContent).toContain("Agent couldn't fix: 2 groups, 37 reports, no PR opened")
+    expect(q(host, 'pipeline-action-section-dismiss')).toBeNull()
+    expect(q(host, 'pipeline-action-section-close')).toBeNull()
+    expect(host.textContent).not.toMatch(/Not a code bug: \d+ groups/)
+  })
+
+  it('one lone agent group stays a plain row, with no heading over it', () => {
+    expect(sectionBlocks([g('agent_failed', ['dismiss']), g('ci_red', ['rerun_ci'])]).map((b) => b.kind)).toEqual(['other'])
+  })
+
+  it('a section whose fix the status line runs shows no second button, and sectionRun counts what both run on', () => {
+    const groups = [g('ci_a', ['rerun_ci'], 5), g('ci_b', ['rerun_ci'], 3)]
+    expect(sectionRun(groups).ids).toEqual(['ci_a-1', 'ci_a-2', 'ci_b-1', 'ci_b-2'])
+    expect(sectionOf(groups, 'ci_b')?.action).toBe('rerun_ci')
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const root = createRoot(host)
+    act(() =>
+      root.render(
+        createElement(
+          MemoryRouter,
+          null,
+          createElement(PipelineGroups, { groups, projectNames: new Map(), showApp: false, now: NOW, busyKey: null, results: new Map(), onAction: () => undefined, topGroupId: 'ci_a', heroRunsSection: true }),
+        ),
+      ),
+    )
+    cleanup.push(() => {
+      act(() => root.unmount())
+      host.remove()
+    })
+    expect(q(host, 'pipeline-action-section-rerun_ci-run')).toBeNull()
+    expect(q(host, 'pipeline-action-section-rerun_ci-above')!.textContent).toBe('Runs from Start here, above')
   })
 })

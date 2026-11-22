@@ -89,6 +89,34 @@ export function humanizeFixError(
       raw,
     };
   }
+  // Local worker (`mushi work`): git refused the commit or the push on the
+  // machine. A pre-commit hook usually stopped the commit; a missing package
+  // in the worker's clone is the common cause (report 3a5cb64c, 2026-11-20:
+  // MODULE_NOT_FOUND typescript in a hook script). Retrying fails the same way.
+  if (m.includes('git commit failed') && (m.includes('module_not_found') || m.includes('cannot find module') || m.includes('cannot find package'))) {
+    return {
+      title: "The local worker couldn't commit: a pre-commit check failed (missing dependency).",
+      hint: "A git hook in the worker's copy of the repo needs a package that is not installed there. Install the repo's dependencies in that copy (or on the worker machine), then send the fix again.",
+      severity: 'hard',
+      raw,
+    };
+  }
+  if (m.includes('git commit failed')) {
+    return {
+      title: "The local worker couldn't commit: a pre-commit check failed.",
+      hint: 'A git hook in the repo stopped the commit on the worker machine. Run the same commit there to see which check failed, fix it, then send the fix again.',
+      severity: 'hard',
+      raw,
+    };
+  }
+  if (m.includes('git push failed')) {
+    return {
+      title: "The local worker couldn't push the fix branch.",
+      hint: 'GitHub refused the push from the worker machine. Check that `gh auth status` is signed in there with write access to the repo, then send the fix again.',
+      severity: 'hard',
+      raw,
+    };
+  }
 
   // Cursor: the API key's Cursor account has no GitHub access to the repo.
   // Cursor reports this as "Failed to verify existence of branch 'main' in

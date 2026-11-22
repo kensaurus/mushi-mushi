@@ -108,6 +108,8 @@ describe('script-tag install (quickstart/web)', () => {
   const LOADER_URL_RE = /https:\/\/cdn\.jsdelivr\.net\/npm\/@mushi-mushi\/web@\d+\/dist\/mushi\.loader\.global\.js/g
   const quickstart = readFileSync(join(CONTENT, 'quickstart', 'web.mdx'), 'utf8')
   const loaderSource = readFileSync(join(REPO, 'packages', 'web', 'src', 'loader.ts'), 'utf8')
+  // The data-* parsing lives in loader-config.ts (validated attribute reads).
+  const loaderConfigSource = readFileSync(join(REPO, 'packages', 'web', 'src', 'loader-config.ts'), 'utf8')
 
   it('uses the same loader URL as the loader header and the console snippet', () => {
     const snippets = readFileSync(join(REPO, 'apps', 'admin', 'src', 'lib', 'sdkSnippets.ts'), 'utf8')
@@ -125,7 +127,7 @@ describe('script-tag install (quickstart/web)', () => {
     expect(documented.length).toBeGreaterThan(5)
     const unread = documented.filter((attr) => {
       const key = attr.slice('data-'.length).replace(/-([a-z])/g, (_, c: string) => c.toUpperCase())
-      return !loaderSource.includes(`ds.${key}`)
+      return !loaderConfigSource.includes(`ds.${key}`) && !loaderConfigSource.includes(`('${key}'`)
     })
     expect(unread).toEqual([])
   })

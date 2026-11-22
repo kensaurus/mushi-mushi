@@ -298,6 +298,8 @@ interface FirstDiagnosisScreenProps {
   apiKey?: string | null
   /** Called once the diagnosis renders — refetch setup status / stats. */
   onDiagnosed?: (reportId: string) => void
+  /** The four setup steps the sidebar and Home count, so this screen says the same number. */
+  setupProgress?: { done: number; total: number }
 }
 
 export function FirstDiagnosisScreen({
@@ -306,6 +308,7 @@ export function FirstDiagnosisScreen({
   projectSlug,
   apiKey,
   onDiagnosed,
+  setupProgress,
 }: FirstDiagnosisScreenProps) {
   const { state, send, keepWaiting, retryConnection } = useFirstDiagnosis({
     projectId,
@@ -324,16 +327,18 @@ export function FirstDiagnosisScreen({
     <div className="space-y-4" data-testid="onboarding-first-diagnosis">
       <Card className="p-5 space-y-4">
         <div>
-          <SignalChip tone="brand" className="text-3xs font-semibold">
-            Step 2 of 2
-          </SignalChip>
-          <h2 className="mt-1.5 text-base font-semibold text-fg">See your first diagnosis</h2>
+          {setupProgress ? (
+            <SignalChip tone="brand" className="text-3xs font-semibold">
+              Set up · {setupProgress.done} of {setupProgress.total} done
+            </SignalChip>
+          ) : null}
+          <h2 className={`${setupProgress ? 'mt-1.5 ' : ''}text-base font-semibold text-fg`}>See your first diagnosis</h2>
           <ContainedBlock tone="muted" className="mt-2">
             <p className="text-xs leading-relaxed text-fg-muted">
               See what Mushi Mushi gives you for each bug: a sample report for{' '}
               <span className="font-mono text-fg-secondary">{projectName}</span> with its plain-English
               explanation and fix prompt, shown in a few seconds. The explanation is pre-written; your real
-              bugs get one written for them. Nothing to install for this step.
+              bugs get one written for them. Nothing to install yet: connecting your app comes next.
             </p>
           </ContainedBlock>
         </div>

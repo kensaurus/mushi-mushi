@@ -92,6 +92,7 @@ import { DiagnosisFixHero } from '../components/report-detail/DiagnosisFixHero'
 import { GenerateTestButton } from '../components/report-detail/GenerateTestButton'
 import { SendToWorkerButton } from '../components/pipeline/SendToWorkerButton'
 import { SentryContextPanel } from '../components/report-detail/SentryContextPanel'
+import { sentryLastEventAt } from '../components/report-detail/sentryLastEvent'
 import { ReportReplayPlayer } from '../components/report-detail/ReportReplayPlayer'
 import { AgentTracePanel } from '../components/report-detail/AgentTracePanel'
 import { TraceWaterfall } from '../components/report-detail/TraceWaterfall'
@@ -116,6 +117,7 @@ import { PageLoadError } from '../components/PageLoadError'
 import { humanizeApiError } from '../lib/humanizeApiError'
 import { reportHasCodeLocation } from '../lib/reportCodeLocation'
 import { useConfirmedDispatch } from '../components/report-detail/useConfirmedDispatch'
+import { DispatchSetupLine } from '../components/report-detail/DispatchSetupLine'
 import { isReporterKeyHash, reportHasReporter } from '../components/report-detail/reporterPresence'
 
 // Same shape the API accepts (api/ids.ts isUuid): RFC 4122, version 1-5.
@@ -661,7 +663,14 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
       {agentCredits.state?.out && latestFix?.status === 'failed' && isAgentOutOfUsageError(latestFix.error) ? (
         <AgentCreditsOutCard state={agentCredits.state} withFollowups={false} className="mb-3" />
       ) : null}
-      {isDispatchEligible ? <DispatchPreflightBanner preflight={preflight} projectId={report.project_id} className="mb-3" /> : null}
+      {isDispatchEligible ? (
+        <DispatchPreflightBanner
+          preflight={preflight}
+          projectId={report.project_id}
+          className="mb-3"
+          required={Boolean(dispatchBlockState.setup)}
+        />
+      ) : null}
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <GenerateTestButton report={report} />
@@ -671,7 +680,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
 
       {/* The one Plan → Do → Check → Act progress display (REPORT D): the
           page used to repeat it as a flow graph and a receipt strip too. */}
-      <ReportPdcaStory report={report} dispatchState={dispatchState} showInternals={showInternals} />
+      <ReportPdcaStory report={report} dispatchState={dispatchState} showInternals={showInternals} dispatchBlock={dispatchBlockState} />
 
       {/* Where the report is stuck, how long each stage took, the error in plain words and the
           retry for that stage (console 2026-11-19). The story above says what happened; this
@@ -712,6 +721,11 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
         tone={recommendation.tone}
         meta={recommendation.meta}
         actions={recommendation.actions}
+        ctaNote={
+          recommendation.setupSteps ? (
+            <DispatchSetupLine setup={recommendation.setupSteps} data-testid="recommendation-dispatch-setup" />
+          ) : undefined
+        }
       />
       )}
 
@@ -905,6 +919,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
           reportStatus={report.status}
           onSentryClosed={onReload}
           hideNoBreadcrumbsNote
+          lastEventAt={sentryLastEventAt(report)}
         />
       </div>
 

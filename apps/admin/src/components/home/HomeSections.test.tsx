@@ -20,7 +20,7 @@ const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }))
 vi.mock('../../lib/supabase', () => ({ apiFetch: api.fetch }))
 vi.mock('../../lib/toast', () => ({ useToast: () => toast }))
 
-import { HealthStrip, showHealthDetail } from './HealthStrip'
+import { HealthStrip, healthAtLabel, healthTileSpansRow, showHealthDetail } from './HealthStrip'
 import { NeedsYouCard } from './NeedsYouCard'
 import { ReleaseCard, releaseIsEmpty } from './ReleaseCard'
 import { SitemapCard } from './SitemapCard'
@@ -121,6 +121,32 @@ describe('HealthStrip', () => {
 })
 
 const need = (id: string, impact: number): NeedsYouItem => ({ id, impact, text: `Thing ${id}.`, action: { label: 'Open', to: `/${id}` } })
+
+describe('HealthStrip layout and times', () => {
+  it('leaves no empty cell in two columns: the last tile of an odd count takes the row', () => {
+    const spans = (n: number) => Array.from({ length: n }, (_, i) => healthTileSpansRow(n, i))
+    expect(spans(4)).toEqual([false, false, false, false])
+    expect(spans(5)).toEqual([false, false, false, false, true])
+    expect(spans(6)).toEqual([false, false, false, false, false, false])
+    expect(spans(1)).toEqual([false])
+  })
+
+  it('renders five lights with the last one spanning the row', async () => {
+    const ids = ['site', 'errors', 'sdk', 'ci', 'setup'] as const
+    await render(createElement(HealthStrip, { section: ok(ids.map((id) => signal({ id }))) }))
+    const items = Array.from(container.querySelectorAll('[data-testid="home-health"] li'))
+    expect(items).toHaveLength(5)
+    expect(items.map((li) => li.className.includes('sm:col-span-2'))).toEqual([false, false, false, false, true])
+  })
+
+  it('says what the time is: the site light reads "Checked <when>", not a bare time', async () => {
+    const at = new Date(Date.now() - 26 * 3600 * 1000).toISOString()
+    await render(createElement(HealthStrip, { section: ok([signal({ id: 'site', at })]) }))
+    expect(byTestId('home-health-site')?.textContent).toMatch(/Checked (yesterday|1 day ago)/)
+    expect(healthAtLabel('ci')).toBe('Last run')
+    expect(healthAtLabel('unknown')).toBe('Updated')
+  })
+})
 
 describe('NeedsYouCard', () => {
   it('puts leading items first and stops at five, one button each', async () => {

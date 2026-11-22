@@ -1209,14 +1209,28 @@ export type SnippetPlan =
  * "app/providers.tsx (or pages/_app.tsx …)"), from its first `//` comment.
  * @internal Exported for tests only.
  */
-export function snippetTarget(framework: Framework): string {
+export function snippetTarget(framework: Framework, cwd?: string): string {
   const comment = framework
     .snippet()
     .split('\n')
     .map((l) => l.trim())
     .find((l) => l.startsWith('//'));
   const text = comment?.replace(/^\/\/\s*/, '').trim();
-  return text && text.length > 0 ? text : 'your app entry file';
+  if (!text) return 'your app entry file';
+  return cwd ? existingEntryVariant(cwd, text) : text;
+}
+
+/**
+ * "src/main.tsx" in a JavaScript app is really src/main.jsx (or .js): name the
+ * file that exists, so the wizard never points at one the app does not have.
+ */
+function existingEntryVariant(cwd: string, target: string): string {
+  const m = /^(\S+?)\.(tsx|ts|jsx|js)(\s.*)?$/.exec(target);
+  if (!m || existsSync(join(cwd, `${m[1]}.${m[2]}`))) return target;
+  for (const ext of ['tsx', 'jsx', 'ts', 'js']) {
+    if (ext !== m[2] && existsSync(join(cwd, `${m[1]}.${ext}`))) return `${m[1]}.${ext}${m[3] ?? ''}`;
+  }
+  return target;
 }
 
 /**
@@ -1246,7 +1260,7 @@ export async function planSnippetInjection(cwd: string, framework: Framework): P
       unchanged: next === source,
     };
   }
-  return { kind: 'manual', target: snippetTarget(framework) };
+  return { kind: 'manual', target: snippetTarget(framework, cwd) };
 }
 
 /** What happened to the init snippet, for the next-steps checklist. */

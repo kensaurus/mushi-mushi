@@ -52,6 +52,19 @@ describe('SentryContextPanel for an imported Sentry issue', () => {
   it('still renders nothing for a report with no Sentry data at all', () => {
     expect(html({})).toBe('')
   })
+
+  // Report 3a5cb64c (2026-11-22): a 4-day-old Sentry error had nothing saying how old it was.
+  it('says when Mushi Mushi last received a Sentry event, without claiming it is Sentry\'s last seen', () => {
+    const out = html({
+      sentryIssueUrl: 'https://acme.sentry.io/issues/4501/',
+      lastEventAt: new Date(Date.now() - 4 * 86_400_000).toISOString(),
+    })
+    expect(out).toContain('data-testid="sentry-last-event"')
+    expect(out).toContain('Last Sentry event Mushi Mushi received:')
+    expect(out).toContain('4 days ago')
+    expect(out).toContain('Sentry may have seen newer events')
+    expect(html({ sentryIssueUrl: 'https://acme.sentry.io/issues/4501/' })).not.toContain('sentry-last-event')
+  })
 })
 
 describe('breadcrumb data scroll region', () => {

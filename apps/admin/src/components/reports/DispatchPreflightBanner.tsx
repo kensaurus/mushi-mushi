@@ -19,6 +19,10 @@
  *          is ready. It used to open Integrations, where the person still
  *          had to find the toggle (owner, 2026-11-17). Without GitHub
  *          access it says so ("Connect GitHub first") and goes there.
+ *
+ *          `required`: on a report page whose Dispatch fix buttons are
+ *          disabled only by these steps, it is not optional to dispatch, so
+ *          the card drops "Optional" and starts open (feedback 2026-11-22).
  */
 
 import { useNavigate } from 'react-router-dom'
@@ -31,6 +35,8 @@ interface Props {
   /** The report's app: "Turn on" switches its Autofix on in place. */
   projectId?: string | null
   className?: string
+  /** Dispatch on this page waits on these steps: no "Optional", open by default. */
+  required?: boolean
 }
 
 const CHECK_ICONS: Record<string, string> = {
@@ -70,7 +76,7 @@ export function stepAction(check: PreflightCheck, checks: readonly PreflightChec
   return { label: CHECK_FIX_LABELS[check.key] ?? 'Fix this', kind: 'go', href: check.fixHref }
 }
 
-export function DispatchPreflightBanner({ preflight, projectId = null, className = '' }: Props) {
+export function DispatchPreflightBanner({ preflight, projectId = null, className = '', required = false }: Props) {
   const navigate = useNavigate()
   const autofix = useTurnOnAutofix(projectId, preflight.reload)
 
@@ -87,9 +93,10 @@ export function DispatchPreflightBanner({ preflight, projectId = null, className
       aria-label="Let Mushi Mushi dispatch the fix for you"
       className={`rounded-lg border border-edge-subtle bg-surface-raised px-3 py-2 ${className}`}
       data-testid="dispatch-preflight"
+      open={required}
     >
       <summary className="cursor-pointer text-xs font-semibold text-fg">
-        Optional: let Mushi Mushi dispatch the fix for you{' '}
+        {required ? 'Let Mushi Mushi dispatch the fix for you' : 'Optional: let Mushi Mushi dispatch the fix for you'}{' '}
         <span className="font-normal text-fg-muted">
           ({failing.length === 1 ? '1 step left' : `${failing.length} steps left`})
         </span>
@@ -109,8 +116,9 @@ export function DispatchPreflightBanner({ preflight, projectId = null, className
                 {CHECK_ICONS[check.key] ?? '•'}
               </span>
               <div className="min-w-0">
-                <span className="text-2xs font-medium text-fg-secondary">{check.label}</span>
-                <span className="text-2xs text-fg-muted ml-1">: {CHECK_PLAIN[check.key] ?? check.hint}</span>
+                {/* The colon belongs to the label: "Autofix enabled : You say yes" had a gap before it (2026-11-22). */}
+                <span className="text-2xs font-medium text-fg-secondary">{check.label}:</span>{' '}
+                <span className="text-2xs text-fg-muted">{CHECK_PLAIN[check.key] ?? check.hint}</span>
                 {CHECK_PLAIN[check.key] && check.hint ? (
                   <span className="block text-2xs text-fg-muted">{check.hint}</span>
                 ) : null}

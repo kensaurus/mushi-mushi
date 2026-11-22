@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   PROJECT_SCOPE_EVENT,
   PROJECT_SCOPE_STORAGE_KEY,
+  adoptLinkedAppScope,
   allAppsSupportFor,
   combinedFetchScope,
   getStoredProjectScopeMode,
@@ -58,6 +59,25 @@ describe('stored scope', () => {
     window.localStorage.setItem(ACTIVE_PROJECT_STORAGE_KEY, PROJECT_A)
     setStoredProjectScopeMode('all')
     expect(window.localStorage.getItem(ACTIVE_PROJECT_STORAGE_KEY)).toBe(PROJECT_A)
+  })
+})
+
+describe('adoptLinkedAppScope', () => {
+  it('leaves All apps for a link that names one app', () => {
+    setStoredProjectScopeMode('all')
+    expect(adoptLinkedAppScope(`?project=${PROJECT_A}`)).toBe(true)
+    expect(getStoredProjectScopeMode()).toBe('project')
+  })
+
+  it('keeps All apps when the link says so, names no valid app, or nothing is stored', () => {
+    setStoredProjectScopeMode('all')
+    expect(adoptLinkedAppScope(`?project=${PROJECT_A}&apps=all`)).toBe(false)
+    expect(adoptLinkedAppScope('?project=not-a-uuid')).toBe(false)
+    expect(adoptLinkedAppScope('')).toBe(false)
+    expect(getStoredProjectScopeMode()).toBe('all')
+    setStoredProjectScopeMode('project')
+    expect(adoptLinkedAppScope(`?project=${PROJECT_A}`)).toBe(false)
+    expect(getStoredProjectScopeMode()).toBe('project')
   })
 })
 
