@@ -88,6 +88,8 @@ import { createRNEventTracker, type RNAnalyticsConfig, type RNEventTracker } fro
 import { createRNSessionTracker, type RNSessionTracker } from './analytics/session-tracker'
 import { MUSHI_SDK_PACKAGE, MUSHI_SDK_VERSION } from './version'
 import type { MushiRNTheme } from './theme'
+import { mergeRuntimeWidget } from './runtime-widget'
+import type { MushiRuntimeSdkConfig } from '@mushi-mushi/core'
 import { createReporterUpdateHub, markReporterReportRead } from './reporter-thread'
 
 export interface MushiRNConfig {
@@ -146,6 +148,13 @@ export interface MushiRNConfig {
      */
     minDescriptionLength?: number
   }
+  /**
+   * Read the console's widget settings at start (`GET /v1/sdk/config`).
+   * Default true. Only the colour and the bottom corner are applied, and
+   * only where this config leaves them unset: a value set here always wins
+   * (ADR 0068). Set false to ignore the console entirely.
+   */
+  runtimeConfig?: boolean
   /**
    * Optional native modules, passed in instead of loaded. When set, the SDK
    * uses them and never loads that package itself — the safest option for
@@ -438,6 +447,8 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
   const [bannerDismissed, setBannerDismissed] = useState(false)
   // Screenshot captured just before the sheet opens (captured while app content is still visible)
   const [sheetScreenshot, setSheetScreenshot] = useState<string | null>(null)
+  // The console's widget settings; null until read (or when the read fails).
+  const [runtimeSdkConfig, setRuntimeSdkConfig] = useState<MushiRuntimeSdkConfig | null>(null)
 
   // Per-install reporter token — persisted in AsyncStorage so "My reports" shows
   // reports from this device across sessions. Falls back to the legacy shared constant
@@ -500,6 +511,18 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
     })
 
     queueRef.current.flush().catch(() => {})
+
+    // Console widget settings (ADR 0068: what this config sets still wins).
+    // Best effort: a failed read leaves the widget exactly as configured.
+    if (config.runtimeConfig !== false) {
+      const client = apiClientRef.current
+      void client
+        ?.getSdkConfig()
+        .then((res) => {
+          if (res.ok && res.data && apiClientRef.current === client) setRuntimeSdkConfig(res.data)
+        })
+        .catch(() => {})
+    }
 
     breadcrumbsRef.current.add({
       category: 'lifecycle',
@@ -1191,6 +1214,10 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
   )
 
   const trigger = config.widget?.trigger ?? 'button'
+  const look = mergeRuntimeWidget(
+    { buttonPosition: config.widget?.buttonPosition, theme: config.widget?.theme },
+    runtimeSdkConfig,
+  )
   const showBanner = trigger === 'banner' && !bannerDismissed
   const showFab =
     !showBanner &&
@@ -1210,7 +1237,7 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
       {showFab && (
         <MushiFloatingButton
           onPress={open}
-          position={config.widget?.buttonPosition}
+          position={look.buttonPosition}
           inset={config.widget?.inset}
         />
       )}
@@ -1226,7 +1253,7 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
         assistantGreeting={config.assistant?.greeting}
         assistantSuggestions={config.assistant?.suggestions}
         inboxPollIntervalMs={config.widget?.inboxPollIntervalMs ?? 0}
-        theme={config.widget?.theme}
+        theme={look.theme}
         minDescriptionLength={config.widget?.minDescriptionLength}
         emailOptIn={config.notifications?.email !== false}
       />
@@ -1235,7 +1262,7 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
           message={toast.message}
           onView={openMyReports}
           onDismiss={() => setToast(null)}
-          theme={config.widget?.theme}
+          theme={look.theme}
         />
       ) : null}
     </MushiContext.Provider>
