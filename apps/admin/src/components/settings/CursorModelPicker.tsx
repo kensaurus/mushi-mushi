@@ -106,6 +106,8 @@ export function CursorModelPicker({
             return
           }
           setOtherOpen(false)
+          // Leaving Other for the model the spec already names keeps its settings.
+          if (id !== '' && id === selection.modelId) return
           onChange(id)
         }}
       >

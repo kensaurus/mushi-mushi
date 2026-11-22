@@ -12,7 +12,7 @@
  *          sits beside the icon buttons.
  */
 
-import { act, createElement, useState } from 'react'
+import { act, createElement, useState, type ComponentProps } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -56,7 +56,9 @@ const { PLATFORM_DEFS } = await import('./types')
 
 const CURSOR = PLATFORM_DEFS.find((d) => d.kind === 'cursor_cloud')!
 
-function baseProps(over: Record<string, unknown> = {}) {
+type CardProps = ComponentProps<typeof PlatformIntegrationCard>
+
+function baseProps(over: Partial<CardProps> = {}): CardProps {
   return {
     def: CURSOR,
     config: { cursor_api_key_ref: '…abcd' },
@@ -93,9 +95,9 @@ describe('PlatformIntegrationCard — Remove key', () => {
     container.remove()
   })
 
-  const render = async (props: Record<string, unknown>) => {
+  const render = async (props: Partial<CardProps>) => {
     await act(async () => {
-      root.render(createElement(PlatformIntegrationCard, baseProps(props) as never))
+      root.render(createElement(PlatformIntegrationCard, baseProps(props)))
     })
   }
   const moreActions = () => container.querySelector<HTMLButtonElement>('button[aria-label="More actions"]')
@@ -214,17 +216,27 @@ describe('PlatformIntegrationCard — Cursor model', () => {
   let container: HTMLDivElement
   let root: Root
 
+  // What the page saves: the draft at the moment Save is pressed.
+  const saved: Array<Record<string, string>> = []
+
   function Editor({ initial }: { initial: string }) {
     const [model, setModel] = useState(initial)
     const [key, setKey] = useState('…abcd')
+    const draft = { cursor_api_key_ref: key, cursor_default_model: model }
     return createElement(PlatformIntegrationCard, baseProps({
       isEditing: true,
-      draft: { cursor_api_key_ref: key, cursor_default_model: model },
+      draft,
       onChangeField: (name: string, value: string) => {
         if (name === 'cursor_default_model') setModel(value)
         if (name === 'cursor_api_key_ref') setKey(value)
       },
-    }) as never)
+      onSave: () => saved.push(draft),
+    }))
+  }
+  function saveButton(): HTMLButtonElement {
+    const btn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Save')
+    if (!btn) throw new Error('no Save button')
+    return btn
   }
 
   function modelSelect(): HTMLSelectElement {
@@ -239,6 +251,7 @@ describe('PlatformIntegrationCard — Cursor model', () => {
   }
 
   beforeEach(() => {
+    saved.length = 0
     modelsPage.paths = []
     modelsPage.current = {
       data: {
@@ -281,6 +294,9 @@ describe('PlatformIntegrationCard — Cursor model', () => {
     await act(async () => change(effort()!, 'xhigh'))
     expect(modelSelect().value).toBe('grok-4.7')
     expect(effort()?.value).toBe('xhigh')
+    // Review of PR #1140: the save gets the whole spec, setting included.
+    await act(async () => saveButton().click())
+    expect(saved).toEqual([{ cursor_api_key_ref: '…abcd', cursor_default_model: 'grok-4.7?reasoning_effort=xhigh' }])
   })
 
   it('reopens a saved spec', async () => {

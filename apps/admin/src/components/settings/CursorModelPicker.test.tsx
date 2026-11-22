@@ -129,6 +129,20 @@ describe('CursorModelPicker', () => {
     expect(selectByLabel('Model').value).toBe(CURSOR_MODEL_OTHER);
   });
 
+  // Review of PR #1140: opening Other to look at a spec and picking the same
+  // model again must not drop its settings.
+  it('keeps the settings when Other is left for the same model', async () => {
+    await render('grok-4.7?reasoning_effort=xhigh');
+    await act(async () => change(selectByLabel('Model'), CURSOR_MODEL_OTHER));
+    await act(async () => change(selectByLabel('Model'), 'grok-4.7'));
+    expect(mocks.specs).toEqual([]);
+    expect(selectByLabel('Model').value).toBe('grok-4.7');
+    expect(selectByLabel('Reasoning effort').value).toBe('xhigh');
+    expect(document.body.querySelector('input')).toBeNull();
+    await act(async () => change(selectByLabel('Model'), 'composer-2.5'));
+    expect(mocks.specs.at(-1)).toBe('composer-2.5');
+  });
+
   it('shows a saved id the list does not have as Other', async () => {
     await render('custom-1');
     expect(selectByLabel('Model').value).toBe(CURSOR_MODEL_OTHER);

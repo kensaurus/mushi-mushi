@@ -23,6 +23,7 @@ const state = vi.hoisted(() => ({
   accessible: [] as string[],
   listModels: null as null | ((apiKey: string) => Promise<unknown[]>),
   query: {} as Record<string, string>,
+  appKeyFor: [] as string[],
 }))
 
 const fakeLog = vi.hoisted(() => {
@@ -46,7 +47,10 @@ vi.mock('../../supabase/functions/_shared/project-access.ts', () => ({
   accessibleProjectIds: async () => state.accessible,
 }))
 vi.mock('../../supabase/functions/_shared/agent-adapters.ts', () => ({
-  resolveCursorApiKey: async () => 'crsr_app',
+  resolveCursorApiKey: async (_db: unknown, projectId: string) => {
+    state.appKeyFor.push(projectId)
+    return 'crsr_app'
+  },
 }))
 vi.mock('../../supabase/functions/_shared/cursor-cloud.ts', async (orig) => {
   const actual = (await orig()) as Record<string, unknown>
@@ -175,6 +179,7 @@ beforeEach(() => {
   state.accessible = [P1, P2]
   state.listModels = null
   state.query = {}
+  state.appKeyFor = []
   dbModule.clearCursorModelCache()
 })
 
@@ -313,6 +318,22 @@ describe('GET cursor/models', () => {
     state.query = {}
     ;({ app } = setup())
     expect((await app.call('GET', MODELS)).status).toBe(200)
+  })
+  // Review of PR #1140: Integrations and spend-down without a key id list the
+  // models of the key the selected app would use, never a shared key.
+  it('no keyId lists models with the key the selected app resolves to', async () => {
+    const seen: string[] = []
+    state.listModels = async (k) => {
+      seen.push(k)
+      return [{ id: 'composer-2.5' }]
+    }
+    state.query = {}
+    const { app } = setup()
+    const res = await app.call('GET', MODELS)
+    expect(res.status).toBe(200)
+    expect(res.body.data).toEqual({ models: [{ id: 'composer-2.5' }] })
+    expect(state.appKeyFor).toEqual([P1])
+    expect(seen).toEqual(['crsr_app'])
   })
 })
 
