@@ -62,7 +62,7 @@ vi.mock('../components/billing/UpgradeNudge', () => ({
   UpgradePill: ({ flag }: { flag: string }) => createElement('span', { 'data-testid': `upgrade-${flag}` }, 'Pro'),
 }))
 
-import { ChecksPage, checksStatus, sortCheckCards } from './ChecksPage'
+import { ChecksPage, checksStatus, idleSection, sortCheckCards } from './ChecksPage'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -199,6 +199,24 @@ describe('ChecksPage', () => {
     expect(container.textContent).not.toContain('App checks')
   })
 
+  // Console polish 2026-11-22: one kind of idle check read "Not running yet (2)" over "Not run yet 2".
+  it('names the idle list once: one heading, and group labels only when there are two kinds', () => {
+    render()
+    const list = container.querySelector('[data-testid="checks-idle"]')!
+    const title = list.querySelector('h2')!.textContent!.replace(/\(\d+\)$/, '').trim()
+    const labels = [...list.querySelectorAll('[data-testid="checks-idle-group-label"]')].map((p) => p.textContent!.replace(/\d+$/, '').trim())
+    const groups = list.querySelectorAll('[data-testid^="checks-idle-not_"]').length
+    if (groups > 1) {
+      expect(title).toBe('Not running yet')
+      expect(labels).toEqual(['Not set up', 'Not run yet'])
+    } else {
+      expect(['Not set up', 'Not run yet']).toContain(title)
+      expect(labels).toEqual([])
+      // "Not run…" names the list once, never as a heading and again as a label just under it.
+      expect((list.textContent!.match(/Not run(ning)? yet/g) ?? []).length).toBeLessThanOrEqual(1)
+    }
+  })
+
   it('never spins: a read with no answer after 20 s reads as not checked, with Retry', () => {
     vi.useFakeTimers()
     try {
@@ -315,6 +333,27 @@ describe('ChecksPage signals (2026-11-18)', () => {
     expect(fold.querySelector('[data-testid="checks-card-qa-coverage"]')).toBeNull()
     // The summary itself never claims a state.
     expect(fold.querySelector('summary')!.hasAttribute('data-state')).toBe(false)
+  })
+})
+
+describe('idleSection', () => {
+  const card = (state: string) => ({ view: { state } }) as never
+  it('names one kind of idle check in the heading, with no group label under it', () => {
+    const one = idleSection([card('not_checked'), card('not_checked')])
+    expect(one.title).toBe('Not run yet')
+    expect(one.labelGroups).toBe(false)
+    expect(one.groups.map((g) => g.id)).toEqual(['not_checked'])
+    expect(idleSection([card('not_set_up')]).title).toBe('Not set up')
+  })
+
+  it('keeps the umbrella heading and labels each group when both kinds are idle', () => {
+    const both = idleSection([card('not_checked'), card('not_set_up'), card('not_set_up')])
+    expect(both.title).toBe('Not running yet')
+    expect(both.labelGroups).toBe(true)
+    expect(both.groups.map((g) => [g.word, g.cards.length])).toEqual([
+      ['Not set up', 2],
+      ['Not run yet', 1],
+    ])
   })
 })
 

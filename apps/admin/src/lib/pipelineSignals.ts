@@ -138,8 +138,11 @@ export function stageTones(stages: readonly PipelineStage[]): Partial<Record<Pip
   return out
 }
 
-/** Actions that close or remove something: never the one-click default. */
-const CLOSING: ReadonlySet<PipelineAction> = new Set(['close', 'dismiss', 'remove'])
+/**
+ * Actions that close or remove something: never the one-click default, and never gathered
+ * under one bulk button. The one copy: PipelineGroups imports it.
+ */
+export const CLOSING_ACTIONS: ReadonlySet<PipelineAction> = new Set(['close', 'dismiss', 'remove'])
 
 /**
  * The one action to show as a button, from the actions a group or item offers (already
@@ -148,7 +151,7 @@ const CLOSING: ReadonlySet<PipelineAction> = new Set(['close', 'dismiss', 'remov
  * first that can run; else the first.
  */
 export function primaryAction(actions: readonly PipelineAction[], items: readonly PipelineItem[]): PipelineAction | null {
-  const open = actions.filter((a) => !CLOSING.has(a))
+  const open = actions.filter((a) => !CLOSING_ACTIONS.has(a))
   const runs = (a: PipelineAction) => actionableIds(items, a).length > 0
   return open.find(runs) ?? open[0] ?? actions.find(runs) ?? actions[0] ?? null
 }

@@ -55,7 +55,12 @@ export interface SignalAlert {
 
 /** Cards on a narrow screen before "Show more". */
 const SHOWN_NARROW = 3
-const MORE = 'self-start text-2xs font-medium text-fg-secondary underline decoration-dotted underline-offset-2 hover:text-fg'
+/** "Show 2 more problems": the visible words lead the name (WCAG 2.5.3), the noun says what. */
+const moreLabel = (n: number) => `Show ${n} more ${n === 1 ? 'problem' : 'problems'}`
+
+// A link-styled button; on a touch screen it is a 44 px target (console polish 2026-11-22).
+const MORE =
+  'inline-flex items-center self-start text-2xs font-medium text-fg-secondary underline decoration-dotted underline-offset-2 hover:text-fg pointer-coarse:min-h-11 pointer-coarse:px-2'
 
 export const SIGNAL_ICON_LINK =
   'inline-flex h-7 w-7 items-center justify-center rounded-sm border border-edge bg-surface-raised text-fg-secondary ' +
@@ -234,12 +239,12 @@ export function AlertCards({
               ))}
             </ul>
             {!all && alerts.length > narrowShown && (
-              <button type="button" className={`${MORE} @xl:hidden`} onClick={() => setAll(true)}>
+              <button type="button" className={`${MORE} @xl:hidden`} aria-label={moreLabel(alerts.length - narrowShown)} onClick={() => setAll(true)}>
                 Show {alerts.length - narrowShown} more
               </button>
             )}
             {!all && alerts.length > maxShown && (
-              <button type="button" className={`${MORE} hidden @xl:inline`} onClick={() => setAll(true)}>
+              <button type="button" className={`${MORE} hidden @xl:inline-flex`} aria-label={moreLabel(alerts.length - maxShown)} onClick={() => setAll(true)}>
                 Show {alerts.length - maxShown} more
               </button>
             )}

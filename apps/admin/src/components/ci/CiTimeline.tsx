@@ -16,7 +16,7 @@
  *          (`splitQuietLanes`) so the busy runners sit together.
  */
 
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import type { CiJob } from '../../lib/ciTypes'
 import {
   CI_OUTCOME_META,
@@ -215,6 +215,18 @@ export function failingLanesFirst<L extends { unassigned: boolean; bars: Readonl
   return lanes.map((l, i) => ({ l, i })).sort((a, b) => rank(a.l) - rank(b.l) || a.i - b.i).map((x) => x.l)
 }
 
+/**
+ * @internal Exported for tests. How many lanes at the top run (or wait on) a job right now:
+ * `failingLanesFirst` puts them first, so the count is the length of that leading run. The
+ * timeline labels that group "Running now (N)" and draws a divider before the rest, so live
+ * work reads as a group by its words, not only by its tint.
+ */
+export function leadingLiveLaneCount(lanes: ReadonlyArray<{ unassigned: boolean; bars: ReadonlyArray<{ outcome: string }> }>): number {
+  let n = 0
+  while (n < lanes.length && !lanes[n].unassigned && laneIsLive(lanes[n])) n++
+  return n
+}
+
 export function CiTimeline({ jobs }: { jobs: CiJob[] }) {
   const [win, setWin] = useState<WindowId>('2h')
   const [inspect, setInspect] = useState<CiTimelineBar | null>(null)
@@ -232,6 +244,7 @@ export function CiTimeline({ jobs }: { jobs: CiJob[] }) {
   const github = foldGithubLanes(visible)
   const lanes = showGithub ? visible : github.shown
   const githubJobs = github.rest.reduce((n, l) => n + l.bars.length, 0)
+  const liveCount = leadingLiveLaneCount(lanes)
   const ticks = useMemo(
     () => Array.from({ length: TICK_STEPS + 1 }, (_, i) => timeline.from + ((timeline.to - timeline.from) * i) / TICK_STEPS),
     [timeline.from, timeline.to],
@@ -304,8 +317,17 @@ export function CiTimeline({ jobs }: { jobs: CiJob[] }) {
               })}
             </div>
             <ul className="relative flex flex-col gap-1" aria-label="Jobs per runner">
-              {lanes.map((lane) => (
-                <Lane key={lane.id} lane={lane} timeline={timeline} onInspect={setInspect} />
+              {liveCount > 0 && (
+                <li className="sticky left-0 z-10 w-fit bg-surface-raised text-2xs font-semibold text-st-running-ink" data-testid="ci-timeline-live-label">
+                  Running now ({liveCount})
+                </li>
+              )}
+              {lanes.map((lane, i) => (
+                <Fragment key={lane.id}>
+                  {/* A quiet line between what runs now and the rest. */}
+                  {liveCount > 0 && i === liveCount && <li className="my-1 border-t border-edge-subtle" aria-hidden="true" data-testid="ci-timeline-live-divider" />}
+                  <Lane lane={lane} timeline={timeline} onInspect={setInspect} />
+                </Fragment>
               ))}
               {github.rest.length > 0 && (
                 <li className="flex items-center gap-2" data-testid="ci-timeline-github-fold">

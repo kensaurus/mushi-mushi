@@ -47,3 +47,17 @@ describe('SegmentedControl scroll strip', () => {
     expect(out).toContain('whitespace-nowrap')
   })
 })
+
+// Console polish 2026-11-22: the selected-tab note named Connect's "Studio" tab, renamed "Editor".
+describe('SegmentedControl notes', () => {
+  it('names the Connect tab by the label the page shows', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { join } = await import('node:path')
+    const forms = readFileSync(join(__dirname, 'forms.tsx'), 'utf8')
+    const connect = readFileSync(join(__dirname, '../../pages/ConnectPage.tsx'), 'utf8')
+    const label = connect.match(/\{ id: 'connect-studio', label: '([^']+)' \}/)?.[1]
+    expect(label).toBe('Editor')
+    expect(forms).toContain(`(Connect: "${label}" tab vs "Add to Cursor")`)
+    expect(forms).not.toContain('"Studio" tab')
+  })
+})

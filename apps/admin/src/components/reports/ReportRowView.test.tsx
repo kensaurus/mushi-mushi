@@ -7,7 +7,8 @@
  * PURPOSE: Row actions on /reports (2026-10-04 console audit, group B):
  *   #76 "Open in new tab" keeps the deploy base path (a bare /reports/<id>
  *       404s on kensaur.us, where the console lives under /mushi-mushi/admin/);
- *   #18 the × only asks the page to dismiss — no request leaves the row.
+ *   #18 Dismiss (in the row's More menu since 2026-11-22) only asks the page to
+ *       dismiss — no request leaves the row.
  */
 
 import { act, createElement } from 'react'
@@ -86,19 +87,30 @@ async function render(onDismiss = vi.fn()) {
   return { onDismiss }
 }
 
+/** The row's actions live in its More menu (console polish 2026-11-22); open it and pick one. */
+async function menuItem(text: string): Promise<HTMLElement | undefined> {
+  const more = container.querySelector<HTMLButtonElement>('[data-testid="report-row-more"]')
+  expect(more).not.toBeNull()
+  await act(async () => more!.click())
+  return Array.from(document.body.querySelectorAll<HTMLElement>('[data-testid="report-row-more-menu"] [role="menuitem"]')).find(
+    (el) => el.textContent?.trim() === text,
+  )
+}
+
 describe('ReportRowView row actions', () => {
   it('opens the report in a new tab under the deploy base path', async () => {
     await render()
-    const link = container.querySelector<HTMLAnchorElement>('a[aria-label="Open in new tab"]')
-    expect(link).not.toBeNull()
+    const link = (await menuItem('Open in new tab')) as HTMLAnchorElement | undefined
+    expect(link?.tagName).toBe('A')
     expect(link!.getAttribute('href')).toContain(`/mushi-mushi/admin/reports/${ROW.id}`)
     expect(link!.getAttribute('target')).toBe('_blank')
   })
 
-  it('the × hands the dismiss to the page and sends nothing itself', async () => {
+  it('Dismiss hands the dismiss to the page and sends nothing itself', async () => {
     const { onDismiss } = await render()
-    const dismiss = container.querySelector<HTMLButtonElement>('button[aria-label="Dismiss"]')
-    await act(async () => dismiss?.click())
+    const dismiss = await menuItem('Dismiss')
+    expect(dismiss).toBeDefined()
+    await act(async () => dismiss!.click())
     expect(onDismiss).toHaveBeenCalledTimes(1)
     expect(apiFetch).not.toHaveBeenCalled()
   })
