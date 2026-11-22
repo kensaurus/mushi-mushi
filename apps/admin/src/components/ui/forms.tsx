@@ -109,7 +109,7 @@ export function SegmentedControl<T extends string>({
             }}
             // Selected = the soft SELECTED_TONE wash, not the filled brand
             // action colour. A filled tab competed with the page's one
-            // primary button (Connect: "Studio" tab vs "Add to Cursor").
+            // primary button (Connect: "Editor" tab vs "Add to Cursor").
             // Inset ring instead of a border so the segment doesn't grow.
             // whitespace-nowrap keeps a two-word label (and its count) on one
             // line; shrink-0 stops the scroll strip's flex items from being
