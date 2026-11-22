@@ -116,8 +116,9 @@ export function DispatchPreflightBanner({ preflight, projectId = null, className
                 {CHECK_ICONS[check.key] ?? '•'}
               </span>
               <div className="min-w-0">
-                <span className="text-2xs font-medium text-fg-secondary">{check.label}</span>
-                <span className="text-2xs text-fg-muted ml-1">: {CHECK_PLAIN[check.key] ?? check.hint}</span>
+                {/* The colon belongs to the label: "Autofix enabled : You say yes" had a gap before it (2026-11-22). */}
+                <span className="text-2xs font-medium text-fg-secondary">{check.label}:</span>{' '}
+                <span className="text-2xs text-fg-muted">{CHECK_PLAIN[check.key] ?? check.hint}</span>
                 {CHECK_PLAIN[check.key] && check.hint ? (
                   <span className="block text-2xs text-fg-muted">{check.hint}</span>
                 ) : null}
