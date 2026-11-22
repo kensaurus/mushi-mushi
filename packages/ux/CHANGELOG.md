@@ -1,5 +1,18 @@
 # @mushi-mushi/ux
 
+## 0.4.0
+
+### Minor Changes
+
+- 1e4f022: - **`mushi-ux scorecard` scores every page of a live app** — each page gets a 1–10 score on eight written dimensions (clarity, hierarchy, consistency, states, truthfulness, copy, accessibility, speed), its top problems with quoted evidence and a fix, and the overall score follows its worst dimension. It reads the page as a person meets it: the tab title, the text, a screenshot early in the load and one once it settles, the settle time and axe. The settle time and axe cap the speed and accessibility scores (ADR 0067).
+  - **Problems that repeat across pages become one root cause** — the same shared component, banner or status rule on ten pages is one cause with ten pages, and two pages that disagree about the same fact are flagged. `--file` files the top causes as Mushi reports, one per cause and at most five a run; a cause already open only gets its pages refreshed.
+  - **Score on Mushi or on your machine** — `--score-via server` (the default) uses your app's AI key, then Mushi's; `claude-code`, `cursor` and `anthropic-api` score locally. `--sync` puts the scorecard on the console (UX runs → Scorecard) with each page's trend across runs. Pages come from `--path` / `--paths-file`, your source (`--routes-from`) or a crawl; `/team?view=sso` counts as its own page. `--from-captures` scores captures another browser driver made, so no second browser opens on a profile already in use.
+
+### Patch Changes
+
+- 0e9fb5d: - **A scorecard run keeps its top 60 root causes** — causes that span pages or contradict come first, then the rest by rank, so a large app's run syncs and files instead of failing with "at most 60" (the first real run on Mushi's console grouped 235). `scorecard.json` on your machine still lists every cause.
+  - **A server-scored run keeps its screenshots** — `--score-via server` sends the screenshot names it uploaded with the final sync, so the console no longer loses them.
+
 ## 0.3.1
 
 ### Patch Changes

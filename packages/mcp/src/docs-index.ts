@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 246 pages, generated from llms.txt. @internal Exported for tests. */
+/** 247 pages, generated from llms.txt. @internal Exported for tests. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — one place to improve your AI-built app",
@@ -1047,7 +1047,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/how-it-works",
     markdown: "how-it-works.md",
     keywords: ["how-it-works", "works", "shown", "real", "screens"],
-    headings: ["The four steps", "1. Your user reports a bug", "2. From the report to a merged fix", "What it fixes about bug tracking today", "For developers", "How a bug moves", "Connect your AI editor", "Watch every fix ship"],
+    headings: ["The four steps", "Before you install: check your live app free", "1. Your user reports a bug", "2. From the report to a merged fix", "What it fixes about bug tracking today", "For developers", "How a bug moves", "Connect your AI editor"],
     excerpt: "Watch a bug go from a user's report to a fix: what you do at each step, what Mushi Mushi does, and the real screens from report button to fix prompt.",
   },
   {
@@ -1949,6 +1949,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["sdks", "svelte", "mushi-mushi/svelte"],
     headings: ["API surface", "Setup", "Submitting a report"],
     excerpt: "Reference for mushi-mushi/svelte, the Mushi Mushi Svelte SDK. initMushi, getMushi and the SvelteKit handleError helpers that send browser errors to your queue.",
+  },
+  {
+    title: "Theming the bug widget",
+    url: docUrl("/sdks/theming"),
+    route: "/sdks/theming",
+    markdown: "sdks/theming.md",
+    keywords: ["sdks", "theming", "bug", "widget"],
+    headings: ["Three easy ways", "1. Script tag (Lovable, Bolt, plain HTML)", "2. In code", "3. In the console", "What can be set where", "CSS tokens", "Contrast rule", "Route rules"],
+    excerpt: "Match the Mushi Mushi bug widget to your app: accent, theme, corner, language and hidden pages from a script tag, code or the console, plus 13 CSS tokens.",
   },
   {
     title: "@mushi-mushi/ux",

@@ -15,7 +15,7 @@ import { Link } from 'react-router-dom'
 import { Badge, Btn } from '../ui'
 import { IconChevronDown, IconChevronRight, IconExternalLink } from '../icons'
 import { ACTION_META, actionableIds, ageLabel, sharedBlockReason, type ActionOutcome, type PipelineAction, type PipelineGroup, type PipelineItem } from '../../lib/pipeline'
-import { groupPrimary, offeredActions, primaryAction } from '../../lib/pipelineSignals'
+import { AGE_BUCKET_LABELS, CLOSING_ACTIONS, groupPrimary, offeredActions, primaryAction } from '../../lib/pipelineSignals'
 import { heldReasonOf, withoutReasonCode } from '../../lib/heldReason'
 import type { PendingAction } from './PipelineActionDialog'
 import { MoreActionsMenu } from '../signal/MoreActionsMenu'
@@ -46,6 +46,11 @@ interface Props {
    * bottleneck" (round-2 review, 2026-11-18); a failed row keeps its red edge.
    */
   topGroupId?: string | null
+  /**
+   * The status line's "Start here" button runs the whole action section of `topGroupId`
+   * (PipelinePage): that section shows no second button with its own count.
+   */
+  heroRunsSection?: boolean
 }
 
 /** Stages whose reports have no fix to keep yet: a local worker may take them. */
@@ -72,6 +77,58 @@ const TONE_BORDER: Record<SignalTone, string> = {
   ok: 'border-l-ok',
   off: 'border-l-edge',
 }
+
+const DAY = 86_400_000
+
+/** One of the age bar's buckets (lib/pipelineSignals.ts AGE_BUCKET_LABELS): 0–3 d, 3–7 d, 7–30 d, 30 d+. */
+type AgeBucket = 0 | 1 | 2 | 3
+
+/**
+ * How long a group's oldest item has waited, in the age bar's buckets. The group's `oldestAt`,
+ * else the oldest non-empty server bucket, else the newest bucket. @internal Exported for tests.
+ */
+export function groupAgeBucket(group: Pick<PipelineGroup, 'oldestAt' | 'ages'>, now: number): AgeBucket {
+  const t = group.oldestAt ? Date.parse(group.oldestAt) : Number.NaN
+  if (Number.isFinite(t)) {
+    const age = now - t
+    return age < 3 * DAY ? 0 : age < 7 * DAY ? 1 : age < 30 * DAY ? 2 : 3
+  }
+  const ages = group.ages
+  if (ages) for (let i = 3; i > 0; i--) if ((ages[i] ?? 0) > 0) return i as AgeBucket
+  return 0
+}
+
+/**
+ * A stuck group's left edge by how long it has waited (2026-11-22): every stuck group had the
+ * same red edge, so 570 items read as one alarm. Neutral under 3 days, amber 3–7 d, red 7–30 d,
+ * full-strength red past 30 d. The age is always printed beside it ("oldest 12 d"), so the edge
+ * is never the only signal.
+ */
+const AGE_EDGE: Record<AgeBucket, string> = {
+  0: 'border-l-edge',
+  1: 'border-l-warn',
+  2: 'border-l-danger/60',
+  3: 'border-l-danger',
+}
+const AGE_INK: Record<AgeBucket, string> = {
+  0: 'text-fg-muted',
+  1: 'text-warn-foreground',
+  2: 'text-danger-foreground',
+  3: 'font-semibold text-danger-foreground',
+}
+
+/** True for an action that closes or removes something (the page's "Start here" never offers one). */
+export function isClosingAction(action: PipelineAction): boolean {
+  return CLOSING_ACTIONS.has(action)
+}
+
+/**
+ * Groups where the agent ran and opened no PR (server `_shared/pipeline-view.ts`
+ * AGENT_FAILED_GROUPS). They sat under "Not a code bug", their one shared action, which read
+ * as if the agent's errors were not code bugs (2026-11-22). They gather under why instead.
+ */
+const AGENT_OUTCOME_GROUP_IDS: ReadonlySet<string> = new Set(['agent_failed', 'agent_failed_person', 'agent_failed_nothing', 'agent_said_fixed'])
+const AGENT_OUTCOME_HEADING = "Agent couldn't fix"
 
 const VERDICT_STATUS: Record<string, RunStatus> = { merge: 'passed', fix_first: 'slow', hold: 'failed' }
 const VERDICT_LABEL: Record<string, string> = { merge: 'Opus: merge', fix_first: 'Opus: fix first', hold: 'Opus: hold' }
@@ -363,10 +420,22 @@ function GroupCard({ group, props, marked, inSection = false }: { group: Pipelin
   const byApp = groupItemsByApp(group, props.projectNames, props.showApp)
   // "Show more" pages through the whole group in the grouped order, so each app shows its oldest first.
   const shownIds = new Set((byApp ? byApp.flatMap((a) => a.items) : group.items).slice(0, shown).map((i) => i.id))
+  const stuck = group.tone === 'stuck'
+  const bucket = groupAgeBucket(group, props.now)
+  const edge = stuck ? AGE_EDGE[bucket] : TONE_BORDER[signal]
+  // The group to start with is the one card that stands out: a brand ring and a "Start here" label.
+  const emphasis = marked ? 'ring-2 ring-brand/40' : ''
   return (
     // On a phone the title takes its own line and the age + actions a row beneath, never a
     // one-letter-wide column (GROUP_HEAD, 2026-11-18).
-    <li ref={ref} className={`scroll-mt-20 rounded-md border border-edge-subtle border-l-4 bg-surface-raised ${TONE_BORDER[signal]}`} data-testid={`pipeline-group-${group.id}`} data-tone={signal}>
+    <li
+      ref={ref}
+      className={`scroll-mt-20 rounded-md border border-edge-subtle border-l-4 bg-surface-raised ${edge} ${emphasis}`.trim()}
+      data-testid={`pipeline-group-${group.id}`}
+      data-tone={signal}
+      data-age={stuck ? AGE_BUCKET_LABELS[bucket] : undefined}
+      data-start-here={marked ? 'true' : undefined}
+    >
       <div className={GROUP_HEAD} data-testid={`pipeline-group-${group.id}-head`}>
         <button
           type="button"
@@ -377,12 +446,24 @@ function GroupCard({ group, props, marked, inSection = false }: { group: Pipelin
         >
           {open ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
           {/* ▲ once per list (the group to start with); ◆ slow and ■/● stay on every row. */}
-          {(signal !== 'danger' || marked) && <StatusGlyph tone={signal} label={marked ? 'Start here' : undefined} />}
-          <span className="min-w-0 text-xs font-medium text-fg wrap-break-word">{group.label}</span>
+          {(signal !== 'danger' || marked) && <StatusGlyph tone={signal} />}
+          {marked && (
+            <span className="shrink-0" data-testid={`pipeline-group-${group.id}-start-here`}>
+              <Badge tone="brand">Start here</Badge>
+              <span className="sr-only">: </span>
+            </span>
+          )}
+          <span className={`min-w-0 text-xs text-fg wrap-break-word ${marked ? 'font-semibold' : 'font-medium'}`}>{group.label}</span>
         </button>
         <span className="flex flex-wrap items-center gap-2 pl-5.5 sm:justify-end sm:pl-0" data-testid={`pipeline-group-${group.id}-side`}>
           {group.oldestAt && group.tone !== 'done' && (
-            <span className="shrink-0 text-2xs tabular-nums text-fg-muted">oldest {ageLabel(group.oldestAt, props.now)}</span>
+            <span
+              className={`shrink-0 text-2xs tabular-nums ${stuck ? AGE_INK[bucket] : 'text-fg-muted'}`}
+              title={stuck ? `Waiting ${AGE_BUCKET_LABELS[bucket]}` : undefined}
+              data-testid={`pipeline-group-${group.id}-age`}
+            >
+              oldest {ageLabel(group.oldestAt, props.now)}
+            </span>
           )}
           {group.settings && (
             <Link
@@ -465,7 +546,13 @@ function GroupCard({ group, props, marked, inSection = false }: { group: Pipelin
  * button. Order is the list's order (biggest first). @internal Exported for tests.
  */
 export function actionSections(groups: readonly PipelineGroup[]): Array<{ action: PipelineAction | null; groups: PipelineGroup[] }> {
-  const primaries = new Map(groups.map((g) => [g, groupPrimary(g)]))
+  // A closing action (Not a code bug, Close PR, Remove) is never one button for several groups.
+  const primaries = new Map(
+    groups.map((g) => {
+      const p = groupPrimary(g)
+      return [g, p && !CLOSING_ACTIONS.has(p.action) ? p : null] as const
+    }),
+  )
   const byAction = new Map<PipelineAction, PipelineGroup[]>()
   for (const g of groups) {
     const p = primaries.get(g)
@@ -485,16 +572,35 @@ export function actionSections(groups: readonly PipelineGroup[]): Array<{ action
   return out
 }
 
+/** One block of the list as drawn. */
+export type SectionBlock =
+  | { kind: 'action'; action: PipelineAction; groups: PipelineGroup[] }
+  | { kind: 'reason'; label: string; groups: PipelineGroup[] }
+  | { kind: 'other'; groups: PipelineGroup[]; headed: boolean }
+
 /**
- * The list as drawn: action sections, and every run of lone groups that follows a section under
- * its own "Other" heading. Lone rows ("8 apps: auto-fix is on…", "5 reports: rejected at intake")
- * sat right under "Send to CI repair: 2 groups" and read as part of it (round-3 review,
+ * The list as drawn: action sections, the agent's no-PR outcomes under "Agent couldn't fix"
+ * (when there are two or more of them), and every run of lone groups that follows a section
+ * under its own "Other" heading. Lone rows ("8 apps: auto-fix is on…", "5 reports: rejected at
+ * intake") sat right under "Send to CI repair: 2 groups" and read as part of it (round-3 review,
  * 2026-11-19). Lone groups before the first section need no heading. @internal Exported for tests.
  */
-export function sectionBlocks(groups: readonly PipelineGroup[]): Array<{ kind: 'action'; action: PipelineAction; groups: PipelineGroup[] } | { kind: 'other'; groups: PipelineGroup[]; headed: boolean }> {
-  const out: Array<{ kind: 'action'; action: PipelineAction; groups: PipelineGroup[] } | { kind: 'other'; groups: PipelineGroup[]; headed: boolean }> = []
+export function sectionBlocks(groups: readonly PipelineGroup[]): SectionBlock[] {
+  const agent = groups.filter((g) => AGENT_OUTCOME_GROUP_IDS.has(g.id))
+  const pooled = agent.length > 1
+  const rest = pooled ? groups.filter((g) => !AGENT_OUTCOME_GROUP_IDS.has(g.id)) : groups
+  const at = (g: PipelineGroup) => groups.indexOf(g)
+  const sections: Array<{ action: PipelineAction | null; reason?: string; groups: PipelineGroup[] }> = actionSections(rest)
+  if (pooled) sections.push({ action: null, reason: AGENT_OUTCOME_HEADING, groups: agent })
+  sections.sort((a, b) => at(a.groups[0]!) - at(b.groups[0]!))
+  const out: SectionBlock[] = []
   let seenSection = false
-  for (const sec of actionSections(groups)) {
+  for (const sec of sections) {
+    if (sec.reason) {
+      seenSection = true
+      out.push({ kind: 'reason', label: sec.reason, groups: sec.groups })
+      continue
+    }
     if (sec.action) {
       seenSection = true
       out.push({ kind: 'action', action: sec.action, groups: sec.groups })
@@ -507,8 +613,13 @@ export function sectionBlocks(groups: readonly PipelineGroup[]): Array<{ kind: '
   return out
 }
 
-/** A heading for groups that take the same fix, and the one button that runs it on all of them. */
-function ActionSection({ action, groups, props, markId }: { action: PipelineAction; groups: PipelineGroup[]; props: Props; markId: string | null }) {
+/**
+ * What a section's one button runs on: each group's primary items, in list order. The status
+ * line's "Start here" button runs the same set when its group sits in that section, so the
+ * two never show different counts (2026-11-22: "Re-run CI (67)" above "Re-run CI (68)").
+ * Exported for the page (and its tests).
+ */
+export function sectionRun(groups: readonly PipelineGroup[]): { ids: string[]; reportIds: Array<string | null> } {
   const ids: string[] = []
   const reportIds: Array<string | null> = []
   for (const g of groups) {
@@ -518,6 +629,20 @@ function ActionSection({ action, groups, props, markId }: { action: PipelineActi
       reportIds.push(byId.get(id)?.reportId ?? null)
     }
   }
+  return { ids, reportIds }
+}
+
+/** The action section a group sits in, when it shares its fix with other groups. Exported for the page. */
+export function sectionOf(groups: readonly PipelineGroup[], groupId: string): { action: PipelineAction; groups: PipelineGroup[] } | null {
+  for (const b of sectionBlocks(groups)) if (b.kind === 'action' && b.groups.some((g) => g.id === groupId)) return { action: b.action, groups: b.groups }
+  return null
+}
+
+/** A heading for groups that take the same fix, and the one button that runs it on all of them. */
+function ActionSection({ action, groups, props, markId }: { action: PipelineAction; groups: PipelineGroup[]; props: Props; markId: string | null }) {
+  const { ids, reportIds } = sectionRun(groups)
+  // The status line's "Start here" button already runs this section: one button, one count.
+  const ranAbove = markId != null && props.heroRunsSection === true && groups.some((g) => g.id === markId)
   const total = groups.reduce((n, g) => n + g.count, 0)
   const key = `${action}:section`
   const label = ACTION_META[action].label
@@ -534,6 +659,11 @@ function ActionSection({ action, groups, props, markId }: { action: PipelineActi
             {left > 0 && ` (${left} more can't take it now)`}
           </span>
         </p>
+        {ranAbove ? (
+          <span className="text-2xs text-fg-muted" data-testid={`pipeline-action-section-${action}-above`}>
+            Runs from Start here, above
+          </span>
+        ) : (
         <Btn
           size="sm"
           variant={ACTION_META[action].variant === 'primary' ? 'primary' : 'ghost'}
@@ -545,6 +675,7 @@ function ActionSection({ action, groups, props, markId }: { action: PipelineActi
           {label}
           {ids.length > 1 ? ` (${ids.length})` : ''}
         </Btn>
+        )}
       </div>
       <ul className="space-y-1">
         {groups.map((g) => (
@@ -566,6 +697,16 @@ export function PipelineGroups(props: Props) {
       {sectionBlocks(props.groups).map((b, i) =>
         b.kind === 'action' ? (
           <ActionSection key={`section:${b.action}`} action={b.action} groups={b.groups} props={props} markId={markId} />
+        ) : b.kind === 'reason' ? (
+          <li key={`reason:${b.label}`} className="space-y-1" data-testid="pipeline-agent-outcome-section">
+            <p className="px-1 pt-1 text-2xs font-semibold text-fg-secondary">
+              {b.label}:{' '}
+              <span className="font-normal text-fg-muted">
+                {b.groups.length} groups, {b.groups.reduce((n, g) => n + g.count, 0)} reports, no PR opened
+              </span>
+            </p>
+            <ul className="space-y-1">{b.groups.map(card)}</ul>
+          </li>
         ) : b.headed ? (
           <li key={`other:${i}`} className="space-y-1" data-testid="pipeline-other-section">
             <p className="px-1 pt-1 text-2xs font-semibold text-fg-secondary">

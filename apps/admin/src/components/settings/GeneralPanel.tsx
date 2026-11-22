@@ -48,8 +48,8 @@ import { providerStatusView } from './keyStatus'
 import { SettingsList, SettingsRow, type RowStatusValue } from './SettingsRow'
 import { slackAlertStatus, slackCanOfferTest } from './slackAlertStatus'
 import { fixBranchFieldState } from './fixBranchField'
-import { sentryRowStatus, useSentryConnection } from '../../lib/useSentryConnection'
-import type { HealthRow } from '../integrations/types'
+import { sentryDsnFieldNote, sentryRowStatus, useSentryConnection } from '../../lib/useSentryConnection'
+import type { HealthRow, PlatformResponse } from '../integrations/types'
 
 /** Tri-state select values for `widget_brand_footer` (null = plan default). */
 type BrandFooterChoice = 'default' | 'on' | 'off'
@@ -114,6 +114,8 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
   // The same verdict the Integrations card shows, from the same inputs, so
   // the two pages never disagree about Sentry.
   const sentryShared = useSentryConnection()
+  // The same credentials read (cached): says where Sentry's connection comes from when no DSN is saved.
+  const sentryPlatform = usePageData<PlatformResponse>('/v1/admin/integrations/platform')
   // The Slack probe the Integrations card reads (same request, cached), so a
   // test sent from either page shows on both.
   const health = usePageData<{ history: HealthRow[] }>('/v1/admin/health/history')
@@ -219,6 +221,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
   // the saved-value line fills in a detail the verdict leaves empty, and
   // stands in while there is nothing to check (no Sentry credentials yet).
   const sentryStatus: RowStatusValue = sentryRowStatus(sentryShared, sentrySavedHint)
+  const sentryDsnNote = sentryDsnFieldNote({ dsnSaved: sentryDsnSaved, shared: sentryShared, platform: sentryPlatform.data })
 
   const supabaseRefSaved = Boolean(saved.supabase_project_ref)
   const supabaseKeyView = providerStatusView('supabase', pool.data?.keys ?? [], pool.data?.legacyKeys ?? [], {
@@ -256,8 +259,11 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
             ) : null
           }
         >
+          {/* Short values get short fields: an 11-character channel ID in a
+              1000px box read as a form that wanted a paragraph (2026-11-22). */}
           <Input
             label="Channel ID"
+            containerClassName="max-w-xs"
             helpId="settings.general.slack_channel_id"
             type="text"
             value={settings.slack_channel_id ?? ''}
@@ -334,13 +340,19 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
         >
           {/* The DSN carries the public key; mask it like the webhook secret below. */}
           <SecretInput
-            label="Sentry DSN"
+            label="Sentry DSN (optional)"
             helpId="settings.general.sentry_dsn"
             value={settings.sentry_dsn ?? ''}
             onChange={(e) => update({ sentry_dsn: e.target.value })}
             placeholder="e.g. https://<key>@o0.ingest.sentry.io/<project-id>"
             validate={sentryDsn()}
           />
+          {/* An empty DSN beside "Working" read as broken: say why it can stay empty. */}
+          {sentryDsnNote && (
+            <p className="-mt-1 text-2xs text-fg-muted" data-testid="sentry-dsn-note">
+              {sentryDsnNote}
+            </p>
+          )}
           <SettingsChangeHint current={settings.sentry_dsn ?? ''} saved={saved.sentry_dsn ?? ''} kind="secret" />
           <SecretInput
             label="Webhook secret"
@@ -390,6 +402,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
         >
           <Input
             label="Supabase project ref"
+            containerClassName="max-w-xs"
             helpId="settings.general.supabase_project_ref"
             type="text"
             value={settings.supabase_project_ref ?? ''}
@@ -535,6 +548,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
         >
           <Input
             label="Branch name pattern"
+            containerClassName="max-w-lg"
             helpId="settings.general.fix_branch_template"
             type="text"
             value={settings.fix_branch_template ?? DEFAULT_BRANCH_TEMPLATE}

@@ -193,7 +193,10 @@ export interface MushiWidgetConfig {
    * colour automatically, so only the base colour is required.
    */
   accent?: string;
-  /** Explicit text colour on the accent surface. Auto-computed when omitted. */
+  /**
+   * Explicit text colour on the accent surface. Auto-computed (black or
+   * white) when omitted, or when this colour is under 3:1 contrast on the accent.
+   */
   accentText?: string;
   triggerText?: string;
   expandedTitle?: string;
@@ -259,7 +262,12 @@ export interface MushiWidgetConfig {
   respectSafeArea?: boolean;
   /** Hide the launcher while any matching element exists in the document. */
   hideOnSelector?: string;
-  /** Hide the launcher on matching pathnames. Strings are substring matches. */
+  /**
+   * Hide the launcher on matching pathnames. An entry without `*` is a
+   * substring match (`/checkout` also hides `/checkout/done`). With `*` it
+   * is a glob over the whole path: `/admin/*` (one segment), `/blog/**`
+   * (`/blog` and everything under it).
+   */
   hideOnRoutes?: string[];
   environments?: Partial<Record<'production' | 'staging' | 'development', 'always' | 'never' | 'manual'>>;
   /** Opt-in smart trigger behavior; planned to become the default in a later minor. */
@@ -1441,6 +1449,12 @@ export interface MushiDiagnosticsResult {
    * rendered in the shadow DOM (not dismissed, not suppressed).
    */
   bannerRendered: boolean;
+  /**
+   * Setup problems the widget worked around, in plain English. Today: text
+   * on the accent under 3:1 contrast, replaced with black or white. Empty
+   * when there are none; absent from older SDKs.
+   */
+  warnings?: string[];
 }
 
 /**

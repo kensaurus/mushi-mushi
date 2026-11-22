@@ -10,6 +10,10 @@ Mushi Mushi checks your live site, shows where people get stuck, and reviews you
 
 **[Check your live app free →](https://kensaur.us/mushi-mushi/docs/check?src=github-readme)** No sign-up, nothing to install.
 
+<a href="https://kensaur.us/mushi-mushi/docs/check?src=github-readme" title="Check your live app free">
+  <img src="./docs/media/walkthroughs/free-check.gif" alt="The free check in 30 seconds: an address is typed into 'Check your live app free' on the Mushi Mushi home page, Check my app is pressed, and the report lists what to fix soon, why it matters, and a prompt to paste into Lovable, Bolt or an AI editor" width="640" />
+</a>
+
 **[Add it to Lovable or Bolt with one prompt →](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt)** No terminal, about five minutes, free for three apps.
 
 Or, in your app's folder:
@@ -26,7 +30,7 @@ npx mushi-mushi
 [![npm provenance](https://img.shields.io/badge/npm-provenance-2ea44f?logo=npm)](./.github/SECURITY.md#verifying-a-mushi-mushi-tarball-before-installing)
 [![skills.sh](https://skills.sh/b/kensaurus/mushi-mushi)](https://skills.sh/kensaurus/mushi-mushi)
 
-[Quick start](#quick-start) · [How it works](#how-it-works) · [Docs](https://kensaur.us/mushi-mushi/docs/) · [Sample diagnosis](https://kensaur.us/mushi-mushi/docs/demo/diagnosis) · [Why not Sentry?](#why-not-just-sentry) · [Self-host](#self-host) · [Vision](./docs/VISION.md)
+[Quick start](#quick-start) · [How it works](#how-it-works) · [Docs](https://kensaur.us/mushi-mushi/docs/) · [Sample diagnosis](https://kensaur.us/mushi-mushi/docs/demo/diagnosis) · [Why not Sentry?](#why-not-just-sentry) · [Self-host with Docker](#self-host) · [Vision](./docs/VISION.md)
 
 <a href="https://kensaur.us/mushi-mushi/docs/demo/diagnosis?src=github-readme" title="See a sample diagnosis: no signup">
   <img alt="A Mushi Mushi diagnosis of the report 'Pay now does nothing on my phone': the cause in plain English, why it broke, the two lines of code at fault, the suggested fix and the steps to reproduce." src="./docs/screenshots/sample-diagnosis.png" width="100%" />
@@ -139,6 +143,8 @@ Pick your AI client and run one command; your editor can then ask what broke and
 ```bash
 npx mushi-mushi
 ```
+
+<img src="./docs/media/walkthroughs/install-wizard.gif" alt="Setup in a terminal: npx mushi-mushi --dry-run finds React and lists what a real run does (install one package, write two settings to .env.local, send a test report) without changing anything; then the report button appears in the corner of a demo shop and opens its feedback form" width="800" />
 
 Run it in your app's folder. What happens next:
 
@@ -286,21 +292,21 @@ A "fix first" review can go back to the agent with its findings, at most twice p
 
 ## Self-host
 
-On your own Supabase project (the free tier works):
-
-```bash
-git clone https://github.com/kensaurus/mushi-mushi.git && cd mushi-mushi
-npx mushi-mushi@latest selfhost up --project-ref <your-supabase-ref>
-```
-
-Or everything in Docker on one Linux or macOS server, no Supabase account:
+Everything in Docker on one Linux or macOS server, no Supabase account:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/kensaurus/mushi-mushi/master/deploy/selfhost/install.sh -o install.sh
 sh install.sh --email you@example.com
 ```
 
-The installer runs Supabase's self-host kit plus Mushi's published images (amd64 and arm64), generates every secret, closes sign-up and keeps every port on `127.0.0.1`. `sh mushi.sh https your.domain` adds HTTPS; `backup`, `restore` and `update` are one command each; your own model server (Ollama, vLLM) works too.
+Or on your own Supabase project (the free tier works):
+
+```bash
+git clone https://github.com/kensaurus/mushi-mushi.git && cd mushi-mushi
+npx mushi-mushi@latest selfhost up --project-ref <your-supabase-ref>
+```
+
+The Docker installer runs Supabase's self-host kit plus Mushi's published images (amd64 and arm64), generates every secret, closes sign-up and keeps every port on `127.0.0.1`. `sh mushi.sh https your.domain` adds HTTPS; `backup`, `restore` and `update` are one command each; your own model server (Ollama, vLLM) works too.
 
 Guides: [Self-hosting quickstart](https://kensaur.us/mushi-mushi/docs/self-hosting), [Docker (one command)](https://kensaur.us/mushi-mushi/docs/self-hosting/docker-compose) and [every environment variable](https://kensaur.us/mushi-mushi/docs/self-hosting/environment). Self-host turns every feature on, with no plan limits. Self-hosting is bring-your-own-key: you pay your LLM vendor at list price. The hosted service needs no key; it bills per diagnosis with a spend cap ([pricing](https://kensaur.us/mushi-mushi/docs/pricing)). Teams wiring Mushi Mushi into an existing stack (SSO, retention, region routing, Kubernetes) start at [`docs/operators/`](./docs/operators/). Only the public `api` function should face the internet: see [internal caller authentication](./packages/server/README.md#internal-caller-authentication-sec-1).
 
@@ -315,7 +321,7 @@ Guides: [Self-hosting quickstart](https://kensaur.us/mushi-mushi/docs/self-hosti
 | Inventory and QA gates | Behind the `inventory_v2` plan flag; reachable from Checks |
 | Multi-region | Region pinning works. Active/active write replication is not automated |
 
-<sub>Repo at a glance (run `pnpm docs-stats`): ~680K TS lines · ~2,900 source files · 45 workspace / 37 npm packages · 78 edge functions · 583 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
+<sub>Repo at a glance (run `pnpm docs-stats`): ~680K TS lines · ~2,900 source files · 45 workspace / 37 npm packages · 78 edge functions · 585 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
 
 ## Community and contributing
 

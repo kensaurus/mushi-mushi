@@ -28,6 +28,7 @@ import { loadReportDeployLive, type MergedFixRow } from '../../_shared/report-de
 import { CLASSIFIER_REPORT_CATEGORIES, featureRequestDispatchBlock } from '../../_shared/report-category.ts';
 import { CLOSED_REASONS, bulkClosedReason, closedReasonAllowed } from '../../_shared/report-close-reasons.ts';
 import { isSdkKey } from '../../_shared/setup-signals.ts';
+import { requiredSetupProgress } from '../../_shared/setup-steps.ts';
 import { REPORT_ORIGIN_FILTERS, reportOriginFilter } from '../../_shared/report-origin.ts';
 import { REPORT_SOURCE_KINDS, isReportSourceKind, reportSourceKindFilter } from '../../_shared/report-source-kind.ts';
 import {
@@ -126,7 +127,8 @@ async function unpinnedReportStats(
   const hasKey = (keysRes.data ?? []).length > 0;
   // SDK keys only: an MCP or CLI key's calls are not the app checking in.
   const hasSdk = ((heartbeatRes.data ?? []) as Array<{ scopes?: string[] | null }>).some((k) => isSdkKey(k.scopes));
-  const setupDone = hasKey && hasSdk && hasIngest;
+  // The one step list (_shared/setup-steps.ts), as /v1/admin/setup counts it.
+  const { setupDone } = requiredSetupProgress({ hasKey, hasSdk, reportCount: totalAllTime });
   const lastReportAt = (latest.data?.created_at as string | null | undefined) ?? null;
   const scoped = (path: string) => `${path}${path.includes('?') ? '&' : '?'}apps=all`;
 
@@ -303,7 +305,7 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     const hasKey = (keysRes.data ?? []).length > 0;
     const hasSdk = ((heartbeatRes.data ?? []) as Array<{ scopes?: string[] | null }>).some((k) => isSdkKey(k.scopes));
     const hasIngest = totalAllTime > 0;
-    const setupDone = hasKey && hasSdk && hasIngest;
+    const { setupDone } = requiredSetupProgress({ hasKey, hasSdk, reportCount: totalAllTime });
     const lastReportAt = recentReports[0]?.created_at ?? null;
 
     const pid = activeProject.id as string;
@@ -1024,14 +1026,21 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
       // The Sentry issues this report came from. resolved_at is stamped only
       // after Sentry answered a resolve (sentry-resolve-back.ts), so the page
       // can say "resolves when the fix merges" vs "resolved in Sentry".
-      db
-        .from('report_external_issues')
-        .select('external_id, external_url, resolved_at, archived_at')
-        .eq('report_id', reportId)
-        .eq('project_id', data.project_id as string)
-        .eq('system', 'sentry')
-        .order('created_at', { ascending: true })
-        .limit(10),
+      // last_seen_at: when Sentry last saw the issue (sentry-ingest.ts
+      // recordSentryLastSeen); read without it while its migration is pending.
+      (async () => {
+        const read = (cols: string) =>
+          db
+            .from('report_external_issues')
+            .select(cols)
+            .eq('report_id', reportId)
+            .eq('project_id', data.project_id as string)
+            .eq('system', 'sentry')
+            .order('created_at', { ascending: true })
+            .limit(10);
+        const res = await read('external_id, external_url, resolved_at, archived_at, last_seen_at');
+        return res.error?.code === '42703' ? await read('external_id, external_url, resolved_at, archived_at') : res;
+      })(),
     ]);
     // true / false from project_settings; null when unknown (no row, the
     // column not migrated yet, or a failed read), so the page never claims

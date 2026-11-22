@@ -225,17 +225,6 @@ export function ReportsTable({
                 className={REPORTS_TABLE_COL.severity}
               />
               <SortHeader
-                label="Conf."
-                fullLabel="Confidence: how sure Mushi Mushi is about the severity and category"
-                field="confidence"
-                current={sort}
-                dir={dir}
-                onSort={onSetSort}
-                align="center"
-                cellPx={TABLE_CELL.pxMeta}
-                className={REPORTS_TABLE_COL.confidence}
-              />
-              <SortHeader
                 label="Action · age"
                 fullLabel="Action, and how long ago it came in (sort by age)"
                 field="created_at"
@@ -265,7 +254,6 @@ export function ReportsTable({
             <col className={REPORTS_TABLE_COL.summary} />
             <col className={REPORTS_TABLE_COL.status} />
             <col className={REPORTS_TABLE_COL.severity} />
-            <col className={REPORTS_TABLE_COL.confidence} />
             <col className={REPORTS_TABLE_COL.action} />
           </colgroup>
           {head(srOnlyHead)}
@@ -280,8 +268,12 @@ export function ReportsTable({
     <div className="border border-edge-subtle rounded-md overflow-hidden bg-surface-raised">
       <div className="px-3 py-1.5 border-b border-edge-subtle bg-surface-raised">
         <span className="block text-2xs text-fg-muted min-w-0 truncate">
-          {/* The count is on the Open chip and in the pager (round-3 sweep 2026-11-19). */}
-          Click a row to triage<span className="hidden sm:inline">; scroll for status & actions</span>
+          {/* The count is on the Open chip and in the pager (round-3 sweep 2026-11-19).
+              "scroll for status & actions" hid the actions behind a scroll
+              that does not happen at desktop width (console UX pass 2026-11-22):
+              the row's own action is always shown, and its More menu (copy link,
+              new tab, dismiss) appears on hover or keyboard focus (always on touch). */}
+          Click a row to open it<span className="hidden sm:inline">. Hover a row or tab to it for More: copy link, new tab, dismiss.</span>
         </span>
       </div>
       {blocks ? (

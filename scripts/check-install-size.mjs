@@ -118,7 +118,13 @@ export const BUDGETS = [
   // (ADR 0063). Text only, no dependency change; measured 260.6 kB packed, 1,026.4 kB unpacked.
   // 2026-11-20: packed 262 → 265 kB: the docs index gained the "What leaves the browser"
   // security page (#1198). Text only, no code or dependency change; measured 262.1 kB packed.
-  { name: '@mushi-mushi/mcp', dir: 'packages/mcp', packed: 265_000, unpacked: 1_035_000 },
+  // 2026-11-22: unpacked 1,035 → 1,045 kB: two tools, get_widget_settings and
+  // set_widget_settings (#1224, ADR 0068), their catalog text in every built entry,
+  // and the docs index's widget/runtime-config copy. No new dependencies; measured
+  // 264.9 kB packed, 1,042.9 kB unpacked. With the theming page (#1222) in the docs
+  // index on the same day, packed 265 → 268 kB: text only; measured 265.2 kB packed,
+  // 1,044.0 kB unpacked.
+  { name: '@mushi-mushi/mcp', dir: 'packages/mcp', packed: 268_000, unpacked: 1_045_000 },
   // 2026-10-28: packed 262 → 270 kB: release 5's version bump adds its CHANGELOG
   // entries (the changelog ships in the tarball), measured 265.4 kB packed.
   // 2026-10-29: 990 → 995 kB unpacked: `mushi doctor` reads the Health check

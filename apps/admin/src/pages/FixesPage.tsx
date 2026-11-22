@@ -1138,6 +1138,8 @@ export function FixesPage() {
                 onClear={clearSelection}
               />
               <FixesTable
+                // A new filter starts again from the first rows.
+                key={`${statusBucket}:${causeFilter ?? ''}`}
                 fixes={visibleFixes}
                 expandedId={expanded}
                 timelines={timelines}

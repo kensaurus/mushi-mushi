@@ -1,5 +1,27 @@
 # mushi-mushi
 
+## 1.39.0
+
+### Patch Changes
+
+- bdaa2dd: A new user's first ten minutes are clearer.
+
+  - **A disabled Dispatch fix says what it needs.** Thanks to [Adam](https://x.com/adamdotenv) for this and the four changes below. Under both Dispatch fix buttons on a report, the setup still missing is written out, each step a link, with a count: "To dispatch a fix: Connect GitHub · Index your code · Turn on Autofix (1 of 4 done)". "The story so far" names the same steps instead of telling you to click a button you can't click, and the setup card on the report no longer calls them optional.
+  - **One setup count everywhere.** The first-run screens said "Step 1 of 2" and "Step 2 of 2", the sidebar said "2 required setup steps remaining" and Home said "3 of 4 done". The first-run screens and the sidebar now use Home's 4-step count and words: "Set up · 2 of 4 done".
+  - **Journeys says what needs a key.** The map from real visits needs no key; only "Scan my site", which also maps pages nobody has visited yet, needs your own Firecrawl key. The page now says so.
+  - **A clean Free Check shows what passed.** It used to say only "Nothing to fix on the pages Mushi Mushi could read". It now says "No problems found on 3 pages", lists every check with a tick, a cross or "not checked", and names each page it read and any page it could not read, with the reason.
+  - **Self-host is easier to find in the README.** The top links say "Self-host with Docker", and the self-host section starts with the one-command Docker install.
+
+- 529bcfc: - **The npm page shows setup and the free check in motion** — a 27-second clip of `npx mushi-mushi --dry-run` (the real output: what a run installs and writes, with nothing changed) ending on the report button in an app, and a 30-second clip of the free check, from typing an address to the prompts that fix what it found. A new "Check your live app free" section says how to run it with no sign-up.
+- Updated dependencies [bdaa2dd]
+- Updated dependencies [ef79529]
+- Updated dependencies [ef79529]
+- Updated dependencies [facd8c1]
+- Updated dependencies [bdaa2dd]
+  - @mushi-mushi/web@1.39.0
+  - @mushi-mushi/cli@0.42.0
+  - @mushi-mushi/core@1.39.0
+
 ## 1.38.0
 
 ### Patch Changes

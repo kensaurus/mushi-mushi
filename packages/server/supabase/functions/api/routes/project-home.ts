@@ -8,8 +8,12 @@
  *
  * The decisions live in `_shared/project-home.ts`; this file does the reads.
  * Each section reads on its own with a deadline, so one slow or failing read
- * makes that section `error` and the rest still render. Counts are exact
- * (`count: 'exact', head: true`), never the length of a capped row list.
+ * makes that section `error` and the rest still render. Every section starts
+ * at once and waits only for the shared reads it uses, so the call takes about
+ * as long as its slowest read (the pipeline), not the sum of them. Per-section
+ * times go out as a `Server-Timing` header and a warning when Home is slow.
+ * Counts are exact (`count: 'exact', head: true`), never the length of a
+ * capped row list.
  *
  * The thumbnail (`_shared/home-thumbnail.ts`) bills the project's own
  * Firecrawl key, never the platform's. Opening Home captures one in the
@@ -96,6 +100,8 @@ const HOUR = 3600_000
 const DAY = 24 * HOUR
 /** Each section's read budget; a slower section reads `error`. */
 const SECTION_MS = 12_000
+/** A Home call slower than this logs which section held it up. */
+const SLOW_HOME_MS = 3000
 const PAGE_VIEW_SAMPLE = 5000
 /**
  * Rows read for one week-row sparkline. At or above it the series is left
@@ -118,6 +124,8 @@ export interface ProjectHomeDeps {
    * a live probe). Absent: Home shows no "Fix these first" and Needs you as before.
    */
   healthChecks?: (db: Db, project: DispatcherProject) => Promise<HealthCheck[]>
+  /** The deadline for the reads behind a dependency (pipeline, Firecrawl key, workers, health checks). Default 12 s. */
+  sectionMs?: number
 }
 
 async function workerFlags(db: Db, userId: string, projectId: string, now: Date): Promise<WorkerFlag[]> {
@@ -206,9 +214,17 @@ interface ProjectRow {
 const latestSeen = (keys: KeyRow[]) =>
   keys.map((k) => k.last_seen_at).filter((x): x is string => !!x).sort().at(-1) ?? null
 
-export async function readProjectHome(db: Db, project: ProjectRow, deps: ProjectHomeDeps, userId: string | null = null) {
+export async function readProjectHome(
+  db: Db,
+  project: ProjectRow,
+  deps: ProjectHomeDeps,
+  userId: string | null = null,
+  /** Filled with each section's milliseconds since the call began (Server-Timing and the slow-call log). */
+  timings: Record<string, number> = {},
+) {
   const id = project.id
   const now = deps.now()
+  const depMs = deps.sectionMs ?? SECTION_MS
   const iso = (msAgo: number) => new Date(now.getTime() - msAgo).toISOString()
   // The report list's calendar windows (UTC midnight), so `/reports?days=N` shows the same count.
   const todayStart = reportWindowStartIso(1, now)
@@ -221,11 +237,20 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
   const NOT_SAMPLE = 'custom_metadata->>source.is.null,custom_metadata->>source.not.in.(admin_test_report,mushi-marketing-seed)'
   const reportCount = () => db.from('reports').select('id', { count: 'exact', head: true }).eq('project_id', id).or(NOT_SAMPLE)
   const mergedCount = () => db.from('fix_attempts').select('id', { count: 'exact', head: true }).eq('project_id', id)
+  const started = performance.now()
+  // When each section settled, in ms since the call began (it never throws: every section settles).
+  const timed = <T,>(name: string, p: Promise<T>): Promise<T> =>
+    p.finally(() => {
+      timings[name] = Math.round(performance.now() - started)
+    })
+
+  // Every read below starts now. A section awaits only the shared reads it
+  // uses, so no section waits behind another section's slow read.
 
   // Reads several sections share.
-  const keysP = settle(
+  const keysP = timed('keys', settle(
     rows<KeyRow>('project_api_keys', db.from('project_api_keys').select('label, scopes, is_active, created_at, last_seen_at, last_seen_origin, last_seen_user_agent').eq('project_id', id)),
-  )
+  ))
   const watchP = settle(
     one<{ base_url: string; status: string; last_checked_at: string | null; last_error: string | null }>(
       'site_watches',
@@ -251,7 +276,7 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
       db.from('project_repos').select('repo_url, default_branch').eq('project_id', id).order('is_primary', { ascending: false }).order('created_at', { ascending: true }).limit(1).maybeSingle(),
     ),
   )
-  const pipelineP = settle(within(deps.readPipeline(db, [id], now), 'pipeline'))
+  const pipelineP = timed('pipeline', settle(within(deps.readPipeline(db, [id], now), 'pipeline', depMs)))
   const deployP = settle(
     one<{ observed_at: string; observed_version: string | null; ok: boolean }>(
       'deploy_observations',
@@ -261,32 +286,23 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
   const thumbP = settle(
     one<ThumbnailRow>(THUMBNAIL_TABLE, db.from(THUMBNAIL_TABLE).select('project_id, storage_path, page_url, captured_at, last_attempt_at, last_error').eq('project_id', id).maybeSingle()),
   )
-  const firecrawlP = settle(within(deps.resolveFirecrawl(db, id), 'firecrawl key'))
+  const firecrawlP = settle(within(deps.resolveFirecrawl(db, id), 'firecrawl key', depMs))
   // Local workers that stopped doing useful work for this app (ADR 0048 amendment 2026-10-28).
-  const workersP = settle(userId ? within((deps.workerFlags ?? workerFlags)(db, userId, id, now), 'local workers') : Promise.resolve([] as WorkerFlag[]))
+  const workersP = timed('workers', settle(userId ? within((deps.workerFlags ?? workerFlags)(db, userId, id, now), 'local workers', depMs) : Promise.resolve([] as WorkerFlag[])))
   // Root causes for "Fix these first" (plan-simplicity-2026-10 Phase 1): stored answers only.
-  const healthP = deps.healthChecks ? settle(within(deps.healthChecks(db, project), 'health checks')) : null
-
-  const [keys, watch, broken, liveUrls, repo, pipeline, deploy, thumb, firecrawl] = await Promise.all([
-    keysP, watchP, brokenP, liveUrlP, repoP, pipelineP, deployP, thumbP, firecrawlP,
-  ])
-
-  const origins = keys.ok ? keys.value.map((k) => k.last_seen_origin) : []
-  const liveUrl = pickLiveUrl({
-    watch: watch.ok ? watch.value?.base_url ?? null : null,
-    audit: liveUrls.ok ? liveUrls.value[0]?.base_url ?? liveUrls.value[1]?.crawler_base_url ?? null : null,
-    origins,
-  })
+  const healthP = deps.healthChecks ? timed('checks', settle(within(deps.healthChecks(db, project), 'health checks', depMs))) : null
+  // The site light's latency, read beside the watch rather than after it.
+  const latenciesP = rows<{ latency_ms: number | null }>(
+    'synthetic_runs',
+    db.from('synthetic_runs').select('latency_ms').eq('project_id', id).gte('ran_at', iso(DAY)).not('latency_ms', 'is', null).limit(500),
+  ).catch(() => [] as Array<{ latency_ms: number | null }>)
 
   // ── Health ──
-  const health = await Promise.all<HealthSignal>([
+  const healthSignalsP = timed('health', Promise.all<HealthSignal>([
     (async () => {
+      const [watch, broken, latencies] = await Promise.all([watchP, brokenP, latenciesP])
       if (!watch.ok) return errorSignal('site', 'Site up', SITE_WATCH_HREF, watch.error)
       if (!broken.ok) return errorSignal('site', 'Site up', SITE_WATCH_HREF, broken.error)
-      const latencies = await rows<{ latency_ms: number | null }>(
-        'synthetic_runs',
-        db.from('synthetic_runs').select('latency_ms').eq('project_id', id).gte('ran_at', iso(DAY)).not('latency_ms', 'is', null).limit(500),
-      ).catch(() => [] as Array<{ latency_ms: number | null }>)
       return siteSignal({
         watch: watch.value,
         brokenPages: broken.value.length,
@@ -301,7 +317,7 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
         db.from('reports').select('id', { count: 'exact', head: true }).eq('project_id', id)
           .or(combineOrGroups([NOT_SAMPLE, ...(userOnly.kind === 'or' ? userOnly.groups : [])]) ?? NOT_SAMPLE)
           .gte('created_at', todayStart)
-      const [todayCount, yesterdayCount, criticalToday, ever, latest, fromUsersToday] = await Promise.all([
+      const [todayCount, yesterdayCount, criticalToday, ever, latest, fromUsersToday, keys] = await Promise.all([
         count('reports today', reportCount().gte('created_at', todayStart)),
         count('reports yesterday', reportCount().gte('created_at', yesterdayStart).lt('created_at', todayStart)),
         count('critical today', reportCount().gte('created_at', todayStart).eq('severity', 'critical')),
@@ -312,16 +328,19 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
         Promise.resolve()
           .then(() => count('user reports today', userReportsToday()))
           .catch(() => undefined),
+        keysP,
       ])
       const sdkSeen = keys.ok && !!latestSeen(keys.value.filter((k) => isSdkKey(k.scopes)))
       return errorsSignal({ today: todayCount, yesterday: yesterdayCount, criticalToday, everConnected: ever > 0 || sdkSeen, latestAt: latest?.created_at ?? null, sdkHref, fromUsersToday, sdkSeen })
     })().catch((e) => errorSignal('errors', 'Errors today', '/reports?days=1', e)),
     (async () => {
+      const keys = await keysP
       if (!keys.ok) return errorSignal('sdk', 'SDK sending', sdkHref, keys.error)
       const sdk = keys.value.filter((k) => k.is_active && isSdkKey(k.scopes))
       return sdkSignal({ sdkKeys: sdk.length, lastSeenAt: latestSeen(sdk), now, sdkHref })
     })(),
     (async () => {
+      const repo = await repoP
       if (!repo.ok) return errorSignal('ci', 'CI on main', '/ci', repo.error)
       const ref = parseGithubRepoUrl(repo.value?.repo_url)
       const slug = ref ? `${ref.owner}/${ref.repo}` : null
@@ -341,9 +360,9 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
         : []
       return ciSignal({ repo: slug, branch, jobs })
     })().catch((e) => errorSignal('ci', 'CI on main', '/ci', e)),
-  ])
+  ]))
   // First-time setup, only for apps with a finished fresh-eyes run (ADR 0053).
-  const setupRun = await one<SetupInput['run']>(
+  const setupRunP = one<SetupInput['run']>(
     'fresh-eyes run',
     db.from('ux_runs').select('ttfv_seconds, steps, reached, stalled_at, finished_at, counts').eq('project_id', id).eq('kind', 'fresh_eyes').eq('status', 'done').eq('dry_run', false).order('finished_at', { ascending: false }).limit(1).maybeSingle(),
   ).catch((e) => {
@@ -351,11 +370,9 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
     log.warn('home: fresh-eyes run unreadable', { projectId: id, err: e instanceof Error ? e.message : String(e) })
     return null
   })
-  const setup = setupSignal({ run: setupRun })
-  if (setup) health.push(setup)
 
   // ── Release ──
-  const waitingP = settle(
+  const waitingP = timed('waiting', settle(
     (async () => {
       const open = [...OPEN_REPORT_STATUSES]
       const sev = (s: string) => count(`waiting ${s}`, reportCount().in('status', open).eq('severity', s))
@@ -368,10 +385,10 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
       ])
       return waitingBySeverity({ critical, high, medium, low, unrated } satisfies Record<SeverityKey, number>)
     })(),
-  )
+  ))
 
   // ── Week, activity ──
-  const weekP = settle(
+  const weekP = timed('week', settle(
     (async () => {
       const sessions = () => db.from('end_user_sessions').select('id', { count: 'exact', head: true }).eq('project_id', id)
       // The sparkline beside each row: the same rows per UTC day. Read
@@ -420,26 +437,27 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
         },
       })
     })(),
-  )
-  const activityP = settle(
+  ))
+  const activityP = timed('activity', settle(
     (async () => {
-      const [reportsToday, reportsWeek, mergedToday, mergedWeek, prsOpenedWeek, deploysWeek] = await Promise.all([
+      const [reportsToday, reportsWeek, mergedToday, mergedWeek, prsOpenedWeek, deploysWeek, deploy] = await Promise.all([
         count('reports today', reportCount().gte('created_at', todayStart)),
         count('reports week', reportCount().gte('created_at', weekStart)),
         count('merged today', mergedCount().gte('merged_at', todayStart)),
         count('merged week', mergedCount().gte('merged_at', weekStart)),
         count('prs week', mergedCount().not('pr_url', 'is', null).gte('created_at', weekStart)),
         count('deploys week', db.from('deploy_observations').select('id', { count: 'exact', head: true }).eq('project_id', id).eq('ok', true).gte('observed_at', weekStart)),
+        deployP,
       ])
       const last = deploy.ok && deploy.value ? { at: deploy.value.observed_at, version: deploy.value.observed_version } : null
       return buildActivity({ reportsToday, reportsWeek, mergedToday, mergedWeek, prsOpenedWeek, deploysWeek, lastDeploy: last })
     })(),
-  )
+  ))
 
   // ── Sitemap ──
-  const sitemapP = settle(
+  const sitemapP = timed('sitemap', settle(
     (async () => {
-      const [views, bugs, sdkOrigins, keyRows, watchRow, sites] = await Promise.all([
+      const [views, bugs, sdkOrigins, keyRows, watchRow, sites, broken] = await Promise.all([
         rows<{ route: string }>('session_page_views', db.from('session_page_views').select('route').eq('project_id', id).gte('ts', weekStart).order('ts', { ascending: false }).limit(PAGE_VIEW_SAMPLE)),
         rows<{ url: string | null }>('report urls', db.from('reports').select('url:environment->>url').eq('project_id', id).or(NOT_SAMPLE).gte('created_at', priorStart).limit(2000)),
         // Where the SDK ran (preview deploys too). Optional: an older self-host without the table keeps every URL.
@@ -447,6 +465,7 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
         keysP,
         watchP,
         liveUrlP,
+        brokenP,
       ])
       const addresses = appAddresses([
         watchRow.ok ? watchRow.value?.base_url : null,
@@ -463,12 +482,12 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
         addresses,
       })
     })(),
-  )
+  ))
 
   // ── Access ──
-  const accessP = settle(
+  const accessP = timed('access', settle(
     (async () => {
-      const [orgMembers, projectMembers, observations, stamped, catalog] = await Promise.all([
+      const [orgMembers, projectMembers, observations, stamped, catalog, keys, repo] = await Promise.all([
         project.organization_id
           ? rows<{ user_id: string; role: string }>('organization_members', db.from('organization_members').select('user_id, role').eq('organization_id', project.organization_id).limit(200))
           : Promise.resolve([]),
@@ -476,6 +495,8 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
         fetchProjectSdkObservations(db, [id]),
         fetchLatestStampedSdkReports(db, [id]),
         rows<{ package: string; version: string; deprecated: boolean | null }>('sdk_versions', db.from('sdk_versions').select('package, version, deprecated')),
+        keysP,
+        repoP,
       ])
       const roles = new Map<string, string>()
       if (project.owner_id) roles.set(project.owner_id, 'owner')
@@ -514,16 +535,32 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
         keysReadable: keys.ok,
       }
     })(),
-  )
+  ))
 
-  const [waiting, week, activity, sitemap, access, workers] = await Promise.all([waitingP, weekP, activityP, sitemapP, accessP, workersP])
+  // The stored screenshot for the app card, signed as soon as its row is read.
+  const thumbnailP = timed('thumbnail', (async (): Promise<{ url: string; capturedAt: string | null; pageUrl: string | null } | null> => {
+    const thumb = await thumbP
+    if (!thumb.ok || !thumb.value?.storage_path) return null
+    const { data } = await within(db.storage.from(THUMBNAIL_BUCKET).createSignedUrl(thumb.value.storage_path, THUMBNAIL_URL_TTL_SEC), 'thumbnail url')
+    return data?.signedUrl ? { url: toPublicSupabaseUrl(data.signedUrl), capturedAt: thumb.value.captured_at, pageUrl: thumb.value.page_url } : null
+  })().catch(() => null))
+
+  const [keys, watch, liveUrls, repo, pipeline, deploy, thumb, firecrawl, health, setupRun, waiting, week, activity, sitemap, access, workers, thumbnail, healthRead] =
+    await Promise.all([
+      keysP, watchP, liveUrlP, repoP, pipelineP, deployP, thumbP, firecrawlP, healthSignalsP, setupRunP,
+      waitingP, weekP, activityP, sitemapP, accessP, workersP, thumbnailP, healthP,
+    ])
+  const setup = setupSignal({ run: setupRun })
+  if (setup) health.push(setup)
+
+  const origins = keys.ok ? keys.value.map((k) => k.last_seen_origin) : []
+  const liveUrl = pickLiveUrl({
+    watch: watch.ok ? watch.value?.base_url ?? null : null,
+    audit: liveUrls.ok ? liveUrls.value[0]?.base_url ?? liveUrls.value[1]?.crawler_base_url ?? null : null,
+    origins,
+  })
 
   // ── App card ──
-  let thumbnail: { url: string; capturedAt: string | null; pageUrl: string | null } | null = null
-  if (thumb.ok && thumb.value?.storage_path) {
-    const { data } = await db.storage.from(THUMBNAIL_BUCKET).createSignedUrl(thumb.value.storage_path, THUMBNAIL_URL_TTL_SEC)
-    if (data?.signedUrl) thumbnail = { url: toPublicSupabaseUrl(data.signedUrl), capturedAt: thumb.value.captured_at, pageUrl: thumb.value.page_url }
-  }
   const ownKey = firecrawl.ok && firecrawl.value?.source === 'byok'
   const thumbnailState = {
     // The table is created by this feature's migration; before it lands the card falls back to the icon.
@@ -599,7 +636,6 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
   }
 
   // ── Fix these first, then Needs you ──
-  const healthRead = healthP ? await healthP : null
   const checks = healthRead?.ok ? healthRead.value : null
   // Each stuck group a problem explains carries it (rootCause), so the cause shows once.
   const stages = pipeline.ok ? (checks ? tagRootCauses(pipeline.value.stages, problemsByProject(checks)) : pipeline.value.stages) : null
@@ -661,7 +697,17 @@ export function registerProjectHomeRoutes(app: Hono<{ Variables: Variables }>, d
     const db = getServiceClient()
     const p = await projectFor(c, db)
     if ('response' in p) return p.response
-    return c.json({ ok: true, data: await readProjectHome(db, p.project, deps, c.get('userId') as string) })
+    const timings: Record<string, number> = {}
+    const started = performance.now()
+    const data = await readProjectHome(db, p.project, deps, c.get('userId') as string, timings)
+    const total = Math.round(performance.now() - started)
+    // Which section held Home up: DevTools shows Server-Timing on the request.
+    c.header('Server-Timing', [...Object.entries(timings).map(([name, ms]) => `${name};dur=${ms}`), `total;dur=${total}`].join(', '))
+    if (total >= SLOW_HOME_MS) {
+      const slowest = Object.entries(timings).sort((a, b) => b[1] - a[1])[0]
+      hlog.warn('home: slow', { projectId: p.project.id, totalMs: total, slowest: slowest?.[0] ?? null, sections: timings })
+    }
+    return c.json({ ok: true, data })
   })
 
   app.post('/v1/admin/projects/:id/home/thumbnail', jwtAuth, async (c: Ctx) => {

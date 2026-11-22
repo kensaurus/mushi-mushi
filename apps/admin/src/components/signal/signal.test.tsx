@@ -91,6 +91,19 @@ describe('AlertCards', () => {
     expect(host.querySelector('h2.sr-only')?.textContent).toContain('4 problems, 1 critical')
   })
 
+  // Console polish 2026-11-22: "Show N more" was a 16 px text link on a tablet.
+  it('makes "Show N more" a named 44 px target on touch', () => {
+    const alerts = ['a', 'b', 'c', 'd', 'e'].map((id) => alert(id, 'serious'))
+    const host = mount(createElement(AlertCards, { alerts, emptyText: null }))
+    const more = [...host.querySelectorAll('button')].filter((b) => /^Show \d+ more$/.test(b.textContent ?? ''))
+    expect(more.length).toBeGreaterThan(0)
+    for (const b of more) {
+      expect(b.className).toContain('pointer-coarse:min-h-11')
+      expect(b.className).toContain('inline-flex')
+      expect(b.getAttribute('aria-label')).toMatch(new RegExp(`^${b.textContent} problems?$`))
+    }
+  })
+
   it('pins a card with keys and names it in the trail', () => {
     const host = mount(
       createElement(

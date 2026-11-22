@@ -26,7 +26,7 @@ import { BreadcrumbPeek } from './BreadcrumbPeek'
 import { ReportRowMeta, ReportRowLayerPill, ReportTagChips } from './ReportRowSummaryMeta'
 import { DispatchFixPreflight } from './DispatchFixPreflight'
 import type { PreflightState } from '../../lib/useDispatchPreflight'
-import { IconShare, IconExternalLink, IconClose } from '../icons'
+import { ReportRowMoreMenu } from './ReportRowMoreMenu'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { ReportSourceTag } from './ReportSourceTag'
 import { reportSourceKind, showsSeverity } from '../../lib/reportSourceKind'
@@ -45,8 +45,8 @@ import {
 } from './reportsTableLayout'
 import {
   BlastRadiusMeter,
+  LowConfidenceChip,
   RecencyHeatLabel,
-  TableConfidenceCell,
   TableSeverityCell,
 } from './ReportMetricCells'
 import { reportHeadline } from '../../lib/format'
@@ -252,6 +252,8 @@ function ReportRowViewInner({
               </div>
             </BreadcrumbPeek>
             <div className="shrink-0 flex items-center gap-1 pt-px">
+              {/* Only a low score shows; the "Conf." column read 95–100% on nearly every row. */}
+              <LowConfidenceChip confidence={row.confidence} />
               {blastRadius > 1 && (
                 <BlastRadiusMeter
                   value={blastRadius}
@@ -300,16 +302,13 @@ function ReportRowViewInner({
           <TableSeverityCell severity={showsSeverity(reportSourceKind(row)) ? row.severity : null} />
         </div>
       </td>
-      <td className={`reports-metric-cell reports-metric-cell--confidence ${REPORTS_TABLE_COL.confidence} ${TABLE_CELL.pxMeta}`}>
-        <div className="reports-metric-cell-slot reports-metric-cell-slot--confidence">
-          <TableConfidenceCell confidence={row.confidence} layout="table" />
-        </div>
-      </td>
       <td className={`reports-action-cell ${REPORTS_TABLE_COL.action} ${TABLE_CELL.pxMeta}`}>
         <div className={`reports-action-stack ${REPORTS_ACTION_STACK_MAX} ml-auto w-full min-w-0`}>
           <div className="reports-action-top ml-auto w-full min-w-0">
-            <span className="row-kebab-reveal pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto inline-flex shrink-0 items-center gap-0">
-              <RowKebab newTabHref={newTabHref} onCopyLink={onCopyLink} onDismiss={onDismiss} />
+            {/* One "More" menu (copy link, new tab, dismiss): shown on row hover and
+                keyboard focus; always on touch, where it is a 44 px target. */}
+            <span className="row-kebab-reveal pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto pointer-coarse:pointer-events-auto inline-flex shrink-0 items-center gap-0">
+              <ReportRowMoreMenu newTabHref={newTabHref} onCopyLink={onCopyLink} onDismiss={onDismiss} />
             </span>
             {canDispatch ? (
               <span
@@ -361,58 +360,6 @@ function ReportRowViewInner({
         </div>
       </td>
     </tr>
-  )
-}
-
-interface KebabProps {
-  /** Absolute, base-path-aware URL for "Open in new tab". */
-  newTabHref: string
-  onCopyLink: () => void
-  onDismiss: () => void
-}
-
-function RowKebab({ newTabHref, onCopyLink, onDismiss }: KebabProps) {
-  return (
-    <>
-      <Tooltip portal content="Copy share link">
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            onCopyLink()
-          }}
-          className="p-1 text-fg-faint hover:text-fg-muted hover:bg-surface-overlay rounded-sm"
-          aria-label="Copy link"
-        >
-          <IconShare size={12} />
-        </button>
-      </Tooltip>
-      <Tooltip portal content="Open in new tab">
-        <a
-          href={newTabHref}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          className="p-1 text-fg-faint hover:text-fg-muted hover:bg-surface-overlay rounded-sm inline-flex"
-          aria-label="Open in new tab"
-        >
-          <IconExternalLink size={12} />
-        </a>
-      </Tooltip>
-      <Tooltip portal content="Dismiss">
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            onDismiss()
-          }}
-          className="p-1 text-fg-faint hover:text-danger hover:bg-danger-muted/20 rounded-sm"
-          aria-label="Dismiss"
-        >
-          <IconClose size={12} />
-        </button>
-      </Tooltip>
-    </>
   )
 }
 

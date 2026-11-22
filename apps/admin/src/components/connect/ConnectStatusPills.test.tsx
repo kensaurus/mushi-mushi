@@ -29,7 +29,8 @@ describe('connectPills', () => {
       now: NOW,
     })
     expect(pills.map((p) => [p.id, p.value, p.tone])).toEqual([
-      ['heartbeat', 'Heard 2m ago', 'ok'],
+      // "App checked in · 2m ago", not "App checked in · Heard 2m ago" (2026-11-22).
+      ['heartbeat', '2m ago', 'ok'],
       ['version', '0.24.4', 'ok'],
       ['editor', '2 connected, last call 1h ago', 'ok'],
     ])
@@ -51,7 +52,7 @@ describe('connectPills', () => {
     expect(behind[1]).toMatchObject({ tone: 'warn', badge: '0.24.4 available' })
     expect(behind[2]).toMatchObject({ value: 'Not connected', tone: 'neutral' })
     const never = connectPills({ sdkLastSeenAt: null, sdkVersion: null, sdkLatestVersion: null, sdkStatus: null, mcpStats: { connectedKeyCount: 0, lastSeenAt: null }, now: NOW })
-    expect(never[0]).toMatchObject({ value: 'Not heard yet', tone: 'neutral' })
+    expect(never[0]).toMatchObject({ value: 'Not yet', tone: 'neutral' })
   })
 
   // "SDK heartbeat" was jargon to a new user (integrator's walk, 2026-10-28).

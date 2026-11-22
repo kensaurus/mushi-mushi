@@ -1984,7 +1984,7 @@ const SDK_INSTALL: ConfigDoc[] = [
     summary:
       "Which corner of the user's app the bug-capture trigger pins to — top-left, top-right, bottom-left, bottom-right.",
     howItWorks:
-      "Drives the live preview and the generated `Mushi.init({ widget: { position: '…' }})` call. The widget mounts in a shadow DOM, so the position is independent of the host app's CSS.",
+      "Drives the live preview and the generated `Mushi.init({ widget: { position: '…' }})` call. The widget mounts in a shadow DOM, so the position is independent of the host app's CSS. If your app's code sets this, your code's value wins (ADR 0068).",
     default: { value: 'bottom-right' },
     whenToChange:
       "Pick the corner that doesn't collide with your existing chrome (chat bubbles usually live bottom-right, so move Mushi Mushi to bottom-left if so).",
@@ -2039,12 +2039,23 @@ const SDK_INSTALL: ConfigDoc[] = [
   {
     id: 'sdk-install.theme',
     label: 'Widget theme',
-    summary: "Light, dark, or auto — auto follows the user's `prefers-color-scheme` media query.",
+    summary: "Light, dark, auto or inherit — auto follows the user's `prefers-color-scheme` media query, inherit follows your page's own dark/light class.",
     howItWorks:
-      'Auto re-evaluates on system theme change so the widget never goes white-on-white when the user toggles dark mode at night. Light/dark force the theme regardless of system preference.',
+      "Auto re-evaluates on system theme change so the widget never goes white-on-white when the user toggles dark mode at night. Light/dark force the theme regardless of system preference. Inherit reads your page: a `dark`/`light` class or `data-theme` / `data-color-scheme` on <html>, else the page background. If your app's code sets this, your code's value wins (ADR 0068).",
     default: { value: 'auto' },
     whenToChange:
       'Force `light` or `dark` when your app explicitly ignores system preference (rare). Otherwise stay on auto for the best a11y default.',
+  },
+  {
+    id: 'sdk-install.accent',
+    label: 'Widget colour',
+    summary:
+      "The widget's brand colour: the Send button, focus rings and the launcher's underline. Auto matches your site.",
+    howItWorks:
+      "Auto (the default) uses your site's `--mushi-accent` or `accent-color` when it finds one with enough contrast, else the widget's own. A custom colour is one hex code; Mushi picks black or white text for it, whichever reads better (never under 3:1), and installed SDKs pick it up at their next start, with no redeploy. Also settable with `mushi widget set --accent` or the MCP tool `set_widget_settings`. If your app's code sets this, your code's value wins (ADR 0068).",
+    default: { value: 'auto' },
+    whenToChange:
+      "Set it when the widget should carry your brand colour and your site does not expose one through `--mushi-accent` or `accent-color`.",
   },
   {
     id: 'sdk-install.trigger_text',
@@ -2052,7 +2063,7 @@ const SDK_INSTALL: ConfigDoc[] = [
     summary:
       'Short label shown next to the bug-capture trigger button (or hidden if the button is icon-only).',
     howItWorks:
-      'Localise this for non-English audiences (e.g. `バグ報告` for Japanese). Empty string = icon-only mode, which saves space but loses the affordance for first-time users.',
+      "Localise this for non-English audiences (e.g. `バグ報告` for Japanese). Empty string = icon-only mode, which saves space but loses the affordance for first-time users. If your app's code sets this, your code's value wins (ADR 0068).",
     default: { value: 'Report' },
     whenToChange:
       'Localise to your audience\'s language. Lengthen to "Report a bug" for novice users; shorten to "" for power users.',

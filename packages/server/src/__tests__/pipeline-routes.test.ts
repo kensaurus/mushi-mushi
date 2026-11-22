@@ -580,3 +580,30 @@ describe('local workers on /pipeline (ADR 0048)', () => {
     expect(queue[0]).toMatchObject({ source: 'requeue', lane_id: 'lane-1' })
   })
 })
+
+describe('readPipeline: independent reads run side by side', () => {
+  // Every table read waits READ ms. 120 open PRs make the per-PR reads span
+  // several chunks (fix_events reads 20 PRs at a time). Read one after
+  // another, the pipeline took many rounds of reads; side by side, a few.
+  const READ = 25
+  const seedMany = (db: FakeDb) => {
+    for (let i = 0; i < 120; i++) {
+      const id = `3100${String(i).padStart(4, '0')}-0000-4000-8000-000000000000`
+      db.table('fix_attempts').push(attempt(id, { pr_number: 100 + i, pr_url: `https://github.com/kensaurus/glot.it/pull/${100 + i}`, commit_sha: `h-${i}`, check_run_conclusion: i % 3 ? 'success' : 'failure' }))
+      db.table('fix_events').push({ fix_attempt_id: id, at: '2026-10-26T08:00:00Z', label: `CI finished: ${i % 3 ? 'passed' : 'failed'}` })
+      db.table('fix_reviews').push({ fix_attempt_id: id, status: 'completed', verdict: i % 2 ? 'merge' : 'fix_first', summary: 'ok', findings: [], error: null, head_sha: `h-${i}`, completed_at: '2026-10-23T01:00:00Z', created_at: '2026-10-23T00:20:00Z', id: `rv-${i}`, project_id: P1, report_id: `r-${id}` })
+    }
+  }
+
+  it('returns the same picture with read latency, in a few rounds of reads', async () => {
+    const { db } = setup()
+    seedMany(db)
+    const fast = await routes.readPipeline(db as never, [P1, P2], NOW)
+    const slowDb = makeFakeDb(db.tables, { readDelayMs: () => READ })
+    const started = performance.now()
+    const slow = await routes.readPipeline(slowDb as never, [P1, P2], NOW)
+    const took = performance.now() - started
+    expect(slow).toEqual(fast)
+    expect(took).toBeLessThan(7 * READ)
+  })
+})

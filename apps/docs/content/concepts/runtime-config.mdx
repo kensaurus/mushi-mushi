@@ -15,7 +15,10 @@ copy from **Projects → SDK install** without rebuilding.
 <Callout type="info">
   Host `init()` still wins when you wired something explicitly — for example
   `widget: { trigger: 'banner' }` or `capture: { screenshot: 'off' }`. The
-  console cannot silently reset those back to defaults.
+  console cannot silently reset those back to defaults. For the widget's look
+  (position, theme, trigger text, colour) the rule is simple: if your app's
+  code sets it, your code's value wins; the console fills what your code left
+  out. To let the console decide, remove the option from your code.
 </Callout>
 
 ## Setup default
@@ -41,6 +44,9 @@ builds.
 | `capture.screenshot: 'off'` | Unconfigured (default on-report) | Screenshot stays off |
 | `capture.console: true` | `console: false` | Console capture turns off (console explicitly set it) |
 | Nothing (defaults) | Banner message + variant | Console banner applies |
+| `widget.position: 'top-left'` | `bottom-left` | `top-left` (your code wins) |
+| `widget.accent: '#e03c2c'` | `#3b5bdb` | `#e03c2c` (your code wins) |
+| Nothing (defaults) | Colour `#3b5bdb` | The widget turns `#3b5bdb`, with black or white text checked for contrast |
 
 Full precedence rules:
 [SDK_RUNTIME_CONFIG.md](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SDK_RUNTIME_CONFIG.md)
@@ -48,8 +54,16 @@ Full precedence rules:
 ## Console tuning without rebuild
 
 1. Open **Projects →** your project → **SDK install**
-2. Change launcher, banner copy, capture toggles, or screenshot privacy caption
+2. Change launcher, position, theme, colour, banner copy, capture toggles, or screenshot privacy caption
 3. Save — live apps pick it up on the next config fetch (usually within seconds)
+
+From your editor instead: the MCP tools `get_widget_settings` and
+`set_widget_settings`, or the CLI:
+
+```bash
+mushi widget show
+mushi widget set --accent '#3b5bdb' --position bottom-left --theme dark --trigger-text 'Report a bug'
+```
 
 No npm publish or app store resubmit required for these knobs.
 

@@ -84,7 +84,7 @@ beforeAll(async () => {
   routes = await import('../../supabase/functions/api/routes/project-home.ts')
 })
 
-type Res = { status: number; body: { ok: boolean; data?: Record<string, any> | null; error?: { code: string; message?: string } } }
+type Res = { status: number; headers?: Record<string, string>; body: { ok: boolean; data?: Record<string, any> | null; error?: { code: string; message?: string } } }
 type Handler = (c: unknown, next?: () => Promise<void>) => Promise<unknown> | unknown
 
 class FakeApp {
@@ -95,11 +95,13 @@ class FakeApp {
     const route = this.routes.find((r) => r.method === method && r.path === path)
     if (!route) throw new Error(`no route ${method} ${path}`)
     const vars: Record<string, unknown> = { userId: 'u1' }
+    const headers: Record<string, string> = {}
     const c = {
+      header: (k: string, v: string) => { headers[k] = v },
       req: { json: async () => ({}), param: (k: string) => state.params[k], header: () => undefined, query: () => undefined },
       get: (k: string) => vars[k],
       set: (k: string, v: unknown) => { vars[k] = v },
-      json: (b: unknown, status = 200) => ({ body: b, status }),
+      json: (b: unknown, status = 200) => ({ body: b, status, headers }),
     }
     return (await route.handlers[route.handlers.length - 1](c)) as Res
   }
@@ -143,9 +145,20 @@ function seed(): Record<string, Array<Record<string, unknown>>> {
   }
 }
 
-function setup(opts: { failRead?: (t: string) => string | { code: string; message: string } | null; noThumbTable?: boolean; workerFlags?: (db: unknown, userId: string, projectId: string) => Promise<unknown[]>; healthChecks?: (db: unknown, project: { id: string }) => Promise<unknown[]> } = {}) {
+function setup(opts: {
+  failRead?: (t: string) => string | { code: string; message: string } | null
+  noThumbTable?: boolean
+  workerFlags?: (db: unknown, userId: string, projectId: string) => Promise<unknown[]>
+  healthChecks?: (db: unknown, project: { id: string }) => Promise<unknown[]>
+  /** Simulated latency per table read (fake-supabase readDelayMs). */
+  readDelayMs?: (t: string) => number
+  /** Replace the pipeline read (e.g. a slow or hanging one). */
+  readPipeline?: (...args: unknown[]) => Promise<unknown>
+  sectionMs?: number
+} = {}) {
   const db: FakeDb = makeFakeDb(seed(), {
     failRead: (t) => (opts.noThumbTable && t === 'project_home_thumbnails' ? { code: '42P01', message: 'relation "project_home_thumbnails" does not exist' } : opts.failRead?.(t) ?? null),
+    ...(opts.readDelayMs ? { readDelayMs: opts.readDelayMs } : {}),
   })
   ;(db as unknown as { storage: unknown }).storage = {
     from: () => ({ createSignedUrl: async (path: string) => ({ data: { signedUrl: `https://x.supabase.co/sign/${path}?token=t` }, error: null }) }),
@@ -162,7 +175,8 @@ function setup(opts: { failRead?: (t: string) => string | { code: string; messag
   routes.registerProjectHomeRoutes(app as never, {
     now: () => NOW,
     // The mocked pipeline.ts above.
-    readPipeline: routes.defaultProjectHomeDeps.readPipeline,
+    readPipeline: (opts.readPipeline ?? routes.defaultProjectHomeDeps.readPipeline) as never,
+    ...(opts.sectionMs ? { sectionMs: opts.sectionMs } : {}),
     resolveFirecrawl: (async () => state.firecrawl) as never,
     captureThumbnail: (async (_db: unknown, _id: string, url: string) => {
       state.captures.push(url)
@@ -313,6 +327,62 @@ describe('GET /v1/admin/projects/:id/home', () => {
     db.table('project_home_thumbnails').push({ project_id: P, storage_path: `${P}/home.png`, page_url: 'https://glot.it', captured_at: ago(1), last_attempt_at: ago(1), last_error: null })
     const res = await app.call('GET', '/v1/admin/projects/:id/home')
     expect(res.body.data!.app.data.thumbnail).toMatchObject({ url: `https://x.supabase.co/sign/${P}/home.png?token=t`, pageUrl: 'https://glot.it' })
+  })
+})
+
+describe('GET /v1/admin/projects/:id/home: sections read side by side', () => {
+  // Every table read waits READ ms; the pipeline read (the slowest on
+  // production) waits PIPE ms. Read one after another, Home took the
+  // pipeline plus four more rounds of reads; side by side it takes about
+  // the pipeline alone.
+  const READ = 40
+  const PIPE = 300
+  const slowPipeline = async (...args: unknown[]) => {
+    await new Promise((r) => setTimeout(r, PIPE))
+    return (routes.defaultProjectHomeDeps.readPipeline as (...a: unknown[]) => Promise<unknown>)(...args)
+  }
+
+  it('answers in about the slowest read, not the sum of the reads', async () => {
+    const { app } = setup({ readDelayMs: () => READ, readPipeline: slowPipeline })
+    const started = performance.now()
+    const res = await app.call('GET', '/v1/admin/projects/:id/home')
+    const took = performance.now() - started
+    expect(res.status).toBe(200)
+    const d = res.body.data!
+    for (const k of ['app', 'health', 'release', 'sitemap', 'week', 'activity', 'access', 'needsYou']) expect(d[k].status, k).not.toBe('error')
+    expect(d.partial).toEqual([])
+    // Serial stages were PIPE + 4 × READ or more (≈ 500 ms measured); side by side ≈ PIPE.
+    expect(took).toBeLessThan(PIPE + 2 * READ + 60)
+    // Each section's time goes out for DevTools, the pipeline the slowest.
+    const timing = Object.fromEntries(res.headers!['Server-Timing'].split(', ').map((p) => [p.split(';dur=')[0], Number(p.split(';dur=')[1])]))
+    expect(Object.keys(timing)).toEqual(expect.arrayContaining(['pipeline', 'health', 'week', 'sitemap', 'access', 'total']))
+    expect(timing.pipeline).toBeGreaterThanOrEqual(PIPE - 5)
+    expect(timing.week).toBeLessThan(PIPE)
+  })
+
+  it('a slow failing section does not hold up or break the others', async () => {
+    const { app } = setup({
+      readDelayMs: (t) => (t === 'session_page_views' ? PIPE : READ),
+      failRead: (t) => (t === 'session_page_views' ? 'session_page_views: timeout' : null),
+    })
+    const started = performance.now()
+    const d = (await app.call('GET', '/v1/admin/projects/:id/home')).body.data!
+    const took = performance.now() - started
+    expect(d.sitemap.status).toBe('error')
+    for (const k of ['health', 'release', 'week', 'activity', 'access']) expect(d[k].status, k).toBe('ok')
+    expect(took).toBeLessThan(PIPE + 2 * READ + 60)
+  })
+
+  it('a read that never answers turns only its section into an error at the deadline', async () => {
+    const { app } = setup({ readDelayMs: () => READ, readPipeline: () => new Promise(() => {}), sectionMs: 200, workerFlags: async () => [] })
+    const started = performance.now()
+    const d = (await app.call('GET', '/v1/admin/projects/:id/home')).body.data!
+    const took = performance.now() - started
+    expect(d.release.status).toBe('error')
+    expect(d.release.error).toMatch(/took longer/)
+    expect(d.partial).toEqual(['pipeline'])
+    for (const k of ['health', 'week', 'activity', 'access', 'sitemap']) expect(d[k].status, k).toBe('ok')
+    expect(took).toBeLessThan(200 + 2 * READ + 100)
   })
 })
 

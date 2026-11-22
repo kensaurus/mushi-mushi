@@ -12,6 +12,7 @@ import { Input, SelectField, Btn, Tooltip, HelpBanner } from '../components/ui'
 import { isCloudMode, RESOLVED_SUPABASE_URL } from '../lib/env'
 import { nextPathFromLoginState } from '../lib/authRedirect'
 import { signupLandingPath } from '../lib/firstRun'
+import { adoptLinkedAppScope } from '../lib/projectScope'
 import {
   classifyAuthError as classifyAuthErrorText,
   emailFormatProblem,
@@ -96,9 +97,9 @@ export function LoginPage() {
 
   const supabaseHost = getSupabaseHost()
   // Fresh signups land on the wizard (first action = send a test report);
-  // returning users go to the dashboard. An explicit `?next=` / router
-  // state still wins for both.
-  const defaultNextPath = track === 'tester' ? '/tester' : mode === 'signup' ? '/onboarding' : '/reports'
+  // returning users go to Home (/dashboard), as `/` does. An explicit
+  // `?next=` / router state still wins for both.
+  const defaultNextPath = track === 'tester' ? '/tester' : mode === 'signup' ? '/onboarding' : '/dashboard'
   const requestedNextPath = nextPathFromLoginState(location.state, searchParams.get('next'), defaultNextPath)
   // A sign-up confirms its email and returns here: a generic landing (Bugs,
   // Home) becomes setup, an invite or deep link is kept (lib/firstRun.ts).
@@ -125,7 +126,12 @@ export function LoginPage() {
     setPasskeyAvailable(canUsePasskeys())
   }, [])
 
-  if (session) return <Navigate to={nextPath} replace />
+  if (session) {
+    // A deep link that waited for sign-in (`next=/reports?project=<id>`) names
+    // one app: open that app, not the stored All apps choice.
+    adoptLinkedAppScope(new URL(nextPath, 'https://console.invalid').search)
+    return <Navigate to={nextPath} replace />
+  }
 
   const switchMode = (next: FormMode) => {
     setMode(next)

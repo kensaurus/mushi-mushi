@@ -269,7 +269,7 @@ function publicOrigin(origin: string | null): string | null {
 /** The two "how to get a map" lines of the empty state, true to what is already done. */
 export function journeyStartHints(input: { hasScan: boolean; hasVisits: boolean; sdkInstalled: boolean }): string[] {
   return [
-    input.hasScan ? 'Site scan: done.' : 'Press Scan my site above to map your public pages (needs a Firecrawl key in Settings, AI keys).',
+    input.hasScan ? 'Site scan: done.' : 'Optional: Scan my site above also maps pages nobody has visited yet. Only the scan needs a key (your own Firecrawl key, in Settings, AI keys); the map from real visits needs none.',
     input.hasVisits
       ? 'Visits: arriving.'
       : input.sdkInstalled

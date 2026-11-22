@@ -94,10 +94,14 @@ interface Props {
   onMerged?: () => void
 }
 
+/** Queue lines shown before "Show N more". */
+const QUEUE_ROWS_FIRST = 4
+
 export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
   const toast = useToast()
   const [rows, setRows] = useState<MergeQueueRow[]>([])
   const [showMerged, setShowMerged] = useState(false)
+  const [showAllRows, setShowAllRows] = useState(false)
   const [removing, setRemoving] = useState<string | null>(null)
   const [trains, setTrains] = useState<ReleaseTrain[]>([])
   const [release, setRelease] = useState<ReleaseSettings | null>(null)
@@ -175,6 +179,12 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
   const merged = shown.filter((r) => r.state === 'merged')
   // Held rows first (each says why), then the one each repo is working on.
   const listed = [...active].sort((a, b) => Number(b.state === 'blocked') - Number(a.state === 'blocked'))
+  const groups = groupQueueRows(listed)
+  // Held rows lead, so the first few are the ones that need a person; the rest
+  // open on request. A 160px box that scrolled inside a long page trapped the
+  // wheel and hid rows (2026-11-22 design pass).
+  const shownGroups = showAllRows ? groups : groups.slice(0, QUEUE_ROWS_FIRST)
+  const hiddenGroups = groups.length - shownGroups.length
   const batching = (release?.mode ?? 'train') === 'train'
   // One line per repo: its train on the way, or when the next one leaves.
   const repos = [...new Set([...active.map((r) => r.repo), ...trains.filter((t) => t.state === 'building' || t.state === 'testing').map((t) => t.repo)])]
@@ -263,7 +273,7 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
           className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-fg-secondary"
           data-testid="auto-decide-note"
         >
-          <span className="text-3xs font-bold tracking-wider uppercase">Opus decides</span>
+          <span className="text-2xs font-semibold text-fg">The Opus review decides:</span>
           <span className="inline-flex items-center gap-1">
             <StatusGlyph tone="ok" />
             <span className="font-semibold text-fg">merge</span> → queue
@@ -305,9 +315,9 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
       )}
       {shown.length === 0 && <p className="text-2xs text-fg-muted">Nothing in the merge queue.</p>}
       {listed.length > 0 && (
-        // A long queue scrolls inside the panel instead of pushing the list down.
-        <ul className="max-h-40 overflow-y-auto divide-y divide-edge-subtle" id="merge-queue-rows">
-          {groupQueueRows(listed).map((group) => {
+        <>
+        <ul className="divide-y divide-edge-subtle" id="merge-queue-rows" data-testid="merge-queue-rows">
+          {shownGroups.map((group) => {
             const r = group[0]
             const why = r.state === 'blocked' ? heldReasonOf(r.detail) : null
             const many = group.length > 1
@@ -336,7 +346,7 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
                       {i === 0 ? `${g.repo}#${g.pr_number}` : `#${g.pr_number}`}
                     </a>
                     {many && (
-                      <Btn variant="ghost" size="sm" className="!px-1 !text-3xs" aria-label={`Remove #${g.pr_number} from the queue`} title="Remove from the queue" loading={removing === g.id} onClick={() => void remove(g)}>
+                      <Btn variant="ghost" size="sm" className="!px-1 !text-3xs pointer-coarse:min-h-11 pointer-coarse:min-w-11" aria-label={`Remove #${g.pr_number} from the queue`} title="Remove from the queue" loading={removing === g.id} onClick={() => void remove(g)}>
                         ✕
                       </Btn>
                     )}
@@ -347,7 +357,7 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
                 {r.detail ? withoutReasonCode(r.detail) : 'Queued.'} <span className="text-fg-faint">· <RelativeTime value={r.updated_at} /></span>
               </span>
               {!many && (
-                <Btn variant="ghost" size="sm" className="shrink-0" loading={removing === r.id} onClick={() => void remove(r)}>
+                <Btn variant="ghost" size="sm" className="shrink-0 pointer-coarse:min-h-11" aria-label={`Remove #${r.pr_number} from the queue`} loading={removing === r.id} onClick={() => void remove(r)}>
                   Remove
                 </Btn>
               )}
@@ -355,6 +365,19 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
             )
           })}
         </ul>
+        {(hiddenGroups > 0 || showAllRows) && groups.length > QUEUE_ROWS_FIRST && (
+          <Btn
+            variant="ghost"
+            size="sm"
+            aria-controls="merge-queue-rows"
+            aria-expanded={showAllRows}
+            onClick={() => setShowAllRows((v) => !v)}
+            data-testid="merge-queue-show-all"
+          >
+            {showAllRows ? 'Show fewer' : `Show ${hiddenGroups} more`}
+          </Btn>
+        )}
+        </>
       )}
       {merged.length > 0 && (
         <div>

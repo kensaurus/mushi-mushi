@@ -10,6 +10,8 @@
  * Output, per journey, in apps/docs/public/walkthroughs/:
  *   <id>.mp4   H.264, 1600 px wide, no audio, fast start
  *   <id>.jpg   poster frame
+ * and, for a journey with `gif`, docs/media/walkthroughs/<id>.gif (800 px,
+ * 64 colours) for the README and npm pages, which cannot play a video inline;
  * and its chapters (the step list, with times) in
  * apps/docs/data/walkthroughs.generated.json, which the <Walkthrough>
  * component reads. The step text is the page's real instructions; the video
@@ -23,6 +25,12 @@
  *   Supabase token refresh. A step that would change data cannot.
  * - The reporter journey runs on a made-up shop (demo-app.html) served by the
  *   recorder; its SDK requests are answered here and never leave the machine.
+ * - A journey without `requiresSignIn` runs in a fresh browser with no stored
+ *   sign-in. Its only allowed writes are the ones it names (`allowWrites`),
+ *   such as the free Production Check's start request.
+ * - A `terminal` journey films terminal.html, which prints the real output of
+ *   the published `mushi-mushi` package, run in a throwaway app with an empty
+ *   config home (no saved sign-in, no keys) just before filming.
  * - Names of private apps and the account email are swapped out of the page
  *   text (PRIVACY), and a run fails if any other app's name (DENYLIST) is
  *   visible after a filmed step.
@@ -34,7 +42,7 @@
 import { createRequire } from 'node:module'
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -54,13 +62,17 @@ try {
 }
 
 const PROFILE = process.env.WALKTHROUGH_PROFILE || join(homedir(), '.playwright-cli-profiles', 'mushi-admin')
+// WALKTHROUGH_CHANNEL=chrome uses the installed Chrome when Playwright's own build is missing.
+const CHANNEL = process.env.WALKTHROUGH_CHANNEL || undefined
 const FFMPEG = process.env.FFMPEG || 'ffmpeg'
 const OUT_DIR = join(ROOT, 'apps/docs/public/walkthroughs')
+const GIF_DIR = join(ROOT, 'docs/media/walkthroughs')
 const DATA_FILE = join(ROOT, 'apps/docs/data/walkthroughs.generated.json')
 const VIEW = { width: 1280, height: 800 }
 const SCALE = 2
 const OUT_WIDTH = 1600
 const DEMO_HTML = readFileSync(join(HERE, 'demo-app.html'), 'utf8')
+const TERMINAL_HTML = readFileSync(join(HERE, 'terminal.html'), 'utf8')
 const OVERLAY = readFileSync(join(HERE, 'overlay.js'), 'utf8')
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -70,13 +82,55 @@ function fail(msg) {
   throw new Error(msg)
 }
 
-/** Answers the demo shop's page and SDK calls; blocks every other write. */
-async function guard(ctx) {
+/**
+ * Runs a terminal journey's commands for real, in a throwaway app with an
+ * empty config home, and returns their output (ANSI colours kept) by id.
+ */
+function captureTerminal(journey) {
+  const spec = journey.terminal
+  const dir = mkdtempSync(join(tmpdir(), `mushi-walkthrough-${journey.id}-app-`))
+  try {
+    for (const [file, body] of Object.entries(spec.files)) {
+      mkdirSync(dirname(join(dir, file)), { recursive: true })
+      writeFileSync(join(dir, file), body)
+    }
+    const home = join(dir, '.home')
+    mkdirSync(home)
+    const env = { ...process.env, FORCE_COLOR: '1', WT_SESSION: '1', HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: join(home, '.config') }
+    for (const k of Object.keys(env)) if (/^(MUSHI_|NO_COLOR$)/i.test(k)) delete env[k]
+    // A moved HOME would also move npm's cache on macOS and Linux.
+    if (process.platform !== 'win32' && !env.npm_config_cache) env.npm_config_cache = join(homedir(), '.npm')
+    const out = {}
+    for (const [id, args] of Object.entries(spec.commands)) {
+      // One command line through the shell (npx is npx.cmd on Windows); the
+      // words are fixed literals from journeys.mjs, never outside input.
+      const r = spawnSync(['npx', '-y', ...args].join(' '), { cwd: dir, env, encoding: 'utf8', shell: true, timeout: 180_000 })
+      if (r.status !== 0) fail(`${journey.id}: npx ${args.join(' ')} exited ${r.status}: ${(r.stderr || '').slice(-400)}`)
+      const text = r.stdout.replace(/\s+$/, '')
+      // Nothing account-shaped may reach the video: a project id, a key or an email.
+      // (Case-sensitive for keys: VITE_MUSHI_PROJECT_ID is a setting's name, not a key.)
+      if (/[0-9a-f]{8}-[0-9a-f]{4}-|[\w.+-]+@[\w-]+\.[\w.]+/i.test(text) || /\bmush(i|_pk)_[A-Za-z0-9_-]{10,}/.test(text)) fail(`${journey.id}: output of ${id} looks like it holds an id, key or email`)
+      out[id] = text
+      log(`${journey.id}: captured ${id} (${text.split('\n').length} lines)`)
+    }
+    return out
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+/** Answers the demo shop's page and SDK calls and the terminal page; blocks every other write. */
+async function guard(ctx, journey, transcript) {
+  const allowWrites = journey.allowWrites ?? []
   await ctx.route('**/*', async (route) => {
     const req = route.request()
     const url = req.url()
     if (url.startsWith('https://plant-shop.example/')) {
       return route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: DEMO_HTML })
+    }
+    if (url.startsWith('https://terminal.example/')) {
+      const body = TERMINAL_HTML.replace('__TRANSCRIPT__', () => JSON.stringify(transcript ?? {}).replace(/</g, '\\u003c'))
+      return route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body })
     }
     if (url.startsWith('https://api.plant-shop.example/')) {
       return route.fulfill({
@@ -87,6 +141,7 @@ async function guard(ctx) {
       })
     }
     if (['GET', 'HEAD', 'OPTIONS'].includes(req.method()) || /\/auth\/v1\/token/.test(url)) return route.continue()
+    if (allowWrites.some((re) => re.test(url))) return route.continue()
     return route.abort('blockedbyclient')
   })
 }
@@ -122,6 +177,8 @@ class Driver {
     this.chapters = []
     this.total = journey.steps.filter((s) => s.do === 'chapter').length
     this.t0 = null
+    // Waits the video plays faster: [{ from, to, factor }] in capture seconds.
+    this.fast = []
     this.cursor = { x: VIEW.width * 0.62, y: VIEW.height * 0.55 }
     this.zoomed = null
   }
@@ -139,7 +196,9 @@ class Driver {
   async checkPrivacy(step) {
     if (this.t0 == null) return
     const lines = (await this.overlay('visibleText')).split('\n')
-    for (const w of DENYLIST) {
+    // A journey may show one named app, e.g. the site a public check is run on.
+    const allowed = (this.journey.allowNames ?? []).map((n) => n.toLowerCase())
+    for (const w of DENYLIST.filter((d) => !allowed.includes(d.toLowerCase()))) {
       const line = lines.find((l) => l.toLowerCase().includes(w.toLowerCase()))
       if (line) fail(`${this.journey.id}: "${w}" is on screen after step "${step.do}${step.title ? `: ${step.title}` : ''}" in: ${line.slice(0, 160)}`)
     }
@@ -258,8 +317,24 @@ class Driver {
         return
       }
       case 'wait': {
+        // `fast: n` plays the wait n times faster, with a corner label saying so.
+        const from = this.now()
+        if (step.fast) await this.overlay('badge', `Sped up ${step.fast}×`)
         if (step.target) await this.locate(step.target)
+        // A click may have loaded a new page, whose pointer starts off screen.
+        await this.overlay('jump', this.cursor.x, this.cursor.y)
+        if (step.fast) {
+          await sleep(200)
+          await this.overlay('badge', null)
+          this.fast.push({ from, to: this.now(), factor: step.fast })
+        }
         await sleep(step.ms ?? 800)
+        return
+      }
+      case 'act': {
+        // A page-specific action, e.g. typing in the terminal page.
+        await step.fn(p)
+        await sleep(step.hold ?? 600)
         return
       }
       case 'end': {
@@ -275,7 +350,35 @@ class Driver {
   }
 }
 
-function encode(journey, frames, t0, tEnd, workDir) {
+/** Capture time -> video time, with the fast-forwarded waits shortened. */
+function timeMap(t0, fast) {
+  return (t) => {
+    let v = t - t0
+    for (const s of fast) {
+      const overlap = Math.max(0, Math.min(t, s.to) - Math.max(t0, s.from))
+      v -= overlap * (1 - 1 / s.factor)
+    }
+    return v
+  }
+}
+
+/** The README / npm GIF: 800 px, 64 colours, a few frames a second. */
+function encodeGif(journey, mp4) {
+  const g = journey.gif
+  mkdirSync(GIF_DIR, { recursive: true })
+  const gif = join(GIF_DIR, `${journey.id}.gif`)
+  const r = spawnSync(
+    FFMPEG,
+    ['-y', '-loglevel', 'error', '-i', mp4,
+      '-vf', `setpts=PTS/${g.speed ?? 1},fps=${g.fps ?? 6},scale=${g.width ?? 800}:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=${g.colors ?? 64}:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle`,
+      gif],
+    { stdio: 'inherit' },
+  )
+  if (r.status !== 0) fail(`${journey.id}: gif failed`)
+  return gif
+}
+
+function encode(journey, frames, t0, tEnd, workDir, map) {
   const usable = frames.filter((f) => f.ts <= tEnd)
   // The frame on screen at t0 opens the video.
   let first = 0
@@ -288,7 +391,7 @@ function encode(journey, frames, t0, tEnd, workDir) {
     writeFileSync(file, Buffer.from(f.data, 'base64'))
     const start = i === 0 ? t0 : f.ts
     const next = i + 1 < clip.length ? clip[i + 1].ts : tEnd
-    lines.push(`file '${file.replace(/\\/g, '/')}'`, `duration ${Math.max(0.001, next - start).toFixed(4)}`)
+    lines.push(`file '${file.replace(/\\/g, '/')}'`, `duration ${Math.max(0.001, map(next) - map(start)).toFixed(4)}`)
   })
   // The concat demuxer needs the last file repeated to honour its duration.
   lines.push(`file '${join(workDir, `f${String(clip.length - 1).padStart(5, '0')}.jpg`).replace(/\\/g, '/')}'`)
@@ -308,23 +411,29 @@ function encode(journey, frames, t0, tEnd, workDir) {
   const poster = join(OUT_DIR, `${journey.id}.jpg`)
   const p = spawnSync(FFMPEG, ['-y', '-loglevel', 'error', '-ss', posterAt.toFixed(2), '-i', mp4, '-frames:v', '1', '-q:v', '4', poster], { stdio: 'inherit' })
   if (p.status !== 0) fail(`${journey.id}: poster failed`)
-  return { mp4, poster }
+  const gif = journey.gif ? encodeGif(journey, mp4) : null
+  return { mp4, poster, gif }
 }
 
 async function record(journey) {
   log(`${journey.id}: starting`)
-  if (!existsSync(PROFILE)) fail(`profile missing: ${PROFILE}`)
-  const ctx = await chromium.launchPersistentContext(PROFILE, {
-    headless: false,
-    viewport: VIEW,
-    deviceScaleFactor: SCALE,
-    colorScheme: journey.colorScheme ?? 'dark',
-    args: ['--hide-scrollbars'],
-  })
+  const transcript = journey.terminal ? captureTerminal(journey) : null
+  const ctxOptions = { viewport: VIEW, deviceScaleFactor: SCALE, colorScheme: journey.colorScheme ?? 'dark' }
+  let browser = null
+  let ctx
+  if (journey.requiresSignIn) {
+    if (!existsSync(PROFILE)) fail(`profile missing: ${PROFILE}`)
+    ctx = await chromium.launchPersistentContext(PROFILE, { ...ctxOptions, channel: CHANNEL, headless: false, args: ['--hide-scrollbars'] })
+  } else {
+    // Public pages only: a fresh browser, so no stored sign-in can reach a frame.
+    browser = await chromium.launch({ channel: CHANNEL, headless: process.env.WALKTHROUGH_HEADED !== '1', args: ['--hide-scrollbars'] })
+    ctx = await browser.newContext(ctxOptions)
+  }
   // mkdtemp: an unguessable, private directory for the frames.
   const workDir = mkdtempSync(join(tmpdir(), `mushi-walkthrough-${journey.id}-`))
   try {
-    await guard(ctx)
+    await guard(ctx, journey, transcript)
+    if (journey.init) await ctx.addInitScript({ content: journey.init })
     await ctx.addInitScript({ content: `window.__WT_PRIVACY__ = ${JSON.stringify(PRIVACY)};\n${OVERLAY}` })
     const page = ctx.pages()[0] ?? (await ctx.newPage())
     if (journey.requiresSignIn) {
@@ -349,12 +458,14 @@ async function record(journey) {
     await sleep(300)
     await cast.stop()
     if (d.t0 == null) fail(`${journey.id}: no start step`)
-    const { mp4, poster } = encode(journey, cast.frames, d.t0, tEnd, workDir)
+    const map = timeMap(d.t0, d.fast)
+    const { mp4, poster, gif } = encode(journey, cast.frames, d.t0, tEnd, workDir, map)
     // The docs CDN caches these for a year under fixed names; the hash in the
     // URL makes a re-recorded clip reach readers.
     const rev = (file) => createHash('sha256').update(readFileSync(file)).digest('hex').slice(0, 10)
-    const duration = +(tEnd - d.t0).toFixed(2)
+    const duration = +map(tEnd).toFixed(2)
     log(`${journey.id}: ${cast.frames.length} frames, ${duration}s -> ${mp4}`)
+    if (gif) log(`${journey.id}: ${(statSync(gif).size / 1024 / 1024).toFixed(2)} MB -> ${gif}`)
     return {
       id: journey.id,
       title: journey.title,
@@ -364,10 +475,11 @@ async function record(journey) {
       width: OUT_WIDTH,
       height: Math.round((OUT_WIDTH * VIEW.height) / VIEW.width),
       duration,
-      chapters: d.chapters.map((c) => ({ ...c, t: +c.t.toFixed(2) })),
+      chapters: d.chapters.map((c) => ({ ...c, t: +map(d.t0 + c.t).toFixed(2) })),
     }
   } finally {
     await ctx.close().catch(() => {})
+    await browser?.close().catch(() => {})
     rmSync(workDir, { recursive: true, force: true })
   }
 }

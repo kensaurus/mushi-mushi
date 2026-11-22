@@ -213,6 +213,141 @@ describe('screenshot submission', { timeout: 15_000 }, () => {
       await vi.waitFor(() => expect(shadow().querySelector('[data-role="screenshot-review"]')).not.toBeNull(), WAIT);
       expect(captures).toBe(2);
     });
+
+    it('on-report: closing at the review step sends nothing, and the next report shows its own new one', async () => {
+      const sdk = Mushi.init(CONFIG);
+      sdk.report();
+      await describeBug();
+      send();
+      await vi.waitFor(() => expect(shadow().querySelector('[data-role="screenshot-review"]')).not.toBeNull(), WAIT);
+
+      // The reporter cancels with the ✕ at the preview.
+      (shadow().querySelector('[data-action="close"]') as HTMLButtonElement).click();
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(posts.some((p) => p.url.endsWith('/v1/reports'))).toBe(false);
+
+      // Reopening does not carry the unseen screenshot into the next report.
+      sdk.report();
+      await describeBug();
+      send();
+      await vi.waitFor(() => expect(shadow().querySelector('[data-role="screenshot-review"]')).not.toBeNull(), WAIT);
+      expect(reports()).toHaveLength(0);
+      expect(captures).toBe(2);
+    });
+  });
+
+  it('on-report: a capture that finishes after the reporter closed is never sent', async () => {
+    const STALE = 'data:image/png;base64,U1RBTEU=';
+    const FRESH = 'data:image/png;base64,RlJFU0g=';
+    let finishFirst: (v: string) => void = () => {};
+    let calls = 0;
+    const screenshotProvider = () => {
+      calls++;
+      return calls === 1 ? new Promise<string>((resolve) => { finishFirst = resolve; }) : Promise.resolve(FRESH);
+    };
+    const sdk = Mushi.init({ ...CONFIG, capture: { screenshot: 'on-report', screenshotProvider } });
+    sdk.report();
+    await vi.waitFor(() => expect(shadow().querySelector('textarea.mushi-textarea')).not.toBeNull(), WAIT);
+    const describeBug = () => {
+      const ta = shadow().querySelector('textarea.mushi-textarea') as HTMLTextAreaElement;
+      ta.value = 'Checkout button does nothing on submit';
+      ta.dispatchEvent(new Event('input'));
+    };
+    const send = () => (shadow().querySelector('[data-action="submit"]') as HTMLButtonElement).click();
+    describeBug();
+    send();
+    await vi.waitFor(() => expect(calls).toBe(1), WAIT);
+
+    // A host provider keeps the panel on screen while it captures: the
+    // reporter closes it, then the capture comes back.
+    (shadow().querySelector('[data-action="close"]') as HTMLButtonElement).click();
+    finishFirst(STALE);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    sdk.report();
+    await vi.waitFor(() => expect(shadow().querySelector('textarea.mushi-textarea')).not.toBeNull(), WAIT);
+    describeBug();
+    send();
+    // A new screenshot is taken and shown; nothing went out yet.
+    await vi.waitFor(() => expect(shadow().querySelector('[data-role="screenshot-review"]')).not.toBeNull(), WAIT);
+    expect(posts.some((p) => p.url.endsWith('/v1/reports'))).toBe(false);
+
+    send();
+    await vi.waitFor(() => expect(posts.some((p) => p.url.endsWith('/v1/reports'))).toBe(true), WAIT);
+    const report = posts.find((p) => p.url.endsWith('/v1/reports'))!.body;
+    expect(report.screenshotDataUrl).toBe(FRESH);
+    expect(JSON.stringify(report)).not.toContain(STALE);
+  });
+
+  it('on-report: a Send from a panel closed and reopened mid-capture sends nothing', async () => {
+    let finishFirst: (v: string) => void = () => {};
+    let calls = 0;
+    const screenshotProvider = () => {
+      calls++;
+      return calls === 1
+        ? new Promise<string>((resolve) => { finishFirst = resolve; })
+        : Promise.resolve('data:image/png;base64,RlJFU0g=');
+    };
+    const sdk = Mushi.init({ ...CONFIG, capture: { screenshot: 'on-report', screenshotProvider } });
+    const type = (text: string) => {
+      const ta = shadow().querySelector('textarea.mushi-textarea') as HTMLTextAreaElement;
+      ta.value = text;
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    sdk.report();
+    await vi.waitFor(() => expect(shadow().querySelector('textarea.mushi-textarea')).not.toBeNull(), WAIT);
+    type('Checkout button does nothing on submit');
+    (shadow().querySelector('[data-action="submit"]') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(calls).toBe(1), WAIT);
+
+    // Closed and reopened before the capture returns; the reporter starts typing again.
+    (shadow().querySelector('[data-action="close"]') as HTMLButtonElement).click();
+    sdk.report();
+    await vi.waitFor(() => expect(shadow().querySelector('textarea.mushi-textarea')).not.toBeNull(), WAIT);
+    type('A different problem, still being written');
+    finishFirst('data:image/png;base64,U1RBTEU=');
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    expect(posts.some((p) => p.url.endsWith('/v1/reports'))).toBe(false);
+    expect(shadow().querySelector('textarea.mushi-textarea')).not.toBeNull();
+    expect(shadow().querySelector('[data-role="screenshot-review"]')).toBeNull();
+  });
+
+  it('on-report: the image sent is the one shown, captured from the redacted page', async () => {
+    let svgSource = '';
+    vi.spyOn(HTMLImageElement.prototype, 'src', 'set').mockImplementation(function (this: HTMLImageElement, v: string) {
+      if (!v.startsWith('data:image/svg+xml')) return;
+      svgSource = decodeURIComponent(v.replace(/^data:image\/svg\+xml;charset=utf-8,/, ''));
+      setTimeout(() => this.onload?.(new Event('load')), 0);
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      scale: vi.fn(),
+      drawImage: vi.fn(),
+      getImageData: () => ({ data: [0, 0, 0, 255] }),
+    } as never);
+    vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue(MASKED_JPEG);
+
+    const sdk = Mushi.init(CONFIG);
+    sdk.report();
+    await vi.waitFor(() => expect(shadow().querySelector('textarea.mushi-textarea')).not.toBeNull(), WAIT);
+    const ta = shadow().querySelector('textarea.mushi-textarea') as HTMLTextAreaElement;
+    ta.value = 'Checkout button does nothing on submit';
+    ta.dispatchEvent(new Event('input'));
+    (shadow().querySelector('[data-action="submit"]') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(shadow().querySelector('[data-role="screenshot-review"]')).not.toBeNull(), WAIT);
+
+    // What was rasterised for this Send had the private parts blacked out.
+    for (const secret of SECRETS) expect(svgSource).not.toContain(secret);
+    expect(svgSource).toContain('data-mushi-redacted="true"');
+    const shown = shadow().querySelector<HTMLImageElement>('.mushi-screenshot-preview img')!.getAttribute('src');
+
+    (shadow().querySelector('[data-action="submit"]') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(posts.some((p) => p.url.endsWith('/v1/reports'))).toBe(true), WAIT);
+    const report = posts.find((p) => p.url.endsWith('/v1/reports'))!.body;
+    // The bytes sent are the bytes the reporter reviewed, not a second capture.
+    expect(report.screenshotDataUrl).toBe(shown);
+    expect(report.screenshotDataUrl).toBe(MASKED_JPEG);
+    for (const secret of SECRETS) expect(JSON.stringify(report)).not.toContain(secret);
   });
 
   it('tab share calls getDisplayMedia synchronously inside the click', async () => {

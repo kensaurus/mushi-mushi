@@ -1,9 +1,11 @@
 import { ConfigHelp } from '../ConfigHelp'
+import { AccentField } from './AccentField'
 import { MUSHI_COPY } from '@mushi-mushi/core'
 import { SELECTED_TONE, SELECTED_TONE_IDLE } from '../../lib/chipTone'
 import {
   DEFAULT_SDK_CONFIG,
   isMobileFramework,
+  isServerFramework,
   type BannerPosition,
   type BannerVariant,
   type Framework,
@@ -14,7 +16,17 @@ import {
 } from '../../lib/sdkSnippets'
 
 const POSITIONS: WidgetPosition[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
-const THEMES: WidgetTheme[] = ['auto', 'light', 'dark']
+const THEMES: WidgetTheme[] = ['auto', 'light', 'dark', 'inherit']
+
+const THEME_TITLE: Record<WidgetTheme, string> = {
+  auto: "Follows the visitor's system light/dark setting",
+  light: 'Always light',
+  dark: 'Always dark',
+  inherit: "Follows your page's own light/dark class or color-scheme",
+}
+
+/** ADR 0068: an explicit value in the app's code beats the console. */
+const CODE_WINS = "If your app's code sets this, your code's value wins."
 const SCREENSHOT_MODES: ScreenshotMode[] = ['on-report', 'auto', 'off']
 const NATIVE_TRIGGER_MODES = ['shake', 'button', 'both', 'none'] as const
 
@@ -37,12 +49,17 @@ export function SdkInstallConfigurator({
   framework,
   onEnabledChange,
   onChange,
+  lockInCode = false,
+  onLockInCodeChange,
 }: {
   config: SdkPreviewConfig
   enabled: boolean
   framework: Framework
   onEnabledChange: (next: boolean) => void
   onChange: (next: SdkPreviewConfig) => void
+  /** "Lock these settings in my code": bake the choices into the web snippet. */
+  lockInCode?: boolean
+  onLockInCodeChange?: (next: boolean) => void
 }) {
   function update<K extends keyof SdkPreviewConfig>(k: K, v: SdkPreviewConfig[K]) {
     onChange({ ...config, [k]: v })
@@ -270,6 +287,7 @@ export function SdkInstallConfigurator({
                 type="button"
                 role="radio"
                 aria-checked={config.theme === t}
+                title={THEME_TITLE[t]}
                 onClick={() => update('theme', t)}
                 className={`px-2 py-1 rounded-sm capitalize transition-opacity ${
                   config.theme === t
@@ -299,6 +317,35 @@ export function SdkInstallConfigurator({
           />
         </label>
       </div>
+
+      <AccentField value={config.accent} onChange={(next) => update('accent', next)} />
+      {/* Web SDKs read these from the console at startup; the snippet leaves
+          them out unless the person locks them in code (ADR 0068). Mobile and
+          server snippets always carry their options, so no toggle there. */}
+      {onLockInCodeChange && !isMobileFramework(framework) && !isServerFramework(framework) && (
+        <label className="flex items-start gap-2 -mt-1">
+          <input
+            type="checkbox"
+            checked={lockInCode}
+            onChange={(e) => onLockInCodeChange(e.target.checked)}
+            className="mt-0.5 h-3 w-3 accent-brand"
+            data-testid="lock-in-code"
+          />
+          <span>
+            <span className="block text-fg-secondary font-medium">Lock these settings in my code</span>
+            <span className="block text-fg-faint mt-0.5" data-testid="code-wins-note">
+              {lockInCode
+                ? `The snippet now includes position, theme, trigger, colour and capture. ${CODE_WINS}`
+                : 'Off: the snippet leaves these out and your app takes them from here at startup, so you can change them without a redeploy.'}
+            </span>
+          </span>
+        </label>
+      )}
+      {(!onLockInCodeChange || isMobileFramework(framework) || isServerFramework(framework)) && (
+        <p className="text-2xs text-fg-faint -mt-1" data-testid="code-wins-note">
+          Position, theme, trigger and colour: {CODE_WINS}
+        </p>
+      )}
 
       {/* Capture options */}
       <fieldset>

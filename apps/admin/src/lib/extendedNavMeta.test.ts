@@ -124,6 +124,8 @@ describe('onboardingNavBadge', () => {
       sdkHostMismatch: false,
     })
     expect(badge?.count).toBe(2)
+    // Same words as Home and the first-run screens, so the counts read as one checklist.
+    expect(badge?.label).toBe('Set up · 2 of 4 done')
   })
 })
 

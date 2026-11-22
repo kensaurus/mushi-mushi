@@ -306,5 +306,69 @@
         "detail": "Plan, Do, Check, Act and Ops: see which part of the loop is stuck."
       }
     ]
+  },
+  "install-wizard": {
+    "id": "install-wizard",
+    "title": "Add the report button with one command",
+    "summary": "Run npx mushi-mushi in your app’s folder. A dry run shows every change first; the real run signs you in once and adds the button.",
+    "video": "/walkthroughs/install-wizard.mp4?v=049f2b0f5e",
+    "poster": "/walkthroughs/install-wizard.jpg?v=d5f7c8417b",
+    "width": 1600,
+    "height": 1000,
+    "duration": 27.02,
+    "chapters": [
+      {
+        "t": 0.01,
+        "title": "In your app’s folder, run npx mushi-mushi",
+        "detail": "Add --dry-run the first time to see every change it would make. Nothing is written."
+      },
+      {
+        "t": 4.45,
+        "title": "Read the plan",
+        "detail": "It found React. It installs one package, writes two settings to .env.local and sends one test report."
+      },
+      {
+        "t": 11.16,
+        "title": "Run it for real and approve the sign-in once",
+        "detail": "Your browser opens, you approve, and it makes your free project and keys. There is nothing to copy or paste."
+      },
+      {
+        "t": 16.38,
+        "title": "The report button is in your app",
+        "detail": "Here in a made-up shop. Your users tap it, write one sentence, and the screen goes with it."
+      }
+    ]
+  },
+  "free-check": {
+    "id": "free-check",
+    "title": "Check your live app free",
+    "summary": "Type your live address on the home page and press one button. No sign-up, nothing to install.",
+    "video": "/walkthroughs/free-check.mp4?v=2ced1859d8",
+    "poster": "/walkthroughs/free-check.jpg?v=7f4f12ae35",
+    "width": 1600,
+    "height": 1000,
+    "duration": 30.03,
+    "chapters": [
+      {
+        "t": 0.01,
+        "title": "Type the address of your live app",
+        "detail": "On the Mushi Mushi home page. No sign-up, and nothing to add to your app."
+      },
+      {
+        "t": 7.03,
+        "title": "Press Check my app",
+        "detail": "It opens your public pages the way a first visitor does: dead links, missing images, code anyone can read."
+      },
+      {
+        "t": 11.47,
+        "title": "See what is wrong, most urgent first",
+        "detail": "Each problem says why it matters, in plain words."
+      },
+      {
+        "t": 18.78,
+        "title": "Paste the fix into Lovable, Bolt or your editor",
+        "detail": "Every problem comes with a short prompt. Your AI builder makes the fix."
+      }
+    ]
   }
 }
