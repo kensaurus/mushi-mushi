@@ -67,3 +67,32 @@ describe('ReportPdcaStory plan stage', () => {
     expect(buildStoryNodes(report({ processing_error: 'schema mismatch' }), idle).plan.state).toBe('failed')
   })
 })
+
+// A new user's first report said "click Dispatch fix" over two disabled Dispatch fix buttons (feedback 2026-11-22).
+describe('ReportPdcaStory fix step while the dispatch setup is unfinished', () => {
+  const withCode = report({ status: 'classified', component: 'src/pages/Login.tsx' } as Partial<ReportDetail>)
+  const setup = {
+    steps: [
+      { key: 'github', label: 'Connect GitHub', href: '/integrations/config#platform-card-github' },
+      { key: 'autofix', label: 'Turn on Autofix', href: '/integrations/config#integrations-codebase' },
+    ],
+    done: 2,
+    total: 4,
+  }
+
+  it('says what to set up first instead of "click Dispatch fix", and shows it inline', () => {
+    const doNode = buildStoryNodes(withCode, idle, false, setup).do
+    expect(doNode.state).toBe('idle')
+    expect(doNode.headline).toBe('No fix yet. To dispatch one: Connect GitHub · Turn on Autofix (2 of 4 done)')
+    expect(doNode.headline).not.toContain('click')
+    expect(doNode.setup).toBe(setup)
+  })
+
+  it('keeps "click Dispatch fix" when nothing is missing, and the no-code reason when there is no code', () => {
+    expect(buildStoryNodes(withCode, idle).do.headline).toBe('No fix dispatched yet — click "Dispatch fix" to start')
+    expect(buildStoryNodes(withCode, idle).do.setup).toBeUndefined()
+    const noCode = buildStoryNodes(report({ status: 'classified' }), idle, false, setup).do
+    expect(noCode.headline).toBe('No fix dispatched yet — no stack trace or file for an agent to change')
+    expect(noCode.setup).toBeUndefined()
+  })
+})
