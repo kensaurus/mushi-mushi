@@ -28,13 +28,6 @@ For per-package, per-bullet detail see each package's `CHANGELOG.md`.
 - **Change the bug widget's look from your editor.** — The MCP tools `get_widget_settings` and `set_widget_settings` read and change the widget's colour, corner, theme, trigger text and launcher for one app; the write returns what it was, what it is now and which settings changed. Installed SDKs pick the change up at their next start, with no redeploy. Project owners and admins only.
 - **`mushi widget show` and `mushi widget set`** — do the same from the terminal, for example `mushi widget set --accent '#3b5bdb' --position bottom-left --theme dark --trigger-text 'Report a bug'`. `--accent auto` goes back to matching your site; a bad colour, corner or theme is refused before anything is sent. A value your app's code sets wins over these settings.
 - **More settings on the script tag** — `data-accent`, `data-accent-text`, `data-locale` and `data-hide-on-routes` (comma-separated), so Lovable, Bolt and plain HTML sites can brand the widget without code.
-- **Script tag typos no longer slip through** — every attribute is checked. A value the widget does not take is skipped with one console warning naming the attribute and the values it accepts; it never throws or breaks the page.
-<<<<<<< HEAD
-=======
-- **Route rules take simple globs** — `hideOnRoutes: ['/admin/*', '/blog/**']`. An entry without `*` still matches anywhere in the path, exactly as before.
-- **Text on your accent stays readable** — when `accentText`, `data-accent-text` or a CSS `--mushi-accent-fg` is under 3:1 contrast on the accent, the widget uses black or white instead and says so in `Mushi.diagnose().warnings` (and in the console with `debug: true`). Your accent colour itself is never changed. A CSS `--mushi-accent` now also gets matching text colour instead of the panel background.
-- **oklch and lab accents are measured correctly** — for these contrast checks.
->>>>>>> origin/master
 
 ## v1.38.x
 
