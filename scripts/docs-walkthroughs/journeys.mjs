@@ -11,6 +11,7 @@
 
 const ADMIN = 'https://kensaur.us/mushi-mushi/admin'
 const APP = '67a6453c-375d-41d7-833a-b33471159442' // the mushi-mushi app
+const SITE = 'https://kensaur.us/mushi-mushi' // the public home page
 
 /** Text swapped out of every page before it is filmed. */
 export const PRIVACY = [
@@ -282,6 +283,84 @@ export const JOURNEYS = [
       { do: 'point', target: (p) => p.getByRole('link', { name: /^See what is failing/ }).first(), hold: 2000 },
       { do: 'chapter', title: 'Filter by stage', detail: 'Plan, Do, Check, Act and Ops: see which part of the loop is stuck.' },
       { do: 'click', target: (p) => p.getByRole('radio', { name: /^Stages/ }), ring: true, hold: 2400 },
+      { do: 'end' },
+    ],
+  },
+  {
+    // The free Production Check, run from the public home page in a fresh
+    // browser. Its one write is the check's start request. The site checked is
+    // glot.it, the maker's own public app (named in the README already); an
+    // address checked in the last 24 hours shows that report again, and the
+    // page says so.
+    id: 'free-check',
+    title: 'Check your live app free',
+    summary: 'Type your live address on the home page and press one button. No sign-up, nothing to install.',
+    colorScheme: 'light',
+    captionAt: 'top',
+    posterAt: 12,
+    allowNames: ['glot'],
+    allowWrites: [/\/v1\/public\/production-check$/],
+    // Answer the site's "Can we count which pages people visit?" with No, so
+    // the prompt stays out of the video and the recording is not counted.
+    init: "try { const get = Storage.prototype.getItem; Storage.prototype.getItem = function (k) { return String(k).startsWith('mushi_events_consent_') ? 'denied' : get.call(this, k) } } catch {}",
+    gif: { width: 800, fps: 6, colors: 64 },
+    steps: [
+      { do: 'goto', url: `${SITE}/`, ready: '#landing-check-url', settle: 1800 },
+      { do: 'start' },
+      { do: 'chapter', title: 'Type the address of your live app', detail: 'On the Mushi Mushi home page. No sign-up, and nothing to add to your app.' },
+      { do: 'point', target: '.landing-check-box', hold: 900 },
+      { do: 'type', target: '#landing-check-url', text: 'kensaur.us/glot-it', delay: 75, hold: 700 },
+      { do: 'chapter', title: 'Press Check my app', detail: 'It opens your public pages the way a first visitor does: dead links, missing images, code anyone can read.' },
+      { do: 'click', target: '.landing-check-box__button', ring: true, hold: 200 },
+      { do: 'wait', target: (p) => p.getByText('Production Check', { exact: true }), fast: 6, ms: 1400 },
+      { do: 'chapter', title: 'See what is wrong, most urgent first', detail: 'Each problem says why it matters, in plain words.' },
+      { do: 'point', target: (p) => p.locator('h2').filter({ hasText: /\(\d+\)\s*$/ }).first(), hold: 1600 },
+      { do: 'point', target: (p) => p.locator('li h3').first(), hold: 1600 },
+      { do: 'chapter', title: 'Paste the fix into Lovable, Bolt or your editor', detail: 'Every problem comes with a short prompt. Your AI builder makes the fix.' },
+      { do: 'scroll', target: (p) => p.getByText('Paste this into Lovable, Bolt or your AI editor', { exact: true }).first(), block: 'center', hold: 1200 },
+      { do: 'point', target: (p) => p.getByText('Paste this into Lovable, Bolt or your AI editor', { exact: true }).first().locator('xpath=following-sibling::p[1]'), hold: 2200 },
+      { do: 'point', target: (p) => p.getByRole('button', { name: /^Copy$/ }).first(), hold: 1600 },
+      { do: 'end' },
+    ],
+  },
+  {
+    // The install wizard. The terminal shows the real output of the published
+    // package's dry run (no sign-in, no files written), captured in a
+    // throwaway React app with an empty config home just before filming. The
+    // real run needs a browser sign-in, so the video narrates that step and
+    // ends on the report button in the made-up shop.
+    id: 'install-wizard',
+    title: 'Add the report button with one command',
+    summary: 'Run npx mushi-mushi in your app’s folder. A dry run shows every change first; the real run signs you in once and adds the button.',
+    colorScheme: 'dark',
+    captionAt: 'top',
+    posterAt: 9,
+    gif: { width: 800, fps: 6, colors: 64 },
+    terminal: {
+      files: {
+        'package.json': `${JSON.stringify({ name: 'my-app', private: true, type: 'module', scripts: { dev: 'vite', build: 'vite build' }, dependencies: { react: '^19.2.0', 'react-dom': '^19.2.0' }, devDependencies: { '@vitejs/plugin-react': '^5.0.0', vite: '^7.0.0' } }, null, 2)}\n`,
+        'index.html': '<!doctype html>\n<div id="root"></div>\n<script type="module" src="/src/main.tsx"></script>\n',
+        'src/main.tsx': "import { createRoot } from 'react-dom/client'\nimport App from './App'\n\ncreateRoot(document.getElementById('root')!).render(<App />)\n",
+        'src/App.tsx': 'export default function App() {\n  return <h1>My app</h1>\n}\n',
+      },
+      commands: { dryrun: ['mushi-mushi@latest', '--dry-run'] },
+    },
+    steps: [
+      { do: 'goto', url: 'https://terminal.example/', ready: '#term', settle: 800 },
+      { do: 'start' },
+      { do: 'chapter', title: 'In your app’s folder, run npx mushi-mushi', detail: 'Add --dry-run the first time to see every change it would make. Nothing is written.' },
+      { do: 'act', fn: (p) => p.evaluate(() => window.__term.type('npx mushi-mushi --dry-run')), hold: 500 },
+      { do: 'act', fn: (p) => p.evaluate(() => window.__term.run('dryrun')), hold: 600 },
+      { do: 'chapter', title: 'Read the plan', detail: 'It found React. It installs one package, writes two settings to .env.local and sends one test report.' },
+      { do: 'point', target: '#out-dryrun', hold: 4200 },
+      { do: 'chapter', title: 'Run it for real and approve the sign-in once', detail: 'Your browser opens, you approve, and it makes your free project and keys. There is nothing to copy or paste.' },
+      { do: 'ring', target: null },
+      { do: 'act', fn: (p) => p.evaluate(() => window.__term.type('npx mushi-mushi')), hold: 2600 },
+      { do: 'goto', url: 'https://plant-shop.example/', ready: '#total', settle: 300 },
+      { do: 'chapter', title: 'The report button is in your app', detail: 'Here in a made-up shop. Your users tap it, write one sentence, and the screen goes with it.' },
+      { do: 'wait', target: (p) => widget(p).locator('button.mushi-trigger'), ms: 400 },
+      { do: 'point', target: (p) => widget(p).locator('button.mushi-trigger'), hold: 1400 },
+      { do: 'click', target: (p) => widget(p).locator('button.mushi-trigger'), ring: true, hold: 2600 },
       { do: 'end' },
     ],
   },

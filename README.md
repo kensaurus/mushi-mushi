@@ -10,6 +10,10 @@ Mushi Mushi checks your live site, shows where people get stuck, and reviews you
 
 **[Check your live app free →](https://kensaur.us/mushi-mushi/docs/check?src=github-readme)** No sign-up, nothing to install.
 
+<a href="https://kensaur.us/mushi-mushi/docs/check?src=github-readme" title="Check your live app free">
+  <img src="./docs/media/walkthroughs/free-check.gif" alt="The free check in 30 seconds: an address is typed into 'Check your live app free' on the Mushi Mushi home page, Check my app is pressed, and the report lists what to fix soon, why it matters, and a prompt to paste into Lovable, Bolt or an AI editor" width="640" />
+</a>
+
 **[Add it to Lovable or Bolt with one prompt →](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt)** No terminal, about five minutes, free for three apps.
 
 Or, in your app's folder:
@@ -139,6 +143,8 @@ Pick your AI client and run one command; your editor can then ask what broke and
 ```bash
 npx mushi-mushi
 ```
+
+<img src="./docs/media/walkthroughs/install-wizard.gif" alt="Setup in a terminal: npx mushi-mushi --dry-run finds React and lists what a real run does (install one package, write two settings to .env.local, send a test report) without changing anything; then the report button appears in the corner of a demo shop and opens its feedback form" width="800" />
 
 Run it in your app's folder. What happens next:
 
