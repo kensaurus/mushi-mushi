@@ -915,6 +915,16 @@ export function FixesPage() {
     if (/^#(fixes-(stopped|release|automation)|merge-queue)/.test(location.hash)) setAutomationOpen(true)
   }, [location.hash, setAutomationOpen])
   const stoppedWithoutPr = useMemo(() => stoppedDispatches(mergedDispatches).length, [mergedDispatches])
+  // PRs the merge queue holds for a person (key used up, conflict, red CI), from
+  // the pipeline read already loaded: the collapsed row still says they need you.
+  const heldInQueue = useMemo(
+    () =>
+      (pipelineData?.stages ?? []).reduce(
+        (n, stage) => n + stage.groups.filter((g) => g.id.startsWith('held_')).reduce((m, g) => m + g.items.length, 0),
+        0,
+      ),
+    [pipelineData],
+  )
 
   if (loading) return <TableSkeleton rows={6} columns={5} showFilters label="Loading fixes" />
   if (error) return <ErrorAlert message="Failed to load fix attempts." onRetry={loadFixes} />
@@ -1065,6 +1075,7 @@ export function FixesPage() {
                   const notes = [
                     fixesStats.failed > 0 ? `${fixesStats.failed} stopped` : null,
                     stoppedWithoutPr > 0 ? `${stoppedWithoutPr} stopped without a PR` : null,
+                    heldInQueue > 0 ? `${heldInQueue} held in the merge queue` : null,
                   ].filter(Boolean)
                   if (!indexOff) return notes.length ? notes.join(' · ') : 'Merge queue, release train, Decide for me'
                   return (

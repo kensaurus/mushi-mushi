@@ -60,14 +60,15 @@ const mocks = vi.hoisted(() => ({
   hideFixesSnapshot: true,
   renderPosture: false,
   stats: null as Record<string, unknown> | null,
+  pipeline: null as unknown,
 }))
 
 vi.mock('../lib/supabase', () => ({ apiFetch: mocks.apiFetch }))
 vi.mock('../lib/usePageData', () => ({
   usePageData: (path: string | null) => ({
-    // The stats read; the pipeline read (release stations) is not under test here.
+    // The stats read, and the pipeline read (null unless a test sets it).
     data: path?.startsWith('/v1/admin/pipeline')
-      ? null
+      ? mocks.pipeline
       : { ...EMPTY_FIXES_STATS, hasAnyProject: true, ...(mocks.stats ?? {}) },
     loading: false,
     error: null,
@@ -142,6 +143,7 @@ beforeEach(() => {
   mocks.hideFixesSnapshot = true
   mocks.renderPosture = false
   mocks.stats = null
+  mocks.pipeline = null
   // Automation remembers open/closed in localStorage: start every test closed.
   window.localStorage.clear()
   vi.stubGlobal('ResizeObserver', class {
@@ -596,6 +598,20 @@ describe('FixesPage', () => {
       expect(document.querySelector('[data-testid="fixes-stopped-sandbox_timeout"]')).not.toBeNull()
     })
 
+    it('the collapsed row counts PRs the merge queue holds for a person', async () => {
+      mocks.fixes = [fix({})]
+      mocks.total = 1
+      mocks.pipeline = {
+        stages: [{ id: 'train', label: 'Release train', count: 2, stuck: 2, oldestAt: null, groups: [
+          { id: 'held_hold', stage: 'train', tone: 'stuck', label: '', count: 2, oldestAt: null, actions: [], settings: null, items: [{ id: 'x1' }, { id: 'x2' }] },
+          { id: 'not_queued', stage: 'train', tone: 'ok', label: '', count: 1, oldestAt: null, actions: [], settings: null, items: [{ id: 'x3' }] },
+        ] }],
+        trains: [],
+      }
+      await render('/fixes')
+      expect(document.querySelector('[data-testid="fixes-automation-summary"]')?.textContent).toContain('2 held in the merge queue')
+    })
+
     it('puts the one Automation row above the list', async () => {
       mocks.fixes = [fix({})]
       mocks.total = 1
@@ -623,6 +639,8 @@ describe('FixesPage', () => {
       await flush()
       expect(automationToggle()?.getAttribute('aria-expanded')).toBe('true')
       expect(document.querySelector('[data-testid="fixes-stopped-reasons"]')).not.toBeNull()
+      // A section anchor is not read as a fix id ("That fix is not in this project's…").
+      expect(document.body.textContent).not.toContain('not in this project')
     })
 
     it('shows Ready to merge only when a fix is ready', async () => {
