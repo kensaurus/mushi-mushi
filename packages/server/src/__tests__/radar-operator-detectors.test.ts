@@ -98,6 +98,15 @@ describe('provider_key_invalid', () => {
   it('a vendor outage is not a bad key: unknown when nothing else could be checked', () => {
     expect(evaluateProviderKeys([obs({ ok: false, failure: 'vendor_error' })], NOW).state).toBe('unknown')
   })
+  // 2026-11-24: an old Anthropic key, rejected but replaced by a working one,
+  // put "A connected key stopped working" in red on all 9 apps.
+  it('a rejected BYOK key next to a working key of the same provider was replaced, not broken', () => {
+    const old = obs({ credentialId: 'byok:old', kind: 'byok', provider: 'anthropic', name: 'old', ok: false, failure: 'credential_rejected', standing: true })
+    const fresh = obs({ credentialId: 'byok:new', kind: 'byok', provider: 'anthropic', name: 'new', ok: true })
+    expect(evaluateProviderKeys([old, fresh], NOW).findings).toHaveLength(0)
+    // A working key of another provider does not replace it.
+    expect(evaluateProviderKeys([old, { ...fresh, provider: 'openai' }], NOW).findings).toHaveLength(1)
+  })
   it('legacy credentials (GitHub token) are checked too', () => {
     const r = evaluateProviderKeys([obs({ credentialId: 'legacy:github', kind: 'github', provider: null, name: 'GitHub', ok: false, failure: 'credential_rejected' })], NOW)
     expect(r.findings[0].fix).toContain('github.com/settings/tokens')

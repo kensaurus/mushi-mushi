@@ -27,6 +27,7 @@ import {
 } from 'react'
 import type { useWhatsNew } from './WhatsNew'
 import { Badge } from './ui'
+import { usePublishedVersion } from '../lib/publishedVersion'
 import {
   IconDashboard,
   IconGauge,
@@ -275,6 +276,8 @@ function ChangelogHighlightRow({
 
 export function VersionBadge({ whatsNew }: VersionBadgeProps) {
   const [open, setOpen] = useState(false)
+  // The build constant goes stale after each npm release; the catalog doesn't.
+  const latestWeb = usePublishedVersion('@mushi-mushi/web', __SDK_WEB_VERSION__)
   // Hover opens the popover before the click lands, so a plain toggle closed
   // it again and the chip seemed to open nothing. A click right after a
   // hover-open keeps it open.
@@ -359,8 +362,8 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
         // This is the latest published web SDK, not the active project's
         // install (an RN project read it as its own version). The project's
         // installed SDK lives on Connect.
-        aria-label={`Versions — latest web SDK release ${__SDK_WEB_VERSION__}, Admin console ${__APP_VERSION__}${whatsNew.hasUnread ? ', new updates available' : ''}`}
-        title={`Latest @mushi-mushi/web release ${__SDK_WEB_VERSION__} · Admin app ${__APP_VERSION__} · ${__BUILD_SHA__}. Your project's installed SDK is on Connect.`}
+        aria-label={`Versions — latest web SDK release ${latestWeb}, Admin console ${__APP_VERSION__}${whatsNew.hasUnread ? ', new updates available' : ''}`}
+        title={`Latest @mushi-mushi/web release ${latestWeb} · Admin app ${__APP_VERSION__} · ${__BUILD_SHA__}. Your project's installed SDK is on Connect.`}
         className={`group relative inline-flex min-w-0 max-w-full items-center gap-1.5 h-6 px-2 rounded-sm hover:bg-surface-overlay motion-safe:transition-[transform,opacity] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
           open ? 'bg-surface-overlay' : ''
         }`}
@@ -372,7 +375,7 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
           title="@mushi-mushi/web (browser SDK on npm)"
         >
           <span className={SDK_LABEL}>Latest </span>
-          <span className={SDK_VER}>{__SDK_WEB_VERSION__}</span>
+          <span className={SDK_VER}>{latestWeb}</span>
         </span>
         <span
           aria-hidden
@@ -385,7 +388,7 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
           className="hidden lg:inline font-mono text-2xs leading-none"
           title="@mushi-mushi/web"
         >
-          <span className={SDK_VER}>{__SDK_WEB_VERSION__}</span>
+          <span className={SDK_VER}>{latestWeb}</span>
         </span>
         {/* The admin build number is a diagnostic, not a glance-value: it cost
             ~90px of permanent header width next to the SDK version embedders
@@ -471,7 +474,7 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
             <div className="mt-2 space-y-2 text-2xs max-h-[13.5rem] overflow-y-auto overscroll-contain pr-0.5">
               <PackageGroup id="SDK">
                 <PackageRow name="@mushi-mushi/core"    version={__SDK_CORE_VERSION__}  hint="Core runtime"          npmName="@mushi-mushi/core" />
-                <PackageRow name="web"                  version={__SDK_WEB_VERSION__}   hint="Browser widget (Shadow DOM)" npmName="@mushi-mushi/web" />
+                <PackageRow name="web"                  version={latestWeb}   hint="Browser widget (Shadow DOM)" npmName="@mushi-mushi/web" />
                 <PackageRow name="react"                version={__SDK_REACT_VERSION__} hint="React bindings"         npmName="@mushi-mushi/react" />
                 <PackageRow name="vue"                  version={__SDK_VUE_VERSION__}   hint="Vue bindings"           npmName="@mushi-mushi/vue" />
                 <PackageRow name="svelte"               version={__SDK_SVELTE_VERSION__} hint="Svelte bindings"       npmName="@mushi-mushi/svelte" />

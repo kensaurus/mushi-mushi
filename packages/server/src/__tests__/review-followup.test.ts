@@ -64,7 +64,9 @@ import {
   buildFollowupPrompt,
   CI_LOG_EXCERPT_MAX_CHARS,
   ciHeadState,
+  ciHeadStateWithChecks,
   isDraftGuardStop,
+  isDraftStopOnlyPending,
   extractCiLogExcerpt,
   expireIfStale,
   FOLLOWUP_MAX_PER_PR,
@@ -1285,6 +1287,22 @@ describe('CI repair: rules', () => {
     // A job that failed in a real step is not the guard, even if the guard step also failed.
     expect(isDraftGuardStop(ciJob({ steps: [{ name: 'Draft PRs run no CI', conclusion: 'failure' }, { name: 'Typecheck', conclusion: 'failure' }] }) as never)).toBe(false)
     expect(isDraftGuardStop(ciJob({ conclusion: 'success', steps: [{ name: 'Draft PRs run no CI', conclusion: 'success' }] }) as never)).toBe(false)
+  })
+
+  // 2026-11-24: 68 open fix PRs read "CI still running after 3 hours" for up to
+  // 22 days; the collector never stored the run after "ready for review", while
+  // the PR's own check summary said success.
+  it("a draft-stop-only pending settles to green when the PR's GitHub checks passed", () => {
+    const draftGate = ciJob({ job_name: 'CI Gate', steps: [{ name: 'Draft PRs run no CI', conclusion: 'failure' }] })
+    expect(isDraftStopOnlyPending([draftGate] as never)).toBe(true)
+    expect(ciHeadStateWithChecks([draftGate] as never, 'success')).toEqual({ state: 'green', failing: [] })
+    // Anything but success keeps the collected state.
+    expect(ciHeadStateWithChecks([draftGate] as never, 'failure').state).toBe('pending')
+    expect(ciHeadStateWithChecks([draftGate] as never, null).state).toBe('pending')
+    // A job really running is still pending, whatever the summary says.
+    const running = [draftGate, ciJob({ job_id: 7010, job_name: 'Typecheck', conclusion: null, ci_kind: 'running' })] as never
+    expect(isDraftStopOnlyPending(running)).toBe(false)
+    expect(ciHeadStateWithChecks(running, 'success').state).toBe('pending')
   })
 
   it('a check that also fails on the base branch is not counted; all of them on the base means no repair', () => {

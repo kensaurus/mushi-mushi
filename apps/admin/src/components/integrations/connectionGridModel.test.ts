@@ -101,7 +101,7 @@ describe('buildConnectionGrid', () => {
     expect(tile.view).toEqual(shared)
     // Importing automatically is working, not "needs attention" over a missing webhook.
     expect(tile.view.state).toBe('working')
-    expect(tile.lastLabel).toBe('Last import')
+    expect(tile.lastLabel).toBe('Imported')
   })
 
   it('a configured tool with a failing check needs you; an unconfigured one does not', () => {

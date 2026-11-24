@@ -852,9 +852,15 @@ export function settingsNavBadge(stats: NavStatSlices['settings']): WorkspaceNav
   // One number with the Settings page banner ("3 keys need you"): servers from 2026-11-19 send it.
   const needing = stats.byokKeysNeedingAction
   if (needing != null) {
-    return needing > 0
-      ? attentionBadge(needing, 'warn', `${needing} AI key${needing === 1 ? '' : 's'} need${needing === 1 ? 's' : ''} you`)
-      : null
+    if (needing <= 0) return null
+    // Only tidy-up (a replaced key, a second copy): the page banner says "Nothing
+    // is broken", so an amber "2 AI keys need you" beside it read as an outage
+    // (2026-11-24). Grey count, like other inventory badges.
+    const broken = stats.byokKeysFailing + (stats.byokKeysExpiring ?? 0) + stats.byokKeysUntested
+    if (broken === 0) {
+      return inventoryBadge(needing, `${needing} old AI key${needing === 1 ? '' : 's'} to tidy up; nothing is broken`)
+    }
+    return attentionBadge(needing, 'warn', `${needing} AI key${needing === 1 ? '' : 's'} need${needing === 1 ? 's' : ''} you`)
   }
   if (stats.byokKeysFailing > 0) {
     return attentionBadge(
