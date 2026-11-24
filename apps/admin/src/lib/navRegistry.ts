@@ -770,9 +770,9 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   // ── Palette-only utility routes ───────────────────────────────────────────
   {
     id: 'nav:overview',
-    path: '/dashboard?view=apps',
+    path: '/portfolio?view=apps',
     label: 'Overview',
-    // A view of Home now (Plan 021): searchable, not a sidebar entry. Named
+    // A view of Apps now (ADR 0069; Home's until then): searchable, not a sidebar entry. Named
     // Overview so "All apps" means only /portfolio (ADR 0027).
     inSidebar: false,
     sectionId: 'act',
@@ -826,9 +826,9 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   },
   {
     id: 'nav:activity',
-    path: '/dashboard?view=users',
+    path: '/portfolio?view=users',
     label: 'User activity',
-    // A view of Home now (Plan 021): searchable, not a sidebar entry.
+    // A view of Apps now (ADR 0069; Home's until then): searchable, not a sidebar entry.
     inSidebar: false,
     sectionId: 'act',
     pdcaStage: 'act',
@@ -842,9 +842,9 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     // (docs: apps/docs/content/admin/users.mdx), so the customer-facing
     // product-analytics page lives at `/analytics`.
     id: 'nav:analytics',
-    path: '/dashboard?view=funnels',
+    path: '/portfolio?view=funnels',
     label: 'Users & funnels',
-    // A view of Home now (Plan 021): searchable, not a sidebar entry.
+    // A view of Apps now (ADR 0069; Home's until then): searchable, not a sidebar entry.
     inSidebar: false,
     sectionId: 'act',
     pdcaStage: 'act',
@@ -855,9 +855,9 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   },
   {
     id: 'nav:intelligence',
-    path: '/dashboard?view=insights',
+    path: '/portfolio?view=insights',
     label: 'Weekly insights',
-    // A view of Home now (Plan 021): searchable, not a sidebar entry.
+    // A view of Apps now (ADR 0069; Home's until then): searchable, not a sidebar entry.
     inSidebar: false,
     sectionId: 'act',
     pdcaStage: 'act',
@@ -868,9 +868,9 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   },
   {
     id: 'nav:growth',
-    path: '/dashboard?view=growth',
+    path: '/portfolio?view=growth',
     label: 'Growth',
-    // A view of Home now (Plan 021): searchable, not a sidebar entry.
+    // A view of Apps now (ADR 0069; Home's until then): searchable, not a sidebar entry.
     inSidebar: false,
     sectionId: 'act',
     pdcaStage: 'act',
@@ -1189,7 +1189,7 @@ export function routeFallbackTitle(pathname: string): string | null {
  *   stay separate but are named for what they do: Home (/dashboard, summary)
  *   vs To-do (/inbox, decisions) vs Improvement runs (/iterate); Bugs
  *   (/reports) vs Processing jobs (/queue); All apps (/portfolio, setup and
- *   holes) vs Overview (/dashboard?view=apps, 7-day usage).
+ *   holes) vs Overview (/portfolio?view=apps, 7-day usage).
  * - Plan 021 (owner, 2026-10-06) supersedes the "stay separate" part for three
  *   families: Home (/dashboard), Mushi health (/health) and Team (/team) each
  *   host their former pages as `?view=` views (lib/pageHubs.ts); the old

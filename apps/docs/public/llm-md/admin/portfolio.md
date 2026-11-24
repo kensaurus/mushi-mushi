@@ -11,6 +11,11 @@ description: The Apps page in Mushi Mushi shows every app in a team, with each a
 
 **Route:** `/portfolio` (sidebar: More pages → Ship & watch → **Apps**, or switch the Apps Lab on under **Settings → Display & sidebar → Labs** to keep it in the sidebar; formerly Portfolio. Also from the team switcher: **All this team's apps**)
 
+Apps has view tabs under its title: **Apps** (this page), [Overview](/admin/overview)
+(`?view=apps`), [User activity](/admin/activity) (`?view=users`), **Users & funnels**
+(`?view=funnels`) and [Weekly insights](/admin/intelligence) (`?view=insights`). They
+were Home's tabs until November 2026; old `/dashboard?view=…` links open them here.
+
 > **Scenario:** You run five apps. One has an old Mushi Mushi SDK, two have the same
 > oversized-file finding, and one never got Sentry set up. You want to see all
 > of that in one place and fix each problem once, not five times.

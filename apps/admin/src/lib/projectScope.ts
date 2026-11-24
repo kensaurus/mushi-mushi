@@ -94,16 +94,23 @@ function matchesRoute(pathname: string, route: string): boolean {
 const TEAM_ACCOUNT_WIDE_VIEWS: readonly string[] = ['members']
 
 /**
+ * Apps (/portfolio) views that read the open app, never every app: they were
+ * Home's views until ADR 0069 and still show one app at a time.
+ */
+const APPS_ONE_APP_VIEWS: readonly string[] = ['users', 'funnels', 'insights']
+
+/**
  * How a route behaves in all-apps mode. `search` defaults to the current URL's
- * query; it only matters for the Team page's views.
+ * query; it only matters for the Team and Apps pages' views.
  */
 export function allAppsSupportFor(pathname: string, search?: string): AllAppsSupport {
   // `/projects/:pid/qa-coverage/:storyId` is one app's story (a redirect).
   if (/^\/projects\/[^/]+\//.test(pathname)) return 'single'
+  const query = () => search ?? (typeof window !== 'undefined' ? window.location.search : '')
+  if (pathname === '/portfolio' && APPS_ONE_APP_VIEWS.includes(new URLSearchParams(query()).get('view') ?? '')) return 'single'
   if (pathname === '/team') {
-    const query = search ?? (typeof window !== 'undefined' ? window.location.search : '')
     // No `view` is the first view, Members (lib/pageHubs.ts drops it from the URL).
-    const view = new URLSearchParams(query).get('view') ?? 'members'
+    const view = new URLSearchParams(query()).get('view') ?? 'members'
     if (TEAM_ACCOUNT_WIDE_VIEWS.includes(view)) return 'account'
   }
   if (ALL_APPS_EXACT.includes(pathname)) return 'combined'

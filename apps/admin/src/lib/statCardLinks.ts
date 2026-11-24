@@ -5,7 +5,7 @@
  */
 
 import { NAV_REGISTRY } from './navRegistry'
-import { HEALTH_HUB, HOME_HUB, TEAM_HUB, legacyHubRoutes, type PageHub } from './pageHubs'
+import { APPS_HUB, HEALTH_HUB, TEAM_HUB, legacyHubRoutes, type PageHub } from './pageHubs'
 
 /* ── Dashboard ─────────────────────────────────────────────────────────── */
 
@@ -282,7 +282,7 @@ const LEGACY_ROUTE: ReadonlyMap<string, { hub: PageHub; viewId: string }> = new 
   legacyHubRoutes().map((r) => [r.path, { hub: r.hub, viewId: r.viewId }] as const),
 )
 
-const HUBS_BY_PATH: ReadonlyMap<string, PageHub> = new Map([HOME_HUB, HEALTH_HUB, TEAM_HUB].map((h) => [h.path, h] as const))
+const HUBS_BY_PATH: ReadonlyMap<string, PageHub> = new Map([APPS_HUB, HEALTH_HUB, TEAM_HUB].map((h) => [h.path, h] as const))
 
 /** Tab ids as the pages name them, in plain words. Unknown ids are title-cased. */
 const TAB_LABELS: Record<string, string> = {

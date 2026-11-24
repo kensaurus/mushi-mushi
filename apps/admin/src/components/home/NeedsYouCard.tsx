@@ -100,6 +100,20 @@ export function NeedsYouCard({ section, fixFirst, leading = [], partial = [], ha
   const hasRootCauses = fixFirst?.status === 'ok' && (fixFirst.data ?? []).length > 0
   // Every read answered, nothing waits, and the app has real reports.
   const trulyClear = !hasRootCauses && partial.length === 0 && hasReports
+  // Nothing needs you: one calm line, not a card (ADR 0069). The health
+  // lights under it are the app's live status.
+  if (section.status === 'ok' && !hasRootCauses && leading.length + (section.data ?? []).length === 0) {
+    return (
+      <div id="home-needs-you" aria-label="Needs you" role="status" data-testid="home-needs-you-clear" className="flex min-w-0 items-center gap-2">
+        {trulyClear ? (
+          <Mascot {...HOME_ALL_CLEAR} size="sm" />
+        ) : (
+          <p className="text-sm text-fg-secondary">Nothing needs you right now.</p>
+        )}
+        {partial.length > 0 && <p className="text-2xs text-fg-faint">Some checks could not be read just now, so this may be missing an item.</p>}
+      </div>
+    )
+  }
   return (
     <Section title="Needs you" id="home-needs-you">
       {primaryElsewhere && (
@@ -113,13 +127,10 @@ export function NeedsYouCard({ section, fixFirst, leading = [], partial = [], ha
           const all = [...leading, ...items].slice(0, NEEDS_YOU_LIMIT)
           return (
             <>
-              {all.length === 0 && trulyClear ? (
-                <div data-testid="home-needs-you-clear">
-                  <Mascot {...HOME_ALL_CLEAR} size="md" />
-                </div>
-              ) : all.length === 0 ? (
+              {/* Only root causes wait (an empty list without them is the one line above). */}
+              {all.length === 0 ? (
                 <p className="text-sm text-fg-secondary" data-testid="home-needs-you-clear">
-                  {hasRootCauses ? 'Nothing else needs you right now.' : 'Nothing needs you right now. Mushi Mushi will list it here when something does.'}
+                  Nothing else needs you right now.
                 </p>
               ) : (
                 <ol className="divide-y divide-edge-subtle" data-testid="home-needs-you">

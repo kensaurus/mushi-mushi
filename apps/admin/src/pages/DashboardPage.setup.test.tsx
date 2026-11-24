@@ -200,6 +200,7 @@ describe('Home while a required setup step is open', () => {
 })
 
 // Fresh-eyes sweep 2026-11-18: "Needs you" sat in row 3, under the hero and four green lights.
+// ADR 0069: it is the first thing on Home, always (after the setup checklist while setup is open).
 describe('Home: problems first', () => {
   let container: HTMLDivElement
   let root: Root
@@ -213,10 +214,8 @@ describe('Home: problems first', () => {
     container.remove()
   })
 
-  it('puts the Needs you row above the health lights while something needs the owner', async () => {
-    const { DashboardPage, homeNeedsFirst } = await import('./DashboardPage')
-    expect(homeNeedsFirst(home as never)).toBe(true)
-    expect(homeNeedsFirst({ needsYou: section([]), fixFirst: section([]) } as never)).toBe(false)
+  it('puts the Needs you row above the health lights', async () => {
+    const { DashboardPage } = await import('./DashboardPage')
     act(() => {
       root.render(createElement(MemoryRouter, null, createElement(DashboardPage)))
     })
