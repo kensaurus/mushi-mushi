@@ -16,14 +16,20 @@ const SEMVER_RE = /^\d+\.\d+\.\d+$/
 const TIMEOUT_MS = 2_500
 const cache = new Map<string, Promise<string | null>>()
 
-/** Returns the catalog's version when it is a plain semver, else the fallback. */
+/**
+ * The catalog's version when it is a plain semver, else the fallback.
+ * @internal Exported for unit tests only.
+ */
 export function pickPublishedVersion(catalogVersion: unknown, fallback: string): string {
   return typeof catalogVersion === 'string' && SEMVER_RE.test(catalogVersion.trim())
     ? catalogVersion.trim()
     : fallback
 }
 
-/** The catalog version for `pkg`, fetched once per page session. Never rejects. */
+/**
+ * The catalog version for `pkg`, fetched once per page session. Never rejects.
+ * @internal Exported for unit tests only.
+ */
 export function getPublishedVersion(pkg: string): Promise<string | null> {
   const hit = cache.get(pkg)
   if (hit) return hit

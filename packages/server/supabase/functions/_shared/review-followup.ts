@@ -323,6 +323,7 @@ function latestCiJobs(rows: readonly CiJobForRepair[]): CiJobForRepair[] {
  * of runs per repo, so on a busy repo the run after "ready for review" can be
  * missed for good: 68 open fix PRs read "CI still running after 3 hours" for
  * up to 22 days while GitHub showed every check green (2026-11-24).
+ * @internal Exported for unit tests only.
  */
 export function isDraftStopOnlyPending(rows: readonly CiJobForRepair[]): boolean {
   const jobs = latestCiJobs(rows)

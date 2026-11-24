@@ -524,7 +524,7 @@ describe('a report with no code location', () => {
     ['new + low', { status: 'new', severity: 'low', stage1_classification: { category: 'bug' } }],
   ] as const
 
-  it.each(triageable)('%s: no dispatch CTA, the reason, and "Dispatch anyway" as a ghost action', (_, overrides) => {
+  it.each(triageable)('%s: no dispatch CTA, the reason, and "Dispatch anyway" as a ghost action', (label, overrides) => {
     const request = vi.fn()
     const rec = deriveRecommendation(makeReport(overrides), makeDispatchState(), 0, request, Date.now(), undefined, false)
     expect(rec.cta).toBeUndefined()
@@ -539,7 +539,7 @@ describe('a report with no code location', () => {
     const withCode = deriveRecommendation(makeReport(overrides), makeDispatchState(), 0, request, Date.now(), undefined, true)
     // With a code location only the urgent "Confirm priority" card adds anything; the two
     // info cards were a second "Dispatch fix" above the bar's own (2026-11-24).
-    expect(withCode.repeatsTriageBar).toBe(overrides.severity === 'critical' ? undefined : true)
+    expect(withCode.repeatsTriageBar).toBe(label === 'new + critical' ? undefined : true)
   })
 
   it('"Dispatch anyway" is disabled while the gate blocks', () => {
