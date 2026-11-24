@@ -339,7 +339,7 @@ export function OnboardingPage() {
       case 'FORBIDDEN':
         return 'Not allowed in this team'
       case 'INVALID_NAME':
-        return 'Project name required'
+        return 'App name required'
       case 'NETWORK_ERROR':
         return 'Couldn\u2019t reach the server'
       default:
@@ -477,21 +477,21 @@ export function OnboardingPage() {
       <div>
         <h3 className="text-sm font-semibold text-fg">
           {setupCliMode && setup.hasAnyProject
-            ? 'Create a new project'
+            ? 'Add another app'
             : setupCliMode
-              ? 'Create your project'
-              : 'Create your first project'}
+              ? 'Add your app'
+              : 'Add your first app'}
         </h3>
         <ContainedBlock tone="muted" className="mt-2">
           <p className="text-xs text-fg-muted">
-            A project is one app: its bug reports, its key and its fixes (the sidebar lists them under Apps). Name it after your app.
+            Each app keeps its own bug reports, key and fixes (the sidebar lists them under Apps). Use your app's name.
           </p>
         </ContainedBlock>
       </div>
       <div className="flex gap-2">
         <div className="flex-1">
           <Input
-            label="Project name"
+            label="App name"
             helpId="onboarding.project_name"
             placeholder="e.g. My SaaS App"
             value={projectName}
@@ -545,7 +545,7 @@ export function OnboardingPage() {
             <p className="text-3xs font-semibold text-fg-secondary" data-testid="onboarding-first-run-progress">
               Set up · {firstRunProgress.done} of {firstRunProgress.total} done
             </p>
-            <h2 className="mt-0.5 text-base font-semibold text-fg">Name your project</h2>
+            <h2 className="mt-0.5 text-base font-semibold text-fg">Name your app</h2>
           </div>
           {/* The field guide says what this step does: the name is the only
               input, and the report key is made for you. */}

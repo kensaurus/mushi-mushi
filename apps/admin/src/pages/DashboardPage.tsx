@@ -34,6 +34,7 @@ import { QuotaBanner } from '../components/dashboard/QuotaBanner'
 import { AppCard, AppCardSkeleton } from '../components/home/AppCard'
 import { HealthStrip, HealthStripSkeleton } from '../components/home/HealthStrip'
 import { NeedsYouCard, NeedsYouSkeleton } from '../components/home/NeedsYouCard'
+import { needsYouWithoutSetupStep } from '../lib/homeSetupFocus'
 import { ReleaseCard, ReleaseSkeleton } from '../components/home/ReleaseCard'
 import { SitemapCard, SitemapSkeleton } from '../components/home/SitemapCard'
 import { WeekCard, WeekSkeleton } from '../components/home/WeekCard'
@@ -120,14 +121,21 @@ export function DashboardPage() {
   // information), so the checklist is the one place.
   const openStep = setupIncomplete ? (project?.steps.find((s) => s.required && !s.complete) ?? null) : null
 
+  // The checklist owns the report-button step while it is open: Needs you and the health lights
+  // drop their copies of it, and the release / pages / week cards (all empty on a new app) wait
+  // until setup is done (fresh-account walk, 2026-11-24).
+  const sdkStepOpen = openStep?.id === 'sdk_installed'
+  const needsYou = data && sdkStepOpen ? needsYouWithoutSetupStep(data.needsYou) : data?.needsYou
+  const hasRootCauses = data?.fixFirst?.status === 'ok' && (data.fixFirst.data ?? []).length > 0
+  const needsRowEmpty = sdkStepOpen && !hasRootCauses && (needsYou?.data ?? []).length === 0
   const needsRow =
-    data && activeProjectId ? (
+    data && needsYou && activeProjectId && !needsRowEmpty ? (
       // Needs you takes the full width; beside the taller Release card a
       // one-line Needs you left ~100 px of empty card (round-3 sweep
       // 2026-11-19). Release moved into the stacked columns below.
       <div data-testid="home-needs-row">
         <NeedsYouCard
-          section={data.needsYou}
+          section={needsYou}
           fixFirst={data.fixFirst}
           partial={data.partial}
           hasReports={!!project && project.report_count > 0}
@@ -205,7 +213,7 @@ export function DashboardPage() {
               <AppCard section={data.app} projectId={activeProjectId} canEdit={ent.canEditProject} onRefreshed={() => void reload()} />
             </div>
             <div className="lg:col-span-7">
-              <HealthStrip section={data.health} />
+              <HealthStrip section={data.health} hideSetupConnect={sdkStepOpen} />
             </div>
           </div>
 
@@ -215,11 +223,13 @@ export function DashboardPage() {
               tall one (Pages beside Access) left 100-200 px of empty space
               (round-3 sweep 2026-11-19). */}
           <div className="grid items-start gap-3 lg:grid-cols-2 [&>*]:min-w-0" data-testid="home-columns">
-            <div className="flex flex-col gap-3">
-              <ReleaseCard section={data.release} projectId={activeProjectId} />
-              <SitemapCard section={(shown ?? data).sitemap} />
-              <WeekCard section={data.week} />
-            </div>
+            {openStep ? null : (
+              <div className="flex flex-col gap-3">
+                <ReleaseCard section={data.release} projectId={activeProjectId} />
+                <SitemapCard section={(shown ?? data).sitemap} />
+                <WeekCard section={data.week} />
+              </div>
+            )}
             <div className="flex flex-col gap-3">
               <AccessCard section={data.access} auditLog={ent.has('audit_log')} />
               <ActivityCard section={(shown ?? data).activity} />

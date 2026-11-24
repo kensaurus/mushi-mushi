@@ -13,7 +13,7 @@ export interface ConsoleRouteEntry {
 }
 
 export const CONSOLE_ROUTES: ConsoleRouteEntry[] = [
-  { path: "/onboarding", label: "Set up", description: "Three-step setup: create a project, install the widget, send a test bug.", group: "Start", keywords: ["get started","setup","install","quickstart","first run","widget","snippet","project"] },
+  { path: "/onboarding", label: "Set up", description: "Four steps: name your app, get its key, add the report button, get your first bug report.", group: "Start", keywords: ["get started","setup","install","quickstart","first run","widget","snippet","project"] },
   { path: "/connect", label: "Connect", description: "Wire up your editor and app: SDK install, MCP for Cursor/Claude, upgrade PRs.", group: "Start", keywords: ["connect & update","install","sdk","upgrade","update","mcp","cursor","npm","package","editor"] },
   { path: "/integrations/config", label: "Integrations", description: "Connect services: Slack, Sentry, GitHub, Linear, Discord — tokens, webhooks, health.", group: "Start", keywords: ["slack","discord","github","sentry","linear","stripe","webhook","connect","plug","integrations","services"] },
   { path: "/mcp", label: "Editor agents", description: "Connect Cursor, Claude and other coding agents to this app through MCP.", group: "Start", keywords: ["mcp","agent help","claude","cursor","agent","tools","context","windsurf","editor"] },

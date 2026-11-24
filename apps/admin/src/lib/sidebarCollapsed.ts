@@ -25,14 +25,17 @@ import { usePersistentState } from './usePersistentState'
 
 const LEGACY_KEY = 'mushi:sidebarCollapsed:v1'
 
-/** The pre-usePersistentState value, or collapsed (the default) when absent. */
+/**
+ * The pre-usePersistentState value, or expanded when absent. A first-time user
+ * got the 48px icon rail with no labels and could not read the console's nine
+ * pages (fresh-account walk, 2026-11-24); a stored choice still wins.
+ */
 function legacySidebarCollapsed(): boolean {
   try {
     const stored = typeof window === 'undefined' ? null : window.localStorage.getItem(LEGACY_KEY)
-    if (stored === '0') return false
-    return true
+    return stored === '1'
   } catch {
-    return true
+    return false
   }
 }
 

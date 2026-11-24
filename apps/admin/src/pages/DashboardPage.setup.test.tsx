@@ -77,9 +77,13 @@ const home = {
     thumbnailState: { available: true, canRefresh: false, reason: 'Add your live site address to take a screenshot.', lastError: null, lastAttemptAt: null },
   }),
   health: section([
-    { id: 'sdk', label: 'SDK sending', status: 'not_connected', light: 'off', headline: 'Never checked in', detail: null, at: null, href: '/connect', connect: { label: 'Set up the SDK', to: '/connect' } },
+    { id: 'sdk', label: 'SDK sending', status: 'not_connected', light: 'off', headline: 'Never checked in', detail: null, at: null, href: '/connect', connect: { label: 'Set up the SDK', to: `/connect?project=${PROJECT}#connect-sdk-health` } },
   ]),
-  needsYou: section([{ id: 'sdk_silent', impact: 65, text: 'Your app is not sending to Mushi yet, so users cannot report bugs.', action: { label: 'Fix it', to: '/connect' } }]),
+  // The server's real hrefs: the setup duplicate goes to Connect's SDK health section.
+  needsYou: section([
+    { id: 'sdk_silent', impact: 65, text: 'Your app is not sending to Mushi yet, so users cannot report bugs.', action: { label: 'Set up the SDK', to: `/connect?project=${PROJECT}#connect-sdk-health` } },
+    { id: 'critical_open', impact: 90, text: '1 critical bug is waiting for a fix.', action: { label: 'Open', to: '/reports?status=open&severity=critical' } },
+  ]),
   release: { status: 'not_connected', data: null, connect: { label: 'Connect GitHub', to: '/connect' }, error: null },
   sitemap: { status: 'not_connected', data: null, connect: { label: 'Install the SDK', to: '/connect' }, error: null },
   week: section([]),
@@ -177,12 +181,18 @@ describe('Home while a required setup step is open', () => {
     expect(container.textContent).not.toContain('Nothing waiting on you')
   })
 
-  it('still shows the Home sections: what needs you, how to connect, and which read failed', async () => {
+  // Fresh-account walk 2026-11-24: the checklist owns the report-button step, so Needs you and
+  // the SDK light drop their copies of it, and the release / pages / week cards wait for setup.
+  it('keeps real needs and read failures, without repeating the open setup step', async () => {
     await mount()
     const text = container.textContent ?? ''
-    expect(container.querySelector('[data-testid="home-needs-you"]')!.textContent).toContain('Your app is not sending to Mushi yet')
-    expect(container.querySelector('[data-testid="home-health-sdk"]')!.textContent).toContain('Add the report button')
-    expect(text).toContain('Connect your GitHub repo to see fixes move toward a release.')
+    const needs = container.querySelector('[data-testid="home-needs-you"]')!.textContent
+    expect(needs).toContain('1 critical bug is waiting for a fix.')
+    expect(needs).not.toContain('Your app is not sending to Mushi yet')
+    const sdkLight = container.querySelector('[data-testid="home-health-sdk"]')!.textContent
+    expect(sdkLight).toContain('Never checked in')
+    expect(sdkLight).not.toContain('Add the report button')
+    expect(text).not.toContain('Connect your GitHub repo to see fixes move toward a release.')
     expect(text).toContain('Could not read access and details just now.')
     // An app with reports opens Home with the explainer closed.
     expect(container.querySelector('[data-testid="home-how-this-works"] button')!.getAttribute('aria-expanded')).toBe('false')

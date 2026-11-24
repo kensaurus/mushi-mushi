@@ -203,7 +203,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     label: 'Set up',
     sectionId: 'start',
     iconKey: 'bolt',
-    paletteDescription: 'Three-step setup: create a project, install the widget, send a test bug.',
+    paletteDescription: 'Four steps: name your app, get its key, add the report button, get your first bug report.',
     paletteKeywords: ['get started', 'setup', 'install', 'quickstart', 'first run', 'widget', 'snippet', 'project'],
     paletteGroup: 'Start',
   },
