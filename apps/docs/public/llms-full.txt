@@ -21176,8 +21176,8 @@ description: The User activity view on Home in the Mushi Mushi console shows an 
 
 # User activity
 
-**Route:** `/dashboard?view=users` (**Home → User activity**). The old `/activity` link
-redirects there.
+**Route:** `/portfolio?view=users` (**Apps → User activity**). The old `/activity` and
+`/dashboard?view=users` links redirect there.
 
 > **Scenario:** You want to know whether end users are actually opening sessions
 > in this project, which routes they hit, and how many of them are identified
@@ -22594,7 +22594,7 @@ description: "Home in the Mushi Mushi console shows how one app is doing: is it 
 
 # Home
 
-**Route:** `/dashboard` (sidebar: **Home**, first tab **Today**)
+**Route:** `/dashboard` (sidebar: **Home**)
 
 > **Scenario:** You open Mushi Mushi in the morning and want to know in 30 seconds whether
 > your app is up, whether anything broke overnight, and what needs you today.
@@ -22607,12 +22607,17 @@ is grey and its button says how to connect it; a part whose read failed says
 
 All of it comes from one call, `GET /v1/admin/projects/:id/home`.
 
-Home has more tabs beside **Today**: **Overview** ([all apps](/admin/overview),
-`?view=apps`), **User activity** ([sessions](/admin/activity), `?view=users`),
-**Users & funnels** (`?view=funnels`) and **Weekly insights**
-([intelligence reports](/admin/intelligence), `?view=insights`). The old paths
-`/overview`, `/activity`, `/analytics` and `/intelligence` open these tabs. This page
-describes **Today**.
+Home has no tabs. **Needs you** comes first, one button per item; when nothing
+needs you it is one line, and the health lights below it are the app's live status.
+A card with nothing to show yet (no release, no page visits, a quiet week) stays
+hidden until it has something.
+
+The views Home used to carry are tabs of [Apps](/admin/portfolio) now:
+**Overview** ([all apps](/admin/overview), `/portfolio?view=apps`), **User activity**
+([sessions](/admin/activity), `?view=users`), **Users & funnels** (`?view=funnels`)
+and **Weekly insights** ([intelligence reports](/admin/intelligence), `?view=insights`).
+Old links (`/dashboard?view=users`, `/overview`, `/activity`, `/analytics`,
+`/intelligence`) open those tabs.
 
 ---
 
@@ -24551,8 +24556,8 @@ description: Weekly insights is the Mushi Mushi plain-English bug digest per app
 
 # Weekly insights
 
-**Route:** `/dashboard?view=insights` (**Home → Weekly insights**). The old `/intelligence`
-link redirects there. It was called Intelligence reports before October 2026.
+**Route:** `/portfolio?view=insights` (**Apps → Weekly insights**). The old `/intelligence`
+and `/dashboard?view=insights` links redirect there. It was called Intelligence reports before October 2026.
 
 Mushi Mushi writes a **weekly bug digest** for each app: an AI-written summary of the
 week's bug trends, fix velocity and areas of concern, with two or three recommendations.
@@ -26014,8 +26019,8 @@ description: The Overview view on Home in the Mushi Mushi console shows seven-da
 
 # Overview
 
-**Route:** `/dashboard?view=apps` (**Home → Overview**). The old `/overview` link redirects
-there. For setup state, hole checks and spend across apps, see [Apps](/admin/portfolio).
+**Route:** `/portfolio?view=apps` (**Apps → Overview**). The old `/overview` and
+`/dashboard?view=apps` links redirect there. For setup state, hole checks and spend across apps, see [Apps](/admin/portfolio).
 
 > **Scenario:** You manage several connected projects and want a single org-scoped
 > glance at 7-day activity and open tickets before diving into any one app.

@@ -7,7 +7,7 @@ import { Callout } from 'nextra/components'
 
 # Home
 
-**Route:** `/dashboard` (sidebar: **Home**, first tab **Today**)
+**Route:** `/dashboard` (sidebar: **Home**)
 
 > **Scenario:** You open Mushi Mushi in the morning and want to know in 30 seconds whether
 > your app is up, whether anything broke overnight, and what needs you today.
@@ -22,12 +22,17 @@ is grey and its button says how to connect it; a part whose read failed says
 
 All of it comes from one call, `GET /v1/admin/projects/:id/home`.
 
-Home has more tabs beside **Today**: **Overview** ([all apps](/admin/overview),
-`?view=apps`), **User activity** ([sessions](/admin/activity), `?view=users`),
-**Users & funnels** (`?view=funnels`) and **Weekly insights**
-([intelligence reports](/admin/intelligence), `?view=insights`). The old paths
-`/overview`, `/activity`, `/analytics` and `/intelligence` open these tabs. This page
-describes **Today**.
+Home has no tabs. **Needs you** comes first, one button per item; when nothing
+needs you it is one line, and the health lights below it are the app's live status.
+A card with nothing to show yet (no release, no page visits, a quiet week) stays
+hidden until it has something.
+
+The views Home used to carry are tabs of [Apps](/admin/portfolio) now:
+**Overview** ([all apps](/admin/overview), `/portfolio?view=apps`), **User activity**
+([sessions](/admin/activity), `?view=users`), **Users & funnels** (`?view=funnels`)
+and **Weekly insights** ([intelligence reports](/admin/intelligence), `?view=insights`).
+Old links (`/dashboard?view=users`, `/overview`, `/activity`, `/analytics`,
+`/intelligence`) open those tabs.
 
 ---
 

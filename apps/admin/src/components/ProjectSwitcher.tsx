@@ -90,9 +90,9 @@ export function ProjectSwitcher() {
   // …which is why the chip names the app the page is *actually* showing: on a
   // route that can't combine apps, "All apps" in the header contradicted the
   // one app below it (report ee6547f5). The dropdown keeps the chosen mode.
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
   const navigate = useNavigate()
-  const pageCombinesApps = allAppsSupportFor(pathname) !== 'single'
+  const pageCombinesApps = allAppsSupportFor(pathname, search) !== 'single'
   // Inline "create new project" affordance — exposed in the dropdown
   // footer so users don't have to navigate away to /projects to spin up
   // a fresh workspace. `creating` toggles the row from a chip to an input.

@@ -13,7 +13,7 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { allAppsSupportFor, requestOpenProjectSwitcher, useProjectScopeMode } from '../lib/projectScope'
 
 /** Views of a one-app page that still show every app. */
-const ALL_APPS_HUB_VIEWS: Record<string, readonly string[]> = { '/dashboard': ['apps', 'growth'] }
+const ALL_APPS_HUB_VIEWS: Record<string, readonly string[]> = { '/portfolio': ['apps', 'growth'] }
 
 /** @internal Exported for tests. */
 export function isAllAppsHubView(pathname: string, search: string): boolean {
@@ -28,7 +28,7 @@ export function ProjectScopeNotice() {
   const mode = useProjectScopeMode()
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
-  if (mode !== 'all' || allAppsSupportFor(pathname) !== 'single') return null
+  if (mode !== 'all' || allAppsSupportFor(pathname, search) !== 'single') return null
   // Hub views that cover every app (fresh-eyes 2026-11-18): Home's Overview lists all apps and
   // Growth is product-wide, so "one app at a time" contradicted the page.
   if (isAllAppsHubView(pathname, search)) return null

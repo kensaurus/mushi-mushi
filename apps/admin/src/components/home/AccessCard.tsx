@@ -42,7 +42,8 @@ export function AccessCard({ section, auditLog }: Props) {
                   {a.repo.branch && <Badge tone="neutral">{a.repo.branch}</Badge>}
                 </span>
               ) : (
-                <Link to="/connect" className="text-link hover:underline">Connect your repo</Link>
+                // The CI light carries "Connect GitHub"; a second button here was the same place (ADR 0069).
+                <span className="text-xs text-fg-muted">Not connected yet</span>
               )}
             </Row>
             <Row term="People">
@@ -79,7 +80,7 @@ export function AccessCard({ section, auditLog }: Props) {
             <Row term="Logs">
               <span className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
                 <Link to="/fixes" className="text-link hover:underline">Fix history</Link>
-                <Link to="/dashboard?view=users" className="text-link hover:underline">User activity</Link>
+                <Link to="/portfolio?view=users" className="text-link hover:underline">User activity</Link>
                 {auditLog && <Link to="/team?view=audit" className="text-link hover:underline">Audit log</Link>}
               </span>
             </Row>

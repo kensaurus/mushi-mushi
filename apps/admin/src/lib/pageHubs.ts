@@ -3,12 +3,16 @@
  * PURPOSE: Pages that did one job from several angles are views of one page
  *          now (Plan 021 Phase 3, owner 2026-10-06), switched with `?view=`:
  *
- *            Home (/dashboard)  — Today, Overview, User activity, Users & funnels, Weekly insights, Growth
+ *            Apps (/portfolio)  — Apps, Overview, User activity, Users & funnels, Weekly insights, Growth
  *            Mushi health (/health) — Mushi's AI & jobs, Code size, Schema changes, Unusual spikes
  *            Team (/team)       — Members, Billing, AI spend, Audit log, Single sign-on, Compliance, Storage
  *
  *          Every retired route redirects to its view with the query kept, so
  *          old links, bookmarks and server-sent URLs keep working.
+ *
+ *          Home (/dashboard) is one page with no views (ADR 0069): its five
+ *          former views live under Apps, and `/dashboard?view=<id>` redirects
+ *          there (homeViewRedirect).
  */
 
 import type { FeatureFlag } from './useEntitlements'
@@ -29,11 +33,12 @@ export interface PageHub {
   views: readonly HubView[]
 }
 
-export const HOME_HUB: PageHub = {
-  path: '/dashboard',
-  title: 'Home view',
+export const APPS_HUB: PageHub = {
+  path: '/portfolio',
+  title: 'Apps view',
   views: [
-    { id: 'today', label: 'Today', legacyPath: null },
+    { id: 'all', label: 'Apps', legacyPath: null },
+    // The ids Home used (`/dashboard?view=users`), so old links redirect as they are.
     { id: 'apps', label: 'Overview', legacyPath: '/overview' },
     { id: 'users', label: 'User activity', legacyPath: '/activity' },
     { id: 'funnels', label: 'Users & funnels', legacyPath: '/analytics' },
@@ -67,7 +72,7 @@ export const TEAM_HUB: PageHub = {
   ],
 }
 
-const PAGE_HUBS: readonly PageHub[] = [HOME_HUB, HEALTH_HUB, TEAM_HUB]
+const PAGE_HUBS: readonly PageHub[] = [APPS_HUB, HEALTH_HUB, TEAM_HUB]
 
 export interface HubViewer {
   isOperator: boolean
@@ -101,7 +106,7 @@ export function lockedHubView(hub: PageHub, raw: string | null, viewer: HubViewe
   return visibleViews(hub, viewer).some((v) => v.id === view.id) ? null : view
 }
 
-/** `/activity?project=x` → `/dashboard?project=x&view=users`, keeping every other param. */
+/** `/activity?project=x` → `/portfolio?project=x&view=users`, keeping every other param. */
 export function hubRedirectTarget(hub: PageHub, viewId: string, search: string): string {
   const params = new URLSearchParams(search)
   if (viewId === hub.views[0].id) params.delete('view')
@@ -128,4 +133,14 @@ export function legacyHubRoutes(): Array<{ path: string; hub: PageHub; viewId: s
   return PAGE_HUBS.flatMap((hub) =>
     hub.views.filter((v) => v.legacyPath).map((v) => ({ path: v.legacyPath as string, hub, viewId: v.id })),
   )
+}
+
+/**
+ * Where `/dashboard?view=<id>` opens now: the Apps view with that id, query
+ * kept (ADR 0069). Null for Home itself (`today`, no view, an unknown id).
+ */
+export function homeViewRedirect(search: string): string | null {
+  const view = new URLSearchParams(search).get('view')
+  if (!view || !APPS_HUB.views.some((v, i) => i > 0 && v.id === view)) return null
+  return hubRedirectTarget(APPS_HUB, view, search)
 }

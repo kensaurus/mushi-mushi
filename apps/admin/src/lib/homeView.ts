@@ -11,7 +11,7 @@
  *            - zero rows and unused keys folded to one line each.
  */
 
-import type { ActivityLine, HealthSignal, HomeAccess, ProjectHome, WeekRow } from './projectHome'
+import type { ActivityLine, HealthSignal, HomeAccess, HomeSection, NeedsYouItem, ProjectHome, WeekRow } from './projectHome'
 import type { SignalTone } from '../components/signal/StatusGlyph'
 
 /**
@@ -52,6 +52,69 @@ function withoutTodayReports(lines: ActivityLine[], week: readonly WeekRow[]): A
     out.splice(today, 0, { id: 'reports_week', text: `${n} bug ${n === 1 ? 'report' : 'reports'} came in this week`, to: '/reports?days=7' })
   }
   return out
+}
+
+/**
+ * @internal Exported for tests.
+ * Where a button goes, for "is this the same button?": the path, other
+ * params and the hash, without the `project` pin. `/connect?project=…#connect-sdk-health`
+ * and `/connect#connect-sdk-health` are one place.
+ */
+export function ctaTarget(to: string): string {
+  const [rest, hash = ''] = to.split('#') as [string, string?]
+  const [path, query = ''] = rest.split('?') as [string, string?]
+  const params = new URLSearchParams(query)
+  params.delete('project')
+  const qs = params.toString()
+  return `${path}${qs ? `?${qs}` : ''}${hash ? `#${hash}` : ''}`
+}
+
+/**
+ * The health lights without a connect button that Needs you or another light
+ * already carries (ADR 0069: one button per place). A brand-new app showed
+ * "Set up the SDK" in Needs you and on the SDK light, and "Install the SDK"
+ * for the same page on the Bugs today light. The light whose own page the
+ * button opens keeps it; the others keep their status and lose the button.
+ */
+export function healthWithoutRepeatedConnects(
+  health: HomeSection<HealthSignal[]>,
+  needs: readonly NeedsYouItem[],
+): HomeSection<HealthSignal[]> {
+  if (health.status !== 'ok' || !health.data) return health
+  const seen = new Set(needs.map((n) => ctaTarget(n.action.to)))
+  const signals = health.data
+  const owns = (s: HealthSignal) => !!s.connect && ctaTarget(s.connect.to) === ctaTarget(s.href)
+  const keep = new Set<string>()
+  for (const s of [...signals.filter(owns), ...signals.filter((x) => !owns(x))]) {
+    if (!s.connect) continue
+    const t = ctaTarget(s.connect.to)
+    if (seen.has(t)) continue
+    seen.add(t)
+    keep.add(s.id)
+  }
+  const next = signals.map((s) => (s.connect && !keep.has(s.id) ? { ...s, connect: null } : s))
+  return next.some((s, i) => s !== signals[i]) ? { ...health, data: next } : health
+}
+
+/**
+ * Which Home cards have something to show (ADR 0069: a card with no data
+ * stays hidden until it has some). A read that failed always shows, so the
+ * owner sees "could not read"; a card that is not connected hides, because a
+ * health light or the setup checklist carries its connect button.
+ */
+export function homeCardsWithContent(data: Pick<ProjectHome, 'release' | 'sitemap' | 'week' | 'activity'>): {
+  release: boolean
+  sitemap: boolean
+  week: boolean
+  activity: boolean
+} {
+  const has = <T>(s: HomeSection<T>, test: (d: T) => boolean) => s.status === 'error' || (s.status === 'ok' && s.data != null && test(s.data))
+  return {
+    release: has(data.release, (r) => !!r.train || !!r.lastDeploy || !r.waiting || r.waiting.total > 0 || r.stations.some((s) => s.count > 0 || s.stuck > 0)),
+    sitemap: has(data.sitemap, (m) => m.pages.some((p) => p.views > 0 || p.bugs > 0 || p.broken)),
+    week: has(data.week, (rows) => splitWeekRows(rows).active.length > 0),
+    activity: has(data.activity, (lines) => lines.length > 0),
+  }
 }
 
 const LIGHT_TONE: Record<HealthSignal['light'], SignalTone> = { good: 'ok', warn: 'warn', bad: 'danger', busy: 'info', off: 'off' }

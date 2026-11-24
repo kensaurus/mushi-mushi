@@ -9,8 +9,8 @@ description: The Overview view on Home in the Mushi Mushi console shows seven-da
 
 # Overview
 
-**Route:** `/dashboard?view=apps` (**Home → Overview**). The old `/overview` link redirects
-there. For setup state, hole checks and spend across apps, see [Apps](/admin/portfolio).
+**Route:** `/portfolio?view=apps` (**Apps → Overview**). The old `/overview` and
+`/dashboard?view=apps` links redirect there. For setup state, hole checks and spend across apps, see [Apps](/admin/portfolio).
 
 > **Scenario:** You manage several connected projects and want a single org-scoped
 > glance at 7-day activity and open tickets before diving into any one app.
