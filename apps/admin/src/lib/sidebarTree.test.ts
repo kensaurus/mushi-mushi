@@ -29,11 +29,10 @@ describe('every page has a place in the sidebar', () => {
     expect(BUILDER_CORE_NAV_PATHS).toEqual(['/dashboard', '/reports', '/fixes', '/connect', '/settings'])
   })
 
-  it('keeps every top-level page that left the sidebar one click away as a Lab an operator starts with on', () => {
-    const operatorLabPaths = LAB_FEATURES.filter((f) => f.operatorDefault).map((f) => f.paths[0])
+  it('keeps every top-level page that left the sidebar as a Lab, so it can be pinned again', () => {
     const leftSidebar = CORE_NAV_PATHS.filter((p) => !BUILDER_CORE_NAV_PATHS.includes(p))
-    expect([...operatorLabPaths].sort()).toEqual([...leftSidebar].sort())
-    expect(leftSidebar).toEqual(expect.arrayContaining(['/pipeline', '/journeys']))
+    expect([...leftSidebar].sort()).toEqual([...['/portfolio', '/integrations/config', '/checks', '/team', '/pipeline', '/journeys']].sort())
+    for (const p of leftSidebar) expect(LAB_FEATURES.some((f) => f.paths[0] === p), p).toBe(true)
   })
 
   it('names only registry pages as sub-pages, under top-level pages', () => {
@@ -92,11 +91,11 @@ describe('More pages', () => {
     for (const p of OPERATOR_ROUTES) expect(NAV_REGISTRY.find((e) => e.path === p)?.operatorOnly, p).toBe(true)
   })
 
-  it('drops the operator Labs from More pages once they are on', () => {
-    const granted = new Set(LAB_FEATURES.filter((f) => f.operatorDefault).map((f) => f.id))
-    for (const p of ['/team', '/checks', '/portfolio', '/integrations/config', '/pipeline', '/journeys']) {
-      expect(morePaths(EVERYONE, granted).has(p), p).toBe(false)
-    }
+  it('gives an operator the same More pages for those six until a Lab pins them (ADR 0069)', () => {
+    const six = ['/portfolio', '/integrations/config', '/checks', '/team', '/pipeline', '/journeys']
+    for (const p of six) expect(morePaths(EVERYONE).has(p), p).toBe(true)
+    const pinned = new Set(LAB_FEATURES.filter((f) => six.includes(f.paths[0]!)).map((f) => f.id))
+    for (const p of six) expect(morePaths(EVERYONE, pinned).has(p), p).toBe(false)
   })
 
   it('drops a Lab once it is kept in the sidebar', () => {

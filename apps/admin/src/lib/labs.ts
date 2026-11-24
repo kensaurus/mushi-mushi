@@ -5,8 +5,7 @@
  *          Replaces the global Quick / Beginner / Advanced switch: the
  *          sidebar always shows the same five pages (ADR 0069), and each Lab
  *          adds its page to a "Labs" group when switched on in Settings › Labs.
- *          An operator account starts with its operator pages switched on
- *          once (applyOperatorLabDefaults); after that the switches are theirs.
+ *          Every Lab starts off, the owner's too: they see what customers see.
  *          Modelled on Supabase Studio's Feature Previews (per feature, with
  *          a route to try it), not on an "expert mode".
  *
@@ -29,11 +28,6 @@ export interface LabFeature {
   paths: readonly string[]
   /** Group heading in Settings › Labs. */
   group: 'bugs' | 'fixing' | 'checks' | 'team' | 'automation' | 'operator'
-  /**
-   * Switched on once for an operator account (ADR 0069): the pages that were
-   * in the operator's sidebar before it became the builder's five.
-   */
-  operatorDefault?: true
 }
 
 export const LAB_FEATURES: readonly LabFeature[] = [
@@ -59,12 +53,12 @@ export const LAB_FEATURES: readonly LabFeature[] = [
   { id: 'tester-rewards', label: 'Tester rewards', description: 'Points, tiers and payouts for people who report bugs.', paths: ['/rewards'], group: 'team' },
   { id: 'sql-query', label: 'SQL query', description: 'Ask your Mushi Mushi data a question in plain words or SQL.', paths: ['/query'], group: 'team' },
   // ADR 0069: these left the sidebar's five pages. Each one still opens by URL, ⌘K and in-page links.
-  { id: 'pipeline', label: 'Pipeline', description: 'Every bug on its way to a merged fix, stage by stage, and what is moving it right now.', paths: ['/pipeline'], group: 'automation', operatorDefault: true },
-  { id: 'journey-optimizer', label: 'Journey optimizer', description: 'Scans your live site for slow, broken or confusing pages. The scan needs your own Firecrawl key.', paths: ['/journeys'], group: 'checks', operatorDefault: true },
-  { id: 'apps', label: 'Apps', description: 'Every app in this team side by side, with what each one still needs set up.', paths: ['/portfolio'], group: 'operator', operatorDefault: true },
-  { id: 'integrations', label: 'Integrations', description: 'Sentry, Slack, GitHub, Linear and the other tools Mushi Mushi talks to.', paths: ['/integrations/config'], group: 'operator', operatorDefault: true },
-  { id: 'checks', label: 'Checks', description: 'Scheduled tests and page checks for your app, and whether your test runs are healthy.', paths: ['/checks'], group: 'operator', operatorDefault: true },
-  { id: 'team', label: 'Team', description: 'Members, invites, billing and how your team signs in.', paths: ['/team'], group: 'operator', operatorDefault: true },
+  { id: 'pipeline', label: 'Pipeline', description: 'Every bug on its way to a merged fix, stage by stage, and what is moving it right now.', paths: ['/pipeline'], group: 'automation' },
+  { id: 'journey-optimizer', label: 'Journey optimizer', description: 'Scans your live site for slow, broken or confusing pages. The scan needs your own Firecrawl key.', paths: ['/journeys'], group: 'checks' },
+  { id: 'apps', label: 'Apps', description: 'Every app in this team side by side, with what each one still needs set up.', paths: ['/portfolio'], group: 'operator' },
+  { id: 'integrations', label: 'Integrations', description: 'Sentry, Slack, GitHub, Linear and the other tools Mushi Mushi talks to.', paths: ['/integrations/config'], group: 'operator' },
+  { id: 'checks', label: 'Checks', description: 'Scheduled tests and page checks for your app, and whether your test runs are healthy.', paths: ['/checks'], group: 'operator' },
+  { id: 'team', label: 'Team', description: 'Members, invites, billing and how your team signs in.', paths: ['/team'], group: 'operator' },
 ] as const
 
 export const LAB_GROUP_LABEL: Record<LabFeature['group'], string> = {
@@ -78,13 +72,7 @@ export const LAB_GROUP_LABEL: Record<LabFeature['group'], string> = {
 
 const STORAGE_KEY = 'mushi:labs'
 const EVENT = 'mushi:labs-change'
-/**
- * Stored with the enabled ids once the operator defaults were granted, so a
- * page the operator later switches off stays off. Versioned: a later default
- * set needs a new marker.
- */
-const OPERATOR_DEFAULTS_GRANTED = 'operator-defaults-1'
-const KNOWN = new Set([...LAB_FEATURES.map((f) => f.id), OPERATOR_DEFAULTS_GRANTED])
+const KNOWN = new Set(LAB_FEATURES.map((f) => f.id))
 
 let cached: ReadonlySet<string> | null = null
 
@@ -163,21 +151,6 @@ function setLabEnabled(id: string, enabled: boolean): void {
   const next = new Set(read())
   if (enabled) next.add(id)
   else next.delete(id)
-  write(next)
-  void pushToAccount(next)
-}
-
-/**
- * For an operator account: switch its operator pages on, once per account
- * (ADR 0069). The grant is stored like any switch, so Settings › Labs shows
- * the pages as on and switching one off sticks.
- */
-export function applyOperatorLabDefaults(): void {
-  const current = read()
-  if (current.has(OPERATOR_DEFAULTS_GRANTED)) return
-  const next = new Set(current)
-  for (const f of LAB_FEATURES) if (f.operatorDefault) next.add(f.id)
-  next.add(OPERATOR_DEFAULTS_GRANTED)
   write(next)
   void pushToAccount(next)
 }

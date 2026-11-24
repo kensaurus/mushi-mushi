@@ -6,7 +6,7 @@
  * FILE: apps/admin/src/components/Layout.sidebarTree.test.tsx
  * PURPOSE: The rendered sidebar shows where you are (owner, 2026-10-27:
  *          "some of the pages and subpages are not showing on the sidebar"):
- *          an operator's Labs (Pipeline, Checks, Team, …) are listed, a page's sub-pages open under it, a page
+ *          every account sees the same five pages (ADR 0069), a pinned page's sub-pages open under it, a page
  *          under More pages opens that list, and the display settings sit in
  *          the account menu, not in the sidebar footer.
  */
@@ -17,12 +17,10 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const state = vi.hoisted(() => ({
-  // An operator with the Labs granted once (lib/labs.ts applyOperatorLabDefaults); a builder test sets false.
+  // The owner's account; a builder test sets false. Both see the same five pages (ADR 0069).
   isOperator: true,
   collapsed: false,
   enabledLabs: new Set<string>(),
-  grants: 0,
-  entitlementsLoading: false,
   sliceCalls: [] as Array<readonly string[] | null | undefined>,
 }))
 
@@ -43,9 +41,6 @@ vi.mock('../lib/labs', async () => {
       isEnabled: (id: string) => state.enabledLabs.has(id),
       setEnabled: () => {},
     }),
-    applyOperatorLabDefaults: () => {
-      state.grants += 1
-    },
   }
 })
 
@@ -53,7 +48,7 @@ vi.mock('../lib/auth', () => ({
   useAuth: () => ({ user: { id: 'u1', email: 'owner@example.com' }, signOut: async () => {} }),
 }))
 vi.mock('../lib/useEntitlements', () => ({
-  useEntitlements: () => ({ isSuperAdmin: false, isOperator: state.isOperator, has: () => true, loading: state.entitlementsLoading }),
+  useEntitlements: () => ({ isSuperAdmin: false, isOperator: state.isOperator, has: () => true, loading: false }),
 }))
 vi.mock('../lib/useSetupStatus', () => ({
   useSetupStatus: () => ({ loading: false, activeProject: null, selectors: { done: true } }),
@@ -101,10 +96,6 @@ vi.mock('./RoutePageHelp', () => ({ RoutePageHelp: () => null }))
 vi.mock('./RouteProgress', () => ({ RouteProgress: () => null }))
 
 import { Layout } from './Layout'
-import { LAB_FEATURES } from '../lib/labs'
-
-/** What an operator's Labs hold after the one-time grant (ADR 0069). */
-const OPERATOR_LABS: ReadonlySet<string> = new Set(LAB_FEATURES.filter((f) => f.operatorDefault).map((f) => f.id))
 
 let root: Root | null = null
 let container: HTMLDivElement | null = null
@@ -115,9 +106,7 @@ beforeEach(() => {
   window.matchMedia ??= ((query: string) =>
     ({ matches: false, media: query, addEventListener: () => {}, removeEventListener: () => {} }) as unknown as MediaQueryList)
   state.collapsed = false
-  state.enabledLabs = new Set(OPERATOR_LABS)
-  state.grants = 0
-  state.entitlementsLoading = false
+  state.enabledLabs = new Set()
   state.sliceCalls = []
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   container = document.createElement('div')
@@ -148,13 +137,14 @@ function current(): string[] {
 }
 
 describe('the sidebar shows where you are', () => {
-  it('lists Pipeline (an operator Lab) and highlights it on /pipeline', () => {
+  it('lists Pipeline under More pages and highlights it on /pipeline', () => {
     renderAt('/pipeline')
-    expect(nav().querySelector('a[href="/pipeline"]')).not.toBeNull()
+    expect(nav().querySelector('[data-testid="nav-more-pages"] a[href="/pipeline"]')).not.toBeNull()
     expect(current()).toEqual(['/pipeline'])
   })
 
-  it("opens a page's sub-pages under it and highlights the one you are on", () => {
+  it("opens a pinned page's sub-pages under it and highlights the one you are on", () => {
+    state.enabledLabs = new Set(['checks'])
     renderAt('/qa-coverage')
     const children = nav().querySelector('[data-testid="nav-children"]')
     expect(children).not.toBeNull()
@@ -216,6 +206,7 @@ describe('the icon rail shows where you are too', () => {
 
   it('shows the sub-page you are on and a More pages button', () => {
     state.collapsed = true
+    state.enabledLabs = new Set(['checks'])
     renderAt('/qa-coverage')
     expect(rail().querySelector('a[href="/qa-coverage"]')).not.toBeNull()
     expect(rail().querySelector('a[href="/judge"]')).toBeNull()
@@ -281,12 +272,10 @@ describe('the brand mark links home', () => {
 describe('a builder gets the short sidebar', () => {
   it('lists Home, Bugs, Fixes, Connect and Settings as the pages, the rest under More pages', () => {
     state.isOperator = false
-    state.enabledLabs = new Set()
     renderAt('/credits')
     for (const p of ['/dashboard', '/reports', '/fixes', '/connect', '/settings']) {
       expect(nav().querySelector(`a[href="${p}"]`), p).not.toBeNull()
     }
-    expect(state.grants).toBe(0)
     const more = nav().querySelector('[data-testid="nav-more-pages"]')!
     // Team, Apps, Checks, Pipeline and Journeys are under More pages for a builder (ADR 0069).
     for (const p of ['/team', '/checks', '/pipeline', '/journeys']) {
@@ -301,28 +290,21 @@ describe('a builder gets the short sidebar', () => {
 })
 
 /**
- * ADR 0069 (owner, 2026-11-24): the owner's account sees the builder sidebar
- * too; their operator pages are Labs switched on once, one click from the five.
+ * ADR 0069 (owner, 2026-11-24): "Builder view by default: you see what
+ * customers see; operator pages one click away."
  */
-describe('an operator gets the same five pages, operator pages as Labs', () => {
-  it('lists the five as the pages and Apps, Integrations, Checks, Team, Pipeline and Journeys under Labs', () => {
-    renderAt('/reports')
-    expect(state.grants).toBeGreaterThan(0)
+describe('the owner gets the same five pages as a builder', () => {
+  it('lists only the five as pages, with Apps, Integrations, Checks, Team, Pipeline and Journeys under More pages', () => {
+    renderAt('/credits')
     // More pages also sits in the core section; only the pages above it count.
     const core = [...nav().querySelectorAll('#nav-section-core a[href]')]
       .filter((a) => !a.closest('#nav-more-pages'))
       .map((a) => a.getAttribute('href'))
-    for (const p of ['/dashboard', '/reports', '/fixes', '/connect', '/settings']) expect(core, p).toContain(p)
-    const labs = nav().querySelector('#nav-section-labs')!
+    expect(core).toEqual(['/dashboard', '/reports', '/fixes', '/connect', '/settings'])
+    expect(nav().querySelector('#nav-section-labs')).toBeNull()
+    const more = nav().querySelector('[data-testid="nav-more-pages"]')!
     for (const p of ['/portfolio', '/integrations/config', '/checks', '/team', '/pipeline', '/journeys']) {
-      expect(core, p).not.toContain(p)
-      expect(labs.querySelector(`a[href="${p}"]`), p).not.toBeNull()
+      expect(more.querySelector(`a[href="${p}"]`), p).not.toBeNull()
     }
-  })
-
-  it('grants the operator Labs only once entitlements have answered', () => {
-    state.entitlementsLoading = true
-    renderAt('/reports')
-    expect(state.grants).toBe(0)
   })
 })

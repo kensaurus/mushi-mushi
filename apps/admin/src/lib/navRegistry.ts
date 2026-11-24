@@ -1204,8 +1204,8 @@ export function routeFallbackTitle(pathname: string): string | null {
 /**
  * The top-level pages: the five sidebar pages plus the pages that head a
  * family of their own (console audit 2026-10-20; ADR 0027). Since ADR 0069
- * only BUILDER_CORE_NAV_PATHS is the sidebar; the rest are Labs that an
- * operator account starts with switched on (lib/labs.ts). The breadcrumb
+ * only BUILDER_CORE_NAV_PATHS is the sidebar; the rest are Labs, off by
+ * default for every account (lib/labs.ts). The breadcrumb
  * treats each of these as a page that names its own views.
  */
 export const CORE_NAV_PATHS: readonly string[] = [
@@ -1225,10 +1225,10 @@ export const CORE_NAV_PATHS: readonly string[] = [
 /**
  * The sidebar is the fix loop (ADR 0069, owner 2026-11-24): Home, Bugs,
  * Fixes, Connect, Settings. Set up shows above it until setup is done
- * (Layout). Every account gets this list, the owner's too. Pipeline and
- * the Journey optimizer became Labs; Apps, Integrations, Checks and Team are
- * Labs an operator starts with on. Every other page is under "More pages"
- * and in ⌘K.
+ * (Layout). Every account gets this list, the owner's too: they see what
+ * customers see. Pipeline, the Journey optimizer, Apps, Integrations, Checks
+ * and Team became Labs, off by default; like every other page they are under
+ * "More pages" and in ⌘K.
  */
 export const BUILDER_CORE_NAV_PATHS: readonly string[] = ['/dashboard', '/reports', '/fixes', '/connect', '/settings']
 

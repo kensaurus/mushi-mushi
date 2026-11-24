@@ -86,40 +86,14 @@ describe('useLabs', () => {
   })
 })
 
-describe('applyOperatorLabDefaults (ADR 0069)', () => {
-  const operatorIds = () => (mod.LAB_FEATURES as readonly LabFeature[]).filter((f) => f.operatorDefault).map((f) => f.id)
-
-  it('covers the pages that left the sidebar: Apps, Integrations, Checks, Team, Pipeline, Journeys', () => {
-    const paths = (mod.LAB_FEATURES as readonly LabFeature[]).filter((f) => f.operatorDefault).map((f) => f.paths[0])
-    expect([...paths].sort()).toEqual(['/checks', '/integrations/config', '/journeys', '/pipeline', '/portfolio', '/team'])
-  })
-
-  it('switches the operator Labs on and keeps the ones already on', async () => {
-    window.localStorage.setItem(KEY, JSON.stringify(['bug-clusters']))
+describe('the pages that left the sidebar (ADR 0069)', () => {
+  it('are Labs that start off, so every account sees the five-page sidebar', async () => {
     await mount()
-    await act(async () => mod.applyOperatorLabDefaults())
-    for (const id of [...operatorIds(), 'bug-clusters']) expect(latest!.isEnabled(id), id).toBe(true)
-  })
-
-  it('grants once: a Lab switched off afterwards stays off', async () => {
-    await mount()
-    await act(async () => mod.applyOperatorLabDefaults())
-    await act(async () => latest!.setEnabled('pipeline', false))
-    await act(async () => mod.applyOperatorLabDefaults())
-    expect(latest!.isEnabled('pipeline')).toBe(false)
-    expect(latest!.isEnabled('team')).toBe(true)
-  })
-
-  it('remembers the grant in what it stores, so another browser does not grant again', async () => {
-    await mount()
-    await act(async () => mod.applyOperatorLabDefaults())
-    const saved = stored() as string[]
-    vi.resetModules()
-    window.localStorage.clear()
-    mod = await import('./labs')
-    mod.syncLabsFromAccount(saved.filter((id) => id !== 'pipeline'))
-    mod.applyOperatorLabDefaults()
-    expect(stored()).not.toContain('pipeline')
+    for (const path of ['/portfolio', '/integrations/config', '/checks', '/team', '/pipeline', '/journeys']) {
+      const lab = mod.labForPath(path)
+      expect(lab, path).not.toBeNull()
+      expect(latest!.isEnabled(lab!.id), path).toBe(false)
+    }
   })
 })
 
