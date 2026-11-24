@@ -315,6 +315,9 @@ describe('Connect control budget (ADR 0069)', () => {
     // 1.35.0 is behind 1.37.2: the upgrade shows in full, with SDK health beside it.
     expect(container.querySelector('#connect-update')?.textContent).toContain('1.37.2')
     expect(container.querySelector('#connect-sdk-health [data-testid="sdk-health-panel"]')).not.toBeNull()
+    // The upgrade is offered only while the SDK is behind (was the status pills' "Upgrade the SDK").
+    const buttons = () => Array.from(container.querySelectorAll('button')).map((b) => b.textContent?.trim())
+    expect(buttons()).toContain('Upgrade to 1.37.2')
     expect(m.controls).toBeLessThanOrEqual(ESTABLISHED_CONTROLS)
     expect(m.tabs).toBe(0)
   })
@@ -326,6 +329,7 @@ describe('Connect control budget (ADR 0069)', () => {
     const ok = container.querySelector('[data-testid="connect-sdk-ok"]')!
     expect(ok.id).toBe('connect-sdk-health')
     expect(container.querySelector('#connect-update')).toBeNull()
+    expect(Array.from(container.querySelectorAll('button')).some((b) => /^Upgrade/.test(b.textContent?.trim() ?? ''))).toBe(false)
     expect(m.controls).toBeLessThan(10)
     await click(Array.from(ok.querySelectorAll('button')).find((b) => b.textContent === 'Details')!)
     expect(container.querySelector('#connect-update')).not.toBeNull()

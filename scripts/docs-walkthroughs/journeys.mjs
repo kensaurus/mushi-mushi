@@ -27,8 +27,6 @@ export const PRIVACY = [
 export const DENYLIST = ['glot', 'tsumagoi', 'yen-yen', 'yenyen', 'solo-boss', 'solo:', 'help her', 'help-her', 'wanting-mind', 'wanting mind', 'lets-talk', 'sbc', 'mushimushi.dev']
 
 const widget = (p) => p.locator('#mushi-mushi-widget')
-/** A button whose whole visible text is `text` (icons and badges aside). */
-const exactButton = (p, text) => p.locator('button, [role=tab]', { hasText: new RegExp(String.raw`^\s*${text}\s*$`) })
 
 export const JOURNEYS = [
   {
@@ -104,14 +102,15 @@ export const JOURNEYS = [
     signInCheckUrl: `${ADMIN}/connect?project=${APP}`,
     posterAt: 6,
     steps: [
-      { do: 'goto', url: `${ADMIN}/connect?project=${APP}`, ready: (p) => p.getByRole('radio', { name: 'Cursor', exact: true }), settle: 2000 },
+      // #connect-studio opens the editor step (ADR 0069: Connect is one step at a time).
+      { do: 'goto', url: `${ADMIN}/connect?project=${APP}#connect-studio`, ready: (p) => p.getByRole('radio', { name: 'Cursor', exact: true }), settle: 2000 },
       // The page remembers the last editor picked; start from Cursor, off camera.
       { do: 'click', target: (p) => p.getByRole('radio', { name: 'Cursor', exact: true }), ms: 1, hold: 800 },
       { do: 'wait', target: (p) => p.getByRole('button', { name: 'Add to Cursor' }), ms: 300 },
       { do: 'start' },
       { do: 'card', title: 'Connect your AI editor', subtitle: 'Open Connect in the console. One click for Cursor and VS Code, one command for Claude Code.' },
-      { do: 'chapter', title: 'Pick the editor you use', detail: 'Cursor, VS Code, Windsurf, Cline, Claude Code, Claude Desktop, Zed, or any MCP client.' },
-      { do: 'point', target: (p) => p.getByText('YOUR AI CLIENT', { exact: false }).locator('xpath=..'), hold: 1800 },
+      { do: 'chapter', title: 'Pick the editor you use', detail: 'Cursor, Claude Code and VS Code first; Other editors has Windsurf, Cline, Zed and any MCP client.' },
+      { do: 'point', target: (p) => p.getByText('Your editor', { exact: false }).locator('xpath=..'), hold: 1800 },
       { do: 'click', target: (p) => p.getByRole('radio', { name: 'Claude Code', exact: true }), hold: 1600 },
       { do: 'chapter', title: 'Add Mushi Mushi in one step', detail: 'Claude Code gets one command to paste. Cursor and VS Code get a button that opens the install dialog.' },
       { do: 'point', target: (p) => p.getByRole('button', { name: 'Show Claude Code command' }), hold: 2200 },
@@ -121,7 +120,8 @@ export const JOURNEYS = [
       { do: 'ring', target: null },
       { do: 'wait', ms: 2800 },
       { do: 'chapter', title: 'Prefer the terminal? Use the CLI', detail: 'mushi reports, mushi fix, and the same data as the console.' },
-      { do: 'click', target: (p) => exactButton(p, 'CLI'), ring: true, hold: 2400 },
+      { do: 'click', target: (p) => p.getByRole('button', { name: 'Use the CLI or skills instead' }), hold: 600 },
+      { do: 'click', target: (p) => p.getByRole('radio', { name: 'CLI', exact: true }), ring: true, hold: 2400 },
       { do: 'end' },
     ],
   },
