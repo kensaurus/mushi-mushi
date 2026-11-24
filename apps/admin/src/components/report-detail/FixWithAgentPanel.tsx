@@ -21,6 +21,11 @@
  * Owner's walkthrough, 2026-11-17: the explanation sits under a fold (Copy
  * stays in view), the lane picked last opens by default, and opening Cursor
  * says "Sent to Cursor".
+ *
+ * ADR 0069 (2026-11-24): one row, one primary. Copy fix prompt leads and the
+ * three editor lanes sit beside it as small buttons. What the prompt holds,
+ * the prompt itself and the whole-codebase copy share one "View the prompt"
+ * fold instead of two folds and a footer line.
  */
 
 import { useMemo, useState } from 'react'
@@ -141,26 +146,13 @@ export function FixWithAgentPanel({ report, cursorWorkspace }: FixWithAgentPanel
     <div id="fix-prompt" className="scroll-mt-chrome">
     <Card className="p-3 mb-3">
       <h2 className="text-sm font-semibold text-fg">Fix it with your coding agent</h2>
-      <details className="mt-0.5 text-xs text-fg-muted" data-testid="fix-agent-explainer">
-        <summary className="cursor-pointer text-2xs hover:text-fg-secondary">What the prompt holds</summary>
-        <p className="mt-0.5">
-          One prompt with the bug, why it broke, the suggested fix, where it happened and how to check the fix. Paste it
-          into Claude Code, Cursor, Codex, Windsurf or any other agent. No setup needed.
-        </p>
-      </details>
-
-      <div className="mt-2.5 flex flex-wrap items-center gap-2">
+      {/* One row: the primary copy, then the editor lanes as small secondary buttons. */}
+      <div role="group" aria-label="Ways to fix it" className="mt-2 flex flex-wrap items-center gap-2">
         {/* With no stack trace or file the triage bar leads with "Not a code
             bug"; a red Copy fix prompt here argued with it (sweep 2026-11-18). */}
         <Btn variant={reportHasCodeLocation(report) ? 'primary' : 'ghost'} size="sm" leadingIcon={<IconCopy />} onClick={() => void copy('fix')} data-testid="copy-fix-prompt">
           {copied === 'fix' ? 'Copied' : 'Copy fix prompt'}
         </Btn>
-        <span className="text-2xs text-fg-faint">
-          {(fixPrompt.length / 1000).toFixed(1)}k characters
-        </span>
-      </div>
-
-      <div role="group" aria-label="Other ways to fix it" className="mt-2 flex flex-wrap gap-2">
         {(Object.keys(LANE_LABEL) as Lane[]).map((lane) => (
           <Btn
             key={lane}
@@ -267,10 +259,14 @@ export function FixWithAgentPanel({ report, cursorWorkspace }: FixWithAgentPanel
         </div>
       )}
 
-      <details className="mt-2 rounded-md border border-edge-subtle/60 bg-surface-overlay/20 px-2.5 py-2 text-2xs text-fg-muted">
+      <details className="mt-2 text-2xs text-fg-muted" data-testid="fix-agent-explainer">
         <summary className="cursor-pointer text-xs font-medium text-fg-muted hover:text-fg-secondary">
-          View the prompt
+          View the prompt <span className="font-normal text-fg-faint">({(fixPrompt.length / 1000).toFixed(1)}k characters)</span>
         </summary>
+        <p className="mt-1 text-xs">
+          One prompt with the bug, why it broke, the suggested fix, where it happened and how to check the fix. Paste it
+          into Claude Code, Cursor, Codex, Windsurf or any other agent. No setup needed.
+        </p>
         {/* Scrollable, so it takes keyboard focus (REPORT A14). */}
         <pre
           tabIndex={0}
@@ -279,19 +275,18 @@ export function FixWithAgentPanel({ report, cursorWorkspace }: FixWithAgentPanel
         >
           {fixPrompt}
         </pre>
+        {report.project_id && (
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-fg-faint">
+            <span>Want the whole codebase as context instead? It is large (tens of thousands of tokens).</span>
+            <CopyRepoDigestButton
+              projectId={report.project_id}
+              reportId={report.id}
+              showBudgetPicker={false}
+              label="Copy code for this bug"
+            />
+          </div>
+        )}
       </details>
-
-      {report.project_id && (
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-2xs text-fg-faint">
-          <span>Want the whole codebase as context instead? It is large (tens of thousands of tokens).</span>
-          <CopyRepoDigestButton
-            projectId={report.project_id}
-            reportId={report.id}
-            showBudgetPicker={false}
-            label="Copy code for this bug"
-          />
-        </div>
-      )}
     </Card>
     </div>
   )

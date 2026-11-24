@@ -127,6 +127,22 @@ describe('FixWithAgentPanel', () => {
     expect(button('Copy fix prompt')).toBeTruthy()
   })
 
+  // ADR 0069: one row (Copy first, the editor lanes beside it) and one fold for the prompt itself.
+  it('puts Copy fix prompt and the editor lanes in one row, and the prompt in one fold', () => {
+    act(() => root.render(createElement(FixWithAgentPanel, { report: REPORT })))
+    const row = container.querySelector('[role="group"][aria-label="Ways to fix it"]')
+    expect(Array.from(row!.querySelectorAll('button')).map((b) => b.textContent?.trim())).toEqual([
+      'Copy fix prompt',
+      'Use with Claude Code',
+      'Use with Cursor',
+      'Use MCP',
+    ])
+    const folds = container.querySelectorAll('details')
+    expect(folds).toHaveLength(1)
+    expect(folds[0]!.querySelector('pre[aria-label="Fix prompt"]')).not.toBeNull()
+    expect(folds[0]!.textContent).toContain('the suggested fix')
+  })
+
   it('opens the hand-off picked last, and says "Sent to Cursor" after opening it', () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null)
     act(() => root.render(createElement(FixWithAgentPanel, { report: REPORT })))

@@ -18,13 +18,19 @@
  *          reads again every 8 s and tells the page when triage finished, so
  *          the classification shows without a reload.
  *
+ *          ADR 0069 (2026-11-24): a builder sees one line ("Progress · Next:
+ *          Fix") and the failed stage's callout; the eight stages, and the
+ *          page's "story so far" passed as children, sit under "Show each
+ *          step". The fold is a native <details>, so the strip stays mounted
+ *          and keeps polling while it is closed.
+ *
  * Data: GET /v1/admin/reports/:id/pipeline; retry POST …/pipeline/retry
  *       (lib/reportPipelineTrail.ts). A failed fix retries through the page's
  *       own dispatch (`onRetryDispatch`, with its gate); red CI points at the
  *       fix actions bar at the top (#report-fix-actions).
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Btn, Card } from '../ui'
 import { StatusMark, StatusPill, STATUS_FILL, STATUS_INK } from '../signal/StatusMark'
 import { usePageData } from '../../lib/usePageData'
@@ -50,11 +56,13 @@ interface Props {
   hasFixActions: boolean
   /** Triage moved past where it was stuck: the page reads the report again. */
   onReportChanged?: () => void
+  /** More progress detail folded with the stages (the page's "story so far"). */
+  children?: ReactNode
 }
 
 const POLL_MS = 8_000
 
-export function ReportPipelineStrip({ reportId, onRetryDispatch, dispatchBlock, hasFixActions, onReportChanged }: Props) {
+export function ReportPipelineStrip({ reportId, onRetryDispatch, dispatchBlock, hasFixActions, onReportChanged, children }: Props) {
   const toast = useToast()
   const { data, error, reload } = usePageData<ReportTrail>(reportTrailPath(reportId), { deps: [reportId] })
   const [busy, setBusy] = useState(false)
@@ -78,14 +86,24 @@ export function ReportPipelineStrip({ reportId, onRetryDispatch, dispatchBlock, 
 
   const widths = useMemo(() => (data ? durationBarWidths(data.stages) : []), [data])
 
-  if (error && !data) {
+  // The trail did not load (or is still loading): the folded detail the page
+  // passed in stays reachable, the stages simply are not drawn.
+  if (!data) {
+    if (!error && !children) return null
     return (
-      <p className="mb-3 text-2xs text-fg-muted" data-testid="report-pipeline-error">
-        The pipeline trail did not load. <button type="button" className="font-medium text-brand hover:underline" onClick={reload}>Retry</button>
-      </p>
+      <Card className="mb-3 p-2.5" id="report-pipeline" data-testid="report-pipeline-strip">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-2xs font-semibold text-fg-secondary">Progress</h3>
+          {error ? (
+            <p className="text-2xs text-fg-muted" data-testid="report-pipeline-error">
+              The progress trail did not load. <button type="button" className="font-medium text-brand hover:underline" onClick={reload}>Retry</button>
+            </p>
+          ) : null}
+        </div>
+        {children ? <StepsFold>{children}</StepsFold> : null}
+      </Card>
     )
   }
-  if (!data) return null
 
   const verdict = trailVerdict(data)
   const callout = calloutStage(data)
@@ -106,46 +124,10 @@ export function ReportPipelineStrip({ reportId, onRetryDispatch, dispatchBlock, 
 
   return (
     <Card className="mb-3 p-2.5" id="report-pipeline" data-testid="report-pipeline-strip">
-      <div className="mb-1.5 flex flex-wrap items-center gap-2" data-failing={data.failing ?? undefined}>
-        <h3 className="text-2xs font-semibold text-fg-secondary">Pipeline</h3>
+      <div className="flex flex-wrap items-center gap-2" data-failing={data.failing ?? undefined}>
+        <h3 className="text-2xs font-semibold text-fg-secondary">Progress</h3>
         <StatusPill status={verdict.status} label={verdict.label} />
       </div>
-      <ol className="grid grid-cols-4 gap-x-2 gap-y-2 sm:grid-cols-8" aria-label="Pipeline stages of this report">
-        {data.stages.map((s, i) => {
-          const dur = durationWords(s.durationMs)
-          const open = s.state === 'running' || s.state === 'waiting' || s.state === 'slow'
-          return (
-            <li
-              key={s.id}
-              className="min-w-0"
-              data-testid={`trail-stage-${s.id}`}
-              data-state={s.state}
-              data-skipped={s.skipped || undefined}
-              title={[s.label, s.note, s.startedAt ? `started ${new Date(s.startedAt).toLocaleString()}` : null, s.endedAt ? `ended ${new Date(s.endedAt).toLocaleString()}` : null].filter(Boolean).join(' · ')}
-            >
-              <span className="flex min-w-0 items-center gap-1">
-                <StatusMark status={s.state} size={11} label={`${s.label}: ${s.state}`} />
-                <span className={`truncate text-3xs font-bold tracking-wider uppercase ${s.state === 'idle' ? 'text-fg-muted' : STATUS_INK[s.state]}`}>{s.label}</span>
-              </span>
-              <span className="mt-1 block h-1.5 overflow-hidden rounded-sm bg-surface-overlay" aria-hidden="true">
-                {widths[i]! > 0 && (
-                  <span
-                    className={`ci-grow-x block h-full rounded-sm ${s.state === 'running' ? 'st-run-bar ci-stripes' : STATUS_FILL[s.state]}`}
-                    style={{ width: `${widths[i]}%` }}
-                  />
-                )}
-              </span>
-              <span
-                className={`mt-0.5 block truncate font-mono text-3xs tabular-nums ${dur ? 'font-bold text-fg' : 'text-fg-faint'}`}
-                title={s.note ?? undefined}
-                data-testid={`trail-stage-${s.id}-time`}
-              >
-                {s.skipped ? 'not needed' : dur ? (open ? `${dur} so far` : dur) : '—'}
-              </span>
-            </li>
-          )
-        })}
-      </ol>
 
       {callout && (
         <div className={`mt-2 border-l-2 pl-2 ${callout.state === 'failed' ? 'border-st-failed' : 'border-st-slow'}`} data-testid="report-pipeline-callout" data-stage={callout.id}>
@@ -209,6 +191,59 @@ export function ReportPipelineStrip({ reportId, onRetryDispatch, dispatchBlock, 
           )}
         </div>
       )}
+
+      <StepsFold>
+        <ol className="grid grid-cols-4 gap-x-2 gap-y-2 sm:grid-cols-8" aria-label="Pipeline stages of this report">
+          {data.stages.map((s, i) => {
+            const dur = durationWords(s.durationMs)
+            const open = s.state === 'running' || s.state === 'waiting' || s.state === 'slow'
+            return (
+              <li
+                key={s.id}
+                className="min-w-0"
+                data-testid={`trail-stage-${s.id}`}
+                data-state={s.state}
+                data-skipped={s.skipped || undefined}
+                title={[s.label, s.note, s.startedAt ? `started ${new Date(s.startedAt).toLocaleString()}` : null, s.endedAt ? `ended ${new Date(s.endedAt).toLocaleString()}` : null].filter(Boolean).join(' · ')}
+              >
+                <span className="flex min-w-0 items-center gap-1">
+                  <StatusMark status={s.state} size={11} label={`${s.label}: ${s.state}`} />
+                  <span className={`truncate text-3xs font-bold tracking-wider uppercase ${s.state === 'idle' ? 'text-fg-muted' : STATUS_INK[s.state]}`}>{s.label}</span>
+                </span>
+                <span className="mt-1 block h-1.5 overflow-hidden rounded-sm bg-surface-overlay" aria-hidden="true">
+                  {widths[i]! > 0 && (
+                    <span
+                      className={`ci-grow-x block h-full rounded-sm ${s.state === 'running' ? 'st-run-bar ci-stripes' : STATUS_FILL[s.state]}`}
+                      style={{ width: `${widths[i]}%` }}
+                    />
+                  )}
+                </span>
+                <span
+                  className={`mt-0.5 block truncate font-mono text-3xs tabular-nums ${dur ? 'font-bold text-fg' : 'text-fg-faint'}`}
+                  title={s.note ?? undefined}
+                  data-testid={`trail-stage-${s.id}-time`}
+                >
+                  {s.skipped ? 'not needed' : dur ? (open ? `${dur} so far` : dur) : '—'}
+                </span>
+              </li>
+            )
+          })}
+        </ol>
+        {children ? <div className="mt-3">{children}</div> : null}
+      </StepsFold>
     </Card>
+  )
+}
+
+/** The closed-by-default fold under the one-line status (ADR 0069). */
+function StepsFold({ children }: { children: ReactNode }) {
+  return (
+    // Named group: the story inside has its own "Technical details" chevron.
+    <details className="group/steps mt-1.5" data-testid="report-pipeline-steps">
+      <summary className="cursor-pointer list-none text-2xs text-fg-secondary hover:text-fg">
+        <span className="inline-block transition-transform group-open/steps:rotate-90" aria-hidden="true">▸</span> Show each step
+      </summary>
+      <div className="mt-1.5">{children}</div>
+    </details>
   )
 }

@@ -17,6 +17,12 @@
  *          diagnosis is worse than none). So when the classifier's
  *          confidence is low or the summary is missing, we fail gracefully:
  *          "Not sure yet — here's what I'd check first."
+ *
+ *          ADR 0069 (2026-11-24): when only the quick check ran, this card
+ *          says so in one plain line that points at the fix prompt. The
+ *          settings link behind it ("Change threshold" / "Check AI keys") is
+ *          Stage2AbsentNote, which the page shows in the LLM classification
+ *          section further down.
  */
 
 import { roundLongDecimals } from '../../lib/format'
@@ -77,7 +83,7 @@ export function DiagnosisFixHero({
             <IconIntelligence className="text-info" />
             {stage2
               ? isConfident ? 'Diagnosis' : 'Diagnosis — low confidence'
-              : isConfident ? 'Classification' : 'Low confidence — check these first'}
+              : isConfident ? 'What we know' : 'Low confidence — check these first'}
           </div>
           {/* No category or "97% sure" chips here: the LLM classification
               card shows them, and they were on the page 5x and 4x (round-3
@@ -108,7 +114,13 @@ export function DiagnosisFixHero({
           </div>
         )}
 
-        {!stage2 && <Stage2AbsentNote view={view} stage1Model={report.stage1_model ?? null} />}
+        {!stage2 && view.kind === 'stage1_only' ? (
+          <p className="mt-1.5 text-xs text-fg-muted" data-testid="stage2-absent-hero">
+            No full diagnosis for this bug yet. Copy the fix prompt below: your editor&rsquo;s AI reads the evidence and
+            works out the cause.
+          </p>
+        ) : null}
+        {!stage2 && view.kind === 'failed' ? <Stage2FailedNote message={view.message} /> : null}
 
         <CodeContextBadge report={report} />
 
@@ -203,8 +215,19 @@ function DiagnosisField({ label, children }: { label: string; children: ReactNod
   )
 }
 
+/** The full diagnosis ran and failed: said beside the diagnosis, since it bears on accuracy. */
+function Stage2FailedNote({ message }: { message: string }) {
+  return (
+    <p className="mt-1.5 text-2xs text-fg-faint">
+      Full diagnosis failed: <span className="wrap-break-word">{message}</span>
+    </p>
+  )
+}
+
 /**
- * Honest note when Stage 2 did not produce a diagnosis. There is no server
+ * Honest note when Stage 2 did not produce a diagnosis, with where to change
+ * it. The page shows it in the LLM classification section (ADR 0069); the
+ * diagnosis card carries a one-line version. There is no server
  * route that re-runs Stage 2 for a classified report, so no button is offered.
  *
  * It says why the full explanation is missing and how to get it (console
@@ -214,14 +237,16 @@ function DiagnosisField({ label, children }: { label: string; children: ReactNod
  *   - the AI was not available, so a rule-based sort ran (`stage1_model`
  *     'heuristic'); "the first check was sure" was not true then.
  */
-function Stage2AbsentNote({ view, stage1Model }: { view: ReturnType<typeof reportDiagnosisView>; stage1Model: string | null }) {
+export function Stage2AbsentNote({ report }: { report: ReportDetail }) {
+  const view = reportDiagnosisView(report)
+  const stage1Model = report.stage1_model ?? null
   if (view.kind === 'stage1_only') {
     const heuristic = stage1Model === 'heuristic'
     // One line, the why behind ⓘ and one link (round-3 sweep 2026-11-19: it
     // was a 3-line paragraph, and the diagnosis graph says the same).
     const why = heuristic
-      ? 'The AI that explains bugs was not available when this one arrived (its key was out of credits or rejected), so only a rule-based sort ran. For this bug, copy the fix prompt below: your editor\'s AI reads the evidence and works out the cause.'
-      : 'The first check was sure what kind of bug this is, so the full diagnosis (why it broke and how to fix it) did not run. For this bug, copy the fix prompt below: your editor\'s AI reads the evidence and works out the cause. For new bugs, set Quick check confidence to 100% and every bug gets the full diagnosis (each one uses a diagnosis from your plan).'
+      ? 'The AI that explains bugs was not available when this one arrived (its key was out of credits or rejected), so only a rule-based sort ran. For this bug, copy the fix prompt at the top of the page: your editor\'s AI reads the evidence and works out the cause.'
+      : 'The first check was sure what kind of bug this is, so the full diagnosis (why it broke and how to fix it) did not run. For this bug, copy the fix prompt at the top of the page: your editor\'s AI reads the evidence and works out the cause. For new bugs, set Quick check confidence to 100% and every bug gets the full diagnosis (each one uses a diagnosis from your plan).'
     return (
       <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-fg-muted" data-testid="stage2-absent">
         <span>{heuristic ? 'Quick summary only: the AI key was not available.' : 'Quick summary only.'}</span>
@@ -229,13 +254,6 @@ function Stage2AbsentNote({ view, stage1Model }: { view: ReturnType<typeof repor
         <Link to={heuristic ? '/settings?tab=byok' : '/settings?tab=general'} className="text-link hover:underline">
           {heuristic ? 'Check AI keys' : 'Change threshold'}
         </Link>
-      </p>
-    )
-  }
-  if (view.kind === 'failed') {
-    return (
-      <p className="mt-1.5 text-2xs text-fg-faint">
-        Full diagnosis failed: <span className="wrap-break-word">{view.message}</span>
       </p>
     )
   }
