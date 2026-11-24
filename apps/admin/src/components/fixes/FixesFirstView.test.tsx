@@ -9,13 +9,15 @@
  *     passed with a few skipped, which the PR's summary stores as "skipped".
  *   - "Stopped: 47 reports" under a status line saying "Stopped 48": the
  *     reasons only covered the newest 200 attempts loaded on the page.
+ * ADR 0069 (2026-11-24): Ready to merge is drawn only when a fix is ready (it
+ * is an action above the list); Stopped lives in the page's Automation section.
  */
 
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { FixesFirstView } from './FixesFirstView'
+import { FixesReadyToMerge, FixesStoppedReasons } from './FixesFirstView'
 import type { FixAttempt } from './types'
 import type { PipelineData } from '../../lib/pipeline'
 
@@ -62,7 +64,8 @@ async function render(fixes: FixAttempt[], pipeline: PipelineData | null, stoppe
       createElement(
         MemoryRouter,
         null,
-        createElement(FixesFirstView, { fixes, pipeline, projectId: 'p1', stoppedTotal, busy: false, onQueue: vi.fn(), onShowCause: vi.fn(), onRetry: vi.fn() }),
+        createElement(FixesReadyToMerge, { fixes, pipeline, busy: false, onQueue: vi.fn() }),
+        createElement(FixesStoppedReasons, { fixes, projectId: 'p1', stoppedTotal, busy: false, onShowCause: vi.fn(), onRetry: vi.fn() }),
       ),
     )
   })
@@ -71,13 +74,12 @@ async function render(fixes: FixAttempt[], pipeline: PipelineData | null, stoppe
 describe('FixesFirstView', () => {
   it('lists a PR /pipeline counts approved and green, even with a skipped check summary', async () => {
     await render([approvedSkippedSummary], pipelineWith([{ id: 'not_queued', items: ['fix-839'] }]))
-    expect(container.querySelector('[data-testid="fixes-ready-empty"]')).toBeNull()
     expect(container.querySelector('[data-testid="fixes-ready-fix-839"]')?.textContent).toContain('Pass rate label is wrong')
     expect(container.textContent).toContain('Ready to merge: 1')
     // The verdict and CI are passed marks, not words on a grey chip.
     const pills = [...container.querySelectorAll('[data-testid="fixes-ready-fix-839"] [data-testid="status-pill"]')]
     expect(pills.map((p) => [p.getAttribute('data-status'), p.textContent])).toEqual([
-      ['passed', 'Opus: merge'],
+      ['passed', 'Approved'],
       ['passed', 'CI passed'],
     ])
   })
@@ -87,13 +89,15 @@ describe('FixesFirstView', () => {
   it('does not list a PR without an Opus merge verdict, even when /pipeline counts it green', async () => {
     const unreviewed = { ...approvedSkippedSummary, review_verdict: null, review_head_sha: null } as FixAttempt
     await render([unreviewed], pipelineWith([{ id: 'not_queued', items: ['fix-839'] }]))
-    expect(container.querySelector('[data-testid="fixes-ready-empty"]')).not.toBeNull()
-    expect(container.textContent).not.toContain('Opus: merge')
+    // Nothing ready: no section at all, not an empty card above the list.
+    expect(container.querySelector('[data-testid="fixes-ready-fix-839"]')).toBeNull()
+    expect(container.querySelector('#fixes-ready')).toBeNull()
   })
 
   it('does not list it when /pipeline does not count it ready', async () => {
     await render([approvedSkippedSummary], pipelineWith([{ id: 'hold', items: ['fix-839'] }]))
-    expect(container.querySelector('[data-testid="fixes-ready-empty"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="fixes-ready-fix-839"]')).toBeNull()
+    expect(container.querySelector('#fixes-ready')).toBeNull()
   })
 
   it('titles Stopped with the status line total and says what the reasons cover', async () => {
