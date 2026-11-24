@@ -9,7 +9,7 @@ description: Map how people move through your app, then fix dead ends, pages peo
 
 # Journey optimizer
 
-**Route:** `/journeys` (sidebar: Journeys)
+**Route:** `/journeys` (sidebar: More pages → Bugs → Journey optimizer; also the **Pages** card on Home. It is a Lab: switch it on under **Settings → Display & sidebar → Labs** to keep it in the sidebar. The site scan needs your own Firecrawl key)
 
 > **Scenario:** Your AI built the app fast. Now you want to know where people get
 > lost: which page they leave from, which two pages say the same thing, and which

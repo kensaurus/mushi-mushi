@@ -21719,7 +21719,7 @@ description: The Checks page in the Mushi Mushi console shows every automatic ch
 
 # Checks
 
-**Route:** `/checks` (sidebar: Checks)
+**Route:** `/checks` (sidebar: More pages → Verify → Checks. It is a Lab: switch it on under **Settings → Display & sidebar → Labs** to keep it in the sidebar)
 
 Is my app OK, and which check is red? Every automatic check Mushi Mushi runs on this app, in one grid, failing checks first. A sentence at the top names the checks that need you, with one button to open the first.
 
@@ -21732,7 +21732,7 @@ Each card has a dot and a state:
 | Green | Pass | A finished run was read and found nothing. Shown with when it last ran. |
 | Grey | Not run yet, Not set up, Status unavailable | Never a pass. Not set up comes with a Set up link. |
 
-An Upgrade pill means the check needs a higher plan. AI prompts and CI runners are Labs: their cards appear once you switch them on under Settings → Display & sidebar → Labs. While you are on Checks or one of its pages, the sidebar lists every check under Checks.
+An Upgrade pill means the check needs a higher plan. AI prompts and CI runners are Labs: their cards appear once you switch them on under Settings → Display & sidebar → Labs. When Checks is in the sidebar, it lists every check under Checks while you are on one of them.
 
 ## The checks
 
@@ -24365,7 +24365,7 @@ description: Set up Mushi Mushi integrations on one page. Open fix pull requests
 
 # Integrations
 
-**Route:** `/integrations/config` (sidebar: **Integrations**, under Connect)
+**Route:** `/integrations/config` (sidebar: More pages → Connect → **Integrations**. It is a Lab: switch it on under **Settings → Display & sidebar → Labs** to keep it in the sidebar)
 
 > **Scenario:** You just set up Mushi Mushi and want fix PRs to open on your GitHub repo,
 > new bugs to land in Linear, and Sentry errors to flow in, all from one page.
@@ -24968,7 +24968,7 @@ description: Map how people move through your app, then fix dead ends, pages peo
 
 # Journey optimizer
 
-**Route:** `/journeys` (sidebar: Journeys)
+**Route:** `/journeys` (sidebar: More pages → Bugs → Journey optimizer; also the **Pages** card on Home. It is a Lab: switch it on under **Settings → Display & sidebar → Labs** to keep it in the sidebar. The site scan needs your own Firecrawl key)
 
 > **Scenario:** Your AI built the app fast. Now you want to know where people get
 > lost: which page they leave from, which two pages say the same thing, and which
@@ -26079,7 +26079,7 @@ description: The Pipeline page in the Mushi Mushi console shows every bug from r
 
 # Pipeline
 
-**Route:** `/pipeline` (sidebar: Pipeline)
+**Route:** `/pipeline` (sidebar: More pages → Fix → Pipeline. It is a Lab: switch it on under **Settings → Display & sidebar → Labs** to keep it in the sidebar)
 
 In Mushi Mushi, every bug moves from a report to a fix PR, an Opus review, CI, a release train, a merge and a deploy. This page shows how many items are in each step now, which are stuck, and why. **This app** follows the app you have open. **All apps** reads every project you can see.
 
@@ -26180,7 +26180,7 @@ Anything that stops a worker from fixing bugs is listed at the top of the tab, w
 | Run outside the worker | A `mushi work` run that no worker claims has run for over 45 minutes: a script started it, so its stage cannot be seen or stopped here | Move that machine to `mushi worker install` |
 | Credits idle | No agent has worked for 2 hours while Cursor credits expire within 7 days, with what blocks the work | Open Workers, or Spend credits |
 
-The same problems show above the Pipeline tabs, as a count on the **Pipeline** item in the sidebar, in **Needs you** on Home (for that app), as "credits idle" on [Spend credits](/admin/credits), in `mushi worker status` and in the MCP tool `get_worker_status`.
+The same problems show above the Pipeline tabs, as a count on the **Pipeline** item in the sidebar when you keep it there, in **Needs you** on Home (for that app), as "credits idle" on [Spend credits](/admin/credits), in `mushi worker status` and in the MCP tool `get_worker_status`.
 
 **Stop this run** (the app's owner or an admin, or the machine's owner; asks first, and is recorded in the audit log) ends the run's claim at once, so the report is free again: the next lane or a cloud agent can take it (it is not put back in a queue). The machine stops the agent at its next heartbeat, within a minute, and commits or pushes nothing more. A git hook that is already running keeps its agent space until git's own time limit (25 minutes); the flag stays up as "a run that was stopped still holds an agent space" until it ends, with the command to end it on the machine. A review follow-up is not a claim: pause its lane and end it on the machine.
 
@@ -26207,7 +26207,7 @@ description: The Apps page in Mushi Mushi shows every app in a team, with each a
 
 # Apps (all apps)
 
-**Route:** `/portfolio` (sidebar: **Apps**; formerly Portfolio. Also from the team switcher: **All this team's apps**)
+**Route:** `/portfolio` (sidebar: More pages → Ship & watch → **Apps**, or switch the Apps Lab on under **Settings → Display & sidebar → Labs** to keep it in the sidebar; formerly Portfolio. Also from the team switcher: **All this team's apps**)
 
 > **Scenario:** You run five apps. One has an old Mushi Mushi SDK, two have the same
 > oversized-file finding, and one never got Sentry set up. You want to see all
@@ -28919,7 +28919,7 @@ description: The Team page in the Mushi Mushi console brings members, billing, A
 
 # Team
 
-**Route:** `/team` (sidebar: **Team**)
+**Route:** `/team` (sidebar: More pages → Account → **Team**. It is a Lab: switch it on under **Settings → Display & sidebar → Labs** to keep it in the sidebar)
 
 > **Scenario:** You want to invite someone, check the bill, see what AI calls cost,
 > or change how your team signs in, without hunting through the sidebar.
