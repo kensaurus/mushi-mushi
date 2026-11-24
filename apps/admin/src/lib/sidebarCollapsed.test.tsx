@@ -33,22 +33,29 @@ afterEach(() => {
 })
 
 describe('useSidebarCollapsed', () => {
-  it('defaults to collapsed', () => {
+  // 2026-11-24: a first-time user got the icon-only rail and could not read the nav.
+  it('defaults to expanded, with labels', () => {
     mount()
-    expect(latest.value).toBe(true)
-    expect(document.documentElement.dataset.sidebar).toBe('collapsed')
+    expect(latest.value).toBe(false)
+    expect(document.documentElement.dataset.sidebar).toBe('expanded')
   })
 
-  it('keeps an expanded choice saved under the old key', () => {
+  it('keeps a choice saved under the old key', () => {
     window.localStorage.setItem('mushi:sidebarCollapsed:v1', '0')
     mount()
     expect(latest.value).toBe(false)
   })
 
+  it('keeps a collapsed choice saved under the old key', () => {
+    window.localStorage.setItem('mushi:sidebarCollapsed:v1', '1')
+    mount()
+    expect(latest.value).toBe(true)
+  })
+
   it('remembers a change under the namespaced key', () => {
     mount()
-    act(() => latest.set(false))
-    expect(window.localStorage.getItem('mushi:ui:sidebar-collapsed')).toBe('{"v":1,"value":false}')
-    expect(document.documentElement.dataset.sidebar).toBe('expanded')
+    act(() => latest.set(true))
+    expect(window.localStorage.getItem('mushi:ui:sidebar-collapsed')).toBe('{"v":1,"value":true}')
+    expect(document.documentElement.dataset.sidebar).toBe('collapsed')
   })
 })

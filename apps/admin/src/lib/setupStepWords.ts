@@ -14,6 +14,12 @@
 import type { SetupStep } from './useSetupStatus'
 
 const WORDS: Record<string, Partial<Pick<SetupStep, 'label' | 'description' | 'cta_label'>>> = {
+  // "Create your first project" / "A project groups all bug reports from one
+  // application": the console says "app" everywhere a builder reads (2026-11-24).
+  project_created: {
+    label: 'Name your app',
+    description: 'Each app keeps its own bug reports, key and fixes.',
+  },
   api_key_generated: {
     label: 'Get your app key',
     description: 'The key lets your app send bug reports to Mushi Mushi. It can only send reports.',

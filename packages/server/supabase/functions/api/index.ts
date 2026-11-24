@@ -186,12 +186,18 @@ const SDK_OBSERVATION_HEADERS = [
 // doesn't enforce CORS — hence "broken on websites only"). Mirror the
 // /v1/reports method set so any future SDK verb is covered without a regression
 // hunt. Origin stays '*' because these are project-API-key authenticated.
+// The console also reads the public /v1/sdk/latest-version through apiFetch,
+// which stamps Authorization and X-Request-Id on every call: without them the
+// preflight failed on every console page load ("x-request-id is not allowed",
+// 2026-11-24) and the header's "Latest SDK" fell back to the build constant.
 app.use(
   '/v1/sdk/*',
   cors({
     origin: '*',
     allowHeaders: [
       'Content-Type',
+      'Authorization',
+      'X-Request-Id',
       'X-Mushi-Api-Key',
       'X-Mushi-Project',
       'X-Mushi-Internal',

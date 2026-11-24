@@ -211,6 +211,61 @@ export function ConnectPage() {
 
   // Native CI shows once the project has loaded and is a native app, so the tab never appears and then vanishes.
   const visibleSections = CONNECT_SECTIONS.filter((s) => s.id !== 'connect-native-ci' || isNativeProject(project))
+  // A new app's next step is the report button (the setup checklist says so). Until its SDK key
+  // has checked in, Bug capture leads the page instead of the editor picker: a first-time user
+  // landed on ten editor buttons while the checklist asked for the report button (2026-11-24).
+  const captureFirst = Boolean(project) && !sdkLastSeenAt
+  const orderedSections = captureFirst
+    ? [...visibleSections.filter((s) => s.id === 'connect-sdk'), ...visibleSections.filter((s) => s.id !== 'connect-sdk')]
+    : visibleSections
+
+  const bugCaptureSection = (
+          <div id="connect-sdk" className="scroll-mt-chrome">
+            <Section title="Bug capture SDK">
+              <SectionDescription when={showSectionDescriptions}>
+                Add the Mushi Mushi SDK to your app so users can report bugs in one tap.
+              </SectionDescription>
+              {project && isExpoReporterNeverConnected(project) ? (
+                <HelpBanner
+                  tone="warn"
+                  title="Your store builds have not checked in yet"
+                  icon={<IconAlertTriangle className="h-5 w-5 text-warn-foreground" />}
+                  className="mb-3"
+                >
+                  <p className="text-xs leading-relaxed">
+                    Keys exist but no store build has checked in. Set{' '}
+                    <code className="font-mono text-2xs">EXPO_PUBLIC_MUSHI_*</code> in your app&apos;s
+                    env file and as GitHub repo variables or secrets, then run a store build: an OTA
+                    update cannot add build-time env.
+                  </p>
+                  <Link
+                    to={`/onboarding?tab=diagnose&project=${project.id}`}
+                    className={`mt-2 inline-block text-xs ${LINK_ACCENT}`}
+                  >
+                    Open Setup Copilot → CI &amp; store builds
+                  </Link>
+                </HelpBanner>
+              ) : null}
+              {project ? (
+                // Embedded: the section is the one card; the SDK card and the
+                // key box inside it drew two more frames (fresh-eyes 2026-11-18).
+                <SdkInstallCard
+                  projectId={project.id}
+                  projectSlug={project.slug}
+                  compact
+                  embedded
+                />
+              ) : (
+                <ProjectFallbackNote
+                  card
+                  pending={projectPending}
+                  missing={projectMissing}
+                  hasError={Boolean(feedError)}
+                />
+              )}
+            </Section>
+          </div>
+  )
 
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-connect">
@@ -267,10 +322,12 @@ export function ConnectPage() {
 
       {/* The field guide's next step for the editor, once the MCP state is known. */}
       {mcpStatsQuery.data && !mcpStatsQuery.loading ? (
-        <Mascot {...editorConnectGuide(mcpStats.topPriority)} size="sm" data-testid="connect-editor-guide" />
+        <Mascot {...editorConnectGuide(mcpStats.topPriority, { appCheckedIn: Boolean(sdkLastSeenAt) })} size="sm" data-testid="connect-editor-guide" />
       ) : null}
 
-      <SectionAnchorNav sections={visibleSections} ariaLabel="Connect page sections" />
+      <SectionAnchorNav sections={orderedSections} ariaLabel="Connect page sections" />
+
+      {captureFirst ? bugCaptureSection : null}
 
       <div id="connect-studio" className="scroll-mt-chrome">
         <ConnectStudio
@@ -381,53 +438,7 @@ export function ConnectPage() {
             </Section>
           </div>
 
-          <div id="connect-sdk" className="scroll-mt-chrome">
-            <Section title="Bug capture SDK">
-              <SectionDescription when={showSectionDescriptions}>
-                Add the Mushi Mushi SDK to your app so users can report bugs in one tap.
-              </SectionDescription>
-              {project && isExpoReporterNeverConnected(project) ? (
-                <HelpBanner
-                  tone="warn"
-                  title="Your store builds have not checked in yet"
-                  icon={<IconAlertTriangle className="h-5 w-5 text-warn-foreground" />}
-                  className="mb-3"
-                >
-                  <p className="text-xs leading-relaxed">
-                    Keys exist but no app has authenticated. For yen-yen, set{' '}
-                    <code className="font-mono text-2xs">EXPO_PUBLIC_MUSHI_*</code> in{' '}
-                    <code className="font-mono text-2xs">apps/mobile/.env.local</code> and as GitHub
-                    repo vars/secrets, then trigger <strong>release-mobile</strong> — OTA cannot inject
-                    compile-time env. <code className="font-mono text-2xs">MUSHI_INGEST_KEY</code> is
-                    Code Health only, not the in-app band.
-                  </p>
-                  <Link
-                    to={`/onboarding?tab=diagnose&project=${project.id}`}
-                    className={`mt-2 inline-block text-xs ${LINK_ACCENT}`}
-                  >
-                    Open Setup Copilot → CI &amp; store builds
-                  </Link>
-                </HelpBanner>
-              ) : null}
-              {project ? (
-                // Embedded: the section is the one card; the SDK card and the
-                // key box inside it drew two more frames (fresh-eyes 2026-11-18).
-                <SdkInstallCard
-                  projectId={project.id}
-                  projectSlug={project.slug}
-                  compact
-                  embedded
-                />
-              ) : (
-                <ProjectFallbackNote
-                  card
-                  pending={projectPending}
-                  missing={projectMissing}
-                  hasError={Boolean(feedError)}
-                />
-              )}
-            </Section>
-          </div>
+          {captureFirst ? null : bugCaptureSection}
 
           <NativeCiSection project={project} showSectionDescriptions={showSectionDescriptions} />
       </div>

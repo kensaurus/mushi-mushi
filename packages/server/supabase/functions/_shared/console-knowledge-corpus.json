@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-18T14:40:30.302Z",
+  "generatedAt": "2026-11-24T13:04:56.536Z",
   "docs": [
     {
       "doc_path": "recipes/connect-github-and-sdk.md",
@@ -60,10 +60,10 @@
       "doc_path": "pages/onboarding.md",
       "section": "main",
       "title": "Set up",
-      "body": "# Set up\n\nThree-step setup: create a project, install the widget, send a test bug.\n\nRoute: /onboarding\nSection: Start\n\nKeywords: get started, setup, install, quickstart, first run, widget, snippet, project\n\nUse this page when the user asks about: get started, setup, install, quickstart, first run, widget",
+      "body": "# Set up\n\nFour steps: name your app, get its key, add the report button, get your first bug report.\n\nRoute: /onboarding\nSection: Start\n\nKeywords: get started, setup, install, quickstart, first run, widget, snippet, project\n\nUse this page when the user asks about: get started, setup, install, quickstart, first run, widget",
       "route_path": "/onboarding",
       "kind": "page",
-      "content_hash": "db53f549ae07c79f25d774a97f9d46956f9099ac4b1a64c0db7dfde2cdb2d5b5"
+      "content_hash": "5b11b3c2b497818cf7114b349405e9b15a2f5eeb845cea3173418b784964bd32"
     },
     {
       "doc_path": "pages/connect.md",

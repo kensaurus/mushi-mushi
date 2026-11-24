@@ -130,7 +130,16 @@ export const HOME_ALL_CLEAR: GuideLine = {
 /** The editor (MCP) state the Connect page already reads. */
 type EditorConnectState = McpStats['topPriority']
 
-export function editorConnectGuide(state: EditorConnectState): GuideLine {
+export function editorConnectGuide(
+  state: EditorConnectState,
+  /** Whether an SDK key has checked in. Omitted keeps the editor-only reading. */
+  app: { appCheckedIn?: boolean } = {},
+): GuideLine {
+  // "Bug reports are coming in" showed to a new app that had only the sample report and an SDK
+  // that never checked in (2026-11-24): the next step is the report button, not the editor.
+  if (app.appCheckedIn === false && state !== 'no_project') {
+    return { pose: 'laptop', line: "Your app hasn't checked in yet. Add the report button first; the steps are just below." }
+  }
   switch (state) {
     case 'no_project':
       return { pose: 'point', line: 'Pick or create an app first. Everything on this page connects to it.' }
