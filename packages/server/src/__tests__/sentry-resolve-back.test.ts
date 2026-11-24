@@ -203,6 +203,18 @@ describe('resolveLinkedSentryIssues', () => {
     expect(String(state.fixEvents[0].detail)).toContain('event:write')
   })
 
+  it('a "Cannot manually resolve" refusal stays open and is not blamed on the token (ec9e9170)', async () => {
+    const fetchImpl = async () => json({ detail: 'Cannot manually resolve one or more issues.' }, 400)
+    const result = await rb.resolveLinkedSentryIssues(makeDb(state), input, { credentials: creds, fetchImpl })
+    expect(result.resolved).toEqual([])
+    expect(result.gone ?? []).toEqual([])
+    expect(result.failed[0].issueId).toBe('4501')
+    expect(state.stamped).toEqual([])
+    expect(state.fixEvents[0]).toMatchObject({ status: 'fail', dedupe_key: 'sentry_resolve_fail:4501' })
+    expect(String(state.fixEvents[0].detail)).toContain('does not allow this issue to be resolved by hand')
+    expect(String(state.fixEvents[0].detail)).not.toContain('event:write')
+  })
+
   it('a redelivered failure hits the dedupe key instead of throwing or stacking', async () => {
     state.fixEventError = { code: '23505', message: 'duplicate key value violates unique constraint' }
     const fetchImpl = async () => json({ detail: 'nope' }, 403)

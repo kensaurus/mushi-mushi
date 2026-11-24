@@ -170,6 +170,17 @@ function isGoneInSentry(err: unknown): boolean {
   return err instanceof SentryApiError && err.status === 404;
 }
 
+/**
+ * Sentry refuses to resolve this issue by hand ("Cannot manually resolve one
+ * or more issues", HTTP 400): some issue types only change status from
+ * Sentry's own side. Not a Mushi or token fault, so it is not logged as an
+ * error and not blamed on the token; the link stays open (Sentry did not
+ * resolve it).
+ */
+function isManualResolveRefused(err: unknown): boolean {
+  return err instanceof SentryApiError && err.status === 400 && /cannot manually resolve/i.test(err.message);
+}
+
 async function recordFixEvent(
   db: SupabaseClient,
   row: {
@@ -292,13 +303,19 @@ export async function resolveLinkedSentryIssues(
         continue;
       }
       const message = String(err instanceof Error ? err.message : err).slice(0, 300);
-      (deps.quiet ? log.warn : log.error)('Sentry resolve-back failed', { projectId, reportId, issueId: link.external_id, err: message });
+      const refused = isManualResolveRefused(err);
+      (deps.quiet || refused ? log.warn : log.error)(
+        refused ? 'Sentry does not allow resolving this issue by hand' : 'Sentry resolve-back failed',
+        { projectId, reportId, issueId: link.external_id, err: message },
+      );
       await recordFixEvent(db, {
         fixAttemptId,
         projectId,
         status: 'fail',
         label: `Sentry issue ${link.external_id} not resolved`,
-        detail: `${message}. The token needs event:write; resolve it in Sentry by hand.`,
+        detail: refused
+          ? `Sentry does not allow this issue to be resolved by hand or through its API (${message}). It stays open in Sentry until Sentry changes its status; check it there.`
+          : `${message}. The token needs event:write; resolve it in Sentry by hand.`,
         dedupeKey: `sentry_resolve_fail:${link.external_id}`,
       });
       result.failed.push({ issueId: link.external_id, error: message });
