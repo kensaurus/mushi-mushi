@@ -11,11 +11,8 @@ import { SETTINGS_SECTION_IDS } from '../../lib/settingsTabs'
 /** General's sections, in page order (ids set on each SettingsList / card). */
 const GENERAL_SECTIONS: ReadonlyArray<{ id: string; label: string }> = [
   { id: 'slack', label: 'Bug alerts' },
-  { id: 'error-tracking', label: 'Error tracking' },
-  { id: 'supabase', label: 'Your database' },
-  { id: 'bug-sorting', label: 'Bug sorting' },
-  { id: 'daily-limits', label: 'Daily limits' },
-  { id: 'widget', label: 'Feedback widget' },
+  // Sentry, the Supabase link, bug sorting, daily limits and the widget line (ADR 0069).
+  { id: 'settings-advanced', label: 'Advanced' },
   { id: 'spend-limits', label: 'Spend limits' },
   { id: SETTINGS_SECTION_IDS.opsSlackBot, label: 'Team Slack bot' },
 ]

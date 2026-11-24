@@ -1,11 +1,18 @@
 /**
  * FILE: apps/admin/src/pages/ConnectPage.tsx
- * PURPOSE: Unified "Connect & Update" hub — one-stop page for SDK install,
- *          MCP setup, CLI install, and SDK upgrade PRs.
+ * PURPOSE: Connect, one step at a time (ADR 0069): 1. the report button,
+ *          2. the editor, 3. GitHub. Only the step to do now is open; done
+ *          steps are one ✓ line with "Change", later ones one line you can
+ *          open. The Update center and SDK health show once the app has
+ *          checked in, as one line while all is well.
+ *
+ *          Links into the page keep working: #connect-sdk, #connect-studio and
+ *          #connect-github open their step, and #connect-sdk-health opens the
+ *          report button step until there is an SDK to check.
  */
 
-import { useEffect, useMemo } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { humanizeApiError } from '../lib/humanizeApiError'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import {
@@ -20,25 +27,20 @@ import { usePageCopy } from '../lib/copy'
 import { SdkInstallCard } from '../components/SdkInstallCard'
 import { SdkNativeConnectivityCard } from '../components/SdkNativeConnectivityCard'
 import { SdkHealthPanel } from '../components/SdkHealthPanel'
-import { SDK_HEALTH_ANCHOR } from '../lib/sdkHealth'
+import { SDK_HEALTH_ANCHOR, type SdkHealthPayload } from '../lib/sdkHealth'
 import { EMPTY_MCP_STATS, type McpStats } from '../components/mcp/types'
 import { ConnectStudio } from '../components/connect/ConnectStudio'
-import { ConnectStatusPills } from '../components/connect/ConnectStatusPills'
+import { connectPills, sdkIsBehind } from '../components/connect/ConnectStatusPills'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import { SectionAnchorNav } from '../components/connect/SectionAnchorNav'
-import { GithubConnectionCard } from '../components/connect/GithubConnectionCard'
+import { GithubConnectionCard, useGithubConnection } from '../components/connect/GithubConnectionCard'
 import { UpdateCenter } from '../components/connect/UpdateCenter'
 import { McpStatusBanner } from '../components/mcp/McpStatusBanner'
+import { StatusMark, type RunStatus } from '../components/signal/StatusMark'
 import { useConnectUx } from '../lib/connectModeUx'
 import { LINK_ACCENT } from '../lib/chipTone'
 import { useDispatchPreflight } from '../lib/useDispatchPreflight'
 import { usePublishPageContext } from '../lib/pageContext'
-import {
-  IconAlertTriangle,
-  IconArrowRight,
-  IconIntegrations,
-  IconLink,
-} from '../components/icons'
+import { IconAlertTriangle, IconLink } from '../components/icons'
 import type { SdkStatus } from '../components/SdkVersionBadge'
 import { isExpoReporterProject } from '../lib/projectMushiEnv'
 import { isSdkKeyScopes, latestHeartbeatAt } from '../lib/heartbeat'
@@ -80,15 +82,28 @@ interface ProjectsPayload {
   projects: ProjectRow[]
 }
 
-// The same order as the page: GitHub and Update share the first row.
-const CONNECT_SECTIONS = [
-  { id: 'connect-studio', label: 'Editor' },
-  { id: 'connect-github', label: 'GitHub' },
-  { id: 'connect-update', label: 'Update' },
-  { id: SDK_HEALTH_ANCHOR, label: 'SDK health' },
-  { id: 'connect-sdk', label: 'Bug capture' },
-  { id: 'connect-native-ci', label: 'Native CI' },
-] as const
+type StepKey = 'sdk' | 'editor' | 'github'
+
+/** The three steps, in the order a new app needs them. Each id is the anchor other pages link to. */
+const CONNECT_STEPS: ReadonlyArray<{ key: StepKey; id: string; label: string }> = [
+  { key: 'sdk', id: 'connect-sdk', label: 'Report button' },
+  { key: 'editor', id: 'connect-studio', label: 'Editor' },
+  { key: 'github', id: 'connect-github', label: 'GitHub' },
+]
+
+/** The step a link opens. SDK health links land on the report button until there is an SDK to check. */
+function stepForHash(hash: string, sdkHealthShown: boolean): StepKey | null {
+  const id = hash.replace(/^#/, '')
+  if (id === 'connect-sdk' || (id === SDK_HEALTH_ANCHOR && !sdkHealthShown)) return 'sdk'
+  if (id === 'connect-studio' || id === 'connect-client-picker') return 'editor'
+  if (id === 'connect-github') return 'github'
+  return null
+}
+
+function repoSlug(url: string | null): string | null {
+  if (!url) return null
+  return url.replace(/^https?:\/\/(www\.)?github\.com\//, '').replace(/\.git$/, '')
+}
 
 function SectionDescription({ children, when = true }: { children: React.ReactNode; when?: boolean }) {
   if (!when) return null
@@ -167,6 +182,7 @@ export function ConnectPage() {
   })
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const activeProjectId = useActiveProjectId()
   const projectsFeed = usePageData<ProjectsPayload>('/v1/admin/projects')
   const mcpStatsQuery = usePageData<McpStats>('/v1/admin/mcp/stats')
@@ -200,143 +216,104 @@ export function ConnectPage() {
   }, [feedError])
 
   const fallbackGithubRepoUrl = project?.primary_repo?.repo_url ?? null
+  const github = useGithubConnection(activeProjectId, preflight, fallbackGithubRepoUrl)
   // SDK keys only: an MCP or CLI key's heartbeat is not the app checking in.
   const sdkLastSeenAt = latestHeartbeatAt(project?.api_keys?.filter((k) => isSdkKeyScopes(k.scopes)))
-  const snapshotLoading = (projectsFeed.loading && !project) || mcpStatsQuery.loading
+  const stepsLoading = (projectsFeed.loading && !project) || mcpStatsQuery.loading
+  const editor = mcpStatsQuery.data ? connectedEditor(mcpStats) : null
+  // An app that only has SDK keys is set up correctly; MCP is an optional extra for the editor.
+  const mcpOptional = mcpStats.topPriority === 'report_only_keys' || mcpStats.topPriority === 'no_mcp_key'
+  const pills = connectPills({
+    sdkLastSeenAt,
+    sdkVersion: project?.sdk_version ?? null,
+    sdkLatestVersion: project?.sdk_latest_version ?? null,
+    sdkStatus: project?.sdk_status ?? null,
+    mcpStats,
+  })
+  const pillValue = (id: 'heartbeat' | 'editor') => pills.find((p) => p.id === id)?.value ?? ''
+
+  // The Update center and SDK health need an SDK to look at: until the app checks in, the report
+  // button step is the whole story (fresh-account walk, 2026-11-24: 44 tabs on a brand-new app).
+  const sdkCheckedIn = Boolean(project) && Boolean(sdkLastSeenAt)
+  const done: Record<StepKey, boolean> = {
+    sdk: Boolean(sdkLastSeenAt),
+    editor: Boolean(editor),
+    github: github.hasGithub,
+  }
+  const firstOpen = CONNECT_STEPS.find((s) => !done[s.key])?.key ?? null
+  const hashStep = stepForHash(location.hash, sdkCheckedIn)
+  // A click opens or closes a step until the next navigation; a link's #hash wins over the
+  // default, which is the first step not done yet (none once all three are).
+  const [choice, setChoice] = useState<{ nav: string; step: StepKey | null } | null>(null)
+  const chosen = choice && choice.nav === location.key ? choice.step : undefined
+  const expanded = chosen !== undefined ? chosen : hashStep ?? (stepsLoading ? null : firstOpen)
+
   // A fresh load of /connect#connect-sdk-health ran the layout's hash scroll
   // before the sections above had their height, and stayed at the top.
   useScrollToHash(!projectsFeed.loading && !mcpStatsQuery.loading)
-  // An app that only has SDK keys is set up correctly; MCP is an optional extra for the editor.
-  const mcpOptional = mcpStats.topPriority === 'report_only_keys' || mcpStats.topPriority === 'no_mcp_key'
 
-  // Native CI shows once the project has loaded and is a native app, so the tab never appears and then vanishes.
-  const visibleSections = CONNECT_SECTIONS.filter((s) => s.id !== 'connect-native-ci' || isNativeProject(project))
-  // A new app's next step is the report button (the setup checklist says so). Until its SDK key
-  // has checked in, Bug capture leads the page instead of the editor picker: a first-time user
-  // landed on ten editor buttons while the checklist asked for the report button (2026-11-24).
-  const captureFirst = Boolean(project) && !sdkLastSeenAt
-  const orderedSections = captureFirst
-    ? [...visibleSections.filter((s) => s.id === 'connect-sdk'), ...visibleSections.filter((s) => s.id !== 'connect-sdk')]
-    : visibleSections
-
-  const bugCaptureSection = (
-          <div id="connect-sdk" className="scroll-mt-chrome">
-            <Section title="Bug capture SDK">
-              <SectionDescription when={showSectionDescriptions}>
-                Add the Mushi Mushi SDK to your app so users can report bugs in one tap.
-              </SectionDescription>
-              {project && isExpoReporterNeverConnected(project) ? (
-                <HelpBanner
-                  tone="warn"
-                  title="Your store builds have not checked in yet"
-                  icon={<IconAlertTriangle className="h-5 w-5 text-warn-foreground" />}
-                  className="mb-3"
-                >
-                  <p className="text-xs leading-relaxed">
-                    Keys exist but no store build has checked in. Set{' '}
-                    <code className="font-mono text-2xs">EXPO_PUBLIC_MUSHI_*</code> in your app&apos;s
-                    env file and as GitHub repo variables or secrets, then run a store build: an OTA
-                    update cannot add build-time env.
-                  </p>
-                  <Link
-                    to={`/onboarding?tab=diagnose&project=${project.id}`}
-                    className={`mt-2 inline-block text-xs ${LINK_ACCENT}`}
-                  >
-                    Open Setup Copilot → CI &amp; store builds
-                  </Link>
-                </HelpBanner>
-              ) : null}
-              {project ? (
-                // Embedded: the section is the one card; the SDK card and the
-                // key box inside it drew two more frames (fresh-eyes 2026-11-18).
-                <SdkInstallCard
-                  projectId={project.id}
-                  projectSlug={project.slug}
-                  compact
-                  embedded
-                />
-              ) : (
-                <ProjectFallbackNote
-                  card
-                  pending={projectPending}
-                  missing={projectMissing}
-                  hasError={Boolean(feedError)}
-                />
-              )}
-            </Section>
-          </div>
+  const fallback = (
+    <ProjectFallbackNote pending={projectPending} missing={projectMissing} hasError={Boolean(feedError)} />
   )
 
-  return (
-    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-connect">
-      <PageHeaderBar
-        title={copy?.title ?? 'Connect'}
-        icon={<IconLink />}
-        description={
-          copy?.description ??
-          'Connect GitHub, install the SDK, add MCP to your editor, set up the CLI, and keep @mushi-mushi/* packages current.'
-        }
-        helpTitle={copy?.help?.title ?? 'About Connect'}
-        helpWhatIsIt={
-          copy?.help?.whatIsIt ??
-          'The install and upgrade cockpit — connect your repo, copy SDK/MCP install commands, and create a PR that bumps @mushi-mushi packages.'
-        }
-        helpUseCases={
-          copy?.help?.useCases ?? [
-            'First-time setup: connect GitHub → install SDK → add MCP to Cursor',
-            'Upgrade path: "Create Upgrade PR" bumps @mushi-mushi/* to latest npm',
-            'Verify indexing: enable codebase index so Explore can map your repo',
-          ]
-        }
-        helpHowToUse={
-          copy?.help?.howToUse ??
-          'Connect GitHub first. Copy the SDK install snippet into your app, then use MCP deeplinks for Cursor. When versions drift, click Create Upgrade PR and merge after CI passes.'
-        }
-      />
+  const summary: Record<StepKey, string> = {
+    sdk: done.sdk ? `App checked in ${pillValue('heartbeat')}` : 'Lets users report bugs in one tap',
+    editor: stepsLoading
+      ? 'Checking…'
+      : done.editor
+        ? pillValue('editor')
+        : 'Lets your editor read each bug',
+    github: github.loading
+      ? 'Checking…'
+      : done.github
+        ? repoSlug(github.repoUrl) ?? 'Connected'
+        : 'Lets fixes open pull requests',
+  }
 
-      {/* Heartbeat, version and editor in three pills (Connect page intent). */}
-      <PagePosture
-        slots={[
-          {
-            id: 'connect-pills',
-            priority: POSTURE_PRIORITY.status,
-            children: (
-              <ConnectStatusPills
-                sdkLastSeenAt={sdkLastSeenAt}
-                sdkVersion={project?.sdk_version ?? null}
-                sdkLatestVersion={project?.sdk_latest_version ?? null}
-                sdkStatus={project?.sdk_status ?? null}
-                mcpStats={mcpStats}
-                loading={snapshotLoading}
-              />
-            ),
-          },
-          {
-            id: 'connect-mcp-problem',
-            priority: POSTURE_PRIORITY.heroOrSnapshot,
-            show: mcpStats.topPriority === 'endpoint_mismatch' || mcpStats.topPriority === 'never_connected',
-            children: <McpStatusBanner stats={mcpStats} plainBanner />,
-          },
-        ]}
-      />
-
-      {/* The field guide's next step for the editor, once the MCP state is known. */}
-      {mcpStatsQuery.data && !mcpStatsQuery.loading ? (
-        <Mascot {...editorConnectGuide(mcpStats.topPriority, { appCheckedIn: Boolean(sdkLastSeenAt) })} size="sm" data-testid="connect-editor-guide" />
-      ) : null}
-
-      <SectionAnchorNav sections={orderedSections} ariaLabel="Connect page sections" />
-
-      {captureFirst ? bugCaptureSection : null}
-
-      <div id="connect-studio" className="scroll-mt-chrome">
+  const body: Record<StepKey, ReactNode> = {
+    sdk: (
+      <>
+        <SectionDescription when={showSectionDescriptions}>
+          Add the Mushi Mushi SDK to your app so users can report bugs in one tap.
+        </SectionDescription>
+        {project && isExpoReporterNeverConnected(project) ? (
+          <HelpBanner
+            tone="warn"
+            title="Your store builds have not checked in yet"
+            icon={<IconAlertTriangle className="h-5 w-5 text-warn-foreground" />}
+            className="mb-3"
+          >
+            <p className="text-xs leading-relaxed">
+              Keys exist but no store build has checked in. Set{' '}
+              <code className="font-mono text-2xs">EXPO_PUBLIC_MUSHI_*</code> in your app&apos;s
+              env file and as GitHub repo variables or secrets, then run a store build: an OTA
+              update cannot add build-time env.
+            </p>
+            <Link
+              to={`/onboarding?tab=diagnose&project=${project.id}`}
+              className={`mt-2 inline-block text-xs ${LINK_ACCENT}`}
+            >
+              Open Setup Copilot → CI &amp; store builds
+            </Link>
+          </HelpBanner>
+        ) : null}
+        {project ? (
+          // Embedded: the step is the one frame; the SDK card and the key box
+          // inside it drew two more (fresh-eyes 2026-11-18).
+          <SdkInstallCard projectId={project.id} projectSlug={project.slug} compact embedded />
+        ) : (
+          fallback
+        )}
+      </>
+    ),
+    editor: (
+      <>
         <ConnectStudio
           projectId={project?.id ?? activeProjectId}
           projectName={project?.name}
-          connectedEditor={mcpStatsQuery.data ? connectedEditor(mcpStats) : null}
+          connectedEditor={editor}
         />
-        {/* One line: Kenji above already says why (round-3 review, 2026-11-19: three stacked
-            instruction paragraphs). The detail moves to the link's tooltip. */}
+        {/* One line: Kenji above already says why (round-3 review, 2026-11-19). */}
         {mcpOptional && project ? (
           <p className="mt-2 text-xs text-fg-muted" data-testid="connect-mcp-optional">
             <Link
@@ -349,19 +326,66 @@ export function ConnectPage() {
             (optional) so your editor can read these reports.
           </p>
         ) : null}
-      </div>
+      </>
+    ),
+    github: (
+      <>
+        <SectionDescription when={showSectionDescriptions}>
+          Connect your repository to enable one-click upgrade PRs and autofix.
+        </SectionDescription>
+        <GithubConnectionCard projectId={activeProjectId} preflight={preflight} fallbackRepoUrl={fallbackGithubRepoUrl} />
+      </>
+    ),
+  }
 
-      {/* The install lives once on this page, in Bug capture, where "Make a
-          key and fill it in" fills the snippet. A pointer to Set up sat above
-          it, so the install showed twice; a setup banner said the same again
-          (first-time user test, 2026-10-28). The "App checked in" pill is the
-          one status. */}
+  return (
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-connect">
+      <PageHeaderBar
+        title={copy?.title ?? 'Connect'}
+        icon={<IconLink />}
+        description={
+          copy?.description ??
+          'Connect your app, one step at a time.'
+        }
+        helpTitle={copy?.help?.title ?? 'About Connect'}
+        helpWhatIsIt={
+          copy?.help?.whatIsIt ??
+          'Where your app connects to Mushi Mushi: the report button in your app, your editor, and your GitHub repo. Once the app checks in, it also keeps the SDK current.'
+        }
+        helpUseCases={
+          copy?.help?.useCases ?? [
+            'First-time setup: add the report button, then connect Cursor or Claude Code, then GitHub',
+            'Upgrade path: "Create Upgrade PR" bumps @mushi-mushi/* to latest npm',
+            'Check why bug reports stopped arriving: SDK health lists each problem with a fix',
+          ]
+        }
+        helpHowToUse={
+          copy?.help?.howToUse ??
+          'Do the open step; the next one opens when it is done. Press Change on a done step to redo it.'
+        }
+      />
+
+      <PagePosture
+        slots={[
+          {
+            id: 'connect-mcp-problem',
+            priority: POSTURE_PRIORITY.heroOrSnapshot,
+            show: mcpStats.topPriority === 'endpoint_mismatch' || mcpStats.topPriority === 'never_connected',
+            children: <McpStatusBanner stats={mcpStats} plainBanner />,
+          },
+        ]}
+      />
+
+      {/* The field guide's next step, once the MCP state is known. */}
+      {mcpStatsQuery.data && !mcpStatsQuery.loading ? (
+        <Mascot {...editorConnectGuide(mcpStats.topPriority, { appCheckedIn: Boolean(sdkLastSeenAt) })} size="sm" data-testid="connect-editor-guide" />
+      ) : null}
 
       {feedError && (
         <HelpBanner
           tone="danger"
           role="alert"
-          title="Couldn't load your projects"
+          title="Couldn't load your apps"
           icon={<IconAlertTriangle className="h-4 w-4 text-danger-foreground" />}
         >
           <p className="text-xs">{feedErrorText}</p>
@@ -371,76 +395,118 @@ export function ConnectPage() {
         </HelpBanner>
       )}
 
-      {/* GitHub and Update center are both short: they share the first row, and the long
-          sections run full width under them. A sticky right column ended at about 1110 px beside
-          a 2500 px left column (round-3 review, 2026-11-19). */}
-      <div className="space-y-6">
-        <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-2">
-          <div id="connect-github" className="scroll-mt-chrome min-w-0">
-            <Section
-              title="GitHub"
-              action={
-                <Btn to="/integrations/config" size="sm" variant="ghost" className="gap-1.5">
-                    <IconIntegrations className="h-3.5 w-3.5" aria-hidden />
-                    Manage
-                    <IconArrowRight className="h-3.5 w-3.5" aria-hidden />
-                  </Btn>
-              }
-            >
-              <SectionDescription when={showSectionDescriptions}>
-                Connect your repository to enable one-click upgrade PRs and autofix.
-              </SectionDescription>
-              <GithubConnectionCard
-                projectId={activeProjectId}
-                preflight={preflight}
-                fallbackRepoUrl={fallbackGithubRepoUrl}
-              />
-            </Section>
-          </div>
+      <ol className="divide-y divide-edge-subtle rounded-md border border-edge-subtle bg-surface" aria-label="Connect your app" data-testid="connect-steps">
+        {CONNECT_STEPS.map((step, i) => {
+          const open = expanded === step.key
+          const isDone = done[step.key]
+          const isNext = !isDone && firstOpen === step.key
+          const mark: RunStatus = isDone ? 'passed' : isNext ? 'waiting' : 'idle'
+          return (
+            <li key={step.key} id={step.id} className="scroll-mt-chrome" data-step={step.key} data-done={isDone || undefined}>
+              {/* SDK health links land here until there is an SDK to check. */}
+              {step.key === 'sdk' && !sdkCheckedIn ? <span id={SDK_HEALTH_ANCHOR} className="block" aria-hidden="true" /> : null}
+              <button
+                type="button"
+                aria-expanded={open}
+                aria-controls={`${step.id}-body`}
+                onClick={() => setChoice({ nav: location.key, step: open ? null : step.key })}
+                className="flex w-full min-w-0 items-center gap-2 px-3 py-2 text-left hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand"
+              >
+                <StatusMark status={mark} />
+                <span className="shrink-0 text-xs font-semibold text-fg">{`${i + 1}. ${step.label}`}</span>
+                <span className="min-w-0 flex-1 truncate text-xs text-fg-muted">{summary[step.key]}</span>
+                <span className="shrink-0 text-2xs font-semibold text-brand">
+                  {open ? 'Hide' : isDone ? 'Change' : isNext ? 'Start' : 'Open'}
+                </span>
+              </button>
+              {open ? (
+                <div id={`${step.id}-body`} className="border-t border-edge-subtle px-3 py-3">
+                  {body[step.key]}
+                </div>
+              ) : null}
+            </li>
+          )
+        })}
+      </ol>
 
-          <div id="connect-update" className="scroll-mt-chrome min-w-0">
-            <Section title="Update center">
-              <SectionDescription when={showSectionDescriptions}>
-                Keep the Mushi Mushi SDK up to date in your connected repository. A one-click PR bumps only
-                @mushi-mushi/* version strings — you review and merge.
-              </SectionDescription>
-              {project ? (
-                <UpdateCenter
-                  project={project}
-                  preflight={preflight}
-                />
-              ) : (
-                <ProjectFallbackNote
-                  pending={projectPending}
-                  missing={projectMissing}
-                  hasError={Boolean(feedError)}
-                />
-              )}
-            </Section>
-          </div>
-        </div>
+      {project && sdkCheckedIn ? (
+        <SdkUpkeep project={project} preflight={preflight} showSectionDescriptions={showSectionDescriptions} />
+      ) : null}
 
-          <div id={SDK_HEALTH_ANCHOR} className="scroll-mt-chrome">
-            <Section title="SDK health">
-              <SectionDescription when={showSectionDescriptions}>
-                Problems that stop bug reports from arriving, each with a fix.
-              </SectionDescription>
-              {project ? (
-                <SdkHealthPanel projectId={project.id} nativeApp={isNativeProject(project)} bare />
-              ) : (
-                <ProjectFallbackNote
-                  card
-                  pending={projectPending}
-                  missing={projectMissing}
-                  hasError={Boolean(feedError)}
-                />
-              )}
-            </Section>
-          </div>
+      <NativeCiSection project={project} showSectionDescriptions={showSectionDescriptions} />
+    </div>
+  )
+}
 
-          {captureFirst ? null : bugCaptureSection}
+/**
+ * The Update center and SDK health, once the app has checked in. When the SDK
+ * is current and nothing is wrong this is one line, with the detail a click
+ * away (ADR 0069); otherwise both sections show, side by side on a wide screen.
+ */
+function SdkUpkeep({
+  project,
+  preflight,
+  showSectionDescriptions,
+}: {
+  project: ProjectRow
+  preflight: ReturnType<typeof useDispatchPreflight>
+  showSectionDescriptions: boolean
+}) {
+  const [details, setDetails] = useState(false)
+  const health = usePageData<SdkHealthPayload>(`/v1/admin/projects/${project.id}/sdk-health`)
+  const behind = sdkIsBehind({
+    sdkVersion: project.sdk_version ?? null,
+    sdkLatestVersion: project.sdk_latest_version ?? null,
+    sdkStatus: project.sdk_status ?? null,
+  })
+  const healthy =
+    Boolean(project.sdk_version) &&
+    !behind &&
+    Boolean(health.data) &&
+    (health.data?.problems.length ?? 0) === 0 &&
+    (health.data?.notes.length ?? 0) === 0
 
-          <NativeCiSection project={project} showSectionDescriptions={showSectionDescriptions} />
+  if (healthy && !details) {
+    return (
+      <div
+        id={SDK_HEALTH_ANCHOR}
+        className="scroll-mt-chrome flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-edge-subtle px-3 py-2"
+        data-testid="connect-sdk-ok"
+      >
+        <StatusMark status="passed" />
+        <span className="min-w-0 flex-1 text-xs text-fg-secondary">
+          <span className="font-semibold text-fg">SDK {project.sdk_version}</span> is up to date. Nothing is stopping bug reports.
+        </span>
+        <button
+          type="button"
+          aria-expanded={false}
+          onClick={() => setDetails(true)}
+          className="text-2xs font-semibold text-brand hover:underline"
+        >
+          Details
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-2">
+      <div id="connect-update" className="scroll-mt-chrome min-w-0">
+        <Section title="Update center">
+          <SectionDescription when={showSectionDescriptions}>
+            Keep the Mushi Mushi SDK up to date in your connected repository. A one-click PR bumps only
+            @mushi-mushi/* version strings — you review and merge.
+          </SectionDescription>
+          <UpdateCenter project={project} preflight={preflight} />
+        </Section>
+      </div>
+      <div id={SDK_HEALTH_ANCHOR} className="scroll-mt-chrome min-w-0">
+        <Section title="SDK health">
+          <SectionDescription when={showSectionDescriptions}>
+            Problems that stop bug reports from arriving, each with a fix.
+          </SectionDescription>
+          <SdkHealthPanel projectId={project.id} nativeApp={isNativeProject(project)} bare />
+        </Section>
       </div>
     </div>
   )

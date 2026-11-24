@@ -1,19 +1,15 @@
 /**
  * @vitest-environment jsdom
  *
- * Connect opens on three pills: SDK heartbeat (SDK keys only), SDK version
- * with an upgrade badge when behind, and the editor connection. Each pill
- * jumps to a section that exists on the page.
+ * Connect's status lines: SDK heartbeat (SDK keys only), SDK version with an
+ * upgrade badge when behind, and the editor connection. Each points at a
+ * section that exists on the page. The step rows show them (ADR 0069); the
+ * "Upgrade the SDK" button lives in the Update center (UpdateCenter).
  */
 
-import { act, createElement } from 'react'
-import { createRoot, type Root } from 'react-dom/client'
-import { MemoryRouter } from 'react-router-dom'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { ConnectStatusPills, connectPills, sdkIsBehind } from './ConnectStatusPills'
+import { describe, expect, it } from 'vitest'
+import { connectPills, sdkIsBehind } from './ConnectStatusPills'
 import { SDK_HEALTH_ANCHOR } from '../../lib/sdkHealth'
-
-;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const NOW = Date.parse('2026-10-27T12:00:00Z')
 const CONNECT_SECTION_IDS = ['connect-studio', 'connect-github', SDK_HEALTH_ANCHOR, 'connect-sdk', 'connect-update']
@@ -69,32 +65,5 @@ describe('connectPills', () => {
   it('treats a deprecated or outdated status as behind even without a latest version', () => {
     expect(sdkIsBehind({ sdkVersion: '0.1.0', sdkLatestVersion: null, sdkStatus: 'deprecated' })).toBe(true)
     expect(sdkIsBehind({ sdkVersion: '0.1.0', sdkLatestVersion: '0.1.0', sdkStatus: null })).toBe(false)
-  })
-})
-
-describe('ConnectStatusPills', () => {
-  let host: HTMLDivElement
-  let root: Root
-  beforeEach(() => {
-    host = document.createElement('div')
-    document.body.appendChild(host)
-    root = createRoot(host)
-  })
-  afterEach(() => {
-    act(() => root.unmount())
-    host.remove()
-  })
-
-  it('offers "Upgrade the SDK" only when the SDK is behind', () => {
-    const base = { sdkLastSeenAt: null, sdkLatestVersion: '0.24.4', sdkStatus: null, mcpStats: { connectedKeyCount: 0, lastSeenAt: null } }
-    act(() => root.render(createElement(MemoryRouter, null, createElement(ConnectStatusPills, { ...base, sdkVersion: '0.24.3' }))))
-    expect(Array.from(host.querySelectorAll('button')).map((b) => b.textContent)).toEqual(['Upgrade the SDK'])
-    act(() => root.render(createElement(MemoryRouter, null, createElement(ConnectStatusPills, { ...base, sdkVersion: '0.24.4' }))))
-    expect(host.querySelectorAll('button')).toHaveLength(0)
-    expect(host.querySelectorAll('[data-pill]')).toHaveLength(3)
-    // Each pill leads with a status mark, colour plus glyph (2026-11-18): no editor is idle.
-    expect(host.querySelector('[data-pill="editor"] [data-testid="status-mark"]')?.getAttribute('data-status')).toBe('idle')
-    act(() => root.render(createElement(MemoryRouter, null, createElement(ConnectStatusPills, { ...base, sdkVersion: '0.24.3' }))))
-    expect(host.querySelector('[data-pill="version"] [data-testid="status-pill"]')?.getAttribute('data-status')).toBe('slow')
   })
 })

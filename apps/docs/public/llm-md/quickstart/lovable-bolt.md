@@ -127,7 +127,7 @@ in your page, like the key of any chat or analytics tool.
 
 ## Change how the button looks
 
-Change it in the Mushi console: **Connect → Bug capture SDK**, then Save. Your
+Change it in the Mushi console: **Connect → Report button → Customize the report button**, then Save. Your
 app picks up the corner, theme, label and colour at its next start, so you do
 not paste a new line or redeploy. You can also ask your editor's agent (MCP
 `set_widget_settings`) or run `mushi widget set`.

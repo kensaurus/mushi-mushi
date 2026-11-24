@@ -245,7 +245,7 @@ export function frameworkLabel(fw: Framework): string {
  *    `mushi-mushi` (covered in the docs migration guide). */
 export function installCommand(fw: Framework): string {
   // The loader needs no package manager — paste the <script> tag and done.
-  if (fw === 'loader') return '# No install — paste the <script> tag into your <head>.'
+  if (fw === 'loader') return '# No install needed'
   if (fw === 'react-native') return 'npm install @mushi-mushi/react-native'
   if (fw === 'expo') return 'npx expo install @mushi-mushi/react-native expo-sensors'
   if (fw === 'capacitor') return 'npm install @mushi-mushi/capacitor && npx cap sync'
@@ -338,7 +338,7 @@ function widgetLines(cfg: SdkPreviewConfig, indent: string): string {
  * snippets leave them out.
  */
 const LOOK_FROM_CONSOLE_NOTE =
-  'Look and position come from the Mushi console (Connect → Bug capture SDK); set them here only to lock them.'
+  'Look and position come from the Mushi console; set them here only to lock them.'
 
 export interface RenderSnippetOptions {
   /**
