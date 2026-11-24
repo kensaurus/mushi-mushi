@@ -153,6 +153,8 @@ export interface SentryResolveBackResult {
   failed: Array<{ issueId: string; error: string }>;
   /** Issues Sentry answered 404 for (deleted or merged away): stamped, not retried. */
   gone?: string[];
+  /** Issues Sentry resolves on its own (it refuses a manual resolve): stamped, not retried. */
+  sentryManaged?: string[];
   skipped?: 'no_links' | 'no_credentials';
 }
 
@@ -168,6 +170,13 @@ export interface SentryBackDeps {
 /** Sentry no longer has the issue (deleted, or merged into another one). */
 function isGoneInSentry(err: unknown): boolean {
   return err instanceof SentryApiError && err.status === 404;
+}
+
+/** Sentry refuses a manual resolve for issue types it opens and closes itself
+ *  (uptime, cron and metric-alert issues): HTTP 400 "Cannot manually resolve
+ *  one or more issues." Retrying can never succeed. */
+export function isSentryManagedIssue(err: unknown): boolean {
+  return err instanceof SentryApiError && err.status === 400 && /cannot manually resolve/i.test(err.message);
 }
 
 async function recordFixEvent(
@@ -289,6 +298,22 @@ export async function resolveLinkedSentryIssues(
         await db.from('report_external_issues').update({ resolved_at: new Date().toISOString(), archived_at: null }).eq('id', link.id);
         log.warn('Sentry issue no longer exists; link closed', { projectId, reportId, issueId: link.external_id });
         (result.gone ??= []).push(link.external_id);
+        continue;
+      }
+      if (isSentryManagedIssue(err)) {
+        // Sentry closes this issue type itself when the check recovers; it
+        // comes back on its own if it fires again. Stamp so no retry loops.
+        await db.from('report_external_issues').update({ resolved_at: new Date().toISOString(), archived_at: null }).eq('id', link.id);
+        log.info('Sentry resolves this issue type itself; link closed', { projectId, reportId, issueId: link.external_id });
+        await recordFixEvent(db, {
+          fixAttemptId,
+          projectId,
+          status: 'ok',
+          label: `Sentry issue ${link.external_id} closes on its own`,
+          detail: 'Sentry does not allow resolving this issue type by hand (uptime, cron or metric alerts); it resolves it when the check recovers.',
+          dedupeKey: `sentry_resolve_managed:${link.external_id}`,
+        });
+        (result.sentryManaged ??= []).push(link.external_id);
         continue;
       }
       const message = String(err instanceof Error ? err.message : err).slice(0, 300);
