@@ -203,6 +203,60 @@ describe('resolveLinkedSentryIssues', () => {
     expect(String(state.fixEvents[0].detail)).toContain('event:write')
   })
 
+  describe('Sentry refuses a manual resolve (monitor-driven issue, report 7483a269)', () => {
+    const refusal = () => json({ detail: 'Cannot manually resolve one or more issues.' }, 400)
+
+    it('does not try the plain resolve, leaves a still-open issue open, and records no failure', async () => {
+      const calls: Array<{ method: string; body: string }> = []
+      const fetchImpl = async (_url: string, init?: RequestInit) => {
+        calls.push({ method: init?.method ?? 'GET', body: String(init?.body ?? '') })
+        return init?.method === 'PUT' ? refusal() : json({ id: '4501', status: 'unresolved' })
+      }
+      const result = await rb.resolveLinkedSentryIssues(makeDb(state), input, { credentials: creds, fetchImpl })
+      expect(calls.filter((c) => c.method === 'PUT')).toHaveLength(1)
+      expect(result.resolved).toEqual([])
+      expect(result.failed).toEqual([])
+      expect(result.selfResolving).toEqual(['4501'])
+      expect(state.stamped).toEqual([])
+      expect(state.fixEvents[0]).toMatchObject({ status: 'pending', dedupe_key: 'sentry_resolve_auto:4501' })
+    })
+
+    it('stamps resolved_at once Sentry itself lists the issue as resolved', async () => {
+      const fetchImpl = async (_url: string, init?: RequestInit) =>
+        init?.method === 'PUT' ? refusal() : json({ id: '4501', status: 'resolved' })
+      const result = await rb.resolveLinkedSentryIssues(makeDb(state), input, { credentials: creds, fetchImpl })
+      expect(result.resolved).toEqual(['4501'])
+      expect(state.stamped).toEqual(['l1'])
+    })
+
+    it('reports a failure when the stamp write fails', async () => {
+      const db = makeDb(state) as unknown as { from: (n: string) => Record<string, unknown> }
+      const failing = {
+        from: (n: string) => ({
+          ...db.from(n),
+          update: () => ({ eq: () => Promise.resolve({ error: { message: 'boom' } }) }),
+        }),
+      } as never
+      const fetchImpl = async (_url: string, init?: RequestInit) =>
+        init?.method === 'PUT' ? refusal() : json({ id: '4501', status: 'resolved' })
+      const result = await rb.resolveLinkedSentryIssues(failing, input, { credentials: creds, fetchImpl })
+      expect(result.resolved).toEqual([])
+      expect(result.failed[0].issueId).toBe('4501')
+      expect(state.fixEvents[0]).toMatchObject({ status: 'fail' })
+    })
+
+    it('another 400 that only mentions the phrase still falls back to the plain resolve', async () => {
+      const bodies: string[] = []
+      const fetchImpl = async (_url: string, init?: RequestInit) => {
+        bodies.push(String(init?.body ?? ''))
+        return bodies.length === 1 ? json({ detail: 'Invalid: cannot manually resolve one or more issues in release X' }, 400) : json({})
+      }
+      const result = await rb.resolveLinkedSentryIssues(makeDb(state), input, { credentials: creds, fetchImpl })
+      expect(result.resolved).toEqual(['4501'])
+      expect(bodies[1]).toBe('{"status":"resolved"}')
+    })
+  })
+
   it('a redelivered failure hits the dedupe key instead of throwing or stacking', async () => {
     state.fixEventError = { code: '23505', message: 'duplicate key value violates unique constraint' }
     const fetchImpl = async () => json({ detail: 'nope' }, 403)

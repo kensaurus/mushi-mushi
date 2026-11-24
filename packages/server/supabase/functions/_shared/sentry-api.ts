@@ -266,15 +266,45 @@ export async function resolveSentryIssue(
     body: JSON.stringify({ status: 'resolvedInNextRelease' }),
   });
   if (first.ok) return { status: 'resolvedInNextRelease' };
+  const firstDetail = await first.text().catch(() => '');
+  if (isManualResolveRefusal(first.status, firstDetail)) throw new SentryManualResolveRefused(issueId);
   if (first.status !== 400 && first.status !== 422) {
-    const detail = await first.text().then((t) => t.slice(0, 200)).catch(() => '');
-    throw new SentryApiError(first.status, `Sentry resolve → ${first.status} ${detail}`.trim());
+    throw new SentryApiError(first.status, `Sentry resolve → ${first.status} ${firstDetail.slice(0, 200)}`.trim());
   }
-  await sentryJson<unknown>(fetchImpl, token, path, {
+  const second = await sentryFetch(fetchImpl, token, path, {
     method: 'PUT',
     body: JSON.stringify({ status: 'resolved' }),
   });
+  if (!second.ok) {
+    const detail = await second.text().catch(() => '');
+    if (isManualResolveRefusal(second.status, detail)) throw new SentryManualResolveRefused(issueId);
+    throw new SentryApiError(second.status, `Sentry PUT ${path} → ${second.status} ${detail.slice(0, 200)}`.trim());
+  }
+  await second.body?.cancel();
   return { status: 'resolved' };
+}
+
+/**
+ * Sentry refuses to resolve some issue types by hand (monitor-driven ones such
+ * as metric alerts, uptime and cron issues): it resolves them itself when the
+ * monitor recovers. The refusal is a 400 whose `detail` is exactly
+ * "Cannot manually resolve one or more issues." (report 7483a269).
+ */
+export class SentryManualResolveRefused extends SentryApiError {
+  constructor(readonly issueId: string) {
+    super(400, `Sentry resolve → 400 Cannot manually resolve one or more issues.`);
+    this.name = 'SentryManualResolveRefused';
+  }
+}
+
+function isManualResolveRefusal(status: number, body: string): boolean {
+  if (status !== 400) return false;
+  try {
+    const detail = (JSON.parse(body) as { detail?: unknown })?.detail;
+    return typeof detail === 'string' && /^cannot manually resolve one or more issues\.?$/i.test(detail.trim());
+  } catch {
+    return false;
+  }
 }
 
 /**

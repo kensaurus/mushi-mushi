@@ -28,6 +28,7 @@ import {
   getSentryIssue,
   resolveSentryIssue,
   SentryApiError,
+  SentryManualResolveRefused,
   unresolveSentryIssue,
   type FetchLike,
 } from './sentry-api.ts';
@@ -153,6 +154,9 @@ export interface SentryResolveBackResult {
   failed: Array<{ issueId: string; error: string }>;
   /** Issues Sentry answered 404 for (deleted or merged away): stamped, not retried. */
   gone?: string[];
+  /** Issues Sentry will not resolve by hand (monitor-driven) and still lists
+   *  as open: left open, not a failure; Sentry resolves them on recovery. */
+  selfResolving?: string[];
   skipped?: 'no_links' | 'no_credentials';
 }
 
@@ -175,7 +179,7 @@ async function recordFixEvent(
   row: {
     fixAttemptId: string | null;
     projectId: string;
-    status: 'ok' | 'fail';
+    status: 'ok' | 'fail' | 'pending';
     label: string;
     detail: string;
     dedupeKey: string;
@@ -201,6 +205,35 @@ async function recordFixEvent(
       err: error.message,
     });
   }
+}
+
+/**
+ * Sentry refused a manual resolve (a monitor-driven issue). Reads the issue:
+ * when Sentry already resolved it, stamps the link; otherwise leaves it open.
+ */
+async function handleManualResolveRefused(
+  db: SupabaseClient,
+  link: SentryLinkRow,
+  creds: SentryCredentials,
+  deps: SentryBackDeps,
+): Promise<'resolved' | 'open' | 'stamp_failed'> {
+  let status: string | undefined;
+  try {
+    status = (await getSentryIssue(creds.token, creds.orgSlug, link.external_id, deps.fetchImpl)).status;
+  } catch (err) {
+    log.warn('Sentry issue status read failed after a refused resolve', { issueId: link.external_id, err: String(err).slice(0, 200) });
+    return 'open';
+  }
+  if (status !== 'resolved') return 'open';
+  const { error } = await db
+    .from('report_external_issues')
+    .update({ resolved_at: new Date().toISOString(), archived_at: null })
+    .eq('id', link.id);
+  if (error) {
+    log.error('Sentry issue is resolved but resolved_at stamp failed', { linkId: link.id, err: error.message });
+    return 'stamp_failed';
+  }
+  return 'resolved';
 }
 
 /**
@@ -283,7 +316,30 @@ export async function resolveLinkedSentryIssues(
         dedupeKey: `sentry_resolve:${link.external_id}`,
       });
       result.resolved.push(link.external_id);
-    } catch (err) {
+    } catch (caught) {
+      let err: unknown = caught;
+      if (err instanceof SentryManualResolveRefused) {
+        const outcome = await handleManualResolveRefused(db, link, creds, deps);
+        if (outcome === 'resolved') {
+          result.resolved.push(link.external_id);
+          continue;
+        }
+        if (outcome === 'open') {
+          log.info('Sentry resolves this issue type itself; link left open', { projectId, reportId, issueId: link.external_id });
+          await recordFixEvent(db, {
+            fixAttemptId,
+            projectId,
+            status: 'pending',
+            label: `Sentry issue ${link.external_id} closes in Sentry on its own`,
+            detail: 'Sentry does not let anyone resolve this kind of issue by hand (a monitor or alert issue); it resolves it when the monitor recovers. Mushi keeps the link open and checks again.',
+            dedupeKey: `sentry_resolve_auto:${link.external_id}`,
+          });
+          (result.selfResolving ??= []).push(link.external_id);
+          continue;
+        }
+        // Stamp failed: fall through and report it as a failure.
+        err = new Error(`Sentry issue ${link.external_id} is resolved in Sentry, but saving that in Mushi failed`);
+      }
       if (isGoneInSentry(err)) {
         // Nothing left to resolve; stamp it so no caller retries it forever.
         await db.from('report_external_issues').update({ resolved_at: new Date().toISOString(), archived_at: null }).eq('id', link.id);
@@ -298,7 +354,9 @@ export async function resolveLinkedSentryIssues(
         projectId,
         status: 'fail',
         label: `Sentry issue ${link.external_id} not resolved`,
-        detail: `${message}. The token needs event:write; resolve it in Sentry by hand.`,
+        detail: caught instanceof SentryManualResolveRefused
+          ? `${message}. Mushi tries again on the next Sentry catch-up.`
+          : `${message}. The token needs event:write; resolve it in Sentry by hand.`,
         dedupeKey: `sentry_resolve_fail:${link.external_id}`,
       });
       result.failed.push({ issueId: link.external_id, error: message });
