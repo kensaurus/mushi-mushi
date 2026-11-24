@@ -28,7 +28,7 @@ import { OrgSwitcher } from './OrgSwitcher'
 import { useMediaQuery } from '../lib/useMediaQuery'
 import { stageForPath, type PdcaStageId } from '../lib/pdca'
 import { NAV_ITEM_BY_PATH, buildOperatorNav, type BuiltNavItem, type BuiltNavSection } from '../lib/buildNav'
-import { coreNavPathsFor } from '../lib/navRegistry'
+import { BUILDER_CORE_NAV_PATHS } from '../lib/navRegistry'
 import { LAB_FEATURES, useLabs } from '../lib/labs'
 import { NAV_CHILDREN, NAV_CHILD_GROUPS, activeParent, isNavPathActive, morePages } from '../lib/sidebarTree'
 import { Tooltip, Btn, Badge } from './ui'
@@ -343,15 +343,15 @@ export function Layout({ children }: { children: ReactNode }) {
         .filter((i): i is NavItem => i != null)
         .filter(visibleByRole)
         .filter(visibleByFeature)
-    // A builder gets the short sidebar; operators keep the full one (audit 2026-11-11).
-    const core = pick(coreNavPathsFor({ isOperator }))
+    // Every account gets the five-page fix loop, the owner's too (ADR 0069): operator pages are Labs, off by default.
+    const core = pick(BUILDER_CORE_NAV_PATHS)
     const labItems = pick(LAB_FEATURES.filter((f) => labs.isEnabled(f.id)).map((f) => f.paths[0]))
     const sections: NavSection[] = [{ id: 'core', title: 'Pages', hint: 'The pages every account has.', items: core }]
     if (labItems.length > 0) {
       sections.push({
         id: 'labs',
         title: 'Labs',
-        hint: 'Pages you switched on in Settings › Labs.',
+        hint: 'Pages kept in your sidebar from Settings › Labs.',
         items: labItems,
       })
     }

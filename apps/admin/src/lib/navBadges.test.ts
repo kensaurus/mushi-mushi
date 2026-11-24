@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest'
 import { navSlicesForPaths, renderNavBadge } from './navBadges'
 import { keepMissingSlices, type NavCounts } from './useNavCounts'
 import { EMPTY_NAV_STAT_SLICES } from './extendedNavMeta'
-import { CORE_NAV_PATHS } from './navRegistry'
+import { BUILDER_CORE_NAV_PATHS } from './navRegistry'
 
 describe('navSlicesForPaths', () => {
   it('always asks for dashboard, /health included', () => {
@@ -33,26 +33,21 @@ describe('navSlicesForPaths', () => {
   })
 
   it('the core sidebar requests only its own badges', () => {
-    expect(navSlicesForPaths(CORE_NAV_PATHS)).toEqual([
-      'dashboard',
-      'fixes',
-      'integrations',
-      'onboarding',
-      'settings',
-      // Pipeline carries the local worker flags (ADR 0048 amendment 2026-10-28).
-      'workers',
-    ])
+    // The five pages of ADR 0069; Pipeline (worker flags) and Integrations are Labs now.
+    expect(navSlicesForPaths(BUILDER_CORE_NAV_PATHS)).toEqual(['dashboard', 'fixes', 'onboarding', 'settings'])
+  })
+
+  it('Pipeline as a Lab still carries the local worker flags (ADR 0048 amendment 2026-10-28)', () => {
+    expect(navSlicesForPaths([...BUILDER_CORE_NAV_PATHS, '/pipeline'])).toContain('workers')
   })
 
   it('an enabled Lab adds that page\'s badge and nothing else', () => {
-    expect(navSlicesForPaths([...CORE_NAV_PATHS, '/releases'])).toEqual([
+    expect(navSlicesForPaths([...BUILDER_CORE_NAV_PATHS, '/releases'])).toEqual([
       'dashboard',
       'fixes',
-      'integrations',
       'onboarding',
       'releases',
       'settings',
-      'workers',
     ])
   })
 })
