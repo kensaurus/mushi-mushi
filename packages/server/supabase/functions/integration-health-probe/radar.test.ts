@@ -87,6 +87,15 @@ Deno.test('byok_key_invalid: only keys the provider rejected', () => {
   assertEquals(f[0].severity, 'error')
 })
 
+Deno.test('byok_key_invalid: a rejected key replaced by a working one of the same provider is a tidy-up', () => {
+  const [f] = detectByokKeyInvalid([
+    { provider_slug: 'anthropic', label: 'old', key_hint: null, status: 'auth_failed', last_error: 'HTTP 401' },
+    { provider_slug: 'anthropic', label: 'new', key_hint: null, status: 'active', last_error: null },
+  ])
+  assertEquals(f.severity, 'info')
+  assertEquals(f.message.includes('nothing is broken'), true)
+})
+
 Deno.test('spend_cap_unset: a missing auto-fix cap or monthly AI budget; silent when everything is capped', () => {
   assertEquals(detectSpendCapUnset({ autofix_enabled: true, autofix_max_spend_usd: 2, autofix_max_dispatches_per_day: 3, monthly_llm_budget_usd: 20 }), [])
   const [f] = detectSpendCapUnset({ autofix_enabled: true, autofix_max_spend_usd: null, autofix_max_dispatches_per_day: 3, monthly_llm_budget_usd: 20 })

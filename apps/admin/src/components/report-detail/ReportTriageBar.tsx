@@ -300,7 +300,7 @@ export function ReportTriageBar({
             {repoChoice.repos.map((r) => (
               <option key={r.id} value={r.id}>
                 {shortRepoName(r.repo_url)}
-                {r.is_primary ? ' (primary)' : ''}
+                {r.id === repoChoice.suggestedRepoId ? ' (matches this build)' : r.is_primary ? ' (primary)' : ''}
               </option>
             ))}
           </SelectField>

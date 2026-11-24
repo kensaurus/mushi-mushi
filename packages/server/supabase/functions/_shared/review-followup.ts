@@ -302,6 +302,48 @@ const CODE_FAILURE_CONCLUSIONS = new Set(['failure', 'timed_out'])
 const PENDING_KINDS = new Set(['running', 'queued'])
 const INFRA_KINDS = new Set(['waiting_for_runner', 'runner_lost', 'queue_expired'])
 
+/** The latest attempt of each job (workflow + job name) on one head. */
+function latestCiJobs(rows: readonly CiJobForRepair[]): CiJobForRepair[] {
+  const latest = new Map<string, CiJobForRepair>()
+  for (const r of rows) {
+    const key = `${r.workflow_name ?? ''}\u0000${r.job_name}`
+    const prev = latest.get(key)
+    const newer =
+      !prev ||
+      (r.run_attempt ?? 1) > (prev.run_attempt ?? 1) ||
+      ((r.run_attempt ?? 1) === (prev.run_attempt ?? 1) && Date.parse(r.gh_created_at ?? '') > Date.parse(prev.gh_created_at ?? ''))
+    if (newer) latest.set(key, r)
+  }
+  return [...latest.values()]
+}
+
+/**
+ * `pending` only because the newest collected row is the draft guard's stop,
+ * with no job actually queued or running. The collector reads a bounded page
+ * of runs per repo, so on a busy repo the run after "ready for review" can be
+ * missed for good: 68 open fix PRs read "CI still running after 3 hours" for
+ * up to 22 days while GitHub showed every check green (2026-11-24).
+ * @internal Exported for unit tests only.
+ */
+export function isDraftStopOnlyPending(rows: readonly CiJobForRepair[]): boolean {
+  const jobs = latestCiJobs(rows)
+  return jobs.some(isDraftGuardStop) && !jobs.some((j) => PENDING_KINDS.has(j.ci_kind))
+}
+
+/**
+ * The head's CI, with the PR's GitHub check summary
+ * (fix_attempts.check_run_conclusion, read by ci-sync from the check runs)
+ * settling a draft-stop-only `pending`. Only `success` settles it; anything
+ * else keeps the collected state.
+ */
+export function ciHeadStateWithChecks(rows: readonly CiJobForRepair[], checkRunConclusion: string | null | undefined): CiHeadState {
+  const ci = ciHeadState(rows)
+  if (ci.state === 'pending' && (checkRunConclusion ?? '').toLowerCase() === 'success' && isDraftStopOnlyPending(rows)) {
+    return { state: 'green', failing: [] }
+  }
+  return ci
+}
+
 /**
  * CI on one head, from its `ci_jobs` rows: the latest attempt of each job
  * (workflow + job name) decides, so a re-run that passed clears a failure.
@@ -316,17 +358,7 @@ const INFRA_KINDS = new Set(['waiting_for_runner', 'runner_lost', 'queue_expired
  * the state is `base_failing`.
  */
 export function ciHeadState(rows: readonly CiJobForRepair[], baseFailing: ReadonlySet<string> | null = null): CiHeadState {
-  const latest = new Map<string, CiJobForRepair>()
-  for (const r of rows) {
-    const key = `${r.workflow_name ?? ''}\u0000${r.job_name}`
-    const prev = latest.get(key)
-    const newer =
-      !prev ||
-      (r.run_attempt ?? 1) > (prev.run_attempt ?? 1) ||
-      ((r.run_attempt ?? 1) === (prev.run_attempt ?? 1) && Date.parse(r.gh_created_at ?? '') > Date.parse(prev.gh_created_at ?? ''))
-    if (newer) latest.set(key, r)
-  }
-  const jobs = [...latest.values()]
+  const jobs = latestCiJobs(rows)
   if (jobs.length === 0) return { state: 'none', failing: [] }
   // The draft run's intentional stop is not a test result: CI runs once the
   // PR is marked ready, so it counts as pending until that run is collected.

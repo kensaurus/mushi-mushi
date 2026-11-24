@@ -481,7 +481,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
   const { state: dispatchState, dispatch: dispatchFix } = useDispatchFix(report.id, report.project_id)
   // Every dispatch from this page (the triage bar and the recommendation's
   // retry) goes to the repo chosen in the triage bar's Repo select.
-  const repoChoice = useDispatchTargetRepo(report.project_id)
+  const repoChoice = useDispatchTargetRepo(report.project_id, report.sentry_release)
   const { dispatchTargetRepoId } = repoChoice
   const dispatch = useCallback(
     () => dispatchFix(dispatchTargetRepoId ? { targetRepoId: dispatchTargetRepoId } : undefined),

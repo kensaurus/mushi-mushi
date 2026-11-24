@@ -195,7 +195,7 @@ describe('ConnectionGrid', () => {
   it('leads with "No alert channel" and a Connect Slack button when events are on and no channel is connected', () => {
     const { onConnect } = render([], { alertEventsOn: 8 })
     const status = host.querySelector('[aria-label="Connection status"]')!
-    expect(status.querySelector('[data-testid="integrations-channel-gap"]')?.textContent).toBe('No alert channel: 8 alert events go nowhere')
+    expect(status.querySelector('[data-testid="integrations-channel-gap"]')?.textContent).toBe("No alert channel: alerts can't be sent yet")
     expect(host.querySelector('[data-testid="integrations-tally"]')).toBeNull()
     act(() => host.querySelector<HTMLButtonElement>('[data-testid="integrations-channel-gap-connect"]')!.click())
     expect(onConnect).toHaveBeenCalledWith('slack')
@@ -211,6 +211,6 @@ describe('ConnectionGrid', () => {
   it('gives the gap its own card when a broken tool leads the status row', () => {
     render(history, { alertEventsOn: 3 })
     expect(host.querySelector('[aria-label="Connection status"]')?.textContent).toMatch(/GitHub needs you/)
-    expect(host.querySelector('[data-testid="integrations-alert-alert-channel-gap"]')?.textContent).toContain('No alert channel: 3 alert events go nowhere')
+    expect(host.querySelector('[data-testid="integrations-alert-alert-channel-gap"]')?.textContent).toContain("No alert channel: alerts can't be sent yet")
   })
 })

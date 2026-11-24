@@ -414,6 +414,8 @@ describe('classification state agrees with the rest of the page', () => {
     )
     expect(rec.title).not.toMatch(/pending/i)
     expect(rec.title).toBe('Triage this report')
+    // The triage bar right below holds the same Dispatch fix: the page shows the bar alone.
+    expect(rec.repeatsTriageBar).toBe(true)
   })
 
   it('a new report with nothing classified yet is still pending', () => {
@@ -522,7 +524,7 @@ describe('a report with no code location', () => {
     ['new + low', { status: 'new', severity: 'low', stage1_classification: { category: 'bug' } }],
   ] as const
 
-  it.each(triageable)('%s: no dispatch CTA, the reason, and "Dispatch anyway" as a ghost action', (_, overrides) => {
+  it.each(triageable)('%s: no dispatch CTA, the reason, and "Dispatch anyway" as a ghost action', (label, overrides) => {
     const request = vi.fn()
     const rec = deriveRecommendation(makeReport(overrides), makeDispatchState(), 0, request, Date.now(), undefined, false)
     expect(rec.cta).toBeUndefined()
@@ -535,7 +537,9 @@ describe('a report with no code location', () => {
     // The triage bar says and does the same; the page shows the bar alone (sweep 2026-11-18).
     expect(rec.repeatsTriageBar).toBe(true)
     const withCode = deriveRecommendation(makeReport(overrides), makeDispatchState(), 0, request, Date.now(), undefined, true)
-    expect(withCode.repeatsTriageBar).toBeUndefined()
+    // With a code location only the urgent "Confirm priority" card adds anything; the two
+    // info cards were a second "Dispatch fix" above the bar's own (2026-11-24).
+    expect(withCode.repeatsTriageBar).toBe(label === 'new + critical' ? undefined : true)
   })
 
   it('"Dispatch anyway" is disabled while the gate blocks', () => {

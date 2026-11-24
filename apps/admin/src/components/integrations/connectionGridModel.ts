@@ -66,7 +66,7 @@ export interface GridTile {
   view: ConnectionView
   /** When something last happened: an event received, or the last check. */
   lastAt: string | null
-  lastLabel: 'Last event' | 'Checked' | 'Last import' | null
+  lastLabel: 'Last event' | 'Checked' | 'Imported' | null
   /** Set up, and no check has ever run: the tile offers "Check now". */
   neverChecked?: boolean
   /** The read-only check this tool has; null for Discord and Teams, whose only test posts a message. */
@@ -191,7 +191,7 @@ export function buildConnectionGrid(input: ConnectionGridInput): GridTile[] {
         : sentryDelivery
           ? 'Last event'
           : sentryImport
-            ? 'Last import'
+            ? 'Imported'
             : sentryProbe
               ? 'Checked'
               : null,

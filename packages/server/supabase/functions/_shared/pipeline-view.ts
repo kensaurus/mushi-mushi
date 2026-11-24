@@ -21,7 +21,7 @@
  */
 
 import { RESOLVED_REPORT_STATUSES } from './fix-report-truth.ts'
-import { ciHeadState, followupTrigger, FOLLOWUP_REASONS, type CiHeadState, type CiJobForRepair, type PriorFollowup } from './review-followup.ts'
+import { ciHeadState, ciHeadStateWithChecks, followupTrigger, FOLLOWUP_REASONS, type CiHeadState, type CiJobForRepair, type PriorFollowup } from './review-followup.ts'
 import { LOCAL_FIX_AGENT, localHandoff } from './local-followup.ts'
 import { parseCheckNameList } from './merge-queue.ts'
 import { ROOT_CAUSE_OF_GROUP } from './health-checks.ts'
@@ -667,7 +667,7 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
     const q = queueByAttempt.get(a.id) ?? null
     const rv = reviews.get(a.id) ?? null
     const jobs = a.commit_sha ? input.ciJobs.get(a.commit_sha) ?? [] : []
-    const ci = ciHeadState(jobs)
+    const ci = ciHeadStateWithChecks(jobs, a.check_run_conclusion)
     const failing = ci.state === 'code_failure' ? ci.failing.map((f) => f.name) : []
     const reviewedAt = rv?.completed_at ?? rv?.created_at ?? a.created_at
 

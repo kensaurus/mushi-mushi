@@ -572,6 +572,8 @@ function recommendationFor(
       description: 'Add a triage note for context, or dispatch a fix.',
       cta: { label: 'Dispatch fix', onClick: onDispatch },
       tone: 'info',
+      // Only repeats the triage bar right below it ("Dispatch fix" twice in a row, 2026-11-24).
+      repeatsTriageBar: true,
     })
   }
 
@@ -581,6 +583,8 @@ function recommendationFor(
       description: 'Set the severity and update status, or dispatch a fix if confidence is high.',
       cta: { label: 'Dispatch fix', onClick: onDispatch },
       tone: 'info',
+      // Only repeats the triage bar right below it ("Dispatch fix" twice in a row, 2026-11-24).
+      repeatsTriageBar: true,
     })
   }
 
