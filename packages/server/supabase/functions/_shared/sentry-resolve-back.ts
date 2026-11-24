@@ -153,6 +153,8 @@ export interface SentryResolveBackResult {
   failed: Array<{ issueId: string; error: string }>;
   /** Issues Sentry answered 404 for (deleted or merged away): stamped, not retried. */
   gone?: string[];
+  /** Issue types Sentry refuses to resolve by hand (it resolves them itself): stamped, not retried. */
+  automatic?: string[];
   skipped?: 'no_links' | 'no_credentials';
 }
 
@@ -256,6 +258,22 @@ export async function resolveLinkedSentryIssues(
   for (const link of links) {
     try {
       const { status } = await resolveSentryIssue(creds.token, creds.orgSlug, link.external_id, deps.fetchImpl);
+      if (status === 'automatic') {
+        // Uptime / cron / metric issues: Sentry refuses a manual resolve and
+        // closes them itself when the check recovers. Stamp the link so the
+        // catch-up does not retry a request Sentry will always refuse.
+        await db.from('report_external_issues').update({ resolved_at: new Date().toISOString(), archived_at: null }).eq('id', link.id);
+        await recordFixEvent(db, {
+          fixAttemptId,
+          projectId,
+          status: 'ok',
+          label: `Sentry issue ${link.external_id} resolves on its own`,
+          detail: `Sentry does not allow resolving this issue type by hand; Sentry resolves it itself when the check recovers. Mushi marked it done ${how}.`,
+          dedupeKey: `sentry_resolve:${link.external_id}`,
+        });
+        (result.automatic ??= []).push(link.external_id);
+        continue;
+      }
       const { error: stampErr } = await db
         .from('report_external_issues')
         .update({ resolved_at: new Date().toISOString(), archived_at: null })

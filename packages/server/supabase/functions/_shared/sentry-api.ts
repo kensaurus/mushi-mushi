@@ -250,30 +250,46 @@ export async function searchSentryIssues(
 }
 
 /**
+ * Sentry's 400 for issue types it resolves on its own (uptime, cron and
+ * metric issues): "Cannot manually resolve one or more issues."
+ */
+const MANUAL_RESOLVE_REFUSED = /cannot manually resolve/i;
+
+/**
  * Resolve an issue. Tries `resolvedInNextRelease` first so a regression in a
  * later release reopens it; a project without release tracking rejects that
- * with a 4xx, and we fall back to plain `resolved`.
+ * with a 4xx, and we fall back to plain `resolved`. An issue type Sentry does
+ * not let anyone resolve by hand answers `automatic`: Sentry closes it itself
+ * once the check recovers, so there is nothing to retry.
  */
 export async function resolveSentryIssue(
   token: string,
   org: string,
   issueId: string,
   fetchImpl: FetchLike = defaultFetch,
-): Promise<{ status: 'resolvedInNextRelease' | 'resolved' }> {
+): Promise<{ status: 'resolvedInNextRelease' | 'resolved' | 'automatic' }> {
   const path = `/organizations/${seg(org)}/issues/${seg(issueId)}/`;
   const first = await sentryFetch(fetchImpl, token, path, {
     method: 'PUT',
     body: JSON.stringify({ status: 'resolvedInNextRelease' }),
   });
   if (first.ok) return { status: 'resolvedInNextRelease' };
+  const detail = await first.text().then((t) => t.slice(0, 200)).catch(() => '');
   if (first.status !== 400 && first.status !== 422) {
-    const detail = await first.text().then((t) => t.slice(0, 200)).catch(() => '');
     throw new SentryApiError(first.status, `Sentry resolve → ${first.status} ${detail}`.trim());
   }
-  await sentryJson<unknown>(fetchImpl, token, path, {
-    method: 'PUT',
-    body: JSON.stringify({ status: 'resolved' }),
-  });
+  if (MANUAL_RESOLVE_REFUSED.test(detail)) return { status: 'automatic' };
+  try {
+    await sentryJson<unknown>(fetchImpl, token, path, {
+      method: 'PUT',
+      body: JSON.stringify({ status: 'resolved' }),
+    });
+  } catch (err) {
+    if (err instanceof SentryApiError && err.status === 400 && MANUAL_RESOLVE_REFUSED.test(err.message)) {
+      return { status: 'automatic' };
+    }
+    throw err;
+  }
   return { status: 'resolved' };
 }
 

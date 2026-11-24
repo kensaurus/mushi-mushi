@@ -186,6 +186,31 @@ describe('resolveLinkedSentryIssues', () => {
     expect(bodies[1]).toBe('{"status":"resolved"}')
   })
 
+  it('stamps, without retrying or failing, an issue type Sentry refuses to resolve by hand (report 7483a269)', async () => {
+    const calls: string[] = []
+    const fetchImpl = async (url: string, init?: RequestInit) => {
+      calls.push(`${init?.method ?? 'GET'} ${url.replace(api.SENTRY_API_BASE, '')}`)
+      return json({ detail: 'Cannot manually resolve one or more issues.' }, 400)
+    }
+    const result = await rb.resolveLinkedSentryIssues(makeDb(state), input, { credentials: creds, fetchImpl })
+    expect(result.failed).toEqual([])
+    expect(result.resolved).toEqual([])
+    expect(result.automatic).toEqual(['4501'])
+    expect(calls).toEqual(['PUT /organizations/sakuramoto/issues/4501/'])
+    expect(state.stamped).toEqual(['l1'])
+    expect(state.fixEvents[0]).toMatchObject({ status: 'ok', dedupe_key: 'sentry_resolve:4501' })
+  })
+
+  it('treats the same refusal on the plain-resolved fallback as automatic', async () => {
+    let n = 0
+    const fetchImpl = async () =>
+      ++n === 1
+        ? json({ detail: 'No release data present in the system.' }, 400)
+        : json({ detail: 'Cannot manually resolve one or more issues.' }, 400)
+    const res = await api.resolveSentryIssue('t', 'sakuramoto', '4501', fetchImpl)
+    expect(res).toEqual({ status: 'automatic' })
+  })
+
   it('keeps the issue resolved when only the comment fails', async () => {
     const fetchImpl = async (url: string) => (url.endsWith('/comments/') ? json({}, 404) : json({}))
     const result = await rb.resolveLinkedSentryIssues(makeDb(state), input, { credentials: creds, fetchImpl })
