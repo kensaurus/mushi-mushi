@@ -164,7 +164,7 @@ function BannerChecklist({
           <p className="mt-0.5 text-2xs text-fg-muted truncate">
             {requiredDone
               ? 'Optional extras below: Mushi Mushi can open fixes for you, or use your own AI key.'
-              : `Project: ${project.project_name}`}
+              : `App: ${project.project_name}`}
           </p>
         </div>
         <div className="flex items-center gap-1 shrink-0">

@@ -126,7 +126,9 @@ export function UpdateCenter({ project, preflight }: UpdateCenterProps) {
         <VersionTable view={view} />
       </div>
 
-      {!hasGithubReady && (
+      {/* Nothing to upgrade until the app reports an SDK version: a brand-new app opened Connect
+          on a yellow "GitHub not ready for upgrade PRs" (fresh-account walk, 2026-11-24). */}
+      {!hasGithubReady && Boolean(project.sdk_version) && (
         <HelpBanner
           tone="warn"
           title="GitHub not ready for upgrade PRs"

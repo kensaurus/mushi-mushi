@@ -6,6 +6,7 @@
  *          one that is not connected says how to connect it.
  */
 
+import { isSdkSetupHref } from '../../lib/homeSetupFocus'
 import { Link } from 'react-router-dom'
 import { Btn, Card, PanelHeader, RelativeTime, Skeleton } from '../ui'
 import { LIGHT_WORD, type HealthSignal, type HomeSection } from '../../lib/projectHome'
@@ -14,7 +15,14 @@ import { healthDisplayTone } from '../../lib/homeView'
 import { HomeSectionBody } from './HomeSectionBody'
 import { homeConnectHref } from '../../lib/homeConnectHref'
 
-export function HealthStrip({ section }: { section: HomeSection<HealthSignal[]> }) {
+export function HealthStrip({
+  section,
+  hideSetupConnect = false,
+}: {
+  section: HomeSection<HealthSignal[]>
+  /** The setup checklist shows the report-button step: tiles keep their status, not a second button for it. */
+  hideSetupConnect?: boolean
+}) {
   return (
     <section aria-label="App health" data-testid="home-health" className="min-w-0">
       <HomeSectionBody section={section} what="the app's health" notConnectedText="No health signals yet.">
@@ -22,7 +30,7 @@ export function HealthStrip({ section }: { section: HomeSection<HealthSignal[]> 
           <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 [&>*]:min-w-0">
             {signals.map((s, i) => (
               <li key={s.id} className={healthTileSpansRow(signals.length, i) ? 'sm:col-span-2' : undefined}>
-                <HealthTile signal={s} />
+                <HealthTile signal={hideSetupConnect && isSdkSetupHref(s.connect?.to) ? { ...s, connect: null } : s} />
               </li>
             ))}
           </ul>

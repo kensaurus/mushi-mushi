@@ -218,9 +218,16 @@ export function ProjectSwitcher() {
   useEffect(() => {
     if (setup.loading || !setup.data || !listIsCurrent) return
     const projects = setup.data.projects
-    if (projects.length === 0) return
     const fromUrl = searchParams.get(ACTIVE_PROJECT_QUERY_PARAM)
     const fromStorage = getActiveProjectIdSnapshot()
+    if (projects.length === 0) {
+      // A brand-new account has no app yet, but this browser can still hold another
+      // account's app id (a shared browser, a deleted account): every panel asked for it
+      // and got 404 / 403 (fresh-account walk, 2026-11-24). Drop the stored one; a URL
+      // deep link is left for the team lookup below to resolve once apps exist.
+      if (fromStorage && !fromUrl) clearActiveProject()
+      return
+    }
     if (fromUrl && !isValidProjectId(fromUrl)) {
       const next = new URLSearchParams(searchParams)
       next.delete(ACTIVE_PROJECT_QUERY_PARAM)

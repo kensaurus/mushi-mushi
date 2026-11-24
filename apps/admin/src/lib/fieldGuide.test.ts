@@ -63,10 +63,20 @@ function everyLine(): Array<[string, GuideLine]> {
     ]),
     ['home-all-clear', HOME_ALL_CLEAR],
     ...EDITOR_STATES.map((s) => [`editor:${s}`, editorConnectGuide(s)] as [string, GuideLine]),
+    ['editor:app-not-checked-in', editorConnectGuide('report_only_keys', { appCheckedIn: false })],
     ['not-found', NOT_FOUND_GUIDE],
     ['crash', CRASH_GUIDE],
   ]
 }
+
+// 2026-11-24: "Bug reports are coming in" showed to a new app whose SDK never checked in.
+describe('editorConnectGuide', () => {
+  it('points at the report button until the app checks in', () => {
+    expect(editorConnectGuide('report_only_keys', { appCheckedIn: false }).line).toMatch(/report button/)
+    expect(editorConnectGuide('report_only_keys', { appCheckedIn: true }).line).toMatch(/Bug reports are coming in/)
+    expect(editorConnectGuide('no_project', { appCheckedIn: false }).line).toMatch(/Pick or create an app/)
+  })
+})
 
 describe('field guide lines', () => {
   it.each(everyLine())('%s fits a phone (≤ 90 characters)', (_id, g) => {
