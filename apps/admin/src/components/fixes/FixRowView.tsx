@@ -271,7 +271,9 @@ function FixRowViewInner({
                 </Btn>
               )
             )}
-            {fix.pr_url && isGithubUrl(fix.pr_url) && (
+            {/* One action per row (ADR 0069): Retry when it can help, else the PR.
+                The PR link stays in the row's details. */}
+            {fix.pr_url && isGithubUrl(fix.pr_url) && !(fix.retryable === true && !isInFlight) && (
               <a
                 href={fix.pr_url}
                 target="_blank"
