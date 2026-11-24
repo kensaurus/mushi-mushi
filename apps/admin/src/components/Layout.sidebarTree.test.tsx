@@ -22,6 +22,7 @@ const state = vi.hoisted(() => ({
   collapsed: false,
   enabledLabs: new Set<string>(),
   grants: 0,
+  entitlementsLoading: false,
   sliceCalls: [] as Array<readonly string[] | null | undefined>,
 }))
 
@@ -52,7 +53,7 @@ vi.mock('../lib/auth', () => ({
   useAuth: () => ({ user: { id: 'u1', email: 'owner@example.com' }, signOut: async () => {} }),
 }))
 vi.mock('../lib/useEntitlements', () => ({
-  useEntitlements: () => ({ isSuperAdmin: false, isOperator: state.isOperator, has: () => true, loading: false }),
+  useEntitlements: () => ({ isSuperAdmin: false, isOperator: state.isOperator, has: () => true, loading: state.entitlementsLoading }),
 }))
 vi.mock('../lib/useSetupStatus', () => ({
   useSetupStatus: () => ({ loading: false, activeProject: null, selectors: { done: true } }),
@@ -116,6 +117,7 @@ beforeEach(() => {
   state.collapsed = false
   state.enabledLabs = new Set(OPERATOR_LABS)
   state.grants = 0
+  state.entitlementsLoading = false
   state.sliceCalls = []
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   container = document.createElement('div')
@@ -316,5 +318,11 @@ describe('an operator gets the same five pages, operator pages as Labs', () => {
       expect(core, p).not.toContain(p)
       expect(labs.querySelector(`a[href="${p}"]`), p).not.toBeNull()
     }
+  })
+
+  it('grants the operator Labs only once entitlements have answered', () => {
+    state.entitlementsLoading = true
+    renderAt('/reports')
+    expect(state.grants).toBe(0)
   })
 })

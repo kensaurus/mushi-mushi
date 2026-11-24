@@ -59,11 +59,11 @@ export const LAB_FEATURES: readonly LabFeature[] = [
   { id: 'tester-rewards', label: 'Tester rewards', description: 'Points, tiers and payouts for people who report bugs.', paths: ['/rewards'], group: 'team' },
   { id: 'sql-query', label: 'SQL query', description: 'Ask your Mushi Mushi data a question in plain words or SQL.', paths: ['/query'], group: 'team' },
   // ADR 0069: these left the sidebar's five pages. Each one still opens by URL, ⌘K and in-page links.
-  { id: 'pipeline', label: 'Pipeline', description: 'Every bug on its way to a merged fix, stage by stage, with the workers and release trains that move it.', paths: ['/pipeline'], group: 'automation', operatorDefault: true },
+  { id: 'pipeline', label: 'Pipeline', description: 'Every bug on its way to a merged fix, stage by stage, and what is moving it right now.', paths: ['/pipeline'], group: 'automation', operatorDefault: true },
   { id: 'journey-optimizer', label: 'Journey optimizer', description: 'Scans your live site for slow, broken or confusing pages. The scan needs your own Firecrawl key.', paths: ['/journeys'], group: 'checks', operatorDefault: true },
   { id: 'apps', label: 'Apps', description: 'Every app in this team side by side, with what each one still needs set up.', paths: ['/portfolio'], group: 'operator', operatorDefault: true },
   { id: 'integrations', label: 'Integrations', description: 'Sentry, Slack, GitHub, Linear and the other tools Mushi Mushi talks to.', paths: ['/integrations/config'], group: 'operator', operatorDefault: true },
-  { id: 'checks', label: 'Checks', description: 'Scheduled tests, page checks and CI health for your app in one list.', paths: ['/checks'], group: 'operator', operatorDefault: true },
+  { id: 'checks', label: 'Checks', description: 'Scheduled tests and page checks for your app, and whether your test runs are healthy.', paths: ['/checks'], group: 'operator', operatorDefault: true },
   { id: 'team', label: 'Team', description: 'Members, invites, billing and how your team signs in.', paths: ['/team'], group: 'operator', operatorDefault: true },
 ] as const
 

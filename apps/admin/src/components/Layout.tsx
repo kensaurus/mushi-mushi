@@ -167,14 +167,15 @@ export function Layout({ children }: { children: ReactNode }) {
     ? projectSnapshots.byId.get(activeProjectId)
     : undefined
   const criticalReports30d = activeProjectSnapshot?.severity_breakdown_30d?.critical ?? 0
-  const { isSuperAdmin, isOperator, has } = useEntitlements()
+  const { isSuperAdmin, isOperator, has, loading: entitlementsLoading } = useEntitlements()
   // ADR 0069: the owner sees the five-page sidebar too; their operator pages
   // (Apps, Integrations, Checks, Team, Pipeline, Journeys) start as Labs that
   // are on, once per account. labs.enabled re-runs it if the account's saved
-  // Labs arrive after the grant.
+  // Labs arrive after the grant. Only on a settled answer: the grant is saved
+  // to the account and must never land on a builder's.
   useEffect(() => {
-    if (isOperator) applyOperatorLabDefaults()
-  }, [isOperator, labs.enabled])
+    if (isOperator && !entitlementsLoading) applyOperatorLabDefaults()
+  }, [isOperator, entitlementsLoading, labs.enabled])
   const pageShellWidth = pageLayoutWidthForPath(pathname)
   const [focusModePreference, setFocusMode] = useFocusMode()
   /** Consent routes always hide chrome; preference still drives the toggle. */
@@ -358,7 +359,7 @@ export function Layout({ children }: { children: ReactNode }) {
       sections.push({
         id: 'labs',
         title: 'Labs',
-        hint: 'Pages you switched on in Settings › Labs.',
+        hint: 'Pages kept in your sidebar from Settings › Labs.',
         items: labItems,
       })
     }
