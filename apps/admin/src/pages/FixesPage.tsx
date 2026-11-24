@@ -1,11 +1,14 @@
 /**
  * FILE: apps/admin/src/pages/FixesPage.tsx
- * PURPOSE: V5.3 §2.10 + §2.18 — the auto-fix pipeline dashboard.
+ * PURPOSE: V5.3 §2.10 + §2.18 — the list of fixes.
  *          Page-level orchestration only: data loading, polling, retries.
- *          It opens on what a person wants first (console journeys
- *          2026-10-27): the release train, the fixes ready to merge with
- *          "Merge when ready", and the stopped fixes grouped by reason, each
- *          with its own Retry (FixesFirstView). The full attempt list follows.
+ *          ADR 0069 ("Fixes is a list of fixes"): the page leads with one
+ *          line saying what needs you, the fixes ready to merge (only when
+ *          there are any), the running requests, then the list, one action
+ *          per row. The operator machinery (release train, merge queue with
+ *          "Decide for me", stopped reasons, requests stopped without a PR,
+ *          the code-index warning) sits in one collapsed "Automation"
+ *          section that remembers whether it was open.
  *          Presentation lives in components/fixes/* so each piece (KPIs,
  *          recommendation banner, in-flight list, per-fix card) can evolve
  *          and be reasoned about in isolation.
@@ -19,7 +22,7 @@ import { useRealtimeReload } from '../lib/realtime'
 import { usePublishPageContext } from '../lib/pageContext'
 import { usePlatformIntegrations } from '../lib/usePlatformIntegrations'
 import { pluralize, pluralizeWithCount } from '../lib/format'
-import { Btn, SegmentedControl, ErrorAlert, FreshnessPill, HelpBanner } from '../components/ui'
+import { Btn, DisclosurePanel, SegmentedControl, ErrorAlert, FreshnessPill } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
@@ -51,7 +54,8 @@ import {
 } from '../lib/fixRetry'
 import type { FixAttempt, DispatchJob, FixSummary } from '../components/fixes/types'
 import { FixesStatusBanner } from '../components/fixes/FixesStatusBanner'
-import { reconcileFixesStats } from '../lib/fixesBannerReconcile'
+import { reconcileFixesStats, stoppedDispatches } from '../lib/fixesBannerReconcile'
+import { usePersistentState } from '../lib/usePersistentState'
 import { FixesPipelineGuide } from '../components/fixes/FixesPipelineGuide'
 import { FixesStartCard } from '../components/fixes/FixesStartCard'
 import { AgentCreditsOutCard } from '../components/AgentCreditsOutCard'
@@ -66,7 +70,7 @@ import { fixRowDomId, readFixDeepLinkId } from '../lib/fixDeepLink'
 import { usePageData } from '../lib/usePageData'
 import { statsWithProjectPresence } from '../lib/projectPresence'
 import { trackSelf } from '../lib/track'
-import { FixesFirstView } from '../components/fixes/FixesFirstView'
+import { FixesReadyToMerge, FixesReleaseTrain, FixesStoppedReasons } from '../components/fixes/FixesFirstView'
 import type { PipelineData } from '../lib/pipeline'
 import {
   collectInFlightReportIds,
@@ -92,12 +96,15 @@ type StatusBucket = 'all' | 'inflight' | 'pr_open' | 'review_merge' | 'merged' |
 
 const STATUS_BUCKETS: { id: StatusBucket; label: string }[] = [
   { id: 'all', label: 'All' },
-  { id: 'inflight', label: 'In flight' },
+  { id: 'inflight', label: 'Running' },
   { id: 'pr_open', label: 'PR open' },
-  // Open PRs the Opus review said to merge: the ones waiting on you.
-  { id: 'review_merge', label: 'Opus: merge' },
+  // Open PRs the review said to merge: the ones waiting on you. Not "Ready to
+  // merge": that list also needs the verdict on the latest commit and green CI,
+  // so one name would show two counts (ADR 0069 plain words, no model names).
+  { id: 'review_merge', label: 'Approved' },
   { id: 'merged', label: 'Shipped' },
-  { id: 'failed', label: 'Failed / skipped' },
+  // The same per-report count as the status line's "stopped".
+  { id: 'failed', label: 'Stopped' },
 ]
 
 /** Attempts per request; the list route allows up to 200. */
@@ -879,15 +886,45 @@ export function FixesPage() {
     void loadFixes()
   }, [reloadStats, reloadPipeline, loadFixes])
 
-  const setupBlocked = ['no_project', 'no_github', 'no_index'].includes(fixesStats.topPriority)
   // With no attempts yet the empty state below asks for GitHub itself; the
   // banner and an empty merge queue only repeated it (2026-10-27).
   const emptyAsksForGithub = fixes.length === 0 && fixesStats.topPriority === 'no_github'
+  // The banner stays for what blocks the page itself: no app, or GitHub gone
+  // while fixes exist. A missing code index does not block a fix (Autofix
+  // writes stub PRs), so it is one line inside Automation (ADR 0069).
+  const statusBlocker = fixesStats.topPriority === 'no_project' || (fixesStats.topPriority === 'no_github' && !emptyAsksForGithub)
+  const indexOff =
+    fixesStats.topPriority === 'no_index' ||
+    (codebaseStats != null &&
+      (!codebaseStats.codebase_index_enabled || codebaseStats.indexed_files === 0) &&
+      fixesStats.topPriority !== 'no_github')
   // Same rule as the Ready to merge list below, with /pipeline's CI read.
   const readyCount = useMemo(() => {
     const approvedGreen = pipelineApprovedGreen(pipelineData ?? null)
     return new Set(fixes.filter((f) => isReadyToMerge(f, approvedGreen)).map((f) => f.pr_url)).size
   }, [fixes, pipelineData])
+
+  // Automation (ADR 0069): the operator machinery in one section, closed by
+  // default and remembered per app, like the Settings disclosures.
+  const [automationOpen, setAutomationOpen] = usePersistentState('fixes:automation-open', false, {
+    projectId: activeProjectId,
+    validate: (v): v is boolean => typeof v === 'boolean',
+  })
+  // Old links into a section that now lives inside Automation open it.
+  useEffect(() => {
+    if (/^#(fixes-(stopped|release|automation)|merge-queue)/.test(location.hash)) setAutomationOpen(true)
+  }, [location.hash, setAutomationOpen])
+  const stoppedWithoutPr = useMemo(() => stoppedDispatches(mergedDispatches).length, [mergedDispatches])
+  // PRs the merge queue holds for a person (key used up, conflict, red CI), from
+  // the pipeline read already loaded: the collapsed row still says they need you.
+  const heldInQueue = useMemo(
+    () =>
+      (pipelineData?.stages ?? []).reduce(
+        (n, stage) => n + stage.groups.filter((g) => g.id.startsWith('held_')).reduce((m, g) => m + g.items.length, 0),
+        0,
+      ),
+    [pipelineData],
+  )
 
   if (loading) return <TableSkeleton rows={6} columns={5} showFilters label="Loading fixes" />
   if (error) return <ErrorAlert message="Failed to load fix attempts." onRetry={loadFixes} />
@@ -905,7 +942,7 @@ export function FixesPage() {
           'See model used, token spend, and trace link per attempt',
           'Spot failure patterns before retrying',
         ]}
-        helpHowToUse={copy?.help?.howToUse ?? 'The list shows every attempt. Filter by status; In flight shows runs still going.'}
+        helpHowToUse={copy?.help?.howToUse ?? 'The list shows every attempt. Filter by status; Running shows runs still going. Automation holds the merge queue, the release train and why fixes stopped.'}
       >
         <FreshnessPill at={lastFetchedAt ?? statsFetchedAt} isValidating={isValidating || statsValidating} channel={channelState} />
         {/* "0 attempts" beside "No fixes in the last 30 days" was noise (round-2 review). */}
@@ -932,7 +969,7 @@ export function FixesPage() {
             priority: POSTURE_PRIORITY.status,
             // The red "stopped" banner said what the status line says; it
             // stays for what blocks auto-fix itself.
-            show: setupBlocked && !emptyAsksForGithub,
+            show: statusBlocker,
             children: (
               <FixesStatusBanner
                 stats={{ ...fixesStats, inProgress: inFlightCount }}
@@ -971,53 +1008,24 @@ export function FixesPage() {
         />
       )}
 
-      {codebaseStats &&
-        (!codebaseStats.codebase_index_enabled || codebaseStats.indexed_files === 0) &&
-        fixesStats.topPriority !== 'no_index' &&
-        fixesStats.topPriority !== 'no_github' && (
-          <HelpBanner
-            tone="warn"
-            role="status"
-            data-testid="fixes-codebase-unindexed-banner"
-            icon={<span aria-hidden="true">⚠</span>}
-          >
-            <strong className="font-semibold">Auto-fix will produce stub PRs</strong> —{' '}
-            {codebaseStats.codebase_index_enabled
-              ? 'your codebase index is empty, so the LLM has nothing to read.'
-              : 'codebase indexing is off, so the LLM has nothing to read.'}{' '}
-            <Link to="/integrations/config" className="underline hover:no-underline">Enable it now →</Link>
-          </HelpBanner>
-        )}
-
       {/* Quick mode has no snapshot strip, so the KPI row stands in for it. */}
       {summary && ux.hideFixesSnapshot && (
         <FixSummaryRow summary={{ ...summary, inProgress: inFlightCount, prsOpen: prCounts.open }} successRate={successRate} />
       )}
 
+      {/* Ready to merge: actions, so they sit above the list, and only when there are any. */}
       {fixes.length > 0 && (
-        <FixesFirstView
+        <FixesReadyToMerge
           fixes={fixes}
           pipeline={pipelineData ?? null}
-          projectId={activeProjectId ?? null}
-          stoppedTotal={fixesStats.failed}
           busy={bulkBusy || retryingAll}
           onQueue={(list) => void queueFixes(list)}
-          onShowCause={reviewFailedCause}
-          onRetry={(list, label) => setRetryRequest({ kind: 'list', fixes: list, label, agent: commonRetryAgent(list.map((f) => f.agent)) })}
-          agentsOut={agentCredits.state?.out === true}
         />
       )}
 
-      {/* With fixes on record the status line and the first view say what this would. */}
+      {/* With fixes on record the status line and Automation say what this would. */}
       {fixesStats.topPriority !== 'failed' && fixesStats.topPriority !== 'inflight' && fixes.length === 0 && (
         <FixRecommendation fixes={fixes} dispatches={mergedDispatches} />
-      )}
-
-      {/* Merge queue, release-train timing and "Decide for me" are controls
-          over fixes: with none on record there is nothing for them to act
-          on, and a new user read them as required setup (re-audit 2026-11-11). */}
-      {emptyAsksForGithub || fixes.length === 0 ? null : (
-        <MergeQueuePanel projectId={activeProjectId ?? null} refreshKey={queueRefresh} onMerged={loadFixes} />
       )}
 
       {mergeFailures.length > 0 && (
@@ -1049,7 +1057,73 @@ export function FixesPage() {
         </section>
       )}
 
-      <InflightDispatches dispatches={mergedDispatches} />
+      <InflightDispatches dispatches={mergedDispatches} show="active" />
+
+      {/* Automation (ADR 0069): one collapsed row for the operator machinery.
+          Merge queue, release-train timing and "Decide for me" are controls
+          over fixes: with none on record there is nothing for them to act on,
+          and a new user read them as required setup (re-audit 2026-11-11). */}
+      {(fixes.length > 0 || stoppedWithoutPr > 0) && (
+        <section id="fixes-automation" aria-label="Automation" className="scroll-mt-6" data-testid="fixes-automation">
+          <DisclosurePanel
+            title={<span className="text-xs font-semibold text-fg">Automation</span>}
+            open={automationOpen}
+            onOpenChange={setAutomationOpen}
+            trailing={
+              <span className="text-2xs font-normal text-fg-muted" data-testid="fixes-automation-summary">
+                {(() => {
+                  const notes = [
+                    fixesStats.failed > 0 ? `${fixesStats.failed} stopped` : null,
+                    stoppedWithoutPr > 0 ? `${stoppedWithoutPr} stopped without a PR` : null,
+                    heldInQueue > 0 ? `${heldInQueue} held in the merge queue` : null,
+                  ].filter(Boolean)
+                  if (!indexOff) return notes.length ? notes.join(' · ') : 'Merge queue, release train, Decide for me'
+                  return (
+                    <>
+                      {notes.length ? `${notes.join(' · ')} · ` : null}
+                      <span className="text-warn-foreground">code not indexed</span>
+                    </>
+                  )
+                })()}
+              </span>
+            }
+          >
+            <div className="space-y-3">
+              {indexOff && (
+                <p className="text-2xs text-fg-secondary" role="status" data-testid="fixes-codebase-unindexed-banner">
+                  <span aria-hidden="true" className="mr-1 text-warn">⚠</span>
+                  <strong className="font-semibold text-fg">Autofix writes stub PRs until your code is indexed</strong>:{' '}
+                  {codebaseStats?.codebase_index_enabled
+                    ? 'the codebase index is empty, so the agent has nothing to read.'
+                    : 'codebase indexing is off, so the agent has nothing to read.'}{' '}
+                  <Link
+                    to={fixesStats.topPriority === 'no_index' && fixesStats.topPriorityTo ? fixesStats.topPriorityTo : '/integrations/config'}
+                    className="font-medium text-link underline-offset-2 hover:underline"
+                  >
+                    Turn on indexing →
+                  </Link>
+                </p>
+              )}
+              {fixes.length > 0 && (
+                <FixesStoppedReasons
+                  fixes={fixes}
+                  projectId={activeProjectId ?? null}
+                  stoppedTotal={fixesStats.failed}
+                  busy={bulkBusy || retryingAll}
+                  onShowCause={reviewFailedCause}
+                  onRetry={(list, label) => setRetryRequest({ kind: 'list', fixes: list, label, agent: commonRetryAgent(list.map((f) => f.agent)) })}
+                  agentsOut={agentCredits.state?.out === true}
+                />
+              )}
+              <InflightDispatches dispatches={mergedDispatches} show="stopped" />
+              {fixes.length > 0 && (
+                <MergeQueuePanel projectId={activeProjectId ?? null} refreshKey={queueRefresh} onMerged={loadFixes} />
+              )}
+              {fixes.length > 0 && <FixesReleaseTrain pipeline={pipelineData ?? null} projectId={activeProjectId ?? null} />}
+            </div>
+          </DisclosurePanel>
+        </section>
+      )}
 
       {fixes.length === 0 ? null : (
         <>

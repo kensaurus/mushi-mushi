@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-18T14:40:30.302Z",
+  "generatedAt": "2026-11-24T14:59:49.143Z",
   "docs": [
     {
       "doc_path": "recipes/connect-github-and-sdk.md",
@@ -60,10 +60,10 @@
       "doc_path": "pages/onboarding.md",
       "section": "main",
       "title": "Set up",
-      "body": "# Set up\n\nThree-step setup: create a project, install the widget, send a test bug.\n\nRoute: /onboarding\nSection: Start\n\nKeywords: get started, setup, install, quickstart, first run, widget, snippet, project\n\nUse this page when the user asks about: get started, setup, install, quickstart, first run, widget",
+      "body": "# Set up\n\nFour steps: name your app, get its key, add the report button, get your first bug report.\n\nRoute: /onboarding\nSection: Start\n\nKeywords: get started, setup, install, quickstart, first run, widget, snippet, project\n\nUse this page when the user asks about: get started, setup, install, quickstart, first run, widget",
       "route_path": "/onboarding",
       "kind": "page",
-      "content_hash": "db53f549ae07c79f25d774a97f9d46956f9099ac4b1a64c0db7dfde2cdb2d5b5"
+      "content_hash": "5b11b3c2b497818cf7114b349405e9b15a2f5eeb845cea3173418b784964bd32"
     },
     {
       "doc_path": "pages/connect.md",
@@ -498,13 +498,13 @@
       "content_hash": "aee228cd1e13b3b92494a441bbbe1b2f5e87de312521f07b28720a98a1e0ba38"
     },
     {
-      "doc_path": "pages/dashboard--view-apps.md",
+      "doc_path": "pages/portfolio--view-apps.md",
       "section": "main",
       "title": "Overview",
-      "body": "# Overview\n\nLast 7 days for every app in this team: sessions, users and open bugs, with links into each app.\n\nRoute: /dashboard?view=apps\nSection: Act\n\nKeywords: overview, app activity, portfolio view, all projects, activity, sessions, consolidated\n\nUse this page when the user asks about: overview, app activity, portfolio view, all projects, activity, sessions",
-      "route_path": "/dashboard",
+      "body": "# Overview\n\nLast 7 days for every app in this team: sessions, users and open bugs, with links into each app.\n\nRoute: /portfolio?view=apps\nSection: Act\n\nKeywords: overview, app activity, portfolio view, all projects, activity, sessions, consolidated\n\nUse this page when the user asks about: overview, app activity, portfolio view, all projects, activity, sessions",
+      "route_path": "/portfolio",
       "kind": "page",
-      "content_hash": "c7952bbe797def049884c19995f09d82e946c91e669bed14720db7f23bba58c1"
+      "content_hash": "7202a0d6fc412986ce93c5b308d592191fcdc3097042fb50984a4610fec38654"
     },
     {
       "doc_path": "pages/health--view-code.md",
@@ -534,40 +534,40 @@
       "content_hash": "d051bd1e9f94313291adf248e27ae442e6042429ca85d66f4fd71801a133d614"
     },
     {
-      "doc_path": "pages/dashboard--view-users.md",
+      "doc_path": "pages/portfolio--view-users.md",
       "section": "main",
       "title": "User activity",
-      "body": "# User activity\n\nPer-app activity — sessions, page views, identified vs. anonymous users, top routes.\n\nRoute: /dashboard?view=users\nSection: Act\n\nKeywords: activity, sessions, users, page views, analytics, dau, engagement\n\nUse this page when the user asks about: activity, sessions, users, page views, analytics, dau",
-      "route_path": "/dashboard",
+      "body": "# User activity\n\nPer-app activity — sessions, page views, identified vs. anonymous users, top routes.\n\nRoute: /portfolio?view=users\nSection: Act\n\nKeywords: activity, sessions, users, page views, analytics, dau, engagement\n\nUse this page when the user asks about: activity, sessions, users, page views, analytics, dau",
+      "route_path": "/portfolio",
       "kind": "page",
-      "content_hash": "7bb49639fb43358cb5058057869974e15cabe2ab95665a7be73f5771336352fb"
+      "content_hash": "e3c6be67fe61bc82cb40bed167f89eea298797d6aac2cec4d417a47c6720af34"
     },
     {
-      "doc_path": "pages/dashboard--view-funnels.md",
+      "doc_path": "pages/portfolio--view-funnels.md",
       "section": "main",
       "title": "Users & funnels",
-      "body": "# Users & funnels\n\nProduct analytics from Mushi.track() — event volume, funnels, next-step paths, people, and weekly retention.\n\nRoute: /dashboard?view=funnels\nSection: Act\n\nKeywords: users & funnels, funnel, funnels, events, track, analytics, retention, paths, people, conversion, cohort\n\nUse this page when the user asks about: users & funnels, funnel, funnels, events, track, analytics",
-      "route_path": "/dashboard",
+      "body": "# Users & funnels\n\nProduct analytics from Mushi.track() — event volume, funnels, next-step paths, people, and weekly retention.\n\nRoute: /portfolio?view=funnels\nSection: Act\n\nKeywords: users & funnels, funnel, funnels, events, track, analytics, retention, paths, people, conversion, cohort\n\nUse this page when the user asks about: users & funnels, funnel, funnels, events, track, analytics",
+      "route_path": "/portfolio",
       "kind": "page",
-      "content_hash": "e4143f54eb061cb0799cb949cd367a7f3a22cedf3d29fd91e9dce196c10d9174"
+      "content_hash": "f5d8ee4d620347334bfbcb30a600b515128b984ac6333894d1c195aefe6c7d52"
     },
     {
-      "doc_path": "pages/dashboard--view-insights.md",
+      "doc_path": "pages/portfolio--view-insights.md",
       "section": "main",
       "title": "Weekly insights",
-      "body": "# Weekly insights\n\nA weekly plain-English report across your apps: what breaks most and who it hits.\n\nRoute: /dashboard?view=insights\nSection: Act\n\nKeywords: intelligence, insights, analytics, trends, heatmap, cohort, weekly report\n\nUse this page when the user asks about: intelligence, insights, analytics, trends, heatmap, cohort",
-      "route_path": "/dashboard",
+      "body": "# Weekly insights\n\nA weekly plain-English report across your apps: what breaks most and who it hits.\n\nRoute: /portfolio?view=insights\nSection: Act\n\nKeywords: intelligence, insights, analytics, trends, heatmap, cohort, weekly report\n\nUse this page when the user asks about: intelligence, insights, analytics, trends, heatmap, cohort",
+      "route_path": "/portfolio",
       "kind": "page",
-      "content_hash": "bc17a8b4ff14de1ccca3315799c593879a5b2f78aa634cd53f236b08c2541119"
+      "content_hash": "7851caa3bbb813281c6bad992fd3b25db7fd5d7ba9496568f13d5f1c6586df92"
     },
     {
-      "doc_path": "pages/dashboard--view-growth.md",
+      "doc_path": "pages/portfolio--view-growth.md",
       "section": "main",
       "title": "Growth",
-      "body": "# Growth\n\nOperator-only company funnel — activated external projects per week, by signup source.\n\nRoute: /dashboard?view=growth\nSection: Act\n\nKeywords: growth, funnel, signups, activation, activated, paid, source, operator\n\nUse this page when the user asks about: growth, funnel, signups, activation, activated, paid",
-      "route_path": "/dashboard",
+      "body": "# Growth\n\nOperator-only company funnel — activated external projects per week, by signup source.\n\nRoute: /portfolio?view=growth\nSection: Act\n\nKeywords: growth, funnel, signups, activation, activated, paid, source, operator\n\nUse this page when the user asks about: growth, funnel, signups, activation, activated, paid",
+      "route_path": "/portfolio",
       "kind": "page",
-      "content_hash": "e867ee2a5da4b16c1614f6fab9af9bb882ad6a11b698c4581bac43d253c4a322"
+      "content_hash": "390d7d31621eb160195afaacd75afe31efd1e72039f6218d27df3fcbcc9c4643"
     },
     {
       "doc_path": "pages/team--view-members.md",

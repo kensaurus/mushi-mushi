@@ -117,7 +117,7 @@ describe('Home views', () => {
     // the numbers open User activity, the card opens Home; no footer repeating
     // "User activity → Open bugs Home" on every card, no slug under the name.
     expect(container.querySelector('a[href="/reports?status=open"]')?.textContent).toBe('65 open')
-    expect(container.querySelector('a[href="/dashboard?view=users"]')?.textContent).toContain('75 sessions')
+    expect(container.querySelector('a[href="/portfolio?view=users"]')?.textContent).toContain('75 sessions')
     expect(text).not.toContain('Open bugs')
     expect(text.match(/mushi-mushi/g)?.length).toBe(1)
   })

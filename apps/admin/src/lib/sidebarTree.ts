@@ -3,7 +3,7 @@
  * PURPOSE: Where every console page sits in the sidebar (owner, 2026-10-27:
  *          "some of the pages and subpages are not showing on the sidebar").
  *
- *          - Core pages (CORE_NAV_PATHS) are always listed.
+ *          - Core pages (BUILDER_CORE_NAV_PATHS) are always listed.
  *          - A core page with sub-pages and no tab strip of its own lists them
  *            under itself while you are on it or on one of them (NAV_CHILDREN),
  *            so /qa-coverage shows Checks › Scheduled tests instead of nothing
@@ -18,9 +18,9 @@
 
 import { LAB_FEATURES } from './labs'
 import {
+  BUILDER_CORE_NAV_PATHS,
   CHECK_GROUPS,
   CHECK_SUB_GROUPS,
-  coreNavPathsFor,
   NAV_REGISTRY,
   NAV_SECTION_META,
   type NavRegistryEntry,
@@ -102,10 +102,11 @@ export function morePages(viewer: SidebarViewer, pinnedLabIds: ReadonlySet<strin
   const pinned = new Set(
     LAB_FEATURES.filter((f) => pinnedLabIds.has(f.id)).map((f) => f.paths[0]),
   )
-  // A builder's core is shorter (coreNavPathsFor): Apps, Integrations, Checks
-  // and Team move here. Sub-pages stay with their page (Checks lists its
-  // checks), so the list does not grow by a dozen check pages.
-  const core = new Set(coreNavPathsFor(viewer))
+  // The core is the five builder pages for every account (ADR 0069): Apps,
+  // Integrations, Checks, Team, Pipeline and Journeys are here unless their
+  // Lab is on. Sub-pages stay with their page (Checks lists its checks), so
+  // the list does not grow by a dozen check pages.
+  const core = new Set(BUILDER_CORE_NAV_PATHS)
   const hidden = NAV_REGISTRY.filter(
     (e) =>
       e.inSidebar !== false &&

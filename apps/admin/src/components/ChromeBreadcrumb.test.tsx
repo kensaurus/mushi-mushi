@@ -44,7 +44,8 @@ describe('ChromeBreadcrumb', () => {
   })
 
   it('puts a sub-page under the page the sidebar lists it under', async () => {
-    expect(await trailAt('/dashboard?view=apps')).toBe('Home›Overview')
+    expect(await trailAt('/portfolio?view=apps')).toBe('Apps›Overview')
+    expect(await trailAt('/portfolio?view=users')).toBe('Apps›User activity')
     expect(await trailAt('/content')).toBe('Checks›Content checks')
     expect(await trailAt('/team?view=billing')).toBe('Team›Billing')
   })

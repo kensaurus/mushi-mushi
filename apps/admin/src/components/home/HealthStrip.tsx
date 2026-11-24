@@ -6,6 +6,7 @@
  *          one that is not connected says how to connect it.
  */
 
+import { isSdkSetupHref } from '../../lib/homeSetupFocus'
 import { Link } from 'react-router-dom'
 import { Btn, Card, PanelHeader, RelativeTime, Skeleton } from '../ui'
 import { LIGHT_WORD, type HealthSignal, type HomeSection } from '../../lib/projectHome'
@@ -14,7 +15,14 @@ import { healthDisplayTone } from '../../lib/homeView'
 import { HomeSectionBody } from './HomeSectionBody'
 import { homeConnectHref } from '../../lib/homeConnectHref'
 
-export function HealthStrip({ section }: { section: HomeSection<HealthSignal[]> }) {
+export function HealthStrip({
+  section,
+  hideSetupConnect = false,
+}: {
+  section: HomeSection<HealthSignal[]>
+  /** The setup checklist shows the report-button step: tiles keep their status, not a second button for it. */
+  hideSetupConnect?: boolean
+}) {
   return (
     <section aria-label="App health" data-testid="home-health" className="min-w-0">
       <HomeSectionBody section={section} what="the app's health" notConnectedText="No health signals yet.">
@@ -22,7 +30,7 @@ export function HealthStrip({ section }: { section: HomeSection<HealthSignal[]> 
           <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 [&>*]:min-w-0">
             {signals.map((s, i) => (
               <li key={s.id} className={healthTileSpansRow(signals.length, i) ? 'sm:col-span-2' : undefined}>
-                <HealthTile signal={s} />
+                <HealthTile signal={hideSetupConnect && isSdkSetupHref(s.connect?.to) ? { ...s, connect: null } : s} />
               </li>
             ))}
           </ul>
@@ -96,14 +104,8 @@ function HealthTile({ signal: server }: { signal: HealthSignal }) {
   const tone = healthDisplayTone(s)
   return (
     <Card className="flex h-full min-w-0 flex-col gap-1 p-3" data-testid={`home-health-${s.id}`}>
-      <PanelHeader
-        className="mb-1"
-        title={
-          <Link to={s.href} className="hover:text-fg">
-            {s.label}
-          </Link>
-        }
-      />
+      {/* One link per light, on its value: the label linked to the same page, two controls for one place (ADR 0069). */}
+      <PanelHeader className="mb-1" title={s.label} />
       {/* The state is the value's mark and colour: a "Good" pill beside
           "Passing" said it twice (round-2 sweep 2026-11-18). The word stays
           for screen readers on the mark. */}

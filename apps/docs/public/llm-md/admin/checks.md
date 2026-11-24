@@ -9,7 +9,7 @@ description: The Checks page in the Mushi Mushi console shows every automatic ch
 
 # Checks
 
-**Route:** `/checks` (sidebar: Checks)
+**Route:** `/checks` (sidebar: More pages → Verify → Checks. It is a Lab: switch it on under **Settings → Display & sidebar → Labs** to keep it in the sidebar)
 
 Is my app OK, and which check is red? Every automatic check Mushi Mushi runs on this app, in one grid, failing checks first. A sentence at the top names the checks that need you, with one button to open the first.
 
@@ -22,7 +22,7 @@ Each card has a dot and a state:
 | Green | Pass | A finished run was read and found nothing. Shown with when it last ran. |
 | Grey | Not run yet, Not set up, Status unavailable | Never a pass. Not set up comes with a Set up link. |
 
-An Upgrade pill means the check needs a higher plan. AI prompts and CI runners are Labs: their cards appear once you switch them on under Settings → Display & sidebar → Labs. While you are on Checks or one of its pages, the sidebar lists every check under Checks.
+An Upgrade pill means the check needs a higher plan. AI prompts and CI runners are Labs: their cards appear once you switch them on under Settings → Display & sidebar → Labs. When Checks is in the sidebar, it lists every check under Checks while you are on one of them.
 
 ## The checks
 

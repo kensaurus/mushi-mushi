@@ -1058,16 +1058,16 @@ const COPY: CopyRegistry = {
     },
     '/connect': {
       title: 'Connect',
-      description: 'One hub to connect GitHub, install the SDK + MCP, and open upgrade PRs.',
+      description: 'Connect your app, one step at a time.',
       help: {
         title: 'About Connect',
-        whatIsIt: 'The install and upgrade hub — connect your repo, copy SDK and editor install commands, and open a PR that bumps @mushi-mushi packages.',
+        whatIsIt: 'Where your app connects to Mushi Mushi: the report button in your app, your editor, and your GitHub repo. Once the app checks in, it also keeps the SDK current.',
         useCases: [
-          'First-time setup: connect GitHub → install SDK → add MCP to Cursor',
+          'First-time setup: add the report button, then connect Cursor or Claude Code, then GitHub',
           'Upgrade path: "Create Upgrade PR" bumps @mushi-mushi/* to latest npm',
-          'Verify indexing: enable codebase index so Explore can map your repo',
+          'Check why bug reports stopped arriving: SDK health lists each problem with a fix',
         ],
-        howToUse: 'Connect GitHub first. Copy the SDK install snippet into your app, then use MCP deeplinks for Cursor. When versions drift, click Create Upgrade PR and merge after CI passes.',
+        howToUse: 'Do the open step; the next one opens when it is done. Press Change on a done step to redo it.',
       },
     },
     '/code-health': {
@@ -1618,7 +1618,7 @@ const COPY: CopyRegistry = {
     },
     '/connect': {
       title: 'Connect',
-      description: 'GitHub connect, SDK install, MCP deeplinks, and one-click upgrade PRs.',
+      description: 'The report button, your editor and GitHub, one step at a time; then SDK upgrades.',
     },
     '/users': {
       title: 'All users',
