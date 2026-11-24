@@ -28,8 +28,8 @@ import { OrgSwitcher } from './OrgSwitcher'
 import { useMediaQuery } from '../lib/useMediaQuery'
 import { stageForPath, type PdcaStageId } from '../lib/pdca'
 import { NAV_ITEM_BY_PATH, buildOperatorNav, type BuiltNavItem, type BuiltNavSection } from '../lib/buildNav'
-import { coreNavPathsFor } from '../lib/navRegistry'
-import { LAB_FEATURES, useLabs } from '../lib/labs'
+import { BUILDER_CORE_NAV_PATHS } from '../lib/navRegistry'
+import { LAB_FEATURES, applyOperatorLabDefaults, useLabs } from '../lib/labs'
 import { NAV_CHILDREN, NAV_CHILD_GROUPS, activeParent, isNavPathActive, morePages } from '../lib/sidebarTree'
 import { Tooltip, Btn, Badge } from './ui'
 import { RouteProgress } from './RouteProgress'
@@ -168,6 +168,13 @@ export function Layout({ children }: { children: ReactNode }) {
     : undefined
   const criticalReports30d = activeProjectSnapshot?.severity_breakdown_30d?.critical ?? 0
   const { isSuperAdmin, isOperator, has } = useEntitlements()
+  // ADR 0069: the owner sees the five-page sidebar too; their operator pages
+  // (Apps, Integrations, Checks, Team, Pipeline, Journeys) start as Labs that
+  // are on, once per account. labs.enabled re-runs it if the account's saved
+  // Labs arrive after the grant.
+  useEffect(() => {
+    if (isOperator) applyOperatorLabDefaults()
+  }, [isOperator, labs.enabled])
   const pageShellWidth = pageLayoutWidthForPath(pathname)
   const [focusModePreference, setFocusMode] = useFocusMode()
   /** Consent routes always hide chrome; preference still drives the toggle. */
@@ -343,8 +350,8 @@ export function Layout({ children }: { children: ReactNode }) {
         .filter((i): i is NavItem => i != null)
         .filter(visibleByRole)
         .filter(visibleByFeature)
-    // A builder gets the short sidebar; operators keep the full one (audit 2026-11-11).
-    const core = pick(coreNavPathsFor({ isOperator }))
+    // Every account gets the five-page fix loop (ADR 0069); operator pages are Labs.
+    const core = pick(BUILDER_CORE_NAV_PATHS)
     const labItems = pick(LAB_FEATURES.filter((f) => labs.isEnabled(f.id)).map((f) => f.paths[0]))
     const sections: NavSection[] = [{ id: 'core', title: 'Pages', hint: 'The pages every account has.', items: core }]
     if (labItems.length > 0) {

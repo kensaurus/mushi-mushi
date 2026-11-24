@@ -1202,10 +1202,11 @@ export function routeFallbackTitle(pathname: string): string | null {
  */
 
 /**
- * The sidebar pages every account has, in order (console audit 2026-10-20;
- * Pipeline added 2026-10-27, ADR 0027 amendment). A page with sub-pages lists
- * them under itself while you are in it (lib/sidebarTree.ts); every other page
- * is under "More pages", and a Lab (lib/labs.ts) can be kept in the sidebar.
+ * The top-level pages: the five sidebar pages plus the pages that head a
+ * family of their own (console audit 2026-10-20; ADR 0027). Since ADR 0069
+ * only BUILDER_CORE_NAV_PATHS is the sidebar; the rest are Labs that an
+ * operator account starts with switched on (lib/labs.ts). The breadcrumb
+ * treats each of these as a page that names its own views.
  */
 export const CORE_NAV_PATHS: readonly string[] = [
   '/dashboard',
@@ -1222,19 +1223,14 @@ export const CORE_NAV_PATHS: readonly string[] = [
 ]
 
 /**
- * The sidebar a builder sees (console audit 2026-11-11, finding 8): someone
- * who built an app with Lovable or Bolt needs Home, Bugs, Fixes, Journeys
- * (ADR 0058: make the app better, not only fix it), Connect and Settings; every other page they may open is under "More pages". Pipeline
- * stays core for every account (ADR 0027 amendment 2026-10-27). Operators
- * (entitlements `operator`) keep CORE_NAV_PATHS.
+ * The sidebar is the fix loop (ADR 0069, owner 2026-11-24): Home, Bugs,
+ * Fixes, Connect, Settings. Set up shows above it until setup is done
+ * (Layout). Every account gets this list, the owner's too. Pipeline and
+ * the Journey optimizer became Labs; Apps, Integrations, Checks and Team are
+ * Labs an operator starts with on. Every other page is under "More pages"
+ * and in ⌘K.
  */
-/** @internal Exported for tests. */
-export const BUILDER_CORE_NAV_PATHS: readonly string[] = ['/dashboard', '/reports', '/fixes', '/journeys', '/pipeline', '/connect', '/settings']
-
-/** The core sidebar for this viewer. */
-export function coreNavPathsFor(viewer: { isOperator: boolean }): readonly string[] {
-  return viewer.isOperator ? CORE_NAV_PATHS : BUILDER_CORE_NAV_PATHS
-}
+export const BUILDER_CORE_NAV_PATHS: readonly string[] = ['/dashboard', '/reports', '/fixes', '/connect', '/settings']
 
 /**
  * Operator pages that are also route-guarded (App.tsx OperatorRoute): Mushi

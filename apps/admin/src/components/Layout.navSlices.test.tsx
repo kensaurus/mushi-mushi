@@ -5,7 +5,8 @@
 /**
  * FILE: apps/admin/src/components/Layout.navSlices.test.tsx
  * PURPOSE: Pin which nav-meta slices Layout asks `useNavCounts` for.
- *          The one sidebar (core pages plus enabled Labs) asks only for
+ *          The one sidebar (the five core pages plus enabled Labs; an
+ *          operator's Labs start on, ADR 0069) asks only for
  *          the visible badges. The open page adds nothing when it is not
  *          in the sidebar — that union existed for `layoutHeroFromStats`,
  *          which has no caller.
@@ -16,10 +17,10 @@ import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { navSlicesForPaths } from '../lib/navBadges'
-import { BUILDER_CORE_NAV_PATHS, CORE_NAV_PATHS } from '../lib/navRegistry'
+import { BUILDER_CORE_NAV_PATHS } from '../lib/navRegistry'
 
 const state = vi.hoisted(() => ({
-  // The full sidebar is the operator's (navRegistry coreNavPathsFor).
+  // An operator with the Labs granted once (lib/labs.ts applyOperatorLabDefaults); a builder test sets false.
   isOperator: true,
   enabledLabs: new Set<string>(),
   sliceCalls: [] as Array<readonly string[] | null | undefined>,
@@ -42,6 +43,7 @@ vi.mock('../lib/labs', async () => {
       isEnabled: (id: string) => state.enabledLabs.has(id),
       setEnabled: () => {},
     }),
+    applyOperatorLabDefaults: () => {},
   }
 })
 
@@ -89,13 +91,18 @@ vi.mock('./RouteProgress', () => ({ RouteProgress: () => null }))
 vi.mock('./SidebarFooterControls', () => ({ SidebarFooterControls: () => null }))
 
 import { Layout } from './Layout'
+import { LAB_FEATURES } from '../lib/labs'
+
+const OPERATOR_LABS = LAB_FEATURES.filter((f) => f.operatorDefault)
+/** An operator's sidebar: the five core pages plus the Labs granted once (ADR 0069). */
+const OPERATOR_SIDEBAR = [...BUILDER_CORE_NAV_PATHS, ...OPERATOR_LABS.map((f) => f.paths[0]!)]
 
 let root: Root | null = null
 let container: HTMLDivElement | null = null
 
 beforeEach(() => {
   state.isOperator = true
-  state.enabledLabs = new Set()
+  state.enabledLabs = new Set(OPERATOR_LABS.map((f) => f.id))
   state.sliceCalls = []
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   container = document.createElement('div')
@@ -126,9 +133,9 @@ function expectSlices(expected: readonly string[]): void {
 }
 
 describe('Layout nav-meta slices', () => {
-  it('asks only for the core sidebar badges, not the open page', () => {
+  it('asks only for the sidebar badges, not the open page', () => {
     renderAt('/releases')
-    const expected = navSlicesForPaths(CORE_NAV_PATHS)
+    const expected = navSlicesForPaths(OPERATOR_SIDEBAR)
     expectSlices(expected)
     expect(expected).not.toContain('releases')
     expect(expected).toEqual([
@@ -144,25 +151,27 @@ describe('Layout nav-meta slices', () => {
 
   it('does not add /billing or /health when those pages are not in the sidebar', () => {
     renderAt('/billing')
-    expectSlices(navSlicesForPaths(CORE_NAV_PATHS))
+    expectSlices(navSlicesForPaths(OPERATOR_SIDEBAR))
     expect(state.sliceCalls.at(-1)).not.toContain('billing')
 
     state.sliceCalls = []
     renderAt('/health')
-    expectSlices(navSlicesForPaths(CORE_NAV_PATHS))
+    expectSlices(navSlicesForPaths(OPERATOR_SIDEBAR))
     expect(state.sliceCalls.at(-1)).not.toContain('health')
   })
 
   it('asks a builder only for the badges of the short sidebar (audit 2026-11-11)', () => {
     state.isOperator = false
+    state.enabledLabs = new Set()
     renderAt('/reports')
     expectSlices(navSlicesForPaths(BUILDER_CORE_NAV_PATHS))
+    expect(state.sliceCalls.at(-1)).toEqual(['dashboard', 'fixes', 'onboarding', 'settings'])
   })
 
   it('adds a Lab’s slice only when that Lab is in the sidebar', () => {
-    state.enabledLabs = new Set(['releases'])
+    state.enabledLabs = new Set([...state.enabledLabs, 'releases'])
     renderAt('/billing')
-    const expected = navSlicesForPaths([...CORE_NAV_PATHS, '/releases'])
+    const expected = navSlicesForPaths([...OPERATOR_SIDEBAR, '/releases'])
     expectSlices(expected)
     expect(expected).toContain('releases')
     expect(expected).not.toContain('billing')

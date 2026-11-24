@@ -21,15 +21,22 @@ describe('every page has a place in the sidebar', () => {
     const children = new Set(Object.values(NAV_CHILDREN).flat())
     const missing = NAV_REGISTRY.filter((e) => e.inSidebar !== false)
       .map((e) => e.path)
-      .filter((p) => !CORE_NAV_PATHS.includes(p) && !children.has(p) && !more.has(p) && !FOOTER_NAV_PATHS.includes(p))
+      .filter((p) => !BUILDER_CORE_NAV_PATHS.includes(p) && !children.has(p) && !more.has(p) && !FOOTER_NAV_PATHS.includes(p))
     expect(missing).toEqual([])
   })
 
-  it('keeps Pipeline in the sidebar for every account', () => {
-    expect(CORE_NAV_PATHS).toContain('/pipeline')
+  it('makes the sidebar the fix loop for every account (ADR 0069)', () => {
+    expect(BUILDER_CORE_NAV_PATHS).toEqual(['/dashboard', '/reports', '/fixes', '/connect', '/settings'])
   })
 
-  it('names only registry pages as sub-pages, under core pages', () => {
+  it('keeps every top-level page that left the sidebar one click away as a Lab an operator starts with on', () => {
+    const operatorLabPaths = LAB_FEATURES.filter((f) => f.operatorDefault).map((f) => f.paths[0])
+    const leftSidebar = CORE_NAV_PATHS.filter((p) => !BUILDER_CORE_NAV_PATHS.includes(p))
+    expect([...operatorLabPaths].sort()).toEqual([...leftSidebar].sort())
+    expect(leftSidebar).toEqual(expect.arrayContaining(['/pipeline', '/journeys']))
+  })
+
+  it('names only registry pages as sub-pages, under top-level pages', () => {
     for (const [parent, children] of Object.entries(NAV_CHILDREN)) {
       expect(CORE_NAV_PATHS).toContain(parent)
       for (const child of children) expect(registryPaths.has(child), child).toBe(true)
@@ -75,13 +82,21 @@ describe('More pages', () => {
       .map((e) => e.path)
       .filter((p) => !BUILDER_CORE_NAV_PATHS.includes(p) && !children.has(p) && !more.has(p) && !FOOTER_NAV_PATHS.includes(p))
     expect(missing).toEqual([])
-    // The core pages moved down are under More pages, Pipeline stays core (ADR 0027).
-    for (const p of ['/team', '/checks', '/portfolio', '/integrations/config']) expect(more.has(p), p).toBe(true)
-    expect(BUILDER_CORE_NAV_PATHS).toContain('/pipeline')
+    // The top-level pages that left the sidebar are under More pages until their Lab is on (ADR 0069).
+    for (const p of ['/team', '/checks', '/portfolio', '/integrations/config', '/pipeline', '/journeys']) expect(more.has(p), p).toBe(true)
+    expect(BUILDER_CORE_NAV_PATHS).not.toContain('/pipeline')
+    expect(BUILDER_CORE_NAV_PATHS).not.toContain('/journeys')
   })
 
   it('guards only pages that are operator-only in the registry', () => {
     for (const p of OPERATOR_ROUTES) expect(NAV_REGISTRY.find((e) => e.path === p)?.operatorOnly, p).toBe(true)
+  })
+
+  it('drops the operator Labs from More pages once they are on', () => {
+    const granted = new Set(LAB_FEATURES.filter((f) => f.operatorDefault).map((f) => f.id))
+    for (const p of ['/team', '/checks', '/portfolio', '/integrations/config', '/pipeline', '/journeys']) {
+      expect(morePaths(EVERYONE, granted).has(p), p).toBe(false)
+    }
   })
 
   it('drops a Lab once it is kept in the sidebar', () => {
