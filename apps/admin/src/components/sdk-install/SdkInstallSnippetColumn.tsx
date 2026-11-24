@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { CodePanel } from '../CodePanel'
 import { ConfigHelp } from '../ConfigHelp'
+import { IconChevronDown, IconChevronRight } from '../icons'
 import { SegmentedControl } from '../ui'
 import {
   FRAMEWORKS,
@@ -45,6 +46,18 @@ export function SdkInstallSnippetColumn({
 }) {
   const [snippetCopied, setSnippetCopied] = useState(false)
   const [installCopied, setInstallCopied] = useState(false)
+  const [showPowerApis, setShowPowerApis] = useState(false)
+  // Twelve framework tabs on a fresh app (ADR 0069): the Script tag works anywhere and leads,
+  // the picked one sits beside it, every other framework is in one list.
+  const chips: Framework[] = framework === 'loader' ? ['loader'] : ['loader', framework]
+  const others = FRAMEWORKS.filter((fw) => !chips.includes(fw))
+
+  function pick(fw: Framework) {
+    autoFrameworkApplied.current = true
+    onFrameworkChange(fw)
+    setSnippetCopied(false)
+    setInstallCopied(false)
+  }
 
   function copy(text: string, setter: (v: boolean) => void) {
     navigator.clipboard.writeText(text).then(() => {
@@ -55,46 +68,47 @@ export function SdkInstallSnippetColumn({
 
   return (
     <div className="space-y-3 min-w-0">
-      {/* Framework tabs.
-          `flex-wrap` is non-negotiable: there are 7 frameworks today
-          (React / Vue / Svelte / React Native / Expo / Capacitor /
-          Vanilla JS) which already overflow the right-column track at
-          ≤ 1024 px viewports. Without wrap the rightmost button (Vanilla
-          JS) gets *clipped outside* the card border — verified at
-          1440 / 1024 / 800 before this fix. `whitespace-nowrap` keeps
-          "React Native" on a single line when wrapping kicks in
-          (otherwise it splits into "React" / "Native" on adjacent
-          lines, which the eye reads as two separate tabs). */}
-      {/* No wrap here: the chips wrap inside their own control and the ⓘ stays at the end of
-          the row. A wrapping row left a lone ⓘ under the chips (round-3 review, 2026-11-19). */}
-      <div className="flex items-start gap-1 border-b border-edge-subtle pb-2">
+      {/* The Script tag and the picked framework as tabs, the rest in a list. The ⓘ stays at the
+          end of the row (round-3 review, 2026-11-19). */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-edge-subtle pb-2">
         <SegmentedControl
           value={framework}
-          options={FRAMEWORKS.map((fw) => ({ id: fw, label: frameworkLabel(fw) }))}
-          onChange={(fw) => {
-            autoFrameworkApplied.current = true
-            onFrameworkChange(fw)
-            setSnippetCopied(false)
-            setInstallCopied(false)
-          }}
+          options={chips.map((fw) => ({ id: fw, label: frameworkLabel(fw) }))}
+          onChange={pick}
           ariaLabel="Framework"
           size="sm"
-          wrap
-          scrollable
-          className="min-w-0 flex-1"
         />
+        <select
+          aria-label="Other frameworks"
+          className="h-7 min-w-0 rounded-sm border border-edge-subtle bg-surface-raised px-2 text-2xs text-fg"
+          value=""
+          onChange={(e) => {
+            if (e.target.value) pick(e.target.value as Framework)
+          }}
+          data-testid="sdk-framework-other"
+        >
+          <option value="">Other frameworks</option>
+          {others.map((fw) => (
+            <option key={fw} value={fw}>
+              {frameworkLabel(fw)}
+            </option>
+          ))}
+        </select>
         <ConfigHelp helpId="sdk-install.framework" />
       </div>
 
       {belowTabs}
 
-      <CodePanel
-        label="Install"
-        language="bash"
-        code={install}
-        onCopy={() => copy(install, setInstallCopied)}
-        copied={installCopied}
-      />
+      {/* The Script tag installs nothing: no "Install" panel saying so beside the code. */}
+      {framework !== 'loader' && (
+        <CodePanel
+          label="Install"
+          language="bash"
+          code={install}
+          onCopy={() => copy(install, setInstallCopied)}
+          copied={installCopied}
+        />
+      )}
 
       <CodePanel
         label="Code"
@@ -114,12 +128,24 @@ export function SdkInstallSnippetColumn({
           ship these methods yet — they'll get a per-platform
           equivalent once their wave lands. */}
       {!isMobileFramework(framework) && !isServerFramework(framework) && (
-        <details className="rounded-md border border-edge-subtle bg-surface-raised/50">
-          <summary className="cursor-pointer select-none list-none flex items-center justify-between gap-2 px-3 py-2 text-xs text-fg hover:bg-surface-overlay rounded-md">
+        <div className="rounded-md border border-edge-subtle bg-surface-raised/50">
+          {/* Rendered only when opened, so a fresh install card is not 150 words of example code. */}
+          <button
+            type="button"
+            aria-expanded={showPowerApis}
+            aria-controls="sdk-power-apis"
+            onClick={() => setShowPowerApis((v) => !v)}
+            className="flex w-full cursor-pointer select-none items-center justify-between gap-2 rounded-md px-3 py-2 text-left text-xs text-fg hover:bg-surface-overlay"
+          >
             <span className="font-medium">Power-user APIs (identity, tags, breadcrumbs, Sentry)</span>
-            <span aria-hidden className="text-2xs text-fg-faint">›</span>
-          </summary>
-          <div className="px-3 pb-3 pt-1 space-y-3 text-2xs text-fg-secondary">
+            {showPowerApis ? (
+              <IconChevronDown size={12} className="text-fg-faint" />
+            ) : (
+              <IconChevronRight size={12} className="text-fg-faint" />
+            )}
+          </button>
+          {showPowerApis && (
+          <div id="sdk-power-apis" className="px-3 pb-3 pt-1 space-y-3 text-2xs text-fg-secondary">
             <p className="leading-relaxed">
               Every report carries the breadcrumb buffer, sticky tags, and (when
               Sentry is installed) the active trace + replay + user. After a
@@ -164,7 +190,8 @@ try {
   throw err
 }`}</pre>
           </div>
-        </details>
+          )}
+        </div>
       )}
     </div>
   )

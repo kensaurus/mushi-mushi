@@ -5,8 +5,6 @@
  *          which stays 0 since the strip was removed on 2026-10-20).
  */
 
-export const BETA_BANNER_OFFSET_VAR = '--mushi-beta-banner-offset'
-
 /**
  * Desktop sub-header height (Search + toolbar row in Layout).
  * @internal Exported for tests only.

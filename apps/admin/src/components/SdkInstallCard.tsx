@@ -286,17 +286,10 @@ export function SdkInstallCard({
         className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1.5 text-xs text-fg-secondary"
         data-testid="sdk-install-fast-paths"
       >
-        {/* Where the key comes from, in one row, on Set up and on Connect. */}
-        {!snippetKey ? (
-          <>
-            <dt className="font-medium text-fg">Key</dt>
-            <dd className="min-w-0" data-testid="sdk-snippet-key-hint">
-              Press <span className="font-medium text-fg">Make a key and fill it in</span> above; it is shown only once.
-            </dd>
-          </>
-        ) : null}
+        {/* No "Key" row: the key panel right above has the button and says the key shows once
+            (it said so twice, ADR 0069 word budget). */}
         <dt className="font-medium text-fg">No coding</dt>
-        <dd className="min-w-0">Script tag below, or Lovable / Bolt under &ldquo;Where does your app run?&rdquo;</dd>
+        <dd className="min-w-0">The Script tag, or pick Lovable / Bolt below</dd>
         <dt className="font-medium text-fg">Terminal</dt>
         <dd className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
           <CodeValue value="npx mushi-mushi" inline />
@@ -450,15 +443,31 @@ function SdkInstallShell({
   return <Card className={className}>{children}</Card>
 }
 
-/** The widget preview and settings: a closed disclosure on setup, a column elsewhere. */
+/**
+ * The widget preview and settings: closed on setup, a column elsewhere. Closed
+ * renders nothing inside (ADR 0069): the settings live in the card's state, so
+ * opening it again shows what was picked.
+ */
 function WidgetCustomizeColumn({ compact, children }: { compact?: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false)
   if (!compact) return <div className="space-y-3">{children}</div>
   return (
-    <details className="group rounded-sm border border-edge-subtle">
-      <summary className="cursor-pointer select-none px-3 py-2 text-xs text-fg-secondary hover:text-fg">
-        Customize the report button (optional, the defaults work)
-      </summary>
-      <div className="space-y-3 border-t border-edge-subtle p-3">{children}</div>
-    </details>
+    <div className="rounded-sm border border-edge-subtle">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls="sdk-customize-button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full cursor-pointer select-none px-3 py-2 text-left text-xs text-fg-secondary hover:text-fg"
+        data-testid="sdk-customize-toggle"
+      >
+        Customize the report button (optional)
+      </button>
+      {open && (
+        <div id="sdk-customize-button" className="space-y-3 border-t border-edge-subtle p-3">
+          {children}
+        </div>
+      )}
+    </div>
   )
 }

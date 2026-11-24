@@ -27,11 +27,13 @@ tools**, `?tab=health` and `?tab=dev` open **SDK & connection**, `?tab=keys` ope
 
 ### General
 
-Bug alerts (Slack channel), error tracking (Sentry), an optional read-only link to your
+Bug alerts (the Slack channel) come first. **Advanced → Show** holds the rest; it
+opens by itself when a link points into it or the saved fix branch pattern is refused:
+the older Slack webhook, error tracking (Sentry), an optional read-only link to your
 Supabase database, and **Bug sorting**: the AI models for triage, the quick check, the
 judge and fixes, the quick-check confidence, grouping of similar bugs and fix branch
-names. It also holds daily limits for Firecrawl and test writing, the feedback widget's
-"Bug reports by Mushi Mushi" line, and, behind **Fixes and CI → Show**, the pull request
+names. It also holds daily limits for Firecrawl and test writing, and the feedback widget's
+"Bug reports by Mushi Mushi" line. Behind **Fixes and CI → Show** are the pull request
 review, verified merge, CI cost and CI policy settings.
 
 **Spend limits** (project admins) cap what the project spends. Leave a field

@@ -1,7 +1,12 @@
 /**
  * FILE: apps/admin/src/components/settings/GeneralPanel.tsx
- * PURPOSE: Settings → General. Lists, one card each:
- *            Bug alerts       Slack bot channel, older Slack webhook
+ * PURPOSE: Settings → General. Bug alerts (the Slack channel) lead; the rest
+ *          sits in one "Advanced" group that is closed until asked, opens by
+ *          itself when a link points into it or the saved branch pattern is
+ *          refused (ADR 0069). Lists, one card each:
+ *            Bug alerts       Slack bot channel
+ *          Advanced:
+ *            Older webhook    the older Slack webhook
  *            Error tracking   Sentry
  *            Your database    Supabase project link (read-only)
  *            Bug sorting      triage model, confidence, grouping, fix branches
@@ -14,6 +19,7 @@
  */
 
 import { useMemo, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { apiFetch } from '../../lib/supabase'
 import { usePageData } from '../../lib/usePageData'
 import { useToast } from '../../lib/toast'
@@ -106,6 +112,24 @@ const DEFAULT_BRANCH_TEMPLATE = 'bugfix/MUSHI-{reportId}-{category}'
 /** The model each job really runs: column defaults and retired ids resolve like the server does. */
 const eff = effectiveModelId
 
+/** Ids inside the Advanced group: a link to any of them opens it. */
+const GENERAL_ADVANCED_ANCHORS: readonly string[] = [
+  'settings-advanced',
+  'slack-webhook',
+  'error-tracking',
+  'supabase',
+  'bug-sorting',
+  'stage1-confidence',
+  'dedup',
+  'fix-branch',
+  'daily-limits',
+  'crawl-pages',
+  'crawl-runs',
+  'tdd-gens',
+  'widget',
+  'widget-brand-footer',
+]
+
 export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
   const toast = useToast()
   const entitlements = useEntitlements()
@@ -121,6 +145,8 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
   const health = usePageData<{ history: HealthRow[] }>('/v1/admin/health/history')
   const slackProbe = health.data?.history?.find((h) => h.kind === 'slack')
   const [draft, setDraft] = useState<ProjectSettings | null>(null)
+  const location = useLocation()
+  const [advancedChoice, setAdvancedChoice] = useState<{ nav: string; open: boolean } | null>(null)
   const [saving, setSaving] = useState(false)
   const [showLegacyWebhook, setShowLegacyWebhook] = usePersistentState(
     'settings:general:slack-webhook-open',
@@ -238,6 +264,12 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
     saved: saved.fix_branch_template,
     defaultValue: DEFAULT_BRANCH_TEMPLATE,
   })
+  // A click opens or closes Advanced until the next navigation. Otherwise it is open when a link
+  // points into it, or when the saved branch pattern is refused: the banner's "Fix pattern" and
+  // the footer's "Fix the branch name pattern first" both need that field on screen.
+  const advancedLinked = GENERAL_ADVANCED_ANCHORS.includes(location.hash.slice(1))
+  const advancedChosen = advancedChoice && advancedChoice.nav === location.key ? advancedChoice.open : null
+  const showAdvanced = advancedChosen ?? (advancedLinked || Boolean(branch.error))
 
   return (
     <>
@@ -283,7 +315,31 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
             </ResultChip>
           )}
         </SettingsRow>
+      </SettingsList>
 
+      {/* Advanced: closed until asked, rendered only when open (ADR 0069). The form keeps every
+          value in its own state, so closing it loses nothing and Save still counts its changes. */}
+      <div
+        id="settings-advanced"
+        className="flex scroll-mt-6 flex-wrap items-center justify-between gap-2 rounded-md border border-edge-subtle px-4 py-3"
+      >
+        <p className="min-w-0 text-sm text-fg-secondary">
+          Advanced: Sentry, the older Slack webhook, your Supabase link, bug sorting, daily limits and the widget line.
+        </p>
+        <Btn
+          size="sm"
+          variant="ghost"
+          aria-expanded={showAdvanced}
+          aria-controls="settings-advanced-body"
+          onClick={() => setAdvancedChoice({ nav: location.key, open: !showAdvanced })}
+          data-testid="settings-advanced-toggle"
+        >
+          {showAdvanced ? 'Hide' : 'Show'}
+        </Btn>
+      </div>
+      {showAdvanced && (
+      <div id="settings-advanced-body" className="space-y-4">
+      <SettingsList id="slack-webhook" title="Older Slack webhook" description="Posts bug alerts without threads or buttons.">
         <SettingsRow
           icon={<IconChat size={16} />}
           title="Older Slack webhook"
@@ -656,6 +712,8 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
           />
         </SettingsRow>
       </SettingsList>
+      </div>
+      )}
 
       <SettingsFormFooter
         dirty={dirty}

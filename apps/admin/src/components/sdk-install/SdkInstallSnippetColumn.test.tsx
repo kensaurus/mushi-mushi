@@ -36,8 +36,36 @@ describe('SdkInstallSnippetColumn', () => {
         install: 'npm i @mushi-mushi/web',
       }))
     })
+    // Closed until asked (ADR 0069): the example is not in the page until the toggle opens it.
+    expect(container.querySelector('pre[aria-label="Power-user API example"]')).toBeNull()
+    const toggle = container.querySelector<HTMLButtonElement>('button[aria-controls="sdk-power-apis"]')!
+    act(() => toggle.click())
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
     const pre = container.querySelector('pre[aria-label="Power-user API example"]')
     expect(pre?.getAttribute('tabindex')).toBe('0')
     expect(pre?.getAttribute('role')).toBe('region')
+  })
+
+  it('shows the Script tag and the picked framework as tabs, the rest in one list', () => {
+    const picked: string[] = []
+    act(() => {
+      root.render(createElement(SdkInstallSnippetColumn, {
+        framework: 'react',
+        onFrameworkChange: (fw: string) => picked.push(fw),
+        autoFrameworkApplied: { current: false },
+        code: 'init()',
+        install: 'npm i @mushi-mushi/web',
+      }))
+    })
+    const tabs = Array.from(container.querySelectorAll('[role="radio"]')).map((b) => b.textContent)
+    expect(tabs).toHaveLength(2)
+    const select = container.querySelector<HTMLSelectElement>('[data-testid="sdk-framework-other"]')!
+    // Every other framework stays one pick away: 12 in all.
+    expect(select.querySelectorAll('option[value]:not([value=""])')).toHaveLength(10)
+    act(() => {
+      select.value = 'vue'
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    expect(picked).toEqual(['vue'])
   })
 })

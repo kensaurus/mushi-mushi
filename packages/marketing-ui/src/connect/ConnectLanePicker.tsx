@@ -35,6 +35,14 @@ export interface ConnectLanePickerProps {
    * `operator` — admin console maps selections to `@theme` brand micro-indicators.
    */
   surface?: 'editorial' | 'operator'
+  /**
+   * The lanes offered as tabs; default all three. With one lane the panel
+   * renders without a tab row (the admin console leads with MCP and offers
+   * CLI and Skills as its own secondary disclosure, ADR 0069).
+   */
+  lanes?: readonly ConnectLane[]
+  /** Rendered after the client chips, e.g. an "Other editors" toggle. */
+  afterClients?: ReactNode
 }
 
 function joinClasses(...parts: (string | false | undefined)[]): string {
@@ -83,7 +91,11 @@ export function ConnectLanePicker({
   className,
   bordered = true,
   surface = 'editorial',
+  lanes,
+  afterClients,
 }: ConnectLanePickerProps) {
+  const laneOptions = lanes ? CONNECT_LANE_OPTIONS.filter((o) => lanes.includes(o.id)) : CONNECT_LANE_OPTIONS
+  const singleLane = laneOptions.length === 1
   const lanePanelLabel =
     CONNECT_LANE_OPTIONS.find((o) => o.id === activeLane)?.label ?? 'Setup'
 
@@ -110,11 +122,13 @@ export function ConnectLanePicker({
             />
           ))}
         </div>
+        {afterClients}
       </div>
 
       <div className="mushi-connect-lanes">
+        {singleLane ? null : (
         <div role="tablist" aria-label="Setup method" className="mushi-connect-tablist">
-          {CONNECT_LANE_OPTIONS.map((lane) => (
+          {laneOptions.map((lane) => (
             <button
               key={lane.id}
               type="button"
@@ -130,10 +144,11 @@ export function ConnectLanePicker({
             </button>
           ))}
         </div>
+        )}
 
         <div
-          role="tabpanel"
-          aria-label={lanePanelLabel}
+          role={singleLane ? undefined : 'tabpanel'}
+          aria-label={singleLane ? undefined : lanePanelLabel}
           className="mushi-connect-panel"
         >
           {renderLane(
