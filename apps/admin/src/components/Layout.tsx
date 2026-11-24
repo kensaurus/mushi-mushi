@@ -403,10 +403,14 @@ export function Layout({ children }: { children: ReactNode }) {
     [isOperator, isSuperAdmin, has, labs.enabled],
   )
   const isCurrent = (path: string) => isNavPathActive(pathname, search, path)
+  // A sub-page whose parent is not in the sidebar (/qa-coverage while Checks is
+  // unpinned, ADR 0069): the parent's entry under More pages marks where you are.
+  const parentInSidebar = visibleNav.some((s) => s.items.some((i) => i.path === openParent))
   // A parent is the current page only when none of its sub-pages is.
   const isCurrentNav = (path: string) =>
-    isCurrent(path) && !(path === openParent && childItems.some((c) => isCurrent(c.path)))
-  const onMorePage = moreGroups.some((g) => g.items.some((i) => isCurrent(i.path)))
+    (isCurrent(path) && !(path === openParent && childItems.some((c) => isCurrent(c.path)))) ||
+    (path === openParent && !parentInSidebar)
+  const onMorePage = moreGroups.some((g) => g.items.some((i) => isCurrentNav(i.path)))
   // Opening a page that lives under "More pages" opens the list, so the
   // sidebar always shows where you are.
   useEffect(() => {
@@ -653,7 +657,7 @@ export function Layout({ children }: { children: ReactNode }) {
                     <>
                       {moreGroups
                         .flatMap((group) => group.items)
-                        .filter((item) => isCurrent(item.path))
+                        .filter((item) => isCurrentNav(item.path))
                         .map((item) => renderNavLink(item, true))}
                       <Tooltip
                         side="right"
