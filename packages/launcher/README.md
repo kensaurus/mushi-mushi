@@ -231,3 +231,9 @@ MIT © [Kenji Sakuramoto](https://github.com/kensaurus). The server packages are
 | <img src="https://kensaur.us/favicon.svg" width="28" height="28" alt=""> | [kensaur.us](https://kensaur.us/?view=portfolio&utm_source=github&utm_medium=readme) | All apps from the same maker |
 
 All apps live under [kensaur.us](https://kensaur.us).
+
+
+<!-- mushi-readme-stats-footer -->
+---
+
+<sub>Monorepo scale (October 2026): 78 edge functions · 585 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
