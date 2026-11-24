@@ -308,3 +308,28 @@ describe('the owner gets the same five pages as a builder', () => {
     }
   })
 })
+
+/**
+ * A check page while Checks is not pinned (ADR 0069 follow-up): the sidebar
+ * still shows where you are, on Checks under More pages, for every account.
+ */
+describe('a sub-page whose parent is under More pages', () => {
+  for (const isOperator of [false, true]) {
+    it(`opens More pages and highlights the parent (${isOperator ? 'operator' : 'builder'})`, () => {
+      state.isOperator = isOperator
+      renderAt('/qa-coverage')
+      const more = nav().querySelector('[data-testid="nav-more-pages"]')
+      expect(more).not.toBeNull()
+      expect(current()).toEqual(['/checks'])
+      expect(more!.querySelector('a[href="/checks"][aria-current="page"]')).not.toBeNull()
+      expect(nav().querySelector('[data-testid="nav-children"]')).toBeNull()
+    })
+  }
+
+  it('shows the parent in the icon rail too', () => {
+    state.collapsed = true
+    renderAt('/qa-coverage')
+    const rail = container!.querySelector('aside nav[aria-label="Main navigation"]') as HTMLElement
+    expect(rail.querySelector('a[href="/checks"][aria-current="page"]')).not.toBeNull()
+  })
+})
