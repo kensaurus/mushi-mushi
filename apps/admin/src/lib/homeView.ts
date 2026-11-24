@@ -55,7 +55,6 @@ function withoutTodayReports(lines: ActivityLine[], week: readonly WeekRow[]): A
 }
 
 /**
- * @internal Exported for tests.
  * Where a button goes, for "is this the same button?": the path, other
  * params and the hash, without the `project` pin. `/connect?project=…#connect-sdk-health`
  * and `/connect#connect-sdk-health` are one place.

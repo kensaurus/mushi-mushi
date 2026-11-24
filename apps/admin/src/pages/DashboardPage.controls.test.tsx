@@ -25,7 +25,8 @@ const section = <T,>(data: T) => ({ status: 'ok' as const, data, connect: null, 
 const notConnected = (label: string, to: string) => ({ status: 'not_connected' as const, data: null, connect: { label, to }, error: null })
 const sdkHref = `/connect?project=${PROJECT}#connect-sdk-health`
 
-function setupFor(done: boolean, reportCount: number) {
+/** `installed`: the report button checks in, no report yet (the window right after install). */
+function setupFor(done: boolean, reportCount: number, installed = done) {
   const steps = [
     { id: 'project_created', label: 'Create your first project', description: '', complete: true, required: true, cta_to: '/projects', cta_label: 'Manage projects' },
     { id: 'api_key_generated', label: 'Generate an API key', description: '', complete: true, required: true, cta_to: '/projects', cta_label: 'Generate key' },
@@ -33,11 +34,11 @@ function setupFor(done: boolean, reportCount: number) {
       id: 'sdk_installed',
       label: 'Install the SDK in your app',
       description: 'Drop the Mushi widget into your app so users can submit reports.',
-      complete: done,
+      complete: installed,
       required: true,
       cta_to: '/onboarding?tab=sdk',
       cta_label: 'Install SDK',
-      diagnostic: { last_sdk_seen_at: done ? HOURS_AGO(2) : null, last_sdk_origin: null, last_sdk_user_agent: null, last_sdk_endpoint_host: null },
+      diagnostic: { last_sdk_seen_at: installed ? HOURS_AGO(2) : null, last_sdk_origin: null, last_sdk_user_agent: null, last_sdk_endpoint_host: null },
     },
     { id: 'first_report_received', label: 'Receive your first bug report', description: '', complete: done, required: true, cta_to: '/reports', cta_label: 'Send test report' },
   ]
@@ -197,7 +198,7 @@ vi.mock('../lib/usePageData', () => ({
         ? pageData(state.home)
         : pageData(null),
 }))
-vi.mock('../lib/useSetupStatus', () => ({ useSetupStatus: () => state.setup }))
+vi.mock('../lib/useSetupStatus', () => ({ useSetupStatus: () => state.setup, invalidateSetupStatus: () => {} }))
 // A builder: not an operator, no paid features.
 vi.mock('../lib/useEntitlements', () => ({
   useEntitlements: () => ({ canEditProject: true, has: () => false, isOperator: false, isSuperAdmin: false, loading: false, planName: 'Free' }),
@@ -300,12 +301,36 @@ describe('Home control budget (ADR 0069)', () => {
     expect(labels).not.toContain('Add the report button')
   })
 
+  // Right after install: the checklist's open step is the first report; the page has one "Send test report".
+  it('a just-installed app with no report yet: under 20 controls, one Send test report', async () => {
+    const installedHome = {
+      ...FRESH_HOME,
+      // Once the SDK has checked in the server reads Bugs today as "None new" (functions/api/routes/project-home.ts everConnected).
+      health: section(
+        FRESH_HOME.health.data.map((h) =>
+          h.id === 'sdk'
+            ? { ...h, status: 'ok', light: 'good', headline: 'Sending', detail: 'Your app checked in today.', at: HOURS_AGO(2), connect: null }
+            : h.id === 'errors'
+              ? { ...h, status: 'ok', light: 'good', headline: 'None new', detail: '0 yesterday.', connect: null }
+              : h,
+        ),
+      ),
+      needsYou: section([]),
+    }
+    const m = await mountHome(installedHome, setupFor(false, 0, true))
+    console.log('[home-budget] installed', JSON.stringify(m))
+    expect(m.viewTabs).toBe(0)
+    expect(m.controls).toBeLessThan(20)
+    const labels = Array.from(container.querySelectorAll('a, button')).map((el) => el.textContent?.trim() ?? '')
+    expect(labels.filter((l) => /^Send test report/.test(l))).toHaveLength(1)
+  })
+
   // Before (2026-11-24, same fixture): 48 controls, 274 words, 5 view tabs.
   it('an established app (lets-talk shape): Needs you first, no view tabs', async () => {
     const m = await mountHome(ESTABLISHED_HOME, setupFor(true, 40))
     console.log('[home-budget] established', JSON.stringify(m))
     expect(m.viewTabs).toBe(0)
-    expect(m.controls).toBeLessThan(40)
+    expect(m.controls).toBeLessThanOrEqual(37)
     const needs = byTestId('home-needs-row')!
     expect(needs.compareDocumentPosition(byTestId('home-health')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(needs.textContent).toContain('1 critical bug is waiting for a fix.')

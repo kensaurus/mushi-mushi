@@ -61,8 +61,11 @@ Four lights, each with a word beside its colour:
 | **SDK sending** | Your app checked in today | Quiet for 1–7 days | Silent for over a week | Create a key and add the SDK |
 | **CI on main** | The latest run on your default branch passed | The test machine stopped (not a code failure) | A check failed | Connect your repo |
 
-Click a light to open where its number came from (broken pages, the report list,
-[SDK health](/admin/sdk-health), [CI](/admin/ci)).
+Click a light's value to open where its number came from (broken pages, the report list,
+[SDK health](/admin/sdk-health), [CI](/admin/ci)). A connect button that Needs you
+already shows is not repeated on a light.
+
+The lights sit under Needs you: they are the app's live status.
 
 ## Needs you
 
@@ -71,11 +74,16 @@ live site, critical bugs waiting for a fix, fixes Opus put on hold, CI failing o
 an app that stopped sending, stuck fixes in the [pipeline](/admin/pipeline) (agent
 failed, approved but not queued, red release train), and an SDK update. Pipeline
 items use the same groups and counts the Pipeline page shows, so the click lands on
-the same number. When nothing needs you, it says so.
+the same number. Needs you is the first thing on Home. When nothing needs you, it is
+one line, "Nothing needs you right now", above the health lights.
 
-While a setup step is still open, the setup card above Home names the step and its fix.
+While a setup step is still open, the setup card at the top of Home names the step and
+its fix, and Needs you shows only what else waits.
 
 ## Release
+
+Shown once something is on its way to a release, a deploy was seen, or bugs wait for
+a fix. Before that it is hidden; the CI light carries **Connect GitHub**.
 
 - **Stations:** fix ready → CI → in train → merged → deployed, with the number of
   fixes at each and how many are stuck. Same stages as [Pipeline](/admin/pipeline).
@@ -88,8 +96,8 @@ While a setup step is still open, the setup card above Home names the step and i
 
 A small map of your busiest pages: visits in the last 7 days (from the SDK's session
 tracker), bug reports in the last 14 days, and pages the live-site watch found broken.
-Page ids (`/lessons/42`) are grouped as `/lessons/:id`. With no visits, reports or
-site checks yet, it says what fills it.
+Page ids (`/lessons/42`) are grouped as `/lessons/:id`. It is hidden until a page has
+a visit, a bug report or a broken check.
 
 ## Access and details
 
@@ -101,12 +109,12 @@ to Fix history, User activity and, on plans that include it, the [Audit log](/ad
 
 Bug reports, critical bugs, fixes merged and (with session tracking) user visits, this
 week against last week. The change is green when it moved the right way for that row
-(fewer bugs, more fixes).
+(fewer bugs, more fixes). Hidden while every row is 0 both weeks.
 
 ## Recent activity
 
 What happened, grouped into plain sentences: "3 fixes merged today", "12 bug reports
-came in this week", "2 deploys seen this week, latest v1.4.0".
+came in this week", "2 deploys seen this week, latest v1.4.0". Hidden in a quiet week.
 
 ## How this works
 

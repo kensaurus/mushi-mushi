@@ -1,10 +1,10 @@
-# Overview (Home view)
+# Overview (Apps view)
 
 Source: https://kensaur.us/mushi-mushi/docs/admin/overview
 
 ---
-title: Overview (Home view)
-description: The Overview view on Home in the Mushi Mushi console shows seven-day activity and open bugs for every connected app in a team at a glance.
+title: Overview (Apps view)
+description: The Overview view on Apps in the Mushi Mushi console shows seven-day activity and open bugs for every connected app in a team at a glance.
 ---
 
 # Overview

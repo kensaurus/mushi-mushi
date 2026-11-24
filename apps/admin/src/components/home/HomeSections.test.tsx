@@ -413,6 +413,13 @@ describe('AccessCard', () => {
     expect(hrefs()).not.toContain('/team?view=audit')
   })
 
+  // ADR 0069: Needs you's "Update" already opens Connect; the chip is not a second button there.
+  it('keeps the SDK chip a label when Needs you carries the update', async () => {
+    await render(createElement(AccessCard, { section: ok(access()), auditLog: false, sdkLinkElsewhere: true }))
+    expect(byTestId('home-access')!.textContent).toContain('Update available')
+    expect(hrefs()).not.toContain('/connect')
+  })
+
   it('links the audit log only on a plan that has it', async () => {
     await render(createElement(AccessCard, { section: ok(access()), auditLog: true }))
     expect(hrefs()).toContain('/team?view=audit')

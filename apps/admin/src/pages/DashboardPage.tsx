@@ -45,7 +45,7 @@ import { ActivityCard, ActivitySkeleton } from '../components/home/ActivityCard'
 import { AccessCard, AccessSkeleton } from '../components/home/AccessCard'
 import { HowThisWorks } from '../components/home/HowThisWorks'
 import type { ProjectHome } from '../lib/projectHome'
-import { dedupeHomeSections, healthWithoutRepeatedConnects, homeCardsWithContent } from '../lib/homeView'
+import { ctaTarget, dedupeHomeSections, healthWithoutRepeatedConnects, homeCardsWithContent } from '../lib/homeView'
 import { homeViewRedirect } from '../lib/pageHubs'
 import { usePageCopy } from '../lib/copy'
 import { IconDashboard } from '../components/icons'
@@ -192,8 +192,10 @@ function HomeToday() {
         ]}
       />
 
-      {/* The setup steps, with Fix it on the SDK step. */}
-      {openStep && project && (
+      {/* The setup steps, with Fix it on the SDK step. Once the report button checks in, the
+          first-report card above sends the test report in place and links the full guide: the
+          checklist under it repeated "Send test report" for the same step (ADR 0069). */}
+      {openStep && project && !showFirstReportHero && (
         <SetupChecklist project={project} mode="banner" onRefresh={setup.reload} adminEndpointHost={setup.data?.admin_endpoint_host} />
       )}
 
@@ -239,7 +241,11 @@ function HomeToday() {
               </div>
             )}
             <div className="flex flex-col gap-3">
-              <AccessCard section={data.access} auditLog={ent.has('audit_log')} />
+              <AccessCard
+                section={data.access}
+                auditLog={ent.has('audit_log')}
+                sdkLinkElsewhere={(needsYou?.data ?? []).some((n) => ctaTarget(n.action.to) === '/connect')}
+              />
               {cards?.activity && <ActivityCard section={(shown ?? data).activity} />}
             </div>
           </div>

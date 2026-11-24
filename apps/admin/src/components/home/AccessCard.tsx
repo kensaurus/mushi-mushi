@@ -25,9 +25,11 @@ interface Props {
   section: HomeSection<HomeAccess>
   /** The plan includes the audit log (enterprise). */
   auditLog: boolean
+  /** Needs you already has the button to Connect (an SDK update): the version chip stays a label. */
+  sdkLinkElsewhere?: boolean
 }
 
-export function AccessCard({ section, auditLog }: Props) {
+export function AccessCard({ section, auditLog, sdkLinkElsewhere = false }: Props) {
   return (
     <Section title="Access and details" id="home-access">
       <HomeSectionBody section={section} what="access and details" notConnectedText="No details yet.">
@@ -63,9 +65,13 @@ export function AccessCard({ section, auditLog }: Props) {
                 {/* With no version yet the chip says it once ("Version not seen yet"). */}
                 {a.sdk.version && <span className="font-mono text-xs text-fg">{`${a.sdk.package ?? 'SDK'} ${a.sdk.version}`}</span>}
                 {a.sdk.latest && a.sdk.status !== 'up-to-date' && <span className="text-xs text-fg-muted">latest {a.sdk.latest}</span>}
-                <Link to="/connect">
+                {sdkLinkElsewhere ? (
                   <Badge tone={SDK_TONE[a.sdk.status].tone}>{SDK_TONE[a.sdk.status].text}</Badge>
-                </Link>
+                ) : (
+                  <Link to="/connect">
+                    <Badge tone={SDK_TONE[a.sdk.status].tone}>{SDK_TONE[a.sdk.status].text}</Badge>
+                  </Link>
+                )}
               </span>
             </Row>
             <Row term="Keys">
