@@ -194,8 +194,9 @@ derives only the *provider slug* — `anthropic` / `openai` — and never mutate
 the model id.)
 
 Priced as of 2026-08-08: `claude-sonnet-4-6`, `claude-haiku-4-5`,
-`claude-haiku-4-5-20251001`, `gpt-5.4`, `gpt-5.4-mini`. When adding a model to
-`_shared/pricing.ts`, add the matching wallet row too — with the **exact** id
+`claude-haiku-4-5-20251001`, `gpt-5.4`, `gpt-5.4-mini`. Mushi Mushi's own cost
+column reads the same catalog (`_shared/llm-cost.ts`). When adding a model, make
+sure the catalog has its row — with the **exact** id
 mushi sends, including any dated failover variant — and **backdate
 `effective_from`**: a future-dated row prices as missing.
 
