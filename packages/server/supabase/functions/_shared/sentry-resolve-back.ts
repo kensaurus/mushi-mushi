@@ -28,6 +28,7 @@ import {
   getSentryIssue,
   resolveSentryIssue,
   SentryApiError,
+  SentryManualResolveRefusedError,
   unresolveSentryIssue,
   type FetchLike,
 } from './sentry-api.ts';
@@ -153,6 +154,9 @@ export interface SentryResolveBackResult {
   failed: Array<{ issueId: string; error: string }>;
   /** Issues Sentry answered 404 for (deleted or merged away): stamped, not retried. */
   gone?: string[];
+  /** Issues Sentry will not let anyone resolve by hand and that are still open
+   *  there (a metric or uptime alert): left open, closed once Sentry resolves them. */
+  managed?: string[];
   skipped?: 'no_links' | 'no_credentials';
 }
 
@@ -175,7 +179,7 @@ async function recordFixEvent(
   row: {
     fixAttemptId: string | null;
     projectId: string;
-    status: 'ok' | 'fail';
+    status: 'ok' | 'fail' | 'pending';
     label: string;
     detail: string;
     dedupeKey: string;
@@ -201,6 +205,18 @@ async function recordFixEvent(
       err: error.message,
     });
   }
+}
+
+/** Mark an earlier "resolves on its own" event done once Sentry resolved the
+ *  issue (it may hang on another fix attempt, so match by project). */
+async function completeManagedEvent(db: SupabaseClient, projectId: string, issueId: string): Promise<void> {
+  const { error } = await db
+    .from('fix_events')
+    .update({ status: 'ok', label: `Sentry issue ${issueId} resolved on its own` })
+    .eq('project_id', projectId)
+    .eq('dedupe_key', `sentry_resolve_managed:${issueId}`)
+    .eq('status', 'pending');
+  if (error) log.warn('Could not complete the pending Sentry event', { issueId, err: error.message });
 }
 
 /**
@@ -283,7 +299,50 @@ export async function resolveLinkedSentryIssues(
         dedupeKey: `sentry_resolve:${link.external_id}`,
       });
       result.resolved.push(link.external_id);
-    } catch (err) {
+    } catch (resolveErr) {
+      let err: unknown = resolveErr;
+      if (err instanceof SentryManualResolveRefusedError) {
+        // Sentry resolves this kind of issue itself. Ask it where the issue
+        // stands instead of reporting a failure Mushi cannot act on.
+        try {
+          const issue = await getSentryIssue(creds.token, creds.orgSlug, link.external_id, deps.fetchImpl);
+          if (issue.status === 'resolved') {
+            const { error: stampErr } = await db
+              .from('report_external_issues')
+              .update({ resolved_at: new Date().toISOString(), archived_at: null })
+              .eq('id', link.id);
+            if (stampErr) throw new Error(`Sentry issue is resolved but resolved_at stamp failed: ${stampErr.message}`);
+            await completeManagedEvent(db, projectId, link.external_id);
+            await recordFixEvent(db, {
+              fixAttemptId,
+              projectId,
+              status: 'ok',
+              label: `Sentry issue ${link.external_id} resolved`,
+              detail: `Sentry resolved this issue itself (it does not allow resolving it by hand); link closed ${how}.`,
+              dedupeKey: `sentry_resolve:${link.external_id}`,
+            });
+            result.resolved.push(link.external_id);
+            continue;
+          }
+          log.info('Sentry issue resolves on its own; link left open', { projectId, reportId, issueId: link.external_id, status: issue.status ?? null });
+          await recordFixEvent(db, {
+            fixAttemptId,
+            projectId,
+            status: 'pending',
+            label: `Sentry issue ${link.external_id} resolves on its own`,
+            detail: 'Sentry does not allow resolving this kind of issue by hand (an alert such as a metric or uptime issue resolves itself once the problem stops). Mushi closes the link when Sentry shows it resolved.',
+            dedupeKey: `sentry_resolve_managed:${link.external_id}`,
+          });
+          (result.managed ??= []).push(link.external_id);
+          continue;
+        } catch (readErr) {
+          // A failed status read proves nothing about the issue: a 404 means
+          // it is gone, anything else is a failure like any other.
+          err = isGoneInSentry(readErr)
+            ? readErr
+            : new Error(`${(resolveErr as Error).message}; status check failed: ${String(readErr instanceof Error ? readErr.message : readErr)}`);
+        }
+      }
       if (isGoneInSentry(err)) {
         // Nothing left to resolve; stamp it so no caller retries it forever.
         await db.from('report_external_issues').update({ resolved_at: new Date().toISOString(), archived_at: null }).eq('id', link.id);

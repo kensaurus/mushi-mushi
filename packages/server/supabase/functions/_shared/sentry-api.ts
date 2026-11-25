@@ -31,6 +31,29 @@ export class SentryApiError extends Error {
 }
 
 /**
+ * Sentry refused a manual resolve: 400 `Cannot manually resolve one or more
+ * issues.` Issue types whose status Sentry's own detector manages (metric and
+ * uptime alerts, for example) only resolve on their own.
+ */
+export class SentryManualResolveRefusedError extends SentryApiError {
+  constructor(message: string) {
+    super(400, message);
+    this.name = 'SentryManualResolveRefusedError';
+  }
+}
+
+/** Sentry's exact refusal body: `{"detail": "Cannot manually resolve …"}`. */
+export function isManualResolveRefusal(status: number, body: string): boolean {
+  if (status !== 400) return false;
+  try {
+    const detail = (JSON.parse(body) as { detail?: unknown })?.detail;
+    return typeof detail === 'string' && /^Cannot manually resolve one or more issues\.?$/.test(detail.trim());
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The text of anything thrown. A PostgREST error is a plain object with a
  * `message`, which `String(err)` turns into "[object Object]".
  */
@@ -252,7 +275,9 @@ export async function searchSentryIssues(
 /**
  * Resolve an issue. Tries `resolvedInNextRelease` first so a regression in a
  * later release reopens it; a project without release tracking rejects that
- * with a 4xx, and we fall back to plain `resolved`.
+ * with a 4xx, and we fall back to plain `resolved`. Throws
+ * SentryManualResolveRefusedError when the fallback gets Sentry's "Cannot
+ * manually resolve" refusal.
  */
 export async function resolveSentryIssue(
   token: string,
@@ -270,10 +295,18 @@ export async function resolveSentryIssue(
     const detail = await first.text().then((t) => t.slice(0, 200)).catch(() => '');
     throw new SentryApiError(first.status, `Sentry resolve → ${first.status} ${detail}`.trim());
   }
-  await sentryJson<unknown>(fetchImpl, token, path, {
+  await first.body?.cancel();
+  const fallback = await sentryFetch(fetchImpl, token, path, {
     method: 'PUT',
     body: JSON.stringify({ status: 'resolved' }),
   });
+  if (!fallback.ok) {
+    const body = await fallback.text().catch(() => '');
+    const message = `Sentry PUT ${path} → ${fallback.status} ${body.slice(0, 200)}`.trim();
+    if (isManualResolveRefusal(fallback.status, body)) throw new SentryManualResolveRefusedError(message);
+    throw new SentryApiError(fallback.status, message);
+  }
+  await fallback.body?.cancel();
   return { status: 'resolved' };
 }
 

@@ -30,6 +30,8 @@ interface State {
   /** What each update wrote, in order (stamped holds the row ids). */
   updates?: Row[]
   fixEventError?: { code: string; message: string } | null
+  stampError?: { message: string } | null
+  eventUpdates?: Array<{ row: Row; where: Record<string, unknown> }>
 }
 
 function makeDb(state: State) {
@@ -48,13 +50,24 @@ function makeDb(state: State) {
         if (name === 'fix_events') state.fixEvents.push(row)
         return Promise.resolve({ error: name === 'fix_events' ? (state.fixEventError ?? null) : null })
       },
-      update: (row: Row) => ({
-        eq: (_c: string, id: string) => {
-          state.stamped.push(id)
-          ;(state.updates ??= []).push(row)
-          return Promise.resolve({ error: null })
-        },
-      }),
+      update: (row: Row) => {
+        const where: Record<string, unknown> = {}
+        const chain = {
+          eq: (c: string, v: unknown) => {
+            where[c] = v
+            return chain
+          },
+          then: (resolve: (v: unknown) => void) => {
+            if (name === 'fix_events') (state.eventUpdates ??= []).push({ row, where })
+            else {
+              state.stamped.push(String(where.id))
+              ;(state.updates ??= []).push(row)
+            }
+            resolve({ error: name === 'fix_events' ? null : (state.stampError ?? null) })
+          },
+        }
+        return chain
+      },
     }
     return q
   }
@@ -209,6 +222,85 @@ describe('resolveLinkedSentryIssues', () => {
     const result = await rb.resolveLinkedSentryIssues(makeDb(state), input, { credentials: creds, fetchImpl })
     expect(result.failed).toHaveLength(1)
     expect(state.fixEvents[0].dedupe_key).toBe('sentry_resolve_fail:4501')
+  })
+
+  describe('Sentry refuses a manual resolve (report 7483a269)', () => {
+    const refusal = () => json({ detail: 'Cannot manually resolve one or more issues.' }, 400)
+    // The reported sequence: the next-release PUT is rejected, the plain
+    // resolve fallback gets the refusal, then Mushi reads the issue.
+    function sentry(issue: () => Response) {
+      const calls: string[] = []
+      const fetchImpl = async (url: string, init?: RequestInit) => {
+        const path = url.replace(api.SENTRY_API_BASE, '')
+        calls.push(`${init?.method ?? 'GET'} ${path} ${String(init?.body ?? '')}`.trim())
+        if (init?.method === 'PUT') return String(init.body).includes('resolvedInNextRelease') ? json({ detail: 'No release data present in the system.' }, 400) : refusal()
+        if (path.endsWith('/comments/')) return json({})
+        return issue()
+      }
+      return { calls, fetchImpl }
+    }
+
+    it('tries the plain resolve before reading the issue', async () => {
+      const { calls, fetchImpl } = sentry(() => json({ id: '4501', status: 'unresolved' }))
+      await rb.resolveLinkedSentryIssues(makeDb(state), input, { credentials: creds, fetchImpl })
+      expect(calls).toEqual([
+        'PUT /organizations/sakuramoto/issues/4501/ {"status":"resolvedInNextRelease"}',
+        'PUT /organizations/sakuramoto/issues/4501/ {"status":"resolved"}',
+        'GET /organizations/sakuramoto/issues/4501/',
+      ])
+    })
+
+    it('still open in Sentry: not a failure, link left open, pending event', async () => {
+      const { fetchImpl } = sentry(() => json({ id: '4501', status: 'unresolved' }))
+      const result = await rb.resolveLinkedSentryIssues(makeDb(state), input, { credentials: creds, fetchImpl })
+      expect(result).toMatchObject({ resolved: [], failed: [], managed: ['4501'] })
+      expect(state.stamped).toEqual([])
+      expect(state.fixEvents[0]).toMatchObject({ status: 'pending', dedupe_key: 'sentry_resolve_managed:4501' })
+    })
+
+    it('already resolved by Sentry: stamps the link, records ok and completes the pending event', async () => {
+      const { fetchImpl } = sentry(() => json({ id: '4501', status: 'resolved' }))
+      const result = await rb.resolveLinkedSentryIssues(makeDb(state), input, { credentials: creds, fetchImpl })
+      expect(result.resolved).toEqual(['4501'])
+      expect(result.failed).toEqual([])
+      expect(state.stamped).toEqual(['l1'])
+      expect(state.fixEvents[0]).toMatchObject({ status: 'ok', dedupe_key: 'sentry_resolve:4501' })
+      expect(state.eventUpdates?.[0]).toMatchObject({
+        row: { status: 'ok' },
+        where: { project_id: 'p1', dedupe_key: 'sentry_resolve_managed:4501', status: 'pending' },
+      })
+    })
+
+    it('a resolved issue whose stamp fails is a failure, not resolved', async () => {
+      state.stampError = { message: 'boom' }
+      const { fetchImpl } = sentry(() => json({ id: '4501', status: 'resolved' }))
+      const result = await rb.resolveLinkedSentryIssues(makeDb(state), input, { credentials: creds, fetchImpl })
+      expect(result.resolved).toEqual([])
+      expect(result.failed[0].error).toContain('stamp failed')
+    })
+
+    it('a failed status read is a failure, never proof the issue is open', async () => {
+      const { fetchImpl } = sentry(() => json({ detail: 'rate limited' }, 503))
+      const result = await rb.resolveLinkedSentryIssues(makeDb(state), input, { credentials: creds, fetchImpl })
+      expect(result.managed).toBeUndefined()
+      expect(result.failed[0].error).toContain('status check failed')
+      expect(state.fixEvents[0]).toMatchObject({ status: 'fail', dedupe_key: 'sentry_resolve_fail:4501' })
+      expect(state.stamped).toEqual([])
+    })
+
+    it('a 404 on the status read takes the gone path', async () => {
+      const { fetchImpl } = sentry(() => json({ detail: 'Not found' }, 404))
+      const result = await rb.resolveLinkedSentryIssues(makeDb(state), input, { credentials: creds, fetchImpl })
+      expect(result.gone).toEqual(['4501'])
+      expect(state.stamped).toEqual(['l1'])
+    })
+
+    it('only the exact 400 refusal counts', () => {
+      expect(api.isManualResolveRefusal(400, '{"detail":"Cannot manually resolve one or more issues."}')).toBe(true)
+      expect(api.isManualResolveRefusal(422, '{"detail":"Cannot manually resolve one or more issues."}')).toBe(false)
+      expect(api.isManualResolveRefusal(400, '{"detail":"Invalid: we cannot manually resolve one or more issues because x"}')).toBe(false)
+      expect(api.isManualResolveRefusal(400, 'Cannot manually resolve one or more issues.')).toBe(false)
+    })
   })
 
   it('records a visible failure when the project has no Sentry credentials', async () => {
