@@ -1752,7 +1752,7 @@ in your page, like the key of any chat or analytics tool.
 
 ## Change how the button looks
 
-Change it in the Mushi console: **Connect → Bug capture SDK**, then Save. Your
+Change it in the Mushi console: **Connect → Report button → Customize the report button**, then Save. Your
 app picks up the corner, theme, label and colour at its next start, so you do
 not paste a new line or redeploy. You can also ask your editor's agent (MCP
 `set_widget_settings`) or run `mushi widget set`.
@@ -2567,7 +2567,7 @@ The SDK adds the report button to your app and sends reports to Mushi Mushi.
 
 **Do this:**
 
-1. Open **Connect → Bug capture SDK**. Pick your framework tab and copy the
+1. Open **Connect → Report button**. Pick your framework and copy the
    snippet. **Make a key and fill it in** puts your key into the snippet.
 2. Put the project ID and key in environment variables, not in code:
    - Vite (React, Vue, Svelte): `VITE_MUSHI_PROJECT_ID` and `VITE_MUSHI_API_KEY`
@@ -2754,7 +2754,7 @@ events. If no deploy has been seen in 14 days, it says so. See
 **Privacy and data:**
 
 - **Screenshots.** Reporters see a preview of the screenshot and can remove it
-  before they send. Under **Connect → Bug capture SDK**, keep **Privacy caption
+  before they send. Under **Connect → Report button → Customize the report button**, keep **Privacy caption
   on screenshot preview** on, or write your own text.
 - **Retention.** Reports older than your plan's window are deleted daily: Free
   30 days, Builder 90, Studio 180, Enterprise custom.
@@ -12244,7 +12244,7 @@ provider or plugin.
 
 ### 3. In the console
 
-Open your app in the console, then **Connect → Bug capture SDK**. Accent
+Open your app in the console, then **Connect → Report button → Customize the report button**. Accent
 colour, position, theme, launcher style, launcher label and the banner look
 can change there without a redeploy ([runtime config](/concepts/runtime-config)).
 For a colour, Mushi picks black or white text with at least 3:1 contrast. The
@@ -21176,8 +21176,8 @@ description: The User activity view on Home in the Mushi Mushi console shows an 
 
 # User activity
 
-**Route:** `/dashboard?view=users` (**Home → User activity**). The old `/activity` link
-redirects there.
+**Route:** `/portfolio?view=users` (**Apps → User activity**). The old `/activity` and
+`/dashboard?view=users` links redirect there.
 
 > **Scenario:** You want to know whether end users are actually opening sessions
 > in this project, which routes they hit, and how many of them are identified
@@ -21719,7 +21719,7 @@ description: The Checks page in the Mushi Mushi console shows every automatic ch
 
 # Checks
 
-**Route:** `/checks` (sidebar: Checks)
+**Route:** `/checks` (sidebar: More pages → Verify → Checks. It is a Lab: switch it on under **Settings → Display & sidebar → Labs** to keep it in the sidebar)
 
 Is my app OK, and which check is red? Every automatic check Mushi Mushi runs on this app, in one grid, failing checks first. A sentence at the top names the checks that need you, with one button to open the first.
 
@@ -21732,7 +21732,7 @@ Each card has a dot and a state:
 | Green | Pass | A finished run was read and found nothing. Shown with when it last ran. |
 | Grey | Not run yet, Not set up, Status unavailable | Never a pass. Not set up comes with a Set up link. |
 
-An Upgrade pill means the check needs a higher plan. AI prompts and CI runners are Labs: their cards appear once you switch them on under Settings → Display & sidebar → Labs. While you are on Checks or one of its pages, the sidebar lists every check under Checks.
+An Upgrade pill means the check needs a higher plan. AI prompts and CI runners are Labs: their cards appear once you switch them on under Settings → Display & sidebar → Labs. When Checks is in the sidebar, it lists every check under Checks while you are on one of them.
 
 ## The checks
 
@@ -22281,36 +22281,32 @@ description: The Connect page wires GitHub, the SDK, MCP, the CLI and your edito
 > the Mushi Mushi SDK. This page wires GitHub, the SDK, MCP, the CLI and upgrade PRs
 > in one place.
 
-A row of status pills at the top (**App checked in**, **SDK version**, **Editor**)
-says what is already connected. Below them, the page opens with a client picker:
-pick your AI client, then a lane (MCP / CLI / Skills). Connecting GitHub enables the
-**Create Upgrade PR** flow; the SDK and MCP sections work without it.
+## Steps
 
----
+The page is three steps, in the order a new app needs them, and only the step
+to do now is open ([ADR 0069](https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0069-builder-console-is-the-fix-loop.md)).
+A done step is one line with a ✓ and **Change**; a later step is one line you
+can still open. Links into the page open their step: `#connect-sdk`,
+`#connect-studio` and `#connect-github`.
 
-## Client picker (3 lanes)
+| # | Step | What it does |
+|---|------|--------------|
+| 1 | **Report button** | The install snippet: the **Script tag** leads, the framework the app's repo uses sits beside it, and every other framework is in **Other frameworks**. **Make a key and fill it in** fills in the key; **Where does your app run?** says where it goes on Lovable, Bolt, Vercel, Netlify or EAS. **Customize the report button** opens the widget settings. Done once the app checks in. |
+| 2 | **Editor** | Cursor, Claude Code and VS Code lead; **Other editors** lists the rest. The MCP one-click comes first, **Use the CLI or skills instead** opens the other two ways, and **Set it up by hand** shows the MCP endpoint. Done once your editor calls Mushi Mushi. |
+| 3 | **GitHub** | Link the repo so upgrade PRs, autofix and CI secret sync can use its token. |
 
-| Lane | What it does |
-|------|--------------|
-| **MCP** | One-click install for Cursor, VS Code, Claude Code, Windsurf and other clients (`ClientConnectButton` mints a scoped key, then opens a deeplink or gives you config JSON) |
-| **CLI** | Three commands to copy: `npm install -g @mushi-mushi/cli@latest`, `mushi login`, then `mushi setup --ide ` |
-| **Skills** | Copy skill setup for the selected client |
+If your only key is an SDK key, a note under the editor step offers **Add an MCP
+key** (`mcp:read`), which your editor needs to read this app's reports.
 
-If your only key is an SDK key, a note under the picker offers **Add an MCP key**
-(`mcp:read`), which your editor needs to read this app's reports.
+### Once the app checks in
 
----
+The **Update center** (per-package freshness and **Create Upgrade PR**) and
+**SDK health** (problems that stop bug reports from arriving, each with a fix;
+see [SDK health](/admin/sdk-health)) show below the steps. While the SDK is
+current and nothing is wrong they are one line, with **Details** for the rest.
+Until the app checks in, links to `#connect-sdk-health` open the report button step.
 
-## Sections
-
-| # | Section | What it does |
-|---|---------|--------------|
-| 1 | Client picker | MCP / CLI / Skills lanes (above) |
-| 2 | **GitHub** | Link the repo so upgrade PRs, autofix and CI secret sync can use its token. **Manage** opens Integrations. |
-| 3 | **SDK health** | Problems that stop bug reports from arriving, each with a fix (see [SDK health](/admin/sdk-health)) |
-| 4 | **Bug capture SDK** | Framework tabs and a copy-ready install snippet; **Make a key and fill it in** fills in the key |
-| 5 | **Native app CI secrets** | Diagnose, and one-click sync of `NEXT_PUBLIC_MUSHI_*` into GitHub Actions |
-| 6 | **Update center** | Per-package freshness and **Create Upgrade PR** |
+Native apps (Capacitor, Expo, React Native) also get **Native app CI secrets**.
 
 ---
 
@@ -22347,7 +22343,7 @@ See also: [Self-hosting](/self-hosting) · [`AGENTS.md` native CI section](https
 
 When a package is outdated or deprecated:
 
-1. Click **Create Upgrade PR** on the Update center row.
+1. Click **Create Upgrade PR** in the Update center (shown once the app checks in).
 2. Backend enqueues `sdk_upgrade_jobs` → `sdk-upgrade-worker` bumps
    `@mushi-mushi/*` in `package.json` files only (never `workspace:` / `file:`).
 3. Draft PR opens on GitHub, auto-readied, status streams via SSE.
@@ -22363,18 +22359,18 @@ CLI equivalent: see [SDK reference → CLI](/sdks/cli) (`mushi upgrade` for loca
 
 ## Quick path (5 minutes)
 
+### Add the report button
+Copy the snippet → paste into your app → deploy or run locally.
+
+### Wire MCP
+In the editor step, click **Add to Cursor** (or your editor's button), restart
+the IDE, then run `mushi doctor`.
+
 ### Connect GitHub
 Press **Connect GitHub**, sign in to GitHub and pick your repository. The list
 shows only repositories you can open, with the one named like your app first.
 If the Mushi Mushi GitHub App is not on your account yet, GitHub asks you to install
 it first.
-
-### Install SDK
-Copy the framework snippet → paste into your app → deploy or run locally.
-
-### Wire MCP
-In the client picker's **MCP** lane, click **Add to Cursor** (or your client's
-button), restart the IDE, then run `mushi doctor`.
 
 ### Wire CLI (SDK + env + MCP)
 `mushi connect` saves credentials, writes the SDK env vars to `.env.local` and wires
@@ -22594,7 +22590,7 @@ description: "Home in the Mushi Mushi console shows how one app is doing: is it 
 
 # Home
 
-**Route:** `/dashboard` (sidebar: **Home**, first tab **Today**)
+**Route:** `/dashboard` (sidebar: **Home**)
 
 > **Scenario:** You open Mushi Mushi in the morning and want to know in 30 seconds whether
 > your app is up, whether anything broke overnight, and what needs you today.
@@ -22607,12 +22603,17 @@ is grey and its button says how to connect it; a part whose read failed says
 
 All of it comes from one call, `GET /v1/admin/projects/:id/home`.
 
-Home has more tabs beside **Today**: **Overview** ([all apps](/admin/overview),
-`?view=apps`), **User activity** ([sessions](/admin/activity), `?view=users`),
-**Users & funnels** (`?view=funnels`) and **Weekly insights**
-([intelligence reports](/admin/intelligence), `?view=insights`). The old paths
-`/overview`, `/activity`, `/analytics` and `/intelligence` open these tabs. This page
-describes **Today**.
+Home has no tabs. **Needs you** comes first, one button per item; when nothing
+needs you it is one line, and the health lights below it are the app's live status.
+A card with nothing to show yet (no release, no page visits, a quiet week) stays
+hidden until it has something.
+
+The views Home used to carry are tabs of [Apps](/admin/portfolio) now:
+**Overview** ([all apps](/admin/overview), `/portfolio?view=apps`), **User activity**
+([sessions](/admin/activity), `?view=users`), **Users & funnels** (`?view=funnels`)
+and **Weekly insights** ([intelligence reports](/admin/intelligence), `?view=insights`).
+Old links (`/dashboard?view=users`, `/overview`, `/activity`, `/analytics`,
+`/intelligence`) open those tabs.
 
 ---
 
@@ -22641,8 +22642,11 @@ Four lights, each with a word beside its colour:
 | **SDK sending** | Your app checked in today | Quiet for 1–7 days | Silent for over a week | Create a key and add the SDK |
 | **CI on main** | The latest run on your default branch passed | The test machine stopped (not a code failure) | A check failed | Connect your repo |
 
-Click a light to open where its number came from (broken pages, the report list,
-[SDK health](/admin/sdk-health), [CI](/admin/ci)).
+Click a light's value to open where its number came from (broken pages, the report list,
+[SDK health](/admin/sdk-health), [CI](/admin/ci)). A connect button that Needs you
+already shows is not repeated on a light.
+
+The lights sit under Needs you: they are the app's live status.
 
 ## Needs you
 
@@ -22651,11 +22655,16 @@ live site, critical bugs waiting for a fix, fixes Opus put on hold, CI failing o
 an app that stopped sending, stuck fixes in the [pipeline](/admin/pipeline) (agent
 failed, approved but not queued, red release train), and an SDK update. Pipeline
 items use the same groups and counts the Pipeline page shows, so the click lands on
-the same number. When nothing needs you, it says so.
+the same number. Needs you is the first thing on Home. When nothing needs you, it is
+one line, "Nothing needs you right now", above the health lights.
 
-While a setup step is still open, the setup card above Home names the step and its fix.
+While a setup step is still open, the setup card at the top of Home names the step and
+its fix, and Needs you shows only what else waits.
 
 ## Release
+
+Shown once something is on its way to a release, a deploy was seen, or bugs wait for
+a fix. Before that it is hidden; the CI light carries **Connect GitHub**.
 
 - **Stations:** fix ready → CI → in train → merged → deployed, with the number of
   fixes at each and how many are stuck. Same stages as [Pipeline](/admin/pipeline).
@@ -22668,8 +22677,8 @@ While a setup step is still open, the setup card above Home names the step and i
 
 A small map of your busiest pages: visits in the last 7 days (from the SDK's session
 tracker), bug reports in the last 14 days, and pages the live-site watch found broken.
-Page ids (`/lessons/42`) are grouped as `/lessons/:id`. With no visits, reports or
-site checks yet, it says what fills it.
+Page ids (`/lessons/42`) are grouped as `/lessons/:id`. It is hidden until a page has
+a visit, a bug report or a broken check.
 
 ## Access and details
 
@@ -22681,12 +22690,12 @@ to Fix history, User activity and, on plans that include it, the [Audit log](/ad
 
 Bug reports, critical bugs, fixes merged and (with session tracking) user visits, this
 week against last week. The change is green when it moved the right way for that row
-(fewer bugs, more fixes).
+(fewer bugs, more fixes). Hidden while every row is 0 both weeks.
 
 ## Recent activity
 
 What happened, grouped into plain sentences: "3 fixes merged today", "12 bug reports
-came in this week", "2 deploys seen this week, latest v1.4.0".
+came in this week", "2 deploys seen this week, latest v1.4.0". Hidden in a quiet week.
 
 ## How this works
 
@@ -24365,7 +24374,7 @@ description: Set up Mushi Mushi integrations on one page. Open fix pull requests
 
 # Integrations
 
-**Route:** `/integrations/config` (sidebar: **Integrations**, under Connect)
+**Route:** `/integrations/config` (sidebar: More pages → Connect → **Integrations**. It is a Lab: switch it on under **Settings → Display & sidebar → Labs** to keep it in the sidebar)
 
 > **Scenario:** You just set up Mushi Mushi and want fix PRs to open on your GitHub repo,
 > new bugs to land in Linear, and Sentry errors to flow in, all from one page.
@@ -24551,8 +24560,8 @@ description: Weekly insights is the Mushi Mushi plain-English bug digest per app
 
 # Weekly insights
 
-**Route:** `/dashboard?view=insights` (**Home → Weekly insights**). The old `/intelligence`
-link redirects there. It was called Intelligence reports before October 2026.
+**Route:** `/portfolio?view=insights` (**Apps → Weekly insights**). The old `/intelligence`
+and `/dashboard?view=insights` links redirect there. It was called Intelligence reports before October 2026.
 
 Mushi Mushi writes a **weekly bug digest** for each app: an AI-written summary of the
 week's bug trends, fix velocity and areas of concern, with two or three recommendations.
@@ -24968,7 +24977,7 @@ description: Map how people move through your app, then fix dead ends, pages peo
 
 # Journey optimizer
 
-**Route:** `/journeys` (sidebar: Journeys)
+**Route:** `/journeys` (sidebar: More pages → Bugs → Journey optimizer; also the **Pages** card on Home. It is a Lab: switch it on under **Settings → Display & sidebar → Labs** to keep it in the sidebar. The site scan needs your own Firecrawl key)
 
 > **Scenario:** Your AI built the app fast. Now you want to know where people get
 > lost: which page they leave from, which two pages say the same thing, and which
@@ -26003,19 +26012,19 @@ Setup (the team's Slack bot, the per-app ops key, the event format) is in
 
 ---
 
-## Overview (Home view)
+## Overview (Apps view)
 
 Source: https://kensaur.us/mushi-mushi/docs/admin/overview
 
 ---
-title: Overview (Home view)
-description: The Overview view on Home in the Mushi Mushi console shows seven-day activity and open bugs for every connected app in a team at a glance.
+title: Overview (Apps view)
+description: The Overview view on Apps in the Mushi Mushi console shows seven-day activity and open bugs for every connected app in a team at a glance.
 ---
 
 # Overview
 
-**Route:** `/dashboard?view=apps` (**Home → Overview**). The old `/overview` link redirects
-there. For setup state, hole checks and spend across apps, see [Apps](/admin/portfolio).
+**Route:** `/portfolio?view=apps` (**Apps → Overview**). The old `/overview` and
+`/dashboard?view=apps` links redirect there. For setup state, hole checks and spend across apps, see [Apps](/admin/portfolio).
 
 > **Scenario:** You manage several connected projects and want a single org-scoped
 > glance at 7-day activity and open tickets before diving into any one app.
@@ -26079,7 +26088,7 @@ description: The Pipeline page in the Mushi Mushi console shows every bug from r
 
 # Pipeline
 
-**Route:** `/pipeline` (sidebar: Pipeline)
+**Route:** `/pipeline` (sidebar: More pages → Fix → Pipeline. It is a Lab: switch it on under **Settings → Display & sidebar → Labs** to keep it in the sidebar)
 
 In Mushi Mushi, every bug moves from a report to a fix PR, an Opus review, CI, a release train, a merge and a deploy. This page shows how many items are in each step now, which are stuck, and why. **This app** follows the app you have open. **All apps** reads every project you can see.
 
@@ -26180,7 +26189,7 @@ Anything that stops a worker from fixing bugs is listed at the top of the tab, w
 | Run outside the worker | A `mushi work` run that no worker claims has run for over 45 minutes: a script started it, so its stage cannot be seen or stopped here | Move that machine to `mushi worker install` |
 | Credits idle | No agent has worked for 2 hours while Cursor credits expire within 7 days, with what blocks the work | Open Workers, or Spend credits |
 
-The same problems show above the Pipeline tabs, as a count on the **Pipeline** item in the sidebar, in **Needs you** on Home (for that app), as "credits idle" on [Spend credits](/admin/credits), in `mushi worker status` and in the MCP tool `get_worker_status`.
+The same problems show above the Pipeline tabs, as a count on the **Pipeline** item in the sidebar when you keep it there, in **Needs you** on Home (for that app), as "credits idle" on [Spend credits](/admin/credits), in `mushi worker status` and in the MCP tool `get_worker_status`.
 
 **Stop this run** (the app's owner or an admin, or the machine's owner; asks first, and is recorded in the audit log) ends the run's claim at once, so the report is free again: the next lane or a cloud agent can take it (it is not put back in a queue). The machine stops the agent at its next heartbeat, within a minute, and commits or pushes nothing more. A git hook that is already running keeps its agent space until git's own time limit (25 minutes); the flag stays up as "a run that was stopped still holds an agent space" until it ends, with the command to end it on the machine. A review follow-up is not a claim: pause its lane and end it on the machine.
 
@@ -26207,7 +26216,12 @@ description: The Apps page in Mushi Mushi shows every app in a team, with each a
 
 # Apps (all apps)
 
-**Route:** `/portfolio` (sidebar: **Apps**; formerly Portfolio. Also from the team switcher: **All this team's apps**)
+**Route:** `/portfolio` (sidebar: More pages → Ship & watch → **Apps**, or switch the Apps Lab on under **Settings → Display & sidebar → Labs** to keep it in the sidebar; formerly Portfolio. Also from the team switcher: **All this team's apps**)
+
+Apps has view tabs under its title: **Apps** (this page), [Overview](/admin/overview)
+(`?view=apps`), [User activity](/admin/activity) (`?view=users`), **Users & funnels**
+(`?view=funnels`) and [Weekly insights](/admin/intelligence) (`?view=insights`). They
+were Home's tabs until November 2026; old `/dashboard?view=…` links open them here.
 
 > **Scenario:** You run five apps. One has an old Mushi Mushi SDK, two have the same
 > oversized-file finding, and one never got Sentry set up. You want to see all
@@ -28412,11 +28426,13 @@ tools**, `?tab=health` and `?tab=dev` open **SDK & connection**, `?tab=keys` ope
 
 ### General
 
-Bug alerts (Slack channel), error tracking (Sentry), an optional read-only link to your
+Bug alerts (the Slack channel) come first. **Advanced → Show** holds the rest; it
+opens by itself when a link points into it or the saved fix branch pattern is refused:
+the older Slack webhook, error tracking (Sentry), an optional read-only link to your
 Supabase database, and **Bug sorting**: the AI models for triage, the quick check, the
 judge and fixes, the quick-check confidence, grouping of similar bugs and fix branch
-names. It also holds daily limits for Firecrawl and test writing, the feedback widget's
-"Bug reports by Mushi Mushi" line, and, behind **Fixes and CI → Show**, the pull request
+names. It also holds daily limits for Firecrawl and test writing, and the feedback widget's
+"Bug reports by Mushi Mushi" line. Behind **Fixes and CI → Show** are the pull request
 review, verified merge, CI cost and CI policy settings.
 
 **Spend limits** (project admins) cap what the project spends. Leave a field
@@ -28919,7 +28935,7 @@ description: The Team page in the Mushi Mushi console brings members, billing, A
 
 # Team
 
-**Route:** `/team` (sidebar: **Team**)
+**Route:** `/team` (sidebar: More pages → Account → **Team**. It is a Lab: switch it on under **Settings → Display & sidebar → Labs** to keep it in the sidebar)
 
 > **Scenario:** You want to invite someone, check the bill, see what AI calls cost,
 > or change how your team signs in, without hunting through the sidebar.

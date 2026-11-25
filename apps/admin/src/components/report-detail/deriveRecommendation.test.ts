@@ -542,6 +542,19 @@ describe('a report with no code location', () => {
     expect(withCode.repeatsTriageBar).toBe(label === 'new + critical' ? undefined : true)
   })
 
+  // ADR 0069: a "No suggested action" card only pointed at the triage row; the page leaves it out.
+  it('a triaged report with notes has no card of its own', () => {
+    const rec = deriveRecommendation(
+      makeReport({ status: 'classified', stage1_classification: { category: 'bug' } }),
+      makeDispatchState(),
+      2,
+      vi.fn(),
+    )
+    expect(rec.title).toBe('No suggested action')
+    expect(rec.cta).toBeUndefined()
+    expect(rec.repeatsTriageBar).toBe(true)
+  })
+
   it('"Dispatch anyway" is disabled while the gate blocks', () => {
     const rec = deriveRecommendation(
       makeReport({ status: 'classified', stage1_classification: { category: 'bug' } }),

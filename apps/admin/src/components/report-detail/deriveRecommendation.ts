@@ -552,7 +552,7 @@ function recommendationFor(
     return {
       title: 'Classification failed — triage manually',
       description:
-        'Press Retry triage in the Pipeline strip, or pick a status and severity by hand.',
+        'Press Retry triage in the Progress line, or pick a status and severity by hand.',
       tone: 'urgent',
     }
   }
@@ -590,7 +590,9 @@ function recommendationFor(
 
   return {
     title: 'No suggested action',
-    description: 'Use the controls above to update status, severity, or dispatch a fix.',
+    description: 'Use the triage row to update status or severity, or copy the fix prompt.',
     tone: 'neutral',
+    // A card that says "nothing to suggest" only points at the triage row: leave it out (ADR 0069).
+    repeatsTriageBar: true,
   }
 }

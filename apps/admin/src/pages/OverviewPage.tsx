@@ -403,7 +403,7 @@ function ProjectHealthCard({ card, recipeWorst }: { card: ProjectCard; recipeWor
       <div className="relative z-10 mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-edge px-4 py-3 text-xs text-fg-muted">
         {hasSessions ? (
           <Link
-            to="/dashboard?view=users"
+            to="/portfolio?view=users"
             onClick={handleSwitchProject}
             className="inline-flex min-h-6 items-center gap-4 rounded-sm hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
             title="Open User activity for this app"

@@ -178,7 +178,7 @@ export function CreditsPage() {
 
       <p className="text-xs text-fg-muted">
         Fixes these levers open: <Link className="text-brand underline underline-offset-2" to="/fixes">Fixes</Link>, and the ones Opus already approved under{' '}
-        <Link className="text-brand underline underline-offset-2" to="/fixes?status=review_merge">Opus: merge</Link>.
+        <Link className="text-brand underline underline-offset-2" to="/fixes?status=review_merge">Approved</Link>.
       </p>
     </div>
   )

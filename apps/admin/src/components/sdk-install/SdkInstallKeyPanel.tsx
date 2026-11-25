@@ -292,7 +292,7 @@ export function SdkInstallKeyPanel({
           )}
           {/* One line; what each mark means sits behind the (i). */}
           <p className="flex items-center gap-1.5 text-2xs text-fg-muted" data-testid="sdk-key-legend">
-            <span>A key is shown in full once, when it is made or rotated.</span>
+            <span>A key shows in full only once, when made or rotated.</span>
             <InfoHint content={KEY_LEGEND} />
           </p>
         </Box>

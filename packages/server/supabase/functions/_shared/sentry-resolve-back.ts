@@ -153,6 +153,8 @@ export interface SentryResolveBackResult {
   failed: Array<{ issueId: string; error: string }>;
   /** Issues Sentry answered 404 for (deleted or merged away): stamped, not retried. */
   gone?: string[];
+  /** Issues Sentry resolves itself and refuses to resolve by hand (metric alerts): stamped, not retried. */
+  selfResolving?: string[];
   skipped?: 'no_links' | 'no_credentials';
 }
 
@@ -168,6 +170,19 @@ export interface SentryBackDeps {
 /** Sentry no longer has the issue (deleted, or merged into another one). */
 function isGoneInSentry(err: unknown): boolean {
   return err instanceof SentryApiError && err.status === 404;
+}
+
+/**
+ * Sentry refuses a manual resolve for issues it resolves itself, such as a
+ * metric-alert issue ("Error spike: >10 errors in 15min"): PUT answers 400
+ * "Cannot manually resolve one or more issues." Nothing is wrong with the
+ * token, so it is not a failure. Marking GLOT-IT-F1's report fixed raised two
+ * Sentry errors in mushi-mushi-server (2026-11-24) and a "not resolved" event
+ * telling the owner to fix the token.
+ * @internal Exported for unit tests only.
+ */
+export function isNotManuallyResolvable(err: unknown): boolean {
+  return err instanceof SentryApiError && err.status === 400 && /cannot manually resolve/i.test(err.message);
 }
 
 async function recordFixEvent(
@@ -289,6 +304,13 @@ export async function resolveLinkedSentryIssues(
         await db.from('report_external_issues').update({ resolved_at: new Date().toISOString(), archived_at: null }).eq('id', link.id);
         log.warn('Sentry issue no longer exists; link closed', { projectId, reportId, issueId: link.external_id });
         (result.gone ??= []).push(link.external_id);
+        continue;
+      }
+      if (isNotManuallyResolvable(err)) {
+        // Sentry closes these itself (metric alerts); stamp the link so nothing retries it.
+        await db.from('report_external_issues').update({ resolved_at: new Date().toISOString(), archived_at: null }).eq('id', link.id);
+        log.info('Sentry issue resolves itself (metric alert); link closed', { projectId, reportId, issueId: link.external_id });
+        (result.selfResolving ??= []).push(link.external_id);
         continue;
       }
       const message = String(err instanceof Error ? err.message : err).slice(0, 300);
@@ -424,6 +446,12 @@ export async function archiveLinkedSentryIssues(
       if (isGoneInSentry(err)) {
         await db.from('report_external_issues').update({ archived_at: new Date().toISOString() }).eq('id', link.id);
         log.warn('Sentry issue no longer exists; link closed', { projectId: input.projectId, reportId: input.reportId, issueId: link.external_id });
+        (result.gone ??= []).push(link.external_id);
+        continue;
+      }
+      if (isNotManuallyResolvable(err)) {
+        await db.from('report_external_issues').update({ archived_at: new Date().toISOString() }).eq('id', link.id);
+        log.info('Sentry issue resolves itself (metric alert); link closed', { projectId: input.projectId, reportId: input.reportId, issueId: link.external_id });
         (result.gone ??= []).push(link.external_id);
         continue;
       }

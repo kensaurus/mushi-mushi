@@ -770,9 +770,9 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   // ── Palette-only utility routes ───────────────────────────────────────────
   {
     id: 'nav:overview',
-    path: '/dashboard?view=apps',
+    path: '/portfolio?view=apps',
     label: 'Overview',
-    // A view of Home now (Plan 021): searchable, not a sidebar entry. Named
+    // A view of Apps now (ADR 0069; Home's until then): searchable, not a sidebar entry. Named
     // Overview so "All apps" means only /portfolio (ADR 0027).
     inSidebar: false,
     sectionId: 'act',
@@ -826,9 +826,9 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   },
   {
     id: 'nav:activity',
-    path: '/dashboard?view=users',
+    path: '/portfolio?view=users',
     label: 'User activity',
-    // A view of Home now (Plan 021): searchable, not a sidebar entry.
+    // A view of Apps now (ADR 0069; Home's until then): searchable, not a sidebar entry.
     inSidebar: false,
     sectionId: 'act',
     pdcaStage: 'act',
@@ -842,9 +842,9 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     // (docs: apps/docs/content/admin/users.mdx), so the customer-facing
     // product-analytics page lives at `/analytics`.
     id: 'nav:analytics',
-    path: '/dashboard?view=funnels',
+    path: '/portfolio?view=funnels',
     label: 'Users & funnels',
-    // A view of Home now (Plan 021): searchable, not a sidebar entry.
+    // A view of Apps now (ADR 0069; Home's until then): searchable, not a sidebar entry.
     inSidebar: false,
     sectionId: 'act',
     pdcaStage: 'act',
@@ -855,9 +855,9 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   },
   {
     id: 'nav:intelligence',
-    path: '/dashboard?view=insights',
+    path: '/portfolio?view=insights',
     label: 'Weekly insights',
-    // A view of Home now (Plan 021): searchable, not a sidebar entry.
+    // A view of Apps now (ADR 0069; Home's until then): searchable, not a sidebar entry.
     inSidebar: false,
     sectionId: 'act',
     pdcaStage: 'act',
@@ -868,9 +868,9 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   },
   {
     id: 'nav:growth',
-    path: '/dashboard?view=growth',
+    path: '/portfolio?view=growth',
     label: 'Growth',
-    // A view of Home now (Plan 021): searchable, not a sidebar entry.
+    // A view of Apps now (ADR 0069; Home's until then): searchable, not a sidebar entry.
     inSidebar: false,
     sectionId: 'act',
     pdcaStage: 'act',
@@ -1189,7 +1189,7 @@ export function routeFallbackTitle(pathname: string): string | null {
  *   stay separate but are named for what they do: Home (/dashboard, summary)
  *   vs To-do (/inbox, decisions) vs Improvement runs (/iterate); Bugs
  *   (/reports) vs Processing jobs (/queue); All apps (/portfolio, setup and
- *   holes) vs Overview (/dashboard?view=apps, 7-day usage).
+ *   holes) vs Overview (/portfolio?view=apps, 7-day usage).
  * - Plan 021 (owner, 2026-10-06) supersedes the "stay separate" part for three
  *   families: Home (/dashboard), Mushi health (/health) and Team (/team) each
  *   host their former pages as `?view=` views (lib/pageHubs.ts); the old
@@ -1202,10 +1202,11 @@ export function routeFallbackTitle(pathname: string): string | null {
  */
 
 /**
- * The sidebar pages every account has, in order (console audit 2026-10-20;
- * Pipeline added 2026-10-27, ADR 0027 amendment). A page with sub-pages lists
- * them under itself while you are in it (lib/sidebarTree.ts); every other page
- * is under "More pages", and a Lab (lib/labs.ts) can be kept in the sidebar.
+ * The top-level pages: the five sidebar pages plus the pages that head a
+ * family of their own (console audit 2026-10-20; ADR 0027). Since ADR 0069
+ * only BUILDER_CORE_NAV_PATHS is the sidebar; the rest are Labs, off by
+ * default for every account (lib/labs.ts). The breadcrumb
+ * treats each of these as a page that names its own views.
  */
 export const CORE_NAV_PATHS: readonly string[] = [
   '/dashboard',
@@ -1222,19 +1223,14 @@ export const CORE_NAV_PATHS: readonly string[] = [
 ]
 
 /**
- * The sidebar a builder sees (console audit 2026-11-11, finding 8): someone
- * who built an app with Lovable or Bolt needs Home, Bugs, Fixes, Journeys
- * (ADR 0058: make the app better, not only fix it), Connect and Settings; every other page they may open is under "More pages". Pipeline
- * stays core for every account (ADR 0027 amendment 2026-10-27). Operators
- * (entitlements `operator`) keep CORE_NAV_PATHS.
+ * The sidebar is the fix loop (ADR 0069, owner 2026-11-24): Home, Bugs,
+ * Fixes, Connect, Settings. Set up shows above it until setup is done
+ * (Layout). Every account gets this list, the owner's too: they see what
+ * customers see. Pipeline, the Journey optimizer, Apps, Integrations, Checks
+ * and Team became Labs, off by default; like every other page they are under
+ * "More pages" and in ⌘K.
  */
-/** @internal Exported for tests. */
-export const BUILDER_CORE_NAV_PATHS: readonly string[] = ['/dashboard', '/reports', '/fixes', '/journeys', '/pipeline', '/connect', '/settings']
-
-/** The core sidebar for this viewer. */
-export function coreNavPathsFor(viewer: { isOperator: boolean }): readonly string[] {
-  return viewer.isOperator ? CORE_NAV_PATHS : BUILDER_CORE_NAV_PATHS
-}
+export const BUILDER_CORE_NAV_PATHS: readonly string[] = ['/dashboard', '/reports', '/fixes', '/connect', '/settings']
 
 /**
  * Operator pages that are also route-guarded (App.tsx OperatorRoute): Mushi

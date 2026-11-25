@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { HEALTH_HUB, HOME_HUB, TEAM_HUB, hubRedirectTarget, hubViewLabel, legacyHubRoutes, lockedHubView, resolveHubView, visibleViews } from './pageHubs'
+import { APPS_HUB, HEALTH_HUB, TEAM_HUB, homeViewRedirect, hubRedirectTarget, hubViewLabel, legacyHubRoutes, lockedHubView, resolveHubView, visibleViews } from './pageHubs'
 
 const viewer = (over: Partial<{ isOperator: boolean; isSuperAdmin: boolean; flags: string[] }> = {}) => ({
   isOperator: over.isOperator ?? false,
@@ -9,11 +9,11 @@ const viewer = (over: Partial<{ isOperator: boolean; isSuperAdmin: boolean; flag
 
 describe('page hubs', () => {
   it('falls back to the first view and hides operator-only views', () => {
-    expect(resolveHubView(HOME_HUB, null, viewer())).toBe('today')
-    expect(resolveHubView(HOME_HUB, 'nope', viewer())).toBe('today')
-    expect(resolveHubView(HOME_HUB, 'users', viewer())).toBe('users')
-    expect(resolveHubView(HOME_HUB, 'growth', viewer())).toBe('today')
-    expect(resolveHubView(HOME_HUB, 'growth', viewer({ isOperator: true }))).toBe('growth')
+    expect(resolveHubView(APPS_HUB, null, viewer())).toBe('all')
+    expect(resolveHubView(APPS_HUB, 'nope', viewer())).toBe('all')
+    expect(resolveHubView(APPS_HUB, 'users', viewer())).toBe('users')
+    expect(resolveHubView(APPS_HUB, 'growth', viewer())).toBe('all')
+    expect(resolveHubView(APPS_HUB, 'growth', viewer({ isOperator: true }))).toBe('growth')
   })
 
   it('shows plan-gated Team views only to teams that have the feature', () => {
@@ -24,7 +24,7 @@ describe('page hubs', () => {
   })
 
   it('redirects every retired route to its view and keeps the query', () => {
-    expect(hubRedirectTarget(HOME_HUB, 'users', '?project=p1')).toBe('/dashboard?project=p1&view=users')
+    expect(hubRedirectTarget(APPS_HUB, 'users', '?project=p1')).toBe('/portfolio?project=p1&view=users')
     expect(hubRedirectTarget(HEALTH_HUB, 'code', '')).toBe('/health?view=code')
     expect(hubRedirectTarget(TEAM_HUB, 'members', '?tab=roles')).toBe('/team?tab=roles')
     expect(legacyHubRoutes().map((r) => r.path).sort()).toEqual(
@@ -41,7 +41,7 @@ describe('page hubs', () => {
     expect(lockedHubView(TEAM_HUB, 'sso', viewer({ isSuperAdmin: true }))).toBeNull()
     expect(lockedHubView(TEAM_HUB, 'billing', viewer())).toBeNull()
     expect(lockedHubView(TEAM_HUB, null, viewer())).toBeNull()
-    expect(lockedHubView(HOME_HUB, 'growth', viewer())).toBeNull()
+    expect(lockedHubView(APPS_HUB, 'growth', viewer())).toBeNull()
   })
 })
 
@@ -52,7 +52,22 @@ describe('hubViewLabel', () => {
     expect(hubViewLabel('/team', '?view=members')).toBeNull()
     expect(hubViewLabel('/team', '')).toBeNull()
     expect(hubViewLabel('/team', '?view=nope')).toBeNull()
-    expect(hubViewLabel('/dashboard', '?view=apps&project=p1')).toBe('Overview')
+    expect(hubViewLabel('/portfolio', '?view=apps&project=p1')).toBe('Overview')
+    expect(hubViewLabel('/dashboard', '?view=apps')).toBeNull()
     expect(hubViewLabel('/reports', '?view=apps')).toBeNull()
+  })
+})
+
+// ADR 0069: Home has no view tabs; every link to one of its old views opens that view under Apps.
+describe('homeViewRedirect', () => {
+  it('sends each former Home view to Apps with the query kept, and leaves Home itself alone', () => {
+    expect(homeViewRedirect('?view=users')).toBe('/portfolio?view=users')
+    expect(homeViewRedirect('?project=p1&view=funnels')).toBe('/portfolio?project=p1&view=funnels')
+    for (const id of ['apps', 'insights', 'growth']) expect(homeViewRedirect(`?view=${id}`)).toBe(`/portfolio?view=${id}`)
+    expect(homeViewRedirect('')).toBeNull()
+    expect(homeViewRedirect('?view=today')).toBeNull()
+    expect(homeViewRedirect('?view=nope&project=p1')).toBeNull()
+    // `all` is Apps' own first view, never a Home view.
+    expect(homeViewRedirect('?view=all')).toBeNull()
   })
 })

@@ -76,7 +76,9 @@ export function FixesPipelineGuide({ topPriority, stats, flat = false }: Props) 
 
   if (flat) {
     return (
-      <details className="group text-xs" open={isFixesGuideExpanded(topPriority ?? live.topPriority)} data-testid="fixes-autofix-how">
+      // Closed: on a new app (no GitHub, no index) it used to open on four
+      // stage rows, the machinery before the first fix (ADR 0069).
+      <details className="group text-xs" data-testid="fixes-autofix-how">
         <summary className="cursor-pointer select-none text-2xs font-medium text-fg-muted hover:text-fg">How Autofix works</summary>
         <div className="mt-2 space-y-2">
           <p className="text-2xs leading-relaxed text-fg-muted">{FIXES_EXPLAINER_SUMMARY}</p>

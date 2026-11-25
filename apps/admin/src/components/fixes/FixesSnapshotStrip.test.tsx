@@ -67,3 +67,15 @@ describe('FixesSnapshotStrip with no fixes yet', () => {
     expect(page.path).toBeNull()
   })
 })
+
+describe('FixesSnapshotStrip once fixes have run (ADR 0069)', () => {
+  it('is one line: each clause links to the list it counts, with no number tiles', () => {
+    render({ ...EMPTY_FIXES_STATS, totalAttempts: 5, failed: 2, prsOpen: 1, completed: 3 }, 1)
+    const status = container.querySelector('[aria-label="Fixes status"]')!
+    expect(status.querySelector('dl')).toBeNull()
+    const links = [...status.querySelectorAll('a')].map((a) => [a.textContent, a.getAttribute('href')])
+    expect(links).toContainEqual(['1 fix running', '/fixes?status=inflight'])
+    expect(links.some(([, href]) => href?.includes('status=failed'))).toBe(true)
+    expect(links.some(([text, href]) => text?.includes('fixed in the last 30 days') && href?.includes('status=merged'))).toBe(true)
+  })
+})

@@ -9,7 +9,7 @@ description: The Team page in the Mushi Mushi console brings members, billing, A
 
 # Team
 
-**Route:** `/team` (sidebar: **Team**)
+**Route:** `/team` (sidebar: More pages → Account → **Team**. It is a Lab: switch it on under **Settings → Display & sidebar → Labs** to keep it in the sidebar)
 
 > **Scenario:** You want to invite someone, check the bill, see what AI calls cost,
 > or change how your team signs in, without hunting through the sidebar.

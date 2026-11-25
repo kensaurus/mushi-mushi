@@ -14,10 +14,15 @@
  *   93   A "Common causes" chip narrows the failed list to that cause.
  *        PR open counts attempts with an open PR whatever CI says, as /repo does.
  *   91   The header counts every attempt, and older ones can be loaded.
- *   Journeys 2026-10-27: the page opens on Ready to merge (Opus merge on the
- *        current commit, CI green) with "Merge when ready", and on stopped
- *        reports grouped by reason with Retry beside each reason; the header
- *        has no bulk paid Retry.
+ *   Journeys 2026-10-27: Ready to merge (a merge verdict on the current
+ *        commit, CI green) with "Merge when ready", and stopped reports grouped
+ *        by reason with Retry beside each reason; the header has no bulk paid
+ *        Retry.
+ *   ADR 0069 (2026-11-24): Fixes is a list of fixes. Ready to merge shows only
+ *        when there are any; the release train, merge queue, "Decide for me",
+ *        the stopped reasons and the requests stopped without a PR sit in one
+ *        "Automation" section, closed by default and remembered; each row has
+ *        one action; tab labels carry no model names.
  */
 
 import { act, createElement } from 'react'
@@ -55,14 +60,15 @@ const mocks = vi.hoisted(() => ({
   hideFixesSnapshot: true,
   renderPosture: false,
   stats: null as Record<string, unknown> | null,
+  pipeline: null as unknown,
 }))
 
 vi.mock('../lib/supabase', () => ({ apiFetch: mocks.apiFetch }))
 vi.mock('../lib/usePageData', () => ({
   usePageData: (path: string | null) => ({
-    // The stats read; the pipeline read (release stations) is not under test here.
+    // The stats read, and the pipeline read (null unless a test sets it).
     data: path?.startsWith('/v1/admin/pipeline')
-      ? null
+      ? mocks.pipeline
       : { ...EMPTY_FIXES_STATS, hasAnyProject: true, ...(mocks.stats ?? {}) },
     loading: false,
     error: null,
@@ -82,6 +88,10 @@ vi.mock('../lib/useSetupStatus', () => ({ useSetupStatus: () => ({ activeProject
 vi.mock('../components/ProjectSwitcher', () => ({ useActiveProjectId: () => mocks.projectId }))
 vi.mock('../lib/copy', () => ({ usePageCopy: () => null }))
 vi.mock('../lib/track', () => ({ trackSelf: vi.fn() }))
+// The "How a fix starts" card (0 fixes) reads the dispatch preflight.
+vi.mock('../lib/useDispatchPreflight', () => ({
+  useDispatchPreflight: () => ({ loading: false, ready: false, error: null, checks: [{ key: 'github', ready: false }], failing: [], reload: vi.fn(), repoUrl: null }),
+}))
 vi.mock('../lib/fixesModeUx', () => ({
   useFixesUx: () => ({
     isQuickstart: false,
@@ -133,6 +143,9 @@ beforeEach(() => {
   mocks.hideFixesSnapshot = true
   mocks.renderPosture = false
   mocks.stats = null
+  mocks.pipeline = null
+  // Automation remembers open/closed in localStorage: start every test closed.
+  window.localStorage.clear()
   vi.stubGlobal('ResizeObserver', class {
     observe() {}
     unobserve() {}
@@ -211,6 +224,15 @@ function buttons(label: string): HTMLButtonElement[] {
 function click(el: Element | undefined | null) {
   if (!el) throw new Error('element not found')
   act(() => el.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+}
+/** The Automation section's toggle (ADR 0069). */
+function automationToggle(): HTMLButtonElement | null {
+  return document.querySelector('[data-testid="fixes-automation"] button[aria-expanded]')
+}
+async function openAutomation() {
+  const toggle = automationToggle()
+  if (toggle?.getAttribute('aria-expanded') !== 'true') click(toggle)
+  await flush()
 }
 
 describe('FixesPage — switching apps (2026-11-16, live)', () => {
@@ -305,10 +327,10 @@ describe('FixesPage', () => {
     expect(inFlightCardValue()).toBe('1')
     expect(document.body.textContent).toContain('queued or running')
     const segments = [...document.querySelectorAll('[aria-label="Filter fix attempts by status"] [role="radio"]')]
-    expect(segments.find((b) => b.textContent?.startsWith('In flight'))?.textContent).toBe('In flight1')
-    click(segments.find((b) => b.textContent?.startsWith('In flight')))
+    expect(segments.find((b) => b.textContent?.startsWith('Running'))?.textContent).toBe('Running1')
+    click(segments.find((b) => b.textContent?.startsWith('Running')))
     const selected = document.querySelector('[aria-label="Filter fix attempts by status"] [aria-checked="true"]')
-    expect(selected?.textContent).toContain('In flight')
+    expect(selected?.textContent).toContain('Running')
     expect(document.body.textContent).toContain('Checkout button does nothing')
   })
 
@@ -377,12 +399,12 @@ describe('FixesPage', () => {
     expect(document.body.textContent).not.toContain('draft fix')
   })
 
-  it('QA 94: the old pipeline tab link opens the In flight filter', async () => {
+  it('QA 94: the old pipeline tab link opens the Running (in flight) filter', async () => {
     mocks.fixes = [fix({ id: 'a', status: 'running', report_fix_state: 'in_flight' }), fix({ id: 'b', report_id: 'r2', report_title: 'Login loops' })]
     mocks.total = 2
     await render('/fixes?tab=pipeline')
     const inflight = document.querySelector('[role="radiogroup"][aria-label="Filter fix attempts by status"] [aria-checked="true"]')
-    expect(inflight?.textContent).toContain('In flight')
+    expect(inflight?.textContent).toContain('Running')
     expect(document.body.textContent).not.toContain('Login loops')
   })
 
@@ -392,10 +414,10 @@ describe('FixesPage', () => {
     await render('/fixes')
     const segments = [...document.querySelectorAll('[aria-label="Filter fix attempts by status"] [role="radio"]')]
     expect(segments.find((b) => b.textContent?.startsWith('PR open'))?.textContent).toBe('PR open1')
-    expect(segments.find((b) => b.textContent?.startsWith('Failed'))?.textContent).toBe('Failed / skipped1')
+    expect(segments.find((b) => b.textContent?.startsWith('Stopped'))?.textContent).toBe('Stopped1')
   })
 
-  it('Opus: merge lists only open PRs the review said to merge (?status=review_merge)', async () => {
+  it('Approved lists only open PRs the review said to merge (?status=review_merge)', async () => {
     const pr = (n: number) => ({ status: 'completed', pr_url: `https://github.com/o/r/pull/${n}`, pr_state: 'open' as const, report_fix_state: 'pr_open' as const })
     mocks.fixes = [
       fix({ id: 'a', report_id: 'r1', report_title: 'Approved fix', review_verdict: 'merge', ...pr(1) }),
@@ -405,7 +427,9 @@ describe('FixesPage', () => {
     mocks.total = 3
     await render('/fixes?status=review_merge')
     const segments = [...document.querySelectorAll('[aria-label="Filter fix attempts by status"] [role="radio"]')]
-    expect(segments.find((b) => b.textContent?.startsWith('Opus: merge'))?.textContent).toBe('Opus: merge1')
+    expect(segments.find((b) => b.textContent?.startsWith('Approved'))?.textContent).toBe('Approved1')
+    // ADR 0069: no model names in the tab labels.
+    expect(segments.some((b) => /Opus|Claude|GPT/.test(b.textContent ?? ''))).toBe(false)
     expect(document.body.textContent).toContain('Approved fix')
     expect(document.body.textContent).not.toContain('Held fix')
     expect(document.body.textContent).not.toContain('Merged fix')
@@ -505,6 +529,7 @@ describe('FixesPage', () => {
         return base(path, init)
       })
       await render('/fixes')
+      await openAutomation()
       const train = document.querySelector('[data-testid="merge-queue-train"]')!
       expect(train.querySelector('figcaption')!.textContent).toContain('Queued 1')
       expect(train.querySelector('[data-testid="train-stage-held"]')!.getAttribute('data-tone')).toBe('warn')
@@ -520,6 +545,7 @@ describe('FixesPage', () => {
       mocks.total = 2
       await render('/fixes')
       expect(buttons('Retry 1 unfixed')).toHaveLength(0)
+      await openAutomation()
       const timeout = document.querySelector('[data-testid="fixes-stopped-sandbox_timeout"]')!
       expect(timeout.textContent).toContain('Ran out of time')
       expect(document.querySelector('[data-testid="fixes-stopped-needs_human-retry"]')).toBeNull()
@@ -533,6 +559,146 @@ describe('FixesPage', () => {
       const calls = mocks.apiFetch.mock.calls.filter(([p]) => p === '/v1/admin/fixes/dispatch')
       expect(calls).toHaveLength(1)
       expect(JSON.parse((calls[0][1] as RequestInit).body as string)).toMatchObject({ reportId: 'r1' })
+    })
+  })
+
+  describe('Fixes is a list of fixes (ADR 0069)', () => {
+    const ready = () =>
+      fix({
+        id: 'pr1', report_id: 'r1', report_title: 'Fix 1', status: 'completed', pr_url: 'https://github.com/o/r/pull/1', pr_number: 1,
+        pr_state: 'open', report_fix_state: 'pr_open', retryable: false, commit_sha: 'head1', check_run_conclusion: 'success',
+        review_verdict: 'merge', review_head_sha: 'head1',
+      })
+    const queueWithDecide = () => {
+      const base = mocks.apiFetch.getMockImplementation()!
+      mocks.apiFetch.mockImplementation(async (path: string, init?: RequestInit) =>
+        path.startsWith('/v1/admin/merge-queue?')
+          ? { ok: true, data: { rows: [], trains: [], release: [{ projectId: 'p1', mode: 'train', intervalMinutes: 1440, maxMembers: 10, autoDecide: true }] } }
+          : base(path, init),
+      )
+    }
+
+    it('keeps the merge queue, Decide for me and the stopped reasons in a closed Automation section', async () => {
+      queueWithDecide()
+      mocks.fixes = [fix({ id: 'a', report_id: 'r1', failure_category: 'sandbox_timeout' } as Partial<FixAttempt>)]
+      mocks.total = 1
+      mocks.stats = { failed: 1, topPriority: 'failed' }
+      await render('/fixes')
+      expect(automationToggle()?.getAttribute('aria-expanded')).toBe('false')
+      expect(document.querySelector('section[aria-label="Merge queue"]')).toBeNull()
+      expect(document.querySelector('[data-testid="fixes-stopped-reasons"]')).toBeNull()
+      expect(document.body.textContent).not.toContain('Decide for me')
+      // The collapsed row still says what is inside that needs you.
+      expect(document.querySelector('[data-testid="fixes-automation-summary"]')?.textContent).toContain('1 stopped')
+      // No merge-queue read (or 30 s poll) until it is opened.
+      expect(mocks.apiFetch.mock.calls.some(([p]) => String(p).startsWith('/v1/admin/merge-queue'))).toBe(false)
+      await openAutomation()
+      expect(document.querySelector('section[aria-label="Merge queue"]')).not.toBeNull()
+      expect(document.body.textContent).toContain('Decide for me')
+      expect(document.querySelector('[data-testid="fixes-stopped-sandbox_timeout"]')).not.toBeNull()
+    })
+
+    it('the collapsed row counts PRs the merge queue holds for a person', async () => {
+      mocks.fixes = [fix({})]
+      mocks.total = 1
+      mocks.pipeline = {
+        stages: [{ id: 'train', label: 'Release train', count: 2, stuck: 2, oldestAt: null, groups: [
+          { id: 'held_hold', stage: 'train', tone: 'stuck', label: '', count: 2, oldestAt: null, actions: [], settings: null, items: [{ id: 'x1' }, { id: 'x2' }] },
+          { id: 'not_queued', stage: 'train', tone: 'ok', label: '', count: 1, oldestAt: null, actions: [], settings: null, items: [{ id: 'x3' }] },
+        ] }],
+        trains: [],
+      }
+      await render('/fixes')
+      expect(document.querySelector('[data-testid="fixes-automation-summary"]')?.textContent).toContain('2 held in the merge queue')
+    })
+
+    it('puts the one Automation row above the list', async () => {
+      mocks.fixes = [fix({})]
+      mocks.total = 1
+      await render('/fixes')
+      const automation = document.querySelector('[data-testid="fixes-automation"]')!
+      const table = document.querySelector('table')!
+      expect(automation.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    })
+
+    it('remembers that Automation was opened', async () => {
+      mocks.fixes = [fix({})]
+      mocks.total = 1
+      await render('/fixes')
+      await openAutomation()
+      act(() => root.unmount())
+      root = createRoot(host)
+      await render('/fixes')
+      expect(automationToggle()?.getAttribute('aria-expanded')).toBe('true')
+    })
+
+    it('an old link into a section inside Automation opens it', async () => {
+      mocks.fixes = [fix({ id: 'a', report_id: 'r1', failure_category: 'sandbox_timeout' } as Partial<FixAttempt>)]
+      mocks.total = 1
+      await render('/fixes#fixes-stopped')
+      await flush()
+      expect(automationToggle()?.getAttribute('aria-expanded')).toBe('true')
+      expect(document.querySelector('[data-testid="fixes-stopped-reasons"]')).not.toBeNull()
+      // A section anchor is not read as a fix id ("That fix is not in this project's…").
+      expect(document.body.textContent).not.toContain('not in this project')
+    })
+
+    it('shows Ready to merge only when a fix is ready', async () => {
+      mocks.fixes = [fix({})]
+      mocks.total = 1
+      await render('/fixes')
+      expect(document.getElementById('fixes-ready')).toBeNull()
+      mocks.fixes = [ready()]
+      mocks.projectId = 'p2'
+      await render('/fixes')
+      expect(document.getElementById('fixes-ready')).not.toBeNull()
+      // The ready row names the review in plain words, no model.
+      expect(document.querySelector('[data-testid="fixes-ready-pr1"]')?.textContent).toContain('Approved')
+    })
+
+    it('a new app with no fixes shows how a fix starts and none of the machinery', async () => {
+      mocks.renderPosture = true
+      mocks.hideFixesSnapshot = false
+      mocks.fixes = []
+      mocks.total = 0
+      mocks.stats = { topPriority: 'no_github' }
+      await render('/fixes')
+      expect(document.querySelector('[data-testid="fixes-start"]')).not.toBeNull()
+      expect(document.querySelector('[data-testid="fixes-automation"]')).toBeNull()
+      expect(document.querySelector('section[aria-label="Merge queue"]')).toBeNull()
+      expect(document.getElementById('fixes-release')).toBeNull()
+      expect(document.querySelector('[aria-label="Filter fix attempts by status"]')).toBeNull()
+      // How Autofix works is there, closed.
+      expect((document.querySelector('[data-testid="fixes-autofix-how"]') as HTMLDetailsElement | null)?.open).toBe(false)
+    })
+
+    it('a missing code index is one line inside Automation, not a banner over the list', async () => {
+      mocks.renderPosture = true
+      mocks.fixes = [fix({})]
+      mocks.total = 1
+      mocks.stats = { topPriority: 'no_index', topPriorityTo: '/integrations/config' }
+      await render('/fixes')
+      expect(document.body.textContent).not.toContain('Index your codebase first')
+      expect(document.querySelector('[data-testid="fixes-automation-summary"]')?.textContent).toContain('code not indexed')
+      expect(document.querySelector('[data-testid="fixes-codebase-unindexed-banner"]')).toBeNull()
+      await openAutomation()
+      expect(document.querySelector('[data-testid="fixes-codebase-unindexed-banner"]')?.textContent).toContain('stub PRs')
+    })
+
+    it('a row offers one action: Retry when it can help, otherwise the PR', async () => {
+      mocks.fixes = [
+        fix({ id: 'a', report_id: 'r1', pr_url: 'https://github.com/o/r/pull/7', pr_number: 7 }),
+        fix({ id: 'b', report_id: 'r2', report_title: 'Login loops', status: 'completed', retryable: false, pr_url: 'https://github.com/o/r/pull/8', pr_number: 8, pr_state: 'open', report_fix_state: 'pr_open' }),
+      ]
+      mocks.total = 2
+      await render('/fixes')
+      const rows = [...document.querySelectorAll('tbody tr')]
+      const retryRow = rows.find((r) => r.textContent?.includes('Checkout button does nothing'))!
+      const prRow = rows.find((r) => r.textContent?.includes('Login loops'))!
+      expect([...retryRow.querySelectorAll('button')].some((b) => b.textContent?.trim() === 'Retry')).toBe(true)
+      expect(retryRow.querySelector('a[href="https://github.com/o/r/pull/7"]')).toBeNull()
+      expect(prRow.querySelector('a[href="https://github.com/o/r/pull/8"]')).not.toBeNull()
+      expect([...prRow.querySelectorAll('button')].some((b) => b.textContent?.trim() === 'Retry')).toBe(false)
     })
   })
 })

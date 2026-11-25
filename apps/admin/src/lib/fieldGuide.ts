@@ -138,7 +138,7 @@ export function editorConnectGuide(
   // "Bug reports are coming in" showed to a new app that had only the sample report and an SDK
   // that never checked in (2026-11-24): the next step is the report button, not the editor.
   if (app.appCheckedIn === false && state !== 'no_project') {
-    return { pose: 'laptop', line: "Your app hasn't checked in yet. Add the report button first; the steps are just below." }
+    return { pose: 'laptop', line: "Your app hasn't checked in yet. Start with the report button below." }
   }
   switch (state) {
     case 'no_project':

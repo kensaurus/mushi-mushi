@@ -25,9 +25,11 @@ interface Props {
   section: HomeSection<HomeAccess>
   /** The plan includes the audit log (enterprise). */
   auditLog: boolean
+  /** Needs you already has the button to Connect (an SDK update): the version chip stays a label. */
+  sdkLinkElsewhere?: boolean
 }
 
-export function AccessCard({ section, auditLog }: Props) {
+export function AccessCard({ section, auditLog, sdkLinkElsewhere = false }: Props) {
   return (
     <Section title="Access and details" id="home-access">
       <HomeSectionBody section={section} what="access and details" notConnectedText="No details yet.">
@@ -42,7 +44,8 @@ export function AccessCard({ section, auditLog }: Props) {
                   {a.repo.branch && <Badge tone="neutral">{a.repo.branch}</Badge>}
                 </span>
               ) : (
-                <Link to="/connect" className="text-link hover:underline">Connect your repo</Link>
+                // The CI light carries "Connect GitHub"; a second button here was the same place (ADR 0069).
+                <span className="text-xs text-fg-muted">Not connected yet</span>
               )}
             </Row>
             <Row term="People">
@@ -62,9 +65,13 @@ export function AccessCard({ section, auditLog }: Props) {
                 {/* With no version yet the chip says it once ("Version not seen yet"). */}
                 {a.sdk.version && <span className="font-mono text-xs text-fg">{`${a.sdk.package ?? 'SDK'} ${a.sdk.version}`}</span>}
                 {a.sdk.latest && a.sdk.status !== 'up-to-date' && <span className="text-xs text-fg-muted">latest {a.sdk.latest}</span>}
-                <Link to="/connect">
+                {sdkLinkElsewhere ? (
                   <Badge tone={SDK_TONE[a.sdk.status].tone}>{SDK_TONE[a.sdk.status].text}</Badge>
-                </Link>
+                ) : (
+                  <Link to="/connect">
+                    <Badge tone={SDK_TONE[a.sdk.status].tone}>{SDK_TONE[a.sdk.status].text}</Badge>
+                  </Link>
+                )}
               </span>
             </Row>
             <Row term="Keys">
@@ -79,7 +86,7 @@ export function AccessCard({ section, auditLog }: Props) {
             <Row term="Logs">
               <span className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
                 <Link to="/fixes" className="text-link hover:underline">Fix history</Link>
-                <Link to="/dashboard?view=users" className="text-link hover:underline">User activity</Link>
+                <Link to="/portfolio?view=users" className="text-link hover:underline">User activity</Link>
                 {auditLog && <Link to="/team?view=audit" className="text-link hover:underline">Audit log</Link>}
               </span>
             </Row>

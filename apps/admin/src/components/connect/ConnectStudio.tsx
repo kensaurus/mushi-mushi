@@ -1,9 +1,12 @@
 /**
  * FILE: apps/admin/src/components/connect/ConnectStudio.tsx
- * PURPOSE: Three-lane "pick your client → connect in one click" hero for /connect.
+ * PURPOSE: "Pick your editor → connect in one click" for /connect.
  *
  * OVERVIEW:
  * - Shared ConnectLanePicker shell from @mushi-mushi/marketing-ui.
+ * - Leads with three common editors and the MCP one-click (ADR 0069); the
+ *   other editors sit behind "Other editors", the CLI and skills behind
+ *   "Use the CLI or skills instead", the manual endpoint behind "Set it up by hand".
  * - Admin-specific lane bodies: ClientConnectButton mint, CLI steps, Skills copy.
  *
  * DEPENDENCIES:
@@ -21,7 +24,7 @@ import {
   type ConnectLane,
 } from '@mushi-mushi/marketing-ui'
 import { ClientConnectButton } from '../ClientConnectButton'
-import { CopyButton, Panel, RelativeTime } from '../ui'
+import { CopyButton, Panel, RelativeTime, SegmentedControl } from '../ui'
 import { StatusPill } from '../signal/StatusMark'
 import { BrandIcon, resolveBrand } from '../ui/BrandIcon'
 import { LINK_ACCENT } from '../../lib/chipTone'
@@ -30,6 +33,14 @@ import { RESOLVED_EXTERNAL_API_URL, RESOLVED_MCP_HTTP_URL, RESOLVED_MCP_OAUTH_UR
 import { CONNECT_SKILLS } from '../../lib/public-copy-shared'
 
 const ADMIN_STORAGE_KEY = 'mushi_selected_client'
+
+/** The editors a builder most often uses lead the picker; the rest are one click away. */
+const COMMON_CLIENTS: ReadonlySet<string> = new Set(['cursor', 'claude-code', 'vscode'])
+
+const ALT_LANES: { id: Exclude<ConnectLane, 'mcp'>; label: string }[] = [
+  { id: 'cli', label: 'CLI' },
+  { id: 'skills', label: 'Skills' },
+]
 
 function CliCommandBlock({
   title,
@@ -158,6 +169,8 @@ const FOLD_TOGGLE =
 
 export function ConnectStudio({ projectId, projectName, connectedEditor }: ConnectStudioProps) {
   const [addingAnother, setAddingAnother] = useState(false)
+  const [allClients, setAllClients] = useState(false)
+  const [byHand, setByHand] = useState(false)
   const folded = Boolean(connectedEditor) && !addingAnother
   const {
     clients,
@@ -169,6 +182,11 @@ export function ConnectStudio({ projectId, projectName, connectedEditor }: Conne
 
   const effectiveProjectId = projectId ?? undefined
   const effectiveProjectName = projectName ?? 'My Project'
+  // The picked editor always shows, even when it is not one of the three.
+  const shownClients = allClients ? clients : clients.filter((c) => COMMON_CLIENTS.has(c.id) || c.id === selectedId)
+  const otherCount = clients.length - clients.filter((c) => COMMON_CLIENTS.has(c.id)).length
+  const altLane = activeLane === 'mcp' ? null : activeLane
+  const selectedClient = clients.find((c) => c.id === selectedId) ?? clients[0]
 
   function renderLane(lane: ConnectLane, client: McpClientDef) {
     if (lane === 'cli') return <CliLane client={client} />
@@ -199,11 +217,21 @@ export function ConnectStudio({ projectId, projectName, connectedEditor }: Conne
           />
         ) : (
           <div className="rounded-md border border-edge-subtle bg-surface-hover/30 px-3 py-2 text-xs text-fg-muted">
-            Select a project above to mint a key and install.
+            Pick an app above to make a key and install.
           </div>
         )}
 
-        <div className="rounded-md border border-edge-subtle bg-surface-hover/30 px-3 py-2">
+        <button
+          type="button"
+          className={FOLD_TOGGLE}
+          aria-expanded={byHand}
+          aria-controls="connect-mcp-by-hand"
+          onClick={() => setByHand((v) => !v)}
+        >
+          {byHand ? 'Hide the manual setup' : 'Set it up by hand'}
+        </button>
+        {byHand && (
+        <div id="connect-mcp-by-hand" className="rounded-md border border-edge-subtle bg-surface-hover/30 px-3 py-2">
           <p className="text-2xs font-medium text-fg-muted mb-1">MCP endpoint for OAuth sign-in (manual setup)</p>
           <div className="flex items-center gap-2">
             {/* One line that scrolls: wrapping broke the URL at its hyphen ("mushi-/mushi") on a phone. */}
@@ -219,7 +247,12 @@ export function ConnectStudio({ projectId, projectName, connectedEditor }: Conne
               <code className="font-mono break-all">{RESOLVED_MCP_HTTP_URL}/.well-known/oauth-authorization-server</code>.
             </p>
           ) : null}
+          <Link to="/mcp" className={`mt-1 inline-flex items-center gap-1 text-2xs ${LINK_ACCENT}`}>
+            <IconTerminal size={12} aria-hidden />
+            All MCP options →
+          </Link>
         </div>
+        )}
       </div>
     )
   }
@@ -254,11 +287,26 @@ export function ConnectStudio({ projectId, projectName, connectedEditor }: Conne
           <ConnectLanePicker
             bordered={false}
             surface="operator"
-            clients={clients}
+            clientSectionLabel="Your editor"
+            clients={shownClients}
             selectedId={selectedId}
             onSelectClient={selectClient}
-            activeLane={activeLane}
+            activeLane="mcp"
             onLaneChange={setActiveLane}
+            lanes={['mcp']}
+            afterClients={
+              otherCount > 0 ? (
+                <button
+                  type="button"
+                  className={`${FOLD_TOGGLE} mt-2`}
+                  aria-expanded={allClients}
+                  onClick={() => setAllClients((v) => !v)}
+                  data-testid="connect-other-editors"
+                >
+                  {allClients ? 'Fewer editors ▴' : `Other editors (${otherCount}) ▾`}
+                </button>
+              ) : null
+            }
             renderLane={renderLane}
             renderClientIcon={(id) =>
               resolveBrand(id) ? (
@@ -268,17 +316,34 @@ export function ConnectStudio({ projectId, projectName, connectedEditor }: Conne
               )
             }
           />
+          {/* MCP is the one-click path; the CLI and skills are the same setup another way. */}
+          <div className="mt-3 space-y-3 border-t border-edge-subtle pt-3">
+            <button
+              type="button"
+              className={FOLD_TOGGLE}
+              aria-expanded={altLane !== null}
+              aria-controls="connect-alt-lanes"
+              onClick={() => setActiveLane(altLane ? 'mcp' : 'cli')}
+              data-testid="connect-alt-lanes-toggle"
+            >
+              {altLane ? 'Hide the CLI and skills' : 'Use the CLI or skills instead'}
+            </button>
+            {altLane && selectedClient && (
+              <div id="connect-alt-lanes" className="space-y-3">
+                <SegmentedControl
+                  value={altLane}
+                  options={ALT_LANES}
+                  onChange={setActiveLane}
+                  ariaLabel="Setup method"
+                  size="sm"
+                />
+                {renderLane(altLane, selectedClient)}
+              </div>
+            )}
+          </div>
         </div>
       </Panel>
       )}
-
-      <div className="flex items-center gap-2 text-2xs text-fg-muted px-1">
-        <IconTerminal size={12} aria-hidden />
-        {/* A link, not a question over it (round-3 review, 2026-11-19: stacked instruction lines). */}
-        <Link to="/mcp" className={LINK_ACCENT}>
-          Manual MCP setup →
-        </Link>
-      </div>
     </div>
   )
 }

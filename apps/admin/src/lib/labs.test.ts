@@ -86,6 +86,17 @@ describe('useLabs', () => {
   })
 })
 
+describe('the pages that left the sidebar (ADR 0069)', () => {
+  it('are Labs that start off, so every account sees the five-page sidebar', async () => {
+    await mount()
+    for (const path of ['/portfolio', '/integrations/config', '/checks', '/team', '/pipeline', '/journeys']) {
+      const lab = mod.labForPath(path)
+      expect(lab, path).not.toBeNull()
+      expect(latest!.isEnabled(lab!.id), path).toBe(false)
+    }
+  })
+})
+
 describe('labForPath', () => {
   it('matches the route and its sub-routes', () => {
     expect(mod.labForPath('/graph')?.id).toBe('bug-clusters')

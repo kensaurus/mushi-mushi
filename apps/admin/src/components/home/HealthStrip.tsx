@@ -104,14 +104,8 @@ function HealthTile({ signal: server }: { signal: HealthSignal }) {
   const tone = healthDisplayTone(s)
   return (
     <Card className="flex h-full min-w-0 flex-col gap-1 p-3" data-testid={`home-health-${s.id}`}>
-      <PanelHeader
-        className="mb-1"
-        title={
-          <Link to={s.href} className="hover:text-fg">
-            {s.label}
-          </Link>
-        }
-      />
+      {/* One link per light, on its value: the label linked to the same page, two controls for one place (ADR 0069). */}
+      <PanelHeader className="mb-1" title={s.label} />
       {/* The state is the value's mark and colour: a "Good" pill beside
           "Passing" said it twice (round-2 sweep 2026-11-18). The word stays
           for screen readers on the mark. */}

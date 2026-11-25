@@ -1,6 +1,16 @@
+/**
+ * FILE: apps/admin/src/components/report-detail/ReportTriageBar.tsx
+ * PURPOSE: Status, severity, category, repo, "Not a code bug", sync and
+ *          Dispatch fix for one report.
+ *
+ * ADR 0069 (2026-11-24): the bar is secondary. "Copy fix prompt" in the fix
+ * card is the page's one primary action, so Dispatch fix is a small ghost
+ * button here, and the page hides it (`showDispatch`) until GitHub is
+ * connected; the collapsed "let Mushi Mushi dispatch the fix" card says how
+ * to get there. With no code location, "Not a code bug" still leads (BL-061).
+ */
 import { useEffect, useId, useState } from 'react'
 import { useInRouterContext } from 'react-router-dom'
-import { Card } from '../../components/ui'
 import { SelectField, Btn } from '../ui'
 import { STATUS_LABELS, SEVERITY_LABELS, CATEGORY_LABELS } from '../../lib/tokens'
 import { IconArrowRight, IconExternalLink } from '../icons'
@@ -57,6 +67,9 @@ interface ReportTriageBarProps {
   /** reportHasCodeLocation(report). When false, "Not a code bug" leads and
    *  Dispatch becomes the secondary "Dispatch anyway" (BL-061). */
   hasCodeLocation?: boolean
+  /** False until GitHub is connected: Autofix cannot open a PR, so Dispatch
+   *  is left out (ADR 0069). A dispatch already under way still shows. */
+  showDispatch?: boolean
 }
 
 const PROVIDER_LABEL: Record<string, string> = {
@@ -77,6 +90,7 @@ export function ReportTriageBar({
   isDispatchBusy,
   repoChoice,
   hasCodeLocation = true,
+  showDispatch = true,
 }: ReportTriageBarProps) {
   const inRouter = useInRouterContext()
   const [showSaved, setShowSaved] = useState(false)
@@ -125,6 +139,9 @@ export function ReportTriageBar({
     dispatchState.status === 'skipped' ? 'Skipped — see reason' :
     retryHelps ? 'Failed — retry' : 'Dispatch again'
 
+  // A dispatch that already started (or ended) belongs on screen whatever the gate says.
+  const dispatchVisible = showDispatch || dispatchState.status !== 'idle'
+
   const syncToIntegrations = async () => {
     if (destinations.length === 0) {
       toast.info('No routing destinations active', 'Connect Jira, Linear, GitHub Issues, or PagerDuty in Integrations.')
@@ -159,7 +176,8 @@ export function ReportTriageBar({
   }
 
   return (
-    <Card  className="mb-3 flex flex-wrap items-end gap-3 p-3">
+    // Secondary: a plain bordered row, not a raised card (ADR 0069).
+    <div role="group" aria-label="Triage" className="mb-3 flex flex-wrap items-end gap-3 rounded-md border border-edge-subtle px-3 py-2" data-testid="report-triage-bar">
       <SelectField
         label="Status"
         value={selectableStatus(report.status)}
@@ -324,13 +342,15 @@ export function ReportTriageBar({
             Not a code bug
           </Btn>
         )}
+        {dispatchVisible && (
         <div className="flex flex-col items-end gap-1">
           {/* A disabled Btn takes no pointer events, so its own title never
               showed; the wrapper carries the hover text (feedback 2026-11-22). */}
           <span className="inline-flex" title={dispatchDisabled ? dispatchBlockReason : undefined} data-testid="report-dispatch-wrap">
+            {/* Secondary: Copy fix prompt is the page's one primary (ADR 0069). */}
             <Btn
-              variant={hasCodeLocation ? 'primary' : 'ghost'}
-              size={hasCodeLocation ? 'md' : 'sm'}
+              variant="ghost"
+              size="sm"
               onClick={onRequestDispatch}
               disabled={dispatchDisabled}
               loading={isDispatchBusy && dispatchState.status !== 'completed' && dispatchState.status !== 'failed'}
@@ -380,10 +400,11 @@ export function ReportTriageBar({
               </span>
             )}
         </div>
+        )}
       </div>
       {!hasCodeLocation && (
         <p className="basis-full text-right text-xs text-fg-muted">{NO_CODE_LOCATION_REASON}</p>
       )}
-    </Card>
+    </div>
   )
 }

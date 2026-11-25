@@ -1,17 +1,21 @@
 /**
  * FILE: apps/admin/src/components/fixes/FixesFirstView.tsx
- * PURPOSE: What /fixes answers first (console journeys 2026-10-27): "which
- *          fixes can I merge, and which failed and why?"
+ * PURPOSE: The pieces /fixes shows besides the list of fixes (ADR 0069,
+ *          "Fixes is a list of fixes"):
  *
- *            1. The release train: the five stations and the train on the
- *               tracks, the same picture and counts as Home and /pipeline.
- *            2. Ready to merge: open fix PRs Opus said to merge about their
- *               latest commit, with CI green (countDefinitions
- *               `isReadyToMerge`). "Merge when ready" queues them (ADR 0041).
- *            3. Stopped, by reason: the reports auto-fix stopped on, one row
- *               per reason, each with its own Retry, which spends LLM budget,
- *               only where a retry can help. "Retry 8 unfixed" used to be
- *               the header's main button.
+ *            - FixesReadyToMerge: open fix PRs the review said to merge about
+ *              their latest commit, with CI green (countDefinitions
+ *              `isReadyToMerge`). "Merge when ready" queues them (ADR 0041).
+ *              It renders nothing when there are none: it is an action, not
+ *              a card to keep empty above the list.
+ *            - FixesReleaseTrain: the five stations and the train on the
+ *              tracks, the same picture and counts as Home and /pipeline.
+ *            - FixesStoppedReasons: the reports auto-fix stopped on, one row
+ *              per reason, each with its own Retry (it spends LLM budget),
+ *              only where a retry can help.
+ *
+ *          The release train and the stopped reasons live inside the page's
+ *          collapsed "Automation" section; Ready to merge sits above the list.
  */
 
 import { AGENT_OUT_OF_USAGE_BUCKET } from '../../lib/agentOutOfUsage'
@@ -125,16 +129,86 @@ function queuedFixIds(pipeline: PipelineData | null): Set<string> {
   return out
 }
 
-interface Props {
+interface ReadyProps {
   fixes: FixAttempt[]
   pipeline: PipelineData | null
+  busy: boolean
+  /** Queue these PRs to merge when ready (ADR 0041). */
+  onQueue: (fixes: FixAttempt[]) => void
+}
+
+export function FixesReadyToMerge({ fixes, pipeline, busy, onQueue }: ReadyProps) {
+  const ready = readyFixes(fixes, pipeline)
+  if (ready.length === 0) return null
+  const queued = queuedFixIds(pipeline)
+  const toQueue = ready.filter((f) => !queued.has(f.id))
+  return (
+    <Section
+      title={`Ready to merge: ${ready.length}`}
+      id="fixes-ready"
+      icon={<IconCheck />}
+      action={
+        toQueue.length > 0 ? (
+          <Btn size="sm" variant="primary" loading={busy} onClick={() => onQueue(toQueue)} data-testid="fixes-ready-queue-all">
+            Merge {toQueue.length === 1 ? 'it' : `${toQueue.length}`} when ready
+          </Btn>
+        ) : undefined
+      }
+    >
+      <ul className="divide-y divide-edge-subtle" data-testid="fixes-ready-list">
+        {ready.map((f) => (
+          <li key={f.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2" data-testid={`fixes-ready-${f.id}`}>
+            <Link to={`/reports/${f.report_id}`} title={f.report_title ?? undefined} className="min-w-0 flex-1 basis-48 wrap-break-word text-xs font-medium text-fg hover:underline">
+              <VitalText text={fixReportLabel(f)} />
+            </Link>
+            <a href={f.pr_url} target="_blank" rel="noreferrer" className="font-mono text-2xs text-fg-secondary hover:underline">
+              #{f.pr_number ?? '?'}
+            </a>
+            {/* Plain words, no model name (ADR 0069): the review approved this commit. */}
+            <StatusPill status="passed" label="Approved" />
+            <StatusPill status="passed" label="CI passed" />
+            {queued.has(f.id) ? (
+              <span data-testid={`fixes-ready-${f.id}-queued`}>
+                <StatusPill status="waiting" label="In the merge queue" />
+              </span>
+            ) : (
+              <Btn size="sm" variant="ghost" disabled={busy} onClick={() => onQueue([f])} data-testid={`fixes-ready-${f.id}-queue`}>
+                Merge when ready
+              </Btn>
+            )}
+          </li>
+        ))}
+      </ul>
+    </Section>
+  )
+}
+
+function pipelinePath(projectId: string | null): string {
+  return projectId ? `/pipeline?project=${encodeURIComponent(projectId)}` : '/pipeline'
+}
+
+export function FixesReleaseTrain({ pipeline, projectId }: { pipeline: PipelineData | null; projectId: string | null }) {
+  if (!pipeline) return null
+  const pipelineHref = pipelinePath(projectId)
+  return (
+    <Section title="Release train" id="fixes-release" icon={<IconReleases />} action={<Link to={pipelineHref} className="text-xs text-link">Pipeline →</Link>}>
+      <div className="space-y-2">
+        <ReleaseStations stations={stationsFromStages(pipeline.stages)} href={pipelineHref} testId="fixes-release-stations" />
+        <p className="text-xs text-fg-secondary">
+          <ReleaseTrainLine train={trainNow(pipeline.trains)} href={pipelineHref} />
+        </p>
+      </div>
+    </Section>
+  )
+}
+
+interface StoppedProps {
+  fixes: FixAttempt[]
   projectId: string | null
   /** Reports auto-fix stopped on, from /v1/admin/fixes/stats: the status line's "Stopped". */
   stoppedTotal?: number
   busy: boolean
-  /** Queue these PRs to merge when ready (ADR 0041). */
-  onQueue: (fixes: FixAttempt[]) => void
-  /** Narrow the table below to one cause. */
+  /** Narrow the list to one cause. */
   onShowCause: (cause: string) => void
   /** Open the retry confirm for these reports. */
   onRetry: (fixes: FixAttempt[], label: string) => void
@@ -142,118 +216,55 @@ interface Props {
   agentsOut?: boolean
 }
 
-export function FixesFirstView({ fixes, pipeline, projectId, stoppedTotal, busy, onQueue, onShowCause, onRetry, agentsOut = false }: Props) {
-  const ready = readyFixes(fixes, pipeline)
-  const queued = queuedFixIds(pipeline)
-  const toQueue = ready.filter((f) => !queued.has(f.id))
-  const pipelineHref = projectId ? `/pipeline?project=${encodeURIComponent(projectId)}` : '/pipeline'
-  const reasons = stoppedReasons(fixes, agentsOut, pipelineHref)
+export function FixesStoppedReasons({ fixes, projectId, stoppedTotal, busy, onShowCause, onRetry, agentsOut = false }: StoppedProps) {
+  const reasons = stoppedReasons(fixes, agentsOut, pipelinePath(projectId))
+  if (reasons.length === 0) return null
   const listed = reasons.reduce((n, r) => n + r.fixes.length, 0)
   // The reasons come from the attempts loaded below (the newest 200), so they
   // can cover fewer reports than the status line's "Stopped 48" (it read 47).
   const stopped = Math.max(listed, stoppedTotal ?? 0)
   const maxStopped = Math.max(1, ...reasons.map((r) => r.fixes.length))
-
   return (
-    <div className="space-y-3" data-testid="fixes-first-view">
-      {pipeline && (
-        <Section title="Release train" id="fixes-release" icon={<IconReleases />} action={<Link to={pipelineHref} className="text-xs text-link">Pipeline →</Link>}>
-          <div className="space-y-2">
-            <ReleaseStations stations={stationsFromStages(pipeline.stages)} href={pipelineHref} testId="fixes-release-stations" />
-            <p className="text-xs text-fg-secondary">
-              <ReleaseTrainLine train={trainNow(pipeline.trains)} href={pipelineHref} />
-            </p>
-          </div>
-        </Section>
-      )}
-
-      <Section
-        title={`Ready to merge${ready.length ? `: ${ready.length}` : ''}`}
-        id="fixes-ready"
-        icon={<IconCheck />}
-        action={
-          toQueue.length > 0 ? (
-            <Btn size="sm" variant="primary" loading={busy} onClick={() => onQueue(toQueue)} data-testid="fixes-ready-queue-all">
-              Merge {toQueue.length === 1 ? 'it' : `${toQueue.length}`} when ready
-            </Btn>
-          ) : undefined
-        }
-      >
-        {/* The definition is the ⓘ on the Ready to merge number above; no paragraph restating it (fresh-eyes 2026-11-18). */}
-        {ready.length === 0 ? (
-          <p className="text-xs text-fg-muted" data-testid="fixes-ready-empty">
-            None right now. A fix lands here once Opus says merge about its latest commit and its CI passes.
-          </p>
-        ) : (
-          <ul className="divide-y divide-edge-subtle" data-testid="fixes-ready-list">
-            {ready.map((f) => (
-              <li key={f.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2" data-testid={`fixes-ready-${f.id}`}>
-                <Link to={`/reports/${f.report_id}`} title={f.report_title ?? undefined} className="min-w-0 flex-1 basis-48 wrap-break-word text-xs font-medium text-fg hover:underline">
-                  <VitalText text={fixReportLabel(f)} />
-                </Link>
-                <a href={f.pr_url} target="_blank" rel="noreferrer" className="font-mono text-2xs text-fg-secondary hover:underline">
-                  #{f.pr_number ?? '?'}
-                </a>
-                <StatusPill status="passed" label="Opus: merge" />
-                <StatusPill status="passed" label="CI passed" />
-                {queued.has(f.id) ? (
-                  <span data-testid={`fixes-ready-${f.id}-queued`}>
-                    <StatusPill status="waiting" label="In the merge queue" />
-                  </span>
-                ) : (
-                  <Btn size="sm" variant="ghost" disabled={busy} onClick={() => onQueue([f])} data-testid={`fixes-ready-${f.id}-queue`}>
-                    Merge when ready
-                  </Btn>
+    <Section title={`Stopped: ${stopped} ${pluralize(stopped, 'report')}`} id="fixes-stopped" icon={<IconAlertTriangle />}>
+      {/* The definition is the ⓘ on the Stopped number; only the coverage caveat stays. */}
+      {stopped > listed && <p className="mb-2 text-2xs text-fg-muted">Reasons for the newest {listed}.</p>}
+      <ul className="divide-y divide-edge-subtle" data-testid="fixes-stopped-reasons">
+        {reasons.map((r) => (
+          <li key={r.cause} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2" data-testid={`fixes-stopped-${r.cause}`}>
+            {/* How many stopped on this reason, as a bar against the biggest reason. */}
+            <BarCell value={r.fixes.length} max={maxStopped} tone="danger" text={r.fixes.length} widthClass="w-12" className="shrink-0" />
+            <button
+              type="button"
+              onClick={() => onShowCause(r.cause)}
+              className="min-w-0 flex-1 basis-40 text-left text-xs font-medium text-fg hover:underline"
+              title={`Show the ${r.fixes.length} stopped ${pluralize(r.fixes.length, 'report')} in the list below`}
+            >
+              {r.label}
+            </button>
+            {r.retryable.length > 0 ? (
+              <Btn
+                size="sm"
+                variant="ghost"
+                disabled={busy}
+                onClick={() => onRetry(r.retryable, r.label)}
+                title="Runs a coding agent again on each report; spends LLM budget. You confirm first."
+                data-testid={`fixes-stopped-${r.cause}-retry`}
+              >
+                Retry {r.retryable.length}
+              </Btn>
+            ) : (
+              <span className="basis-full pl-24 text-2xs text-fg-muted sm:basis-auto sm:pl-0" data-testid={`fixes-stopped-${r.cause}-no-retry`}>
+                {r.noRetry}
+                {r.fix && (
+                  <Link to={r.fix.to} className="ml-1.5 font-medium text-brand hover:underline">
+                    {r.fix.label} →
+                  </Link>
                 )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-
-      {reasons.length > 0 && (
-        <Section title={`Stopped: ${stopped} ${pluralize(stopped, 'report')}`} id="fixes-stopped" icon={<IconAlertTriangle />}>
-          {/* The definition is the ⓘ on the Stopped number; only the coverage caveat stays. */}
-          {stopped > listed && <p className="mb-2 text-2xs text-fg-muted">Reasons for the newest {listed}.</p>}
-          <ul className="divide-y divide-edge-subtle" data-testid="fixes-stopped-reasons">
-            {reasons.map((r) => (
-              <li key={r.cause} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2" data-testid={`fixes-stopped-${r.cause}`}>
-                {/* How many stopped on this reason, as a bar against the biggest reason. */}
-                <BarCell value={r.fixes.length} max={maxStopped} tone="danger" text={r.fixes.length} widthClass="w-12" className="shrink-0" />
-                <button
-                  type="button"
-                  onClick={() => onShowCause(r.cause)}
-                  className="min-w-0 flex-1 basis-40 text-left text-xs font-medium text-fg hover:underline"
-                  title={`Show the ${r.fixes.length} stopped ${pluralize(r.fixes.length, 'report')} in the list below`}
-                >
-                  {r.label}
-                </button>
-                {r.retryable.length > 0 ? (
-                  <Btn
-                    size="sm"
-                    variant="ghost"
-                    disabled={busy}
-                    onClick={() => onRetry(r.retryable, r.label)}
-                    title="Runs a coding agent again on each report; spends LLM budget. You confirm first."
-                    data-testid={`fixes-stopped-${r.cause}-retry`}
-                  >
-                    Retry {r.retryable.length}
-                  </Btn>
-                ) : (
-                  <span className="basis-full pl-24 text-2xs text-fg-muted sm:basis-auto sm:pl-0" data-testid={`fixes-stopped-${r.cause}-no-retry`}>
-                    {r.noRetry}
-                    {r.fix && (
-                      <Link to={r.fix.to} className="ml-1.5 font-medium text-brand hover:underline">
-                        {r.fix.label} →
-                      </Link>
-                    )}
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
-        </Section>
-      )}
-    </div>
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </Section>
   )
 }

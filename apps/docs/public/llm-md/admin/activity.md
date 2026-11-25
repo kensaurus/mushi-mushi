@@ -9,8 +9,8 @@ description: The User activity view on Home in the Mushi Mushi console shows an 
 
 # User activity
 
-**Route:** `/dashboard?view=users` (**Home → User activity**). The old `/activity` link
-redirects there.
+**Route:** `/portfolio?view=users` (**Apps → User activity**). The old `/activity` and
+`/dashboard?view=users` links redirect there.
 
 > **Scenario:** You want to know whether end users are actually opening sessions
 > in this project, which routes they hit, and how many of them are identified

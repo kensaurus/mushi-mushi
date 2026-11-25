@@ -73,7 +73,7 @@ provider or plugin.
 
 ### 3. In the console
 
-Open your app in the console, then **Connect → Bug capture SDK**. Accent
+Open your app in the console, then **Connect → Report button → Customize the report button**. Accent
 colour, position, theme, launcher style, launcher label and the banner look
 can change there without a redeploy ([runtime config](/concepts/runtime-config)).
 For a colour, Mushi picks black or white text with at least 3:1 contrast. The

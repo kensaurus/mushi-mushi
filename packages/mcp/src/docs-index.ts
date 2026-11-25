@@ -147,7 +147,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/connect",
     markdown: "admin/connect.md",
     keywords: ["admin", "connect"],
-    headings: ["Client picker (3 lanes)", "Sections", "Native app CI secrets", "SDK upgrade PR", "Quick path (5 minutes)", "Connect GitHub", "Install SDK", "Wire MCP"],
+    headings: ["Steps", "Once the app checks in", "Native app CI secrets", "SDK upgrade PR", "Quick path (5 minutes)", "Add the report button", "Wire MCP", "Connect GitHub"],
     excerpt: "The Connect page wires GitHub, the SDK, MCP, the CLI and your editor to a Mushi Mushi project, and shows when your installed SDK is out of date.",
   },
   {
@@ -421,13 +421,13 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "The Ops page in Mushi Mushi shows every app's payments, releases and alerts in one feed, which app is not reporting, and what is still open.",
   },
   {
-    title: "Overview (Home view)",
+    title: "Overview (Apps view)",
     url: docUrl("/admin/overview"),
     route: "/admin/overview",
     markdown: "admin/overview.md",
-    keywords: ["admin", "overview", "home", "view"],
+    keywords: ["admin", "overview", "apps", "view"],
     headings: ["What you see", "Data source", "Related"],
-    excerpt: "The Overview view on Home in the Mushi Mushi console shows seven-day activity and open bugs for every connected app in a team at a glance.",
+    excerpt: "The Overview view on Apps in the Mushi Mushi console shows seven-day activity and open bugs for every connected app in a team at a glance.",
   },
   {
     title: "Pipeline",

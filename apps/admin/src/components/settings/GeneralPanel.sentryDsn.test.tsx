@@ -84,7 +84,8 @@ describe('GeneralPanel Sentry DSN field', () => {
 
   async function render(): Promise<void> {
     await act(async () => {
-      root.render(createElement(MemoryRouter, null, createElement(GeneralPanel)))
+      // Sentry and the webhook sit in the Advanced group (ADR 0069); a link into it opens it.
+      root.render(createElement(MemoryRouter, { initialEntries: ['/settings#error-tracking'] }, createElement(GeneralPanel)))
       for (let i = 0; i < 5; i += 1) await Promise.resolve()
     })
   }
