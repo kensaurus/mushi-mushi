@@ -140,6 +140,22 @@ describe('widget submit outcome', { timeout: 15_000 }, () => {
     expect(reportPosts).toBe(1);
   });
 
+  it('closing right after Send and reopening starts a fresh report, not the old receipt', async () => {
+    const sdk = Mushi.init(CONFIG);
+    sdk.report();
+    typeAndSend('The checkout button does nothing');
+    await vi.waitFor(() => expect(reportPosts).toBe(1), WAIT);
+    // Within the 500 ms before the receipt shows.
+    sdk.close();
+    sdk.report();
+    const ta = shadow().querySelector('textarea.mushi-textarea') as HTMLTextAreaElement;
+    ta.value = 'A second, different problem';
+    ta.dispatchEvent(new Event('input'));
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    expect(shadow().querySelector('.mushi-success')).toBeNull();
+    expect((shadow().querySelector('textarea.mushi-textarea') as HTMLTextAreaElement).value).toBe('A second, different problem');
+  });
+
   it('the not-sent line clears when the next send goes through', async () => {
     Mushi.init(CONFIG).report();
     typeAndSend('zzzzzzzzzzzzzzz');
