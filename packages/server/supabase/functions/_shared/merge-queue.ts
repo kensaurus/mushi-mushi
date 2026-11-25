@@ -50,6 +50,20 @@ export interface ChecksView {
 export const ADVISORY_CHECKS: ReadonlySet<string> = new Set(['Compare @mushi-mushi/* to npm latest'])
 
 /**
+ * Whether a check holds a PR or a train. When the base branch's rules name
+ * required checks, only those do: the repo has said what blocks a merge, and
+ * every other check is advisory. glot.it requires only "gate"; its advisory
+ * "v3 mobile visual regression (PR)" ran on trains alone, failed on stale
+ * baselines, and Mushi bisected 2026-11-25's trains down to single fixes and
+ * held each one for a check none of them broke. With no required checks
+ * declared, every check holds, except ADVISORY_CHECKS.
+ */
+function checkHolds(name: string, required: ReadonlySet<string> = new Set()): boolean {
+  if (ADVISORY_CHECKS.has(name)) return false
+  return required.size === 0 || required.has(name)
+}
+
+/**
  * Whether a head's failed checks are the base branch's, not its own: at
  * least one also fails on the base, and every other one fails there too or
  * did not run there. The second rule sees through aggregator jobs: glot.it's
@@ -135,9 +149,15 @@ export function reviewRefusal(
  * that ran more than once counts by its newest run: a draft's CI stops on
  * purpose ("Draft PRs run no CI") and runs again on the same commit once
  * the PR is marked ready, so the old stop must not read as a failure.
- * ADVISORY_CHECKS never wait or fail, but still count as having run.
+ * Checks that do not hold (`checkHolds`) never wait or fail, but still count
+ * as having run. A required check with no run yet is pending: an aggregate
+ * like "gate" needs every other job, so it appears last, and its absence must
+ * not read as green.
  */
-export function checksView(runs: Array<{ id?: number; name?: string; status?: string; conclusion?: string | null; started_at?: string | null }>): ChecksView {
+export function checksView(
+  runs: Array<{ id?: number; name?: string; status?: string; conclusion?: string | null; started_at?: string | null }>,
+  required: ReadonlySet<string> = new Set(),
+): ChecksView {
   const newest = new Map<string, (typeof runs)[number]>()
   runs.forEach((r, i) => {
     const key = r.name ?? `#${i}`
@@ -148,8 +168,9 @@ export function checksView(runs: Array<{ id?: number; name?: string; status?: st
   let pending = 0
   const failed: string[] = []
   const ran: string[] = []
+  for (const name of required) if (!ADVISORY_CHECKS.has(name) && !newest.has(name)) pending++
   for (const r of newest.values()) {
-    const advisory = ADVISORY_CHECKS.has(r.name ?? '')
+    const advisory = !checkHolds(r.name ?? '', required)
     if (r.status !== 'completed') {
       if (!advisory) pending++
     } else {

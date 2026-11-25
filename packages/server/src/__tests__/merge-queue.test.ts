@@ -79,6 +79,31 @@ describe('checksView / conflictPrompt / queueLine', () => {
     // Only the exact name: a required check that fails still fails.
     expect(checksView([{ name: `${name} (required)`, status: 'completed', conclusion: 'failure' }]).failed).toEqual([`${name} (required)`])
   })
+  it('holds only on the checks the base branch requires, when it names any (glot.it trains, 2026-11-25)', () => {
+    const required = new Set(['gate'])
+    const v3 = 'v3 mobile visual regression (PR)'
+    // The advisory visual job failed every train; "gate" passed. That train is green.
+    expect(
+      checksView(
+        [
+          { name: v3, status: 'completed', conclusion: 'failure' },
+          { name: 'gate', status: 'completed', conclusion: 'success' },
+        ],
+        required,
+      ),
+    ).toEqual({ pending: 0, failed: [], ran: [v3, 'gate'] })
+    // A non-required check still running does not hold it either.
+    expect(checksView([{ name: v3, status: 'in_progress' }, { name: 'gate', status: 'completed', conclusion: 'success' }], required).pending).toBe(0)
+    // A failing required check still fails.
+    expect(checksView([{ name: 'gate', status: 'completed', conclusion: 'failure' }], required).failed).toEqual(['gate'])
+    // No rules declared: every check holds, as before.
+    expect(checksView([{ name: v3, status: 'completed', conclusion: 'failure' }]).failed).toEqual([v3])
+  })
+  it('waits for a required check that has not reported yet (an aggregate appears last)', () => {
+    const required = new Set(['gate'])
+    expect(checksView([{ name: 'Lint & Build', status: 'completed', conclusion: 'success' }], required)).toEqual({ pending: 1, failed: [], ran: ['Lint & Build'] })
+    expect(checksView([], required).pending).toBe(1)
+  })
   it('counts a check by its newest run, so a draft guard stop is gone once CI ran after mark-ready', () => {
     expect(
       checksView([
