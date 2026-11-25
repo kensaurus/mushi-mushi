@@ -69,6 +69,8 @@ export async function mintInstallationAccess(installationId: number): Promise<{ 
 
 type InstallationAccess = { token: string; permissions: Record<string, string> | null }
 const INSTALLATION_TOKEN_REUSE_MARGIN_MS = 5 * 60_000
+const INSTALLATION_TOKEN_MINT_ATTEMPTS = 3
+const INSTALLATION_TOKEN_RETRY_BASE_MS = 250
 const installationTokenCache = new Map<number, { access: InstallationAccess; expiresMs: number }>()
 const installationTokenInflight = new Map<number, Promise<InstallationAccess>>()
 
@@ -96,18 +98,28 @@ async function mintInstallationAccessUncached(installationId: number): Promise<{
     .replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')
   const jwt = `${data}.${sigB64}`
 
-  const res = await fetchWithTimeout(
-    `https://api.github.com/app/installations/${installationId}/access_tokens`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${jwt}`,
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
+  // GitHub answers the token exchange with a transient 502/503/504 now and
+  // then; one such blip failed the whole mint (report bfba2dfe). Retry 5xx a
+  // couple of times with a short backoff; 4xx (bad JWT, removed install) fails
+  // at once.
+  let res: Response | null = null
+  for (let attempt = 0; attempt < INSTALLATION_TOKEN_MINT_ATTEMPTS; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, INSTALLATION_TOKEN_RETRY_BASE_MS * attempt))
+    res = await fetchWithTimeout(
+      `https://api.github.com/app/installations/${installationId}/access_tokens`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${jwt}`,
+          Accept: 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
       },
-    },
-  )
-  if (!res.ok) throw new Error(`installation token mint failed: ${res.status}`)
+    )
+    if (res.ok || res.status < 500) break
+    await res.body?.cancel().catch(() => {})
+  }
+  if (!res || !res.ok) throw new Error(`installation token mint failed: ${res?.status ?? 'no response'}`)
   const body = await res.json() as { token: string; expires_at?: string; permissions?: Record<string, string> }
   // GitHub states the expiry; without a readable one, assume the shortest
   // reuse that still helps one page view (10 minutes).

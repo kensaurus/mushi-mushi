@@ -16,7 +16,8 @@ const github = await import('../../supabase/functions/_shared/github.ts')
 
 const realFetch = globalThis.fetch
 let mints = 0
-let failNext = false
+let failNext = 0
+let failStatus = 502
 let expiresInMs = 60 * 60_000
 
 beforeAll(async () => {
@@ -33,14 +34,15 @@ beforeAll(async () => {
 beforeEach(() => {
   github.clearInstallationTokenCache()
   mints = 0
-  failNext = false
+  failNext = 0
+  failStatus = 502
   expiresInMs = 60 * 60_000
   globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
     expect(String(url)).toMatch(/\/app\/installations\/\d+\/access_tokens$/)
     mints++
-    if (failNext) {
-      failNext = false
-      return new Response('{}', { status: 502 })
+    if (failNext > 0) {
+      failNext--
+      return new Response('{}', { status: failStatus })
     }
     return new Response(
       JSON.stringify({ token: `ghs_${mints}`, expires_at: new Date(Date.now() + expiresInMs).toISOString(), permissions: { contents: 'write' } }),
@@ -77,8 +79,22 @@ describe('installation token cache', () => {
   })
 
   it('does not cache a failed mint', async () => {
-    failNext = true
+    failNext = 3
     await expect(github.mintInstallationToken(42)).rejects.toThrow(/mint failed: 502/)
+    expect(mints).toBe(3)
+    expect(await github.mintInstallationToken(42)).toBe('ghs_4')
+  })
+
+  it('retries a transient 502 from GitHub and succeeds', async () => {
+    failNext = 1
     expect(await github.mintInstallationToken(42)).toBe('ghs_2')
+    expect(mints).toBe(2)
+  })
+
+  it('does not retry a 4xx', async () => {
+    failNext = 1
+    failStatus = 401
+    await expect(github.mintInstallationToken(42)).rejects.toThrow(/mint failed: 401/)
+    expect(mints).toBe(1)
   })
 })
