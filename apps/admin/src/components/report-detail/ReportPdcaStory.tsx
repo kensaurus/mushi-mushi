@@ -79,6 +79,8 @@ interface Props {
   showInternals?: boolean
   /** The page's dispatch gate: with `setup`, "Fix written" says what to set up first. */
   dispatchBlock?: { blocked: boolean; setup?: DispatchSetupSteps | null }
+  /** Inside another card (the page folds it under the Progress line, ADR 0069): no card of its own. */
+  bare?: boolean
 }
 
 /**
@@ -92,12 +94,10 @@ const STEP_NAME: Partial<Record<PdcaStageId, string>> = {
   act: 'Fix live',
 }
 
-export function ReportPdcaStory({ report, dispatchState, showInternals = false, dispatchBlock }: Props) {
+export function ReportPdcaStory({ report, dispatchState, showInternals = false, dispatchBlock, bare = false }: Props) {
   const nodes = buildStoryNodes(report, dispatchState, showInternals, dispatchBlock?.blocked ? dispatchBlock.setup ?? null : null)
-  return (
-    // The heading sits outside the list: an <ol> may only hold <li>, and a
-    // <header> inside it broke the list for screen readers (REPORT A14).
-    <Card className="relative mb-3 p-3 motion-safe:animate-mushi-fade-in">
+  const body = (
+    <>
       {/* No "Explained → Fix written → …" chain beside the heading: the four
           rows are that chain (round-3 sweep 2026-11-19). */}
       <h3 className="mb-2 text-2xs font-semibold text-fg-secondary">The story so far</h3>
@@ -108,8 +108,12 @@ export function ReportPdcaStory({ report, dispatchState, showInternals = false, 
           return <StoryRow key={id} node={node} isLast={isLast} />
         })}
       </ol>
-    </Card>
+    </>
   )
+  // The heading sits outside the list: an <ol> may only hold <li>, and a
+  // <header> inside it broke the list for screen readers (REPORT A14).
+  if (bare) return <div className="relative" data-testid="report-story">{body}</div>
+  return <Card className="relative mb-3 p-3 motion-safe:animate-mushi-fade-in">{body}</Card>
 }
 
 function StoryRow({ node, isLast }: { node: StoryNode; isLast: boolean }) {
@@ -271,8 +275,8 @@ export function buildStoryNodes(
       ? 'done'
       : 'pending'
   const planHeadline = classifyFailed
-    // The raw error lives once, screened, behind the Pipeline strip's Details (console 2026-11-19).
-    ? 'Classification failed. The Pipeline strip below says why and has a Retry button.'
+    // The raw error lives once, screened, behind the Progress line's Details (console 2026-11-19).
+    ? 'Classification failed. The Progress line says why and has a Retry button.'
     : classified
       // The summary shows once, higher up (summaryPlace); the step says what was decided.
       ? `Sorted as ${(CATEGORY_LABELS[report.category] ?? report.category ?? 'a report').toLowerCase()}`
