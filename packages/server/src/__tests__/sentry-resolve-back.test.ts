@@ -30,6 +30,7 @@ interface State {
   /** What each update wrote, in order (stamped holds the row ids). */
   updates?: Row[]
   fixEventError?: { code: string; message: string } | null
+  updateError?: { message: string } | null
 }
 
 function makeDb(state: State) {
@@ -52,7 +53,7 @@ function makeDb(state: State) {
         eq: (_c: string, id: string) => {
           state.stamped.push(id)
           ;(state.updates ??= []).push(row)
-          return Promise.resolve({ error: null })
+          return Promise.resolve({ error: state.updateError ?? null })
         },
       }),
     }
@@ -212,6 +213,15 @@ describe('resolveLinkedSentryIssues', () => {
     expect(result.resolved).toEqual([])
     expect(result.selfResolving).toEqual(['4501'])
     expect(state.stamped).toEqual(['l1'])
+    expect(state.fixEvents).toEqual([])
+  })
+
+  it('does not report a metric-alert link closed when the close stamp fails', async () => {
+    state.updateError = { message: 'connection reset' }
+    const fetchImpl = async () => json({ detail: 'Cannot manually resolve one or more issues.' }, 400)
+    const result = await rb.resolveLinkedSentryIssues(makeDb(state), input, { credentials: creds, fetchImpl })
+    expect(result.selfResolving).toBeUndefined()
+    expect(result.failed).toEqual([{ issueId: '4501', error: 'resolved_at stamp failed: connection reset' }])
     expect(state.fixEvents).toEqual([])
   })
 

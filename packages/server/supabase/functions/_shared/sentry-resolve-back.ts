@@ -299,16 +299,27 @@ export async function resolveLinkedSentryIssues(
       });
       result.resolved.push(link.external_id);
     } catch (err) {
-      if (isGoneInSentry(err)) {
-        // Nothing left to resolve; stamp it so no caller retries it forever.
-        await db.from('report_external_issues').update({ resolved_at: new Date().toISOString(), archived_at: null }).eq('id', link.id);
+      const gone = isGoneInSentry(err);
+      if (gone || isNotManuallyResolvable(err)) {
+        // Nothing to resolve by hand (deleted, or a metric alert Sentry closes
+        // itself); stamp the link so no caller retries it forever. A failed
+        // stamp leaves the link open, so it is reported as failed, not closed.
+        const { error: stampErr } = await db
+          .from('report_external_issues')
+          .update({ resolved_at: new Date().toISOString(), archived_at: null })
+          .eq('id', link.id);
+        if (stampErr) {
+          log.error('Sentry link close stamp failed', { linkId: link.id, issueId: link.external_id, err: stampErr.message });
+          result.failed.push({ issueId: link.external_id, error: `resolved_at stamp failed: ${stampErr.message}` });
+          continue;
+        }
+      }
+      if (gone) {
         log.warn('Sentry issue no longer exists; link closed', { projectId, reportId, issueId: link.external_id });
         (result.gone ??= []).push(link.external_id);
         continue;
       }
       if (isNotManuallyResolvable(err)) {
-        // Sentry closes these itself (metric alerts); stamp the link so nothing retries it.
-        await db.from('report_external_issues').update({ resolved_at: new Date().toISOString(), archived_at: null }).eq('id', link.id);
         log.info('Sentry issue resolves itself (metric alert); link closed', { projectId, reportId, issueId: link.external_id });
         (result.selfResolving ??= []).push(link.external_id);
         continue;
