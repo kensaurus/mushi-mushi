@@ -81,7 +81,7 @@ npm org: https://www.npmjs.com/org/mushi-mushi
 - [Reporter updates](https://kensaur.us/mushi-mushi/docs/admin/notifications): The Reporter updates page in Mushi Mushi lists widget messages your reporters see, so you can check they hear back when a bug is diagnosed, fixed and shipped.
 - [Onboarding](https://kensaur.us/mushi-mushi/docs/admin/onboarding): Get your first bug report into Mushi Mushi with the console's Set up page, from naming your project to a report with a plain-English diagnosis.
 - [Ops](https://kensaur.us/mushi-mushi/docs/admin/ops): The Ops page in Mushi Mushi shows every app's payments, releases and alerts in one feed, which app is not reporting, and what is still open.
-- [Overview (Home view)](https://kensaur.us/mushi-mushi/docs/admin/overview): The Overview view on Home in the Mushi Mushi console shows seven-day activity and open bugs for every connected app in a team at a glance.
+- [Overview (Apps view)](https://kensaur.us/mushi-mushi/docs/admin/overview): The Overview view on Apps in the Mushi Mushi console shows seven-day activity and open bugs for every connected app in a team at a glance.
 - [Pipeline](https://kensaur.us/mushi-mushi/docs/admin/pipeline): The Pipeline page in the Mushi Mushi console shows every bug from report to deploy, where it is stuck and why, with one-click fixes.
 - [Apps (all apps)](https://kensaur.us/mushi-mushi/docs/admin/portfolio): The Apps page in Mushi Mushi shows every app in a team, with each app's worst recipe state, hole checks and SDK version, plus fixes that apply across apps.
 - [Manage apps](https://kensaur.us/mushi-mushi/docs/admin/projects): Create a Mushi Mushi project, mint an API key, copy the install snippet for your framework and send a test report, all from the Manage apps page.
