@@ -203,6 +203,18 @@ describe('resolveLinkedSentryIssues', () => {
     expect(String(state.fixEvents[0].detail)).toContain('event:write')
   })
 
+  // 2026-11-24: marking GLOT-IT-F1's report fixed (a metric-alert issue) raised
+  // two Sentry errors and a "not resolved, fix the token" event.
+  it('closes a metric-alert issue Sentry will not resolve by hand, without a failure', async () => {
+    const fetchImpl = async () => json({ detail: 'Cannot manually resolve one or more issues.' }, 400)
+    const result = await rb.resolveLinkedSentryIssues(makeDb(state), input, { credentials: creds, fetchImpl })
+    expect(result.failed).toEqual([])
+    expect(result.resolved).toEqual([])
+    expect(result.selfResolving).toEqual(['4501'])
+    expect(state.stamped).toEqual(['l1'])
+    expect(state.fixEvents).toEqual([])
+  })
+
   it('a redelivered failure hits the dedupe key instead of throwing or stacking', async () => {
     state.fixEventError = { code: '23505', message: 'duplicate key value violates unique constraint' }
     const fetchImpl = async () => json({ detail: 'nope' }, 403)
