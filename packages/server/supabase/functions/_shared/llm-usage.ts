@@ -23,6 +23,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { extractAnthropicCacheUsage, logLlmInvocation, type LlmInvocationRecord } from './telemetry.ts'
 import { sanitizeLlmError } from './llm-error-sanitize.ts'
 import { isKnownModel } from './llm-cost.ts'
+import { takeVendorCost } from './vendor-cost.ts'
 
 export interface LlmTokenUsage {
   inputTokens: number | null
@@ -135,6 +136,7 @@ export function buildLlmUsageRecord(ctx: LlmUsageContext, outcome: LlmUsageOutco
   const resultObj = (outcome.result ?? null) as {
     experimental_providerMetadata?: unknown
     providerMetadata?: unknown
+    response?: { id?: unknown }
   } | null
   const cache = extractAnthropicCacheUsage(
     resultObj?.experimental_providerMetadata ?? resultObj?.providerMetadata,
@@ -161,6 +163,8 @@ export function buildLlmUsageRecord(ctx: LlmUsageContext, outcome: LlmUsageOutco
     cacheCreationInputTokens: cache.cacheCreationInputTokens,
     cacheReadInputTokens: cache.cacheReadInputTokens,
     skipHostedBilling: ctx.skipHostedBilling === true || ctx.billHosted !== true,
+    // What the provider said the call cost (OpenRouter), keyed by its generation id.
+    vendorCostUsd: failed ? null : takeVendorCost(typeof resultObj?.response?.id === 'string' ? resultObj.response.id : null),
   }
 }
 

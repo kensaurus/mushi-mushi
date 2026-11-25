@@ -12,6 +12,12 @@
  * effective_to); a correction is a newer override. Rates arrive here in USD
  * per 1M tokens, as a person reads them off a pricing page, and are stored
  * as integer micro-USD.
+ *
+ * Bridge contract (kensaurus-wallet-api `price_override`, yen-yen #638): a
+ * strict payload (an unknown key is a 400), `source` is always set to
+ * 'manual' by the server and may not be sent, `note` is required (3-500
+ * chars), created_by is stored as 'mushi:<created_by>'. 201 {override},
+ * 409 override-exists, 400 override-invalid.
  */
 
 export interface PriceOverrideInput {
@@ -21,7 +27,7 @@ export interface PriceOverrideInput {
   outputUsdPerMTok: number
   cachedInputUsdPerMTok?: number | null
   sourceUrl?: string | null
-  note?: string | null
+  note: string
 }
 
 export type ParsedOverride = { ok: true; value: PriceOverrideInput } | { ok: false; error: string }
@@ -54,7 +60,9 @@ export function parsePriceOverride(body: unknown): ParsedOverride {
   if (typeof cached === 'string') return { ok: false, error: cached }
   const sourceUrl = typeof b.source_url === 'string' && b.source_url.trim() ? b.source_url.trim() : null
   if (sourceUrl && !/^https:\/\/\S{3,300}$/.test(sourceUrl)) return { ok: false, error: 'source_url must be an https link to the price' }
-  const note = typeof b.note === 'string' ? b.note.trim().slice(0, 200) || null : null
+  const typed = typeof b.note === 'string' ? b.note.trim().slice(0, 500) : ''
+  // The bridge requires a note: say where the price came from when the person did not.
+  const note = typed.length >= 3 ? typed : `Added in the Mushi Mushi console for unpriced ${model}${sourceUrl ? ` (${sourceUrl})` : ''}`.slice(0, 500)
   return {
     ok: true,
     value: { provider, model, inputUsdPerMTok: input!, outputUsdPerMTok: output!, cachedInputUsdPerMTok: cached, sourceUrl, note },
@@ -71,10 +79,9 @@ export function overrideRow(v: PriceOverrideInput, createdBy: string, now: Date)
     unit_kind: 'tokens',
     input_per_mtok_micro: micros(v.inputUsdPerMTok),
     output_per_mtok_micro: micros(v.outputUsdPerMTok),
-    cached_input_per_mtok_micro: v.cachedInputUsdPerMTok == null ? null : micros(v.cachedInputUsdPerMTok),
-    source: 'manual',
-    source_url: v.sourceUrl ?? null,
-    note: v.note ?? null,
+    ...(v.cachedInputUsdPerMTok == null ? {} : { cached_input_per_mtok_micro: micros(v.cachedInputUsdPerMTok) }),
+    ...(v.sourceUrl ? { source_url: v.sourceUrl } : {}),
+    note: v.note,
     effective_from: now.toISOString(),
     created_by: createdBy.slice(0, 120),
   }
@@ -85,7 +92,7 @@ const PRICE_OVERRIDE_ACTION = 'price_override'
 
 export type WriteOverrideResult =
   | { ok: true; row: Record<string, unknown> }
-  | { ok: false; status: number; code: 'NOT_CONFIGURED' | 'BRIDGE_UNSUPPORTED' | 'BRIDGE_ERROR'; message: string }
+  | { ok: false; status: number; code: 'NOT_CONFIGURED' | 'BRIDGE_UNSUPPORTED' | 'BRIDGE_ERROR' | 'OVERRIDE_EXISTS' | 'OVERRIDE_INVALID'; message: string }
 
 /** POST the row to kensaurus-wallet-api. Never throws. */
 export async function writePriceOverride(
@@ -108,8 +115,14 @@ export async function writePriceOverride(
       }),
       signal: AbortSignal.timeout(8_000),
     })
+    if (res.status === 409) {
+      return { ok: false, status: 409, code: 'OVERRIDE_EXISTS', message: 'A price for this model starting at this moment already exists. Reload; it is in force.' }
+    }
     if (res.status === 400) {
       const text = await res.text().catch(() => '')
+      if (text.includes('override-invalid')) {
+        return { ok: false, status: 400, code: 'OVERRIDE_INVALID', message: 'The price book refused these rates. Check the input and output prices.' }
+      }
       // A bridge without the action rejects the enum value as an invalid body.
       return { ok: false, status: 501, code: 'BRIDGE_UNSUPPORTED', message: `The price book bridge refused the override (${text.slice(0, 160) || 'invalid body'}).` }
     }

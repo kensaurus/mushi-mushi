@@ -120,6 +120,12 @@ export interface LlmInvocationRecord {
    * decision, not a side effect of recording the spend.
    */
   skipHostedBilling?: boolean
+  /**
+   * The cost the provider itself reported for this call (OpenRouter's
+   * usage.cost). When set it is stored as the row's cost with price_source
+   * 'vendor_actual': an actual charge beats the catalog estimate.
+   */
+  vendorCostUsd?: number | null
 }
 
 /**
@@ -148,14 +154,26 @@ export function logLlmInvocation(
   // stores which price was used (price_source / price_version / price_tier),
   // or cost_usd NULL with unpriced_reason when the book has no price.
   // priceLlmCall never rejects.
-  const done = priceLlmCall({
-    model: rec.usedModel,
-    inputTokens: rec.inputTokens,
-    outputTokens: rec.outputTokens,
-    cacheReadTokens: rec.cacheReadInputTokens,
-    cacheWriteTokens: rec.cacheCreationInputTokens,
-    units: rec.billableUnits,
-  }).then((cost) => recordInvocation(db, rec, cost))
+  const vendor = rec.vendorCostUsd
+  const priced: Promise<LlmCost> = typeof vendor === 'number' && Number.isFinite(vendor) && vendor >= 0
+    ? Promise.resolve({
+        costUsd: vendor,
+        source: 'vendor_actual',
+        version: null,
+        tier: null,
+        unpricedReason: null,
+        provider: 'vendor',
+        model: rec.usedModel,
+      })
+    : priceLlmCall({
+        model: rec.usedModel,
+        inputTokens: rec.inputTokens,
+        outputTokens: rec.outputTokens,
+        cacheReadTokens: rec.cacheReadInputTokens,
+        cacheWriteTokens: rec.cacheCreationInputTokens,
+        units: rec.billableUnits,
+      })
+  const done = priced.then((cost) => recordInvocation(db, rec, cost))
   // Most callers fire and forget (`void logLlmInvocation(...)`). The price
   // lookup now sits before the insert, so keep the isolate alive until the
   // row (and the hosted debit it schedules) is written.

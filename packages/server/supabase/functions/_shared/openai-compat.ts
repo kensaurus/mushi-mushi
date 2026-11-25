@@ -14,6 +14,7 @@
 import { createOpenAI } from 'npm:@ai-sdk/openai@1'
 import { isOpenRouterBaseUrl, openAiCompatibleModelId } from './openai-model-id.ts'
 import { withRouteParamsFetch } from './route-request-params.ts'
+import { withOpenRouterCostCapture } from './vendor-cost.ts'
 
 // The id rule lives in an npm-free module so raw-fetch callers can use it
 // without loading the AI SDK. Inside the api function, import this module
@@ -34,7 +35,11 @@ export function openAiProvider(options: OpenAiOptions): OpenAiProvider {
   // calls only (route-request-params.ts); the max_completion_tokens rewrite
   // runs on OpenAI's own host.
   const routed = withRouteParamsFetch(options.fetch ?? fetch)
-  const base = createOpenAI({ ...options, fetch: isOpenAiHost(options.baseURL) ? withMaxCompletionTokens(routed) : routed })
+  // OpenRouter reports what each call cost; keep it for the usage row (vendor-cost.ts).
+  const host = isOpenAiHost(options.baseURL) ? withMaxCompletionTokens(routed)
+    : isOpenRouterBaseUrl(options.baseURL) ? withOpenRouterCostCapture(routed)
+    : routed
+  const base = createOpenAI({ ...options, fetch: host })
   const make = ((modelId: string, settings?: unknown) =>
     jsonObjectMode((base as unknown as (id: string, s?: unknown) => unknown)(openAiCompatibleModelId(modelId, options.baseURL), settings))
   ) as unknown as OpenAiProvider

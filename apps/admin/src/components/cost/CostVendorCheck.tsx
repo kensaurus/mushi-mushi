@@ -9,7 +9,7 @@
 
 import { usePageData } from '../../lib/usePageData'
 import { StatusMark } from '../signal/StatusMark'
-import { Btn } from '../ui'
+import { Link } from 'react-router-dom'
 import type { CostReconciliation } from './types'
 import { vendorCheckLines } from './vendorCheck'
 
@@ -20,23 +20,36 @@ export function CostVendorCheck({ projectId }: { projectId: string }) {
   const anyKey = page.data.providers.some((p) => p.hasAdminKey)
   return (
     <section aria-labelledby="cost-vendor-check-title" className="rounded-md border border-edge bg-surface p-3" data-testid="cost-vendor-check">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 id="cost-vendor-check-title" className="text-xs font-semibold text-fg">Checked against the provider's bill</h3>
-        {!anyKey && (
-          <Btn size="sm" variant="ghost" to="/portfolio?tab=spend#portfolio-connectors">
-            Add an admin key
-          </Btn>
-        )}
-      </div>
-      <ul className="mt-1 space-y-0.5">
-        {lines.map((l) => (
-          <li key={l.provider} className="flex items-start gap-1.5 text-2xs text-fg-secondary">
-            <StatusMark status={l.status} className="mt-0.5" />
-            <span>{l.text}</span>
-          </li>
-        ))}
-      </ul>
-      <p className="mt-1 text-2xs text-fg-muted">A difference above 3% raises an alert in Ops.</p>
+      <h3 id="cost-vendor-check-title" className="text-xs font-semibold text-fg">Checked against the provider's bill</h3>
+      {!anyKey ? (
+        <div className="mt-1 space-y-1 text-2xs text-fg-secondary" data-testid="cost-vendor-check-no-key">
+          <p className="flex items-start gap-1.5">
+            <StatusMark status="idle" className="mt-0.5" />
+            <span>Add an OpenAI / Anthropic admin key to compare against your bill.</span>
+          </p>
+          <p className="flex flex-wrap items-center gap-x-3 gap-y-1 pl-4">
+            <a href="https://platform.openai.com/settings/organization/admin-keys" target="_blank" rel="noreferrer" className="text-link underline">
+              OpenAI admin keys
+            </a>
+            <a href="https://console.anthropic.com/settings/admin-keys" target="_blank" rel="noreferrer" className="text-link underline">
+              Anthropic admin keys
+            </a>
+            <Link to="/portfolio?tab=spend#portfolio-connectors" className="text-link underline">
+              Add it under AI provider spend
+            </Link>
+          </p>
+        </div>
+      ) : (
+        <ul className="mt-1 space-y-0.5">
+          {lines.map((l) => (
+            <li key={l.provider} className="flex items-start gap-1.5 text-2xs text-fg-secondary">
+              <StatusMark status={l.status} className="mt-0.5" />
+              <span>{l.text}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="mt-1 text-2xs text-fg-muted">Checked daily. A difference above 3% raises an alert in Ops.</p>
     </section>
   )
 }

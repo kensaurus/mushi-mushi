@@ -64,9 +64,13 @@ describe('price override', () => {
     const row = overrideRow(p.value, 'mushi-console:u1', new Date('2026-11-25T00:00:00Z'))
     expect(row).toMatchObject({
       provider: 'anthropic', model_or_unit: 'claude-new-6', unit_kind: 'tokens',
-      input_per_mtok_micro: 3_000_000, output_per_mtok_micro: 15_000_000, cached_input_per_mtok_micro: null,
-      source: 'manual', effective_from: '2026-11-25T00:00:00.000Z', created_by: 'mushi-console:u1',
+      input_per_mtok_micro: 3_000_000, output_per_mtok_micro: 15_000_000,
+      effective_from: '2026-11-25T00:00:00.000Z', created_by: 'mushi-console:u1',
     })
+    // The bridge's schema is strict: no `source` (always 'manual'), no null optional keys.
+    expect(row).not.toHaveProperty('source')
+    expect(row).not.toHaveProperty('cached_input_per_mtok_micro')
+    expect(String(row.note)).toMatch(/Mushi Mushi console.*claude-new-6/)
   })
 
   it('refuses a missing rate, a typo-sized rate, an unknown provider and a non-https source', () => {
@@ -83,5 +87,9 @@ describe('price override', () => {
     expect(await writePriceOverride({}, { url: 'https://bridge.example', token: 't', fetchImpl: fetchImpl as never })).toMatchObject({ ok: false, code: 'BRIDGE_UNSUPPORTED' })
     const sent = JSON.parse((fetchImpl.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)
     expect(sent).toMatchObject({ action: 'price_override', external_project: 'mushi' })
+    const exists = vi.fn(async () => new Response('{"error":"override-exists"}', { status: 409 }))
+    expect(await writePriceOverride({}, { url: 'https://bridge.example', token: 't', fetchImpl: exists as never })).toMatchObject({ ok: false, code: 'OVERRIDE_EXISTS' })
+    const invalid = vi.fn(async () => new Response('{"error":"override-invalid"}', { status: 400 }))
+    expect(await writePriceOverride({}, { url: 'https://bridge.example', token: 't', fetchImpl: invalid as never })).toMatchObject({ ok: false, code: 'OVERRIDE_INVALID' })
   })
 })

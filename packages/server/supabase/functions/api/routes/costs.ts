@@ -766,12 +766,13 @@ export function registerCostsRoutes(parent: Hono<{ Variables: Variables }>) {
     const parsed = parsePriceOverride(await c.req.json().catch(() => null))
     if (!parsed.ok) return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: parsed.error } }, 400)
     const userId = c.get('userId') as string
-    const row = overrideRow(parsed.value, `mushi-console:${userId}`, new Date())
+    // Stored by the bridge as 'mushi:console:<user id>'.
+    const row = overrideRow(parsed.value, `console:${userId}`, new Date())
     const res = await writePriceOverride(row, {
       url: Deno.env.get('KENSAURUS_WALLET_URL') ?? '',
       token: Deno.env.get('KENSAURUS_WALLET_INTERNAL_TOKEN') ?? '',
     })
-    if (!res.ok) return c.json({ ok: false, error: { code: res.code, message: res.message } }, res.status as 501 | 502 | 503)
+    if (!res.ok) return c.json({ ok: false, error: { code: res.code, message: res.message } }, res.status as 400 | 409 | 501 | 502 | 503)
     // The next call of this model prices from the override; rows already
     // written stay unpriced (the price did not exist when they ran).
     setLlmPriceSource(null)

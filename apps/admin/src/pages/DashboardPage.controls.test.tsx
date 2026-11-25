@@ -229,6 +229,8 @@ vi.mock('../components/dashboard/QuotaBanner', () => ({ QuotaBanner: () => null 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const CONTROLS = 'a[href], button, [role="button"], [role="radio"], [role="tab"], input, select, textarea, summary'
+/** The live re-walk's count (admin 0.1.735, 2026-11-25): buttons, links, selects and inputs. */
+const LIVE_CONTROLS = 'a[href], button, select, input'
 
 function measure(el: Element) {
   const words: string[] = []
@@ -236,6 +238,7 @@ function measure(el: Element) {
   for (let n = walker.nextNode(); n; n = walker.nextNode()) words.push(...(n.textContent ?? '').split(/\s+/).filter(Boolean))
   return {
     controls: el.querySelectorAll(CONTROLS).length,
+    liveControls: el.querySelectorAll(LIVE_CONTROLS).length,
     words: words.length,
     viewTabs: el.querySelectorAll('[role="radiogroup"] [role="radio"], [role="tablist"] [role="tab"]').length,
     cards: el.querySelectorAll('[id^="home-"]').length,
@@ -277,8 +280,17 @@ describe('Home control budget (ADR 0069)', () => {
     state.home = home
     state.setup = setup
     const { DashboardPage } = await import('./DashboardPage')
+    // Layout draws the page's "Related:" row under it (RoutePageHelp); count it as the live page does.
+    const { PageHelpProvider } = await import('../lib/pageHelpContext')
+    const { RoutePageHelp } = await import('../components/RoutePageHelp')
     await act(async () => {
-      root.render(createElement(MemoryRouter, { initialEntries: ['/dashboard'] }, createElement(DashboardPage)))
+      root.render(
+        createElement(
+          MemoryRouter,
+          { initialEntries: ['/dashboard'] },
+          createElement(PageHelpProvider, null, createElement(DashboardPage), createElement(RoutePageHelp)),
+        ),
+      )
     })
     for (let i = 0; i < 8; i += 1) await act(async () => { await Promise.resolve() })
     return measure(container)
@@ -292,6 +304,14 @@ describe('Home control budget (ADR 0069)', () => {
     console.log('[home-budget] fresh', JSON.stringify(m))
     expect(m.viewTabs).toBe(0)
     expect(m.controls).toBeLessThan(20)
+    // The live measure (2026-11-25 re-walk counted 26): at most 19.
+    expect(m.liveControls).toBeLessThanOrEqual(19)
+    // Repeats a new app does not need: the Related row (the sidebar has To-do, Bugs and Fixes),
+    // empty logs links, and the checklist's second refresh (the header's Refresh Home reads it too).
+    expect(container.querySelector('[aria-label="Related pages"]')).toBeNull()
+    expect(container.querySelector('a[href="/fixes"]')).toBeNull()
+    expect(container.querySelector('a[href="/portfolio?view=users"]')).toBeNull()
+    expect(container.querySelectorAll('button[aria-label^="Refresh"]')).toHaveLength(1)
     // Release, Pages, This week and Recent activity have nothing to show yet.
     for (const id of ['home-release', 'home-sitemap', 'home-week', 'home-activity']) expect(container.querySelector(`#${id}`), id).toBeNull()
     // One button per place: Connect GitHub once (the CI light), the report button only in the checklist.
@@ -321,6 +341,7 @@ describe('Home control budget (ADR 0069)', () => {
     console.log('[home-budget] installed', JSON.stringify(m))
     expect(m.viewTabs).toBe(0)
     expect(m.controls).toBeLessThan(20)
+    expect(m.liveControls).toBeLessThanOrEqual(19)
     const labels = Array.from(container.querySelectorAll('a, button')).map((el) => el.textContent?.trim() ?? '')
     expect(labels.filter((l) => /^Send test report/.test(l))).toHaveLength(1)
   })
@@ -330,12 +351,16 @@ describe('Home control budget (ADR 0069)', () => {
     const m = await mountHome(ESTABLISHED_HOME, setupFor(true, 40))
     console.log('[home-budget] established', JSON.stringify(m))
     expect(m.viewTabs).toBe(0)
-    expect(m.controls).toBeLessThanOrEqual(37)
+    // 37 on the page plus the three Related links Layout draws under it (counted since 2026-11-25).
+    expect(m.controls).toBeLessThanOrEqual(40)
     const needs = byTestId('home-needs-row')!
     expect(needs.compareDocumentPosition(byTestId('home-health')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(needs.textContent).toContain('1 critical bug is waiting for a fix.')
     // "User visits" still opens User activity, now under Apps.
     expect(container.querySelector('a[href="/portfolio?view=users"]')).toBeTruthy()
+    // An app with data keeps its Related row and Fix history.
+    expect(container.querySelector('[aria-label="Related pages"]')).toBeTruthy()
+    expect(container.querySelector('a[href="/fixes"]')).toBeTruthy()
   })
 
   it('says nothing needs you in one line above the live status', async () => {
