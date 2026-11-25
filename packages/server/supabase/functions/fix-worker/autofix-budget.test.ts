@@ -5,6 +5,8 @@ import {
   budgetSnapshot,
   checkAutofixBudget,
   dispatchTrigger,
+  FIX_RESERVE_FLOOR_USD,
+  fixReserveFromRows,
   isSiblingDispatch,
   validateSpendLimit,
 } from '../_shared/autofix-budget.ts'
@@ -208,4 +210,47 @@ Deno.test('spend limits: positive numbers (whole for the daily cap) or null', ()
   assertEquals(validateSpendLimit('monthly_llm_budget_usd', -5).ok, false)
   assertEquals(validateSpendLimit('monthly_llm_budget_usd', '5').ok, false)
   assertEquals(validateSpendLimit('monthly_llm_budget_usd', 1_000_000).ok, false)
+})
+
+Deno.test('an unpriced fix-worker call adds no dollars and is counted instead of reading as $0', async () => {
+  const check = await checkAutofixBudget(
+    fakeDb({ llm_invocations: [spend(0.5), { ...spend(0), cost_usd: null }] }),
+    P,
+    CAPS,
+    { trigger: 'manual' },
+  )
+  assertEquals(check.spendUsd30d, 0.5)
+  assertEquals(check.unpricedCalls30d, 1)
+  assertEquals(budgetSnapshot(check).unpriced_calls_30d, 1)
+})
+
+Deno.test('the fix reserve stays at its floor until 20 priced attempts, then is their p95', () => {
+  const few = Array.from({ length: 19 }, (_, i) => ({ report_id: `r${i}`, cost_usd: 0.01 }))
+  assertEquals(fixReserveFromRows(few), { usd: FIX_RESERVE_FLOOR_USD, samples: 19, source: 'floor' })
+
+  // 20 attempts costing $0.01 … $0.20; nearest-rank p95 is the 19th: $0.19.
+  const many = Array.from({ length: 20 }, (_, i) => ({ report_id: `r${i}`, cost_usd: (i + 1) / 100 }))
+  assertEquals(fixReserveFromRows(many), { usd: 0.19, samples: 20, source: 'p95' })
+
+  // One attempt is the summed spend of its report; unpriced rows are skipped.
+  const split = [
+    ...many,
+    { report_id: 'r0', cost_usd: 0.5 },
+    { report_id: 'r1', cost_usd: null },
+    { report_id: null, cost_usd: 9 },
+  ]
+  assertEquals(fixReserveFromRows(split).samples, 20)
+  // r0 is now $0.51, the top of 20; the 19th of 20 (p95) is $0.20.
+  assertEquals(fixReserveFromRows(split).usd, 0.2)
+})
+
+Deno.test('an automatic dispatch under a spend cap waits for a person while fix-worker spend is unpriced', async () => {
+  const db = () => fakeDb({ llm_invocations: [spend(0.1), { ...spend(0), cost_usd: null }] })
+  const auto = await checkAutofixBudget(db(), P, CAPS, { trigger: 'automatic' })
+  assertEquals(auto.allowed, true)
+  assertEquals(auto.requiresApproval, true)
+  assert(auto.approvalReason?.includes('cannot be checked'))
+  // No cap set: nothing to check, no approval needed.
+  const uncapped = await checkAutofixBudget(db(), P, { ...CAPS, autofix_max_spend_usd: null }, { trigger: 'automatic' })
+  assertEquals(uncapped.requiresApproval, false)
 })

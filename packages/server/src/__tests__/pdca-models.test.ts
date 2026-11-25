@@ -73,7 +73,7 @@ describe('pdca-runner source', () => {
     expect(src).toContain('claudeGenerateText')
     expect(src).toContain('resolvePdcaModel(run.primary_model')
     expect(src).toContain('resolvePdcaModel(run.judge_model')
-    expect(src).toContain('estimateCallCostUsd(')
+    expect(src).toContain('priceLlmCall(')
   })
 
   it('the queue route defaults to the shared model and validates both fields', () => {

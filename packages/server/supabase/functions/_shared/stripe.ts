@@ -249,6 +249,18 @@ export const listInvoices = (
 ): Promise<{ data: StripeInvoice[] }> =>
   stripeFetch(cfg, `/invoices?customer=${encodeURIComponent(customer)}&limit=${limit}`)
 
+/** The fields of a Stripe Price object the console's plan picker needs. */
+export interface StripePrice {
+  id: string
+  active: boolean
+  currency: string
+  unit_amount: number | null
+  recurring: { interval: string; interval_count: number } | null
+}
+
+export const retrievePrice = (cfg: StripeConfig, id: string): Promise<StripePrice> =>
+  stripeFetch(cfg, `/prices/${encodeURIComponent(id)}`)
+
 // ----------------------------------------------------------------
 // Subscription hydration
 // ----------------------------------------------------------------

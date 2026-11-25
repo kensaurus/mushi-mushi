@@ -8,7 +8,7 @@ import { toSseEvent } from '../../_shared/sse.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
 import { jwtAuth } from '../../_shared/auth.ts';
-import { estimateCallCostUsd } from '../../_shared/pricing.ts';
+import { priceLlmCall } from '../../_shared/llm-cost.ts';
 import {
   ASSIST_EFFORT,
   ASSIST_FALLBACK,
@@ -747,7 +747,7 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
       } = llmResult;
 
       const latencyMs = Date.now() - started;
-      const costUsd = estimateCallCostUsd(usedModel, inputTokens ?? 0, outputTokens ?? 0);
+      const costUsd = (await priceLlmCall({ model: usedModel, inputTokens, outputTokens, cacheReadTokens: cacheRead, cacheWriteTokens: cacheCreate })).costUsd;
 
       void logLlmInvocation(db, {
         projectId: activeProject?.id ?? null,
@@ -1067,7 +1067,7 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
         cacheRead = routed.result.cache?.cacheReadInputTokens ?? null;
 
         const latencyMs = Date.now() - started;
-        const costUsd = estimateCallCostUsd(usedModel, inputTokens ?? 0, outputTokens ?? 0);
+        const costUsd = (await priceLlmCall({ model: usedModel, inputTokens, outputTokens, cacheReadTokens: cacheRead, cacheWriteTokens: cacheCreate })).costUsd;
 
         await stream.write(
           toSseEvent(

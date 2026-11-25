@@ -15,7 +15,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import * as models from '../../supabase/functions/_shared/models.ts'
-import { LLM_PRICING_PER_M_TOKENS } from '../../supabase/functions/_shared/pricing.ts'
+import { KNOWN_MODEL_IDS } from '../../supabase/functions/_shared/llm-cost.ts'
 
 const FUNCTIONS_ROOT = resolve(__dirname, '../../supabase/functions')
 
@@ -92,7 +92,7 @@ describe('gap #14b: Sonnet callers use claude-messages.ts', () => {
   }
 })
 
-describe('every model a route can call is priced', () => {
+describe('every model a route can call is a model Mushi knows', () => {
   const modelIds = Object.entries(modelValues)
     .filter(([, v]) => typeof v === 'string' && /^(claude-|gpt-|text-embedding-)/.test(v))
     .map(([k, v]) => [k, v as string] as const)
@@ -102,13 +102,15 @@ describe('every model a route can call is priced', () => {
   })
 
   for (const [name, id] of modelIds) {
-    it(`${name} (${id}) has a pricing.ts row`, () => {
-      expect(LLM_PRICING_PER_M_TOKENS[id], `${id} is unpriced, so it would bill at the fallback rate`).toBeDefined()
+    // Prices live in the shared catalog (kensaurus-shared); a routed model the
+    // catalog lacks is recorded as unpriced and listed on the Costs page.
+    it(`${name} (${id}) is in KNOWN_MODEL_IDS`, () => {
+      expect(KNOWN_MODEL_IDS.has(id), `${id} is not a model Mushi knows`).toBe(true)
     })
   }
 
-  it('the server-side refusal fallback of Sonnet 5.5 is priced too', () => {
+  it('the server-side refusal fallback of Sonnet 5.5 is known too', () => {
     // A refusal fallback is served (and billed) as `claude-sonnet-5`.
-    expect(LLM_PRICING_PER_M_TOKENS['claude-sonnet-5']).toBeDefined()
+    expect(KNOWN_MODEL_IDS.has('claude-sonnet-5')).toBe(true)
   })
 })

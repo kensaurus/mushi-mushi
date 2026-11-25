@@ -23,7 +23,7 @@ import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { ANTHROPIC_HAIKU, MISTAKE_EFFORT, MISTAKE_MODEL, OPENAI_MINI, THINKING_HEADROOM_TOKENS } from '../_shared/models.ts'
 import { claudeGenerateText } from '../_shared/claude-messages.ts'
-import { UsageByModel } from '../_shared/pricing.ts'
+import { UsageByModel } from '../_shared/llm-cost.ts'
 import { recordLlmUsage } from '../_shared/llm-usage.ts'
 import { withAnthropicOrOpenAi } from '../_shared/llm-failover.ts'
 
@@ -218,7 +218,7 @@ Use clear headings. Be opinionated and specific.`,
     }
 
     return new Response(
-      JSON.stringify({ ok: true, lessonId, updated: Object.keys(updates), costUsd: ledger.totalCostUsd }),
+      JSON.stringify({ ok: true, lessonId, updated: Object.keys(updates), costUsd: await ledger.totalCostUsd() }),
       { headers: { 'content-type': 'application/json' } },
     )
   }),

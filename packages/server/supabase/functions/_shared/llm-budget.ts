@@ -8,8 +8,8 @@
  * What counts toward the budget — the same number the Costs page shows as
  * "this month" (api/routes/costs.ts spendMonthUsd):
  *   - every `llm_invocations` row of the project since 00:00 UTC on the 1st,
- *     priced by its stored cost_usd (or the model price table when a legacy
- *     row has none), whatever the key: the project's own BYOK keys and the
+ *     at its stored cost_usd (priced at write time from the shared price
+ *     catalog, _shared/llm-cost.ts), whatever the key: the project's own BYOK keys and the
  *     platform key both count, because the budget is the owner's own cap on
  *     what their app's bugs cost them;
  *   - legacy `llm_cost_usd` ledger rows in the same window.
@@ -26,21 +26,24 @@
  * The shared path logs it to Sentry and lets the call proceed — one failed
  * read must not take triage dark — so the failure is loud, not silent.
  *
+ * Unpriced calls (cost_usd NULL: the catalog had no price in force) add no
+ * dollars, because no dollar figure exists for them. They are counted, with
+ * their tokens, in `unpricedCalls` / `unpricedTokens`, which the Costs page
+ * and the over-budget message show. There is no token cap to enforce.
+ *
  * Pure apart from the injected client; no Deno globals.
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
-import { estimateCallCostUsd } from './pricing.ts'
 
-/** Same rule as the Costs page: the stored cost wins, else price the tokens. */
-export function resolveCostUsd(
-  model: string | null | undefined,
-  inputTokens: number | null | undefined,
-  outputTokens: number | null | undefined,
-  persisted: number | null | undefined,
-): number {
-  if (persisted != null) return Number(persisted)
-  return estimateCallCostUsd(model, inputTokens ?? 0, outputTokens ?? 0)
+/**
+ * Same rule as the Costs page: the stored cost, or null when the row is
+ * unpriced. A row is never re-priced here: a missing price is not a number.
+ */
+export function resolveCostUsd(persisted: number | string | null | undefined): number | null {
+  if (persisted == null) return null
+  const n = Number(persisted)
+  return Number.isFinite(n) ? n : null
 }
 
 export function utcMonthStart(now: Date): Date {
@@ -73,8 +76,12 @@ export class LlmBudgetUnavailableError extends Error {
 
 export interface LlmBudgetState {
   budgetUsd: number | null
-  /** Spend this UTC month. Counting stops once it reaches the budget. */
+  /** Priced spend this UTC month. Counting stops once it reaches the budget. */
   spendUsd: number
+  /** Calls this month the catalog could not price (counted up to where spend counting stopped). */
+  unpricedCalls: number
+  /** Input + output tokens of those calls. */
+  unpricedTokens: number
   over: boolean
   resetsAt: string
 }
@@ -102,11 +109,13 @@ export async function readLlmBudgetState(
   const raw = (settings as { monthly_llm_budget_usd?: unknown } | null)?.monthly_llm_budget_usd
   const budgetUsd = raw == null ? null : Number(raw)
   if (budgetUsd == null || !Number.isFinite(budgetUsd)) {
-    return { budgetUsd: null, spendUsd: 0, over: false, resetsAt }
+    return { budgetUsd: null, spendUsd: 0, unpricedCalls: 0, unpricedTokens: 0, over: false, resetsAt }
   }
 
   const since = monthStart.toISOString()
   let spendUsd = 0
+  let unpricedCalls = 0
+  let unpricedTokens = 0
   for (let from = 0; spendUsd < budgetUsd; from += PAGE) {
     const { data, error } = await db
       .from('llm_invocations')
@@ -122,7 +131,15 @@ export async function readLlmBudgetState(
       output_tokens: number | null
       cost_usd: number | null
     }>
-    for (const r of rows) spendUsd += resolveCostUsd(r.used_model, r.input_tokens, r.output_tokens, r.cost_usd)
+    for (const r of rows) {
+      const cost = resolveCostUsd(r.cost_usd)
+      if (cost === null) {
+        unpricedCalls++
+        unpricedTokens += (r.input_tokens ?? 0) + (r.output_tokens ?? 0)
+      } else {
+        spendUsd += cost
+      }
+    }
     if (rows.length < PAGE) break
   }
   if (spendUsd < budgetUsd) {
@@ -135,7 +152,7 @@ export async function readLlmBudgetState(
     for (const r of (data ?? []) as Array<{ cost_usd: number | null }>) spendUsd += Number(r.cost_usd ?? 0)
   }
 
-  return { budgetUsd, spendUsd, over: spendUsd >= budgetUsd, resetsAt }
+  return { budgetUsd, spendUsd, unpricedCalls, unpricedTokens, over: spendUsd >= budgetUsd, resetsAt }
 }
 
 /** Per-isolate cache: the hot path (fast-filter, every report) reads at most once a minute per project. */

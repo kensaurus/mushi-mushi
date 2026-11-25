@@ -33,7 +33,8 @@ export interface PdcaIteration {
   critique_text: string | null
   score: number | null
   score_breakdown: Record<string, number>
-  model_cost_usd: number
+  /** null = the model call had no price in the price book. */
+  model_cost_usd: number | null
   ms_elapsed: number
   created_at: string
 }

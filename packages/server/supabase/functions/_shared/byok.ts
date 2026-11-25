@@ -186,6 +186,8 @@ export async function resolveLlmKey(
  * failed budget read is logged to Sentry and the call proceeds: one failed
  * read must not stop triage, and it must not pass unnoticed either.
  */
+const unpricedBudgetWarned = new Set<string>();
+
 export async function enforceLlmBudget(
   db: SupabaseClient,
   projectId: string,
@@ -193,7 +195,19 @@ export async function enforceLlmBudget(
 ): Promise<void> {
   if (!isBudgetedProvider(provider)) return;
   try {
-    await assertLlmBudget(db, projectId);
+    const state = await assertLlmBudget(db, projectId);
+    // Unpriced calls add no dollars to the budget (no price exists for
+    // them). Say so loudly, once per project per isolate, instead of
+    // letting the cap quietly undercount.
+    if (state.budgetUsd != null && state.unpricedCalls > 0 && !unpricedBudgetWarned.has(projectId)) {
+      unpricedBudgetWarned.add(projectId);
+      log.error('LLM budget leaves out unpriced calls', {
+        projectId,
+        provider,
+        unpricedCalls: state.unpricedCalls,
+        unpricedTokens: state.unpricedTokens,
+      });
+    }
   } catch (err) {
     if (err instanceof LlmBudgetUnavailableError) {
       log.error('LLM budget check failed; call proceeds unchecked', { projectId, provider, err: err.message });

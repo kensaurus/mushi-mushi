@@ -18,11 +18,12 @@
  *   - Producer/Critic pattern (2026 canonical, LangGraph-style)
  *   - Personas defined in agent_personas table (extensible without redeploys)
  *   - Producer and judge default to Claude Sonnet 5.5 (pdca-models.ts); the
- *     OpenAI fallback is gpt-6.2-sol; overridable only within that priced table
+ *     OpenAI fallback is gpt-6.2-sol; overridable only within PDCA_CLAUDE_MODELS
  *   - The critic asks for native structured output (`output_config.format`),
  *     never a forced tool call: Sonnet 5.5 rejects a forced tool_choice
  *   - Monotonicity guard: abort if score regresses (prevents fruitless cycles)
- *   - Each call priced from pdca-models.ts and logged to llm_cost_usd
+ *   - Each call priced by PdcaConfig.priceCall (the shared price book) and logged
+ *     to llm_cost_usd; an unpriced call is reported, never logged as $0
  *   - Run state persisted in pdca_runs + pdca_iterations (Phase 3b wires the DB)
  */
 
@@ -35,10 +36,10 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   PDCA_MAX_OUTPUT_TOKENS,
   PDCA_OPENAI_FALLBACK_MODEL,
-  pdcaCallCostUsd,
   resolvePdcaClaudeModel,
   type PdcaClaudeModel,
-  type PdcaPricedModel,
+  type PdcaModel,
+  type PdcaPriceCall,
   type PdcaTokenUsage,
 } from './pdca-models.js'
 
@@ -61,6 +62,11 @@ export interface PdcaConfig {
   anthropicApiKey?: string
   /** HTTP client for the model providers and the page fetch (tests inject one). */
   fetch?: typeof globalThis.fetch
+  /**
+   * Prices each call from the shared KENSAURUS price book (priceFor in
+   * kensaurus-spine/price.ts). Without it every call is unpriced.
+   */
+  priceCall?: PdcaPriceCall
 }
 
 export interface PdcaIteration {
@@ -70,7 +76,8 @@ export interface PdcaIteration {
   critiqueText: string
   score: number
   scoreBreakdown: Record<string, number>
-  costUsd: number
+  /** null when either call was unpriced. */
+  costUsd: number | null
   msElapsed: number
 }
 
@@ -110,13 +117,10 @@ const CRITIC_PROVIDER_OPTIONS = {
 }
 
 interface PricedCall {
-  model: PdcaPricedModel
+  model: PdcaModel
   usage: PdcaTokenUsage
-  costUsd: number
-}
-
-function pricedCall(model: PdcaPricedModel, usage: PdcaTokenUsage): PricedCall {
-  return { model, usage, costUsd: pdcaCallCostUsd(model, usage) }
+  /** null = unpriced. */
+  costUsd: number | null
 }
 
 // ─── PDCA runner ─────────────────────────────────────────────
@@ -179,7 +183,7 @@ export class PdcaRunner {
           critiqueText: critique.critique_text,
           score: critique.overall_score,
           scoreBreakdown: Object.fromEntries(critique.dimensions.map((d) => [d.name, d.score])),
-          costUsd: producerCall.costUsd + criticCall.costUsd,
+          costUsd: producerCall.costUsd === null || criticCall.costUsd === null ? null : producerCall.costUsd + criticCall.costUsd,
           msElapsed: Date.now() - iterStart,
         }
 
@@ -266,7 +270,7 @@ Return ONLY the improved markup — no explanation, no markdown code fences, jus
         prompt,
         maxOutputTokens: PDCA_MAX_OUTPUT_TOKENS,
       })
-      return { draft: text.trim(), call: pricedCall(primaryModel, usage) }
+      return { draft: text.trim(), call: await this.pricedCall(primaryModel, usage) }
     } catch (err) {
       console.warn(`[pdca] producer ${primaryModel} failed, falling back to ${PDCA_OPENAI_FALLBACK_MODEL}:`, err)
       const { text, usage } = await generateText({
@@ -274,7 +278,7 @@ Return ONLY the improved markup — no explanation, no markdown code fences, jus
         prompt,
         maxOutputTokens: PDCA_MAX_OUTPUT_TOKENS,
       })
-      return { draft: text.trim(), call: pricedCall(PDCA_OPENAI_FALLBACK_MODEL, usage) }
+      return { draft: text.trim(), call: await this.pricedCall(PDCA_OPENAI_FALLBACK_MODEL, usage) }
     }
   }
 
@@ -306,7 +310,7 @@ Evaluate this against the persona criteria above. Be specific, critical, and act
         maxOutputTokens: PDCA_MAX_OUTPUT_TOKENS,
         providerOptions: CRITIC_PROVIDER_OPTIONS,
       })
-      return { critique: object, call: pricedCall(judgeModel, usage) }
+      return { critique: object, call: await this.pricedCall(judgeModel, usage) }
     } catch (err) {
       console.warn(`[pdca] critic ${judgeModel} failed, falling back to ${PDCA_OPENAI_FALLBACK_MODEL}:`, err)
       const { object, usage } = await generateObject({
@@ -315,7 +319,7 @@ Evaluate this against the persona criteria above. Be specific, critical, and act
         prompt,
         maxOutputTokens: PDCA_MAX_OUTPUT_TOKENS,
       })
-      return { critique: object, call: pricedCall(PDCA_OPENAI_FALLBACK_MODEL, usage) }
+      return { critique: object, call: await this.pricedCall(PDCA_OPENAI_FALLBACK_MODEL, usage) }
     }
   }
 
@@ -354,7 +358,21 @@ Evaluate this against the persona criteria above. Be specific, critical, and act
     })
   }
 
+  private async pricedCall(model: PdcaModel, usage: PdcaTokenUsage): Promise<PricedCall> {
+    let costUsd: number | null = null
+    if (this.config.priceCall) {
+      const provider = model.startsWith('claude-') ? 'anthropic' : 'openai'
+      costUsd = await this.config.priceCall({ provider, model, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens }).catch(() => null)
+    }
+    return { model, usage, costUsd }
+  }
+
   private async logCost(operation: string, call: PricedCall) {
+    // llm_cost_usd.cost_usd is NOT NULL: an unpriced call is reported, not written as $0.
+    if (call.costUsd === null) {
+      console.warn(`[pdca] ${operation} (${call.model}) is unpriced; no llm_cost_usd row written`)
+      return
+    }
     const { error } = await this.db.from('llm_cost_usd').insert({
       project_id: this.config.projectId,
       operation,

@@ -28,7 +28,7 @@ import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
 import { log as rootLog } from '../../_shared/logger.ts'
 import { apiKeyAuth, jwtAuth } from '../../_shared/auth.ts'
-import { estimateCallCostUsd } from '../../_shared/pricing.ts'
+import { priceLlmCall } from '../../_shared/llm-cost.ts'
 import {
   ASSIST_EFFORT,
   ASSIST_FALLBACK,
@@ -263,7 +263,7 @@ export function registerSdkAssistantRoutes(app: Hono<{ Variables: Variables }>):
       const inputTokens = result.usage?.promptTokens
       const outputTokens = result.usage?.completionTokens
       const latencyMs = Date.now() - started
-      const costUsd = estimateCallCostUsd(usedModel, inputTokens ?? 0, outputTokens ?? 0)
+      const costUsd = (await priceLlmCall({ model: usedModel, inputTokens, outputTokens })).costUsd
 
       llmSpan.end({
         model: usedModel,

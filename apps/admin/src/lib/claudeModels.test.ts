@@ -58,18 +58,20 @@ describe('effectiveModelId', () => {
 })
 
 describe('recommendations', () => {
-  const pricing = readFileSync(resolve(__dirname, '../../../../packages/server/supabase/functions/_shared/pricing.ts'), 'utf8')
+  // The server prices calls from the shared catalog; KNOWN_MODEL_IDS in
+  // _shared/llm-cost.ts is the list of models it knows how to call.
+  const known = readFileSync(resolve(__dirname, '../../../../packages/server/supabase/functions/_shared/llm-cost.ts'), 'utf8')
 
-  it('recommend and default only models in the catalog that the server can price', () => {
+  it('recommend and default only models in the catalog that the server knows', () => {
     for (const id of [...Object.values(ROLE_DEFAULTS), ...Object.values(ROLE_RECOMMENDED).map((r) => r.id)]) {
       expect(CLAUDE_MODELS.some((m) => m.id === id), id).toBe(true)
-      expect(pricing.includes(`'${id}':`), `${id} priced in _shared/pricing.ts`).toBe(true)
+      expect(known.includes(`'${id}',`), `${id} in KNOWN_MODEL_IDS`).toBe(true)
     }
   })
 
-  it('price every current model on the server too', () => {
+  it('know every current model on the server too', () => {
     for (const m of CLAUDE_MODELS.filter((x) => x.current)) {
-      expect(pricing.includes(`'${m.id}':`), m.id).toBe(true)
+      expect(known.includes(`'${m.id}',`), m.id).toBe(true)
     }
   })
 

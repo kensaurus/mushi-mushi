@@ -105,8 +105,9 @@ async function recentLlmSpendUsd(db: SupabaseClient, projectId: string, nowMs: n
     { what: 'llm_invocations', maxRows: MAX_SPEND_ROWS },
   )
   // A cut-short read only makes the sum a lower bound; the suggestion is then
-  // still at least twice that, so it never undercuts what was read.
-  return read.rows.reduce((n, r) => n + resolveCostUsd(r.used_model, r.input_tokens, r.output_tokens, r.cost_usd), 0)
+  // still at least twice that, so it never undercuts what was read. Unpriced
+  // rows (no catalog price) add nothing: the sum is priced spend.
+  return read.rows.reduce((n, r) => n + (resolveCostUsd(r.cost_usd) ?? 0), 0)
 }
 
 async function collectFindings(

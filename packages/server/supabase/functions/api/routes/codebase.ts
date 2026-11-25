@@ -30,7 +30,6 @@ import { getActivePlugins, dispatchPluginEvent } from '../../_shared/plugins.ts'
 import { getAvailableTags } from '../../_shared/ontology.ts';
 import { executeNaturalLanguageQuery } from '../../_shared/nl-query.ts';
 import { getPlan, listPlans } from '../../_shared/plans.ts';
-import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
 import { dbError, ownedProjectIds, callerProjectIds } from '../shared.ts';
 import { pgSafeSlice, pgSafeText } from '../../_shared/pg-text.ts';

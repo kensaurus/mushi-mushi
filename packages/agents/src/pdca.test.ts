@@ -34,7 +34,7 @@ vi.mock('@supabase/supabase-js', () => {
 })
 
 import { PdcaRunner, type PdcaConfig } from './pdca.js'
-import { PDCA_MAX_OUTPUT_TOKENS, pdcaCallCostUsd } from './pdca-models.js'
+import { PDCA_MAX_OUTPUT_TOKENS } from './pdca-models.js'
 
 type JsonObject = Record<string, unknown>
 
@@ -140,12 +140,14 @@ describe('PdcaRunner on Claude Sonnet 5.5', () => {
     for (const banned of ['minimum', 'maximum', 'maxItems', 'maxLength']) expect(keys.has(banned)).toBe(false)
   })
 
-  it('keeps the per-dimension scores and prices each call from the pricing table', async () => {
+  it('keeps the per-dimension scores and prices each call through priceCall', async () => {
     const { fetchImpl } = stubFetch()
-    const result = await new PdcaRunner(config({ fetch: fetchImpl })).run()
+    // Stand-in for priceFor over the shared price book: $2 / $10 per 1M tokens.
+    const priceCall = async (c: { inputTokens?: number; outputTokens?: number }) => ((c.inputTokens ?? 0) * 2 + (c.outputTokens ?? 0) * 10) / 1_000_000
+    const result = await new PdcaRunner(config({ fetch: fetchImpl, priceCall })).run()
 
-    const producerCost = pdcaCallCostUsd('claude-sonnet-5-5', { inputTokens: 1_000, outputTokens: 300 })
-    const criticCost = pdcaCallCostUsd('claude-sonnet-5-5', { inputTokens: 2_000, outputTokens: 400 })
+    const producerCost = (1_000 * 2 + 300 * 10) / 1_000_000
+    const criticCost = (2_000 * 2 + 400 * 10) / 1_000_000
     expect(result.iterations[0].scoreBreakdown).toEqual({ clarity: 0.8, hierarchy: 1 })
     expect(result.iterations[0].costUsd).toBeCloseTo(producerCost + criticCost, 10)
 
@@ -154,6 +156,13 @@ describe('PdcaRunner on Claude Sonnet 5.5', () => {
       { project_id: 'p1', operation: 'pdca-producer', model: 'claude-sonnet-5-5', input_tokens: 1_000, output_tokens: 300, cost_usd: producerCost },
       { project_id: 'p1', operation: 'pdca-critic', model: 'claude-sonnet-5-5', input_tokens: 2_000, output_tokens: 400, cost_usd: criticCost },
     ])
+  })
+
+  it('without a price book every call is unpriced: no cost, no $0 ledger row', async () => {
+    const { fetchImpl } = stubFetch()
+    const result = await new PdcaRunner(config({ fetch: fetchImpl })).run()
+    expect(result.iterations[0].costUsd).toBeNull()
+    expect(dbState.inserts.filter((i) => i.table === 'llm_cost_usd')).toEqual([])
   })
 
   it('calls the model the caller picked', async () => {

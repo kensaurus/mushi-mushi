@@ -25,11 +25,15 @@ interface Props {
   section: HomeSection<HomeAccess>
   /** The plan includes the audit log (enterprise). */
   auditLog: boolean
+  /** False on an app with no fix yet: "Fix history" would open an empty list. */
+  showFixHistory?: boolean
+  /** False on an app with no visits yet: "User activity" would open an empty list. */
+  showUserActivity?: boolean
   /** Needs you already has the button to Connect (an SDK update): the version chip stays a label. */
   sdkLinkElsewhere?: boolean
 }
 
-export function AccessCard({ section, auditLog, sdkLinkElsewhere = false }: Props) {
+export function AccessCard({ section, auditLog, sdkLinkElsewhere = false, showFixHistory = true, showUserActivity = true }: Props) {
   return (
     <Section title="Access and details" id="home-access">
       <HomeSectionBody section={section} what="access and details" notConnectedText="No details yet.">
@@ -83,13 +87,16 @@ export function AccessCard({ section, auditLog, sdkLinkElsewhere = false }: Prop
                 <KeyList keys={a.keys} keysTotal={a.keysTotal} />
               )}
             </Row>
-            <Row term="Logs">
-              <span className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
-                <Link to="/fixes" className="text-link hover:underline">Fix history</Link>
-                <Link to="/portfolio?view=users" className="text-link hover:underline">User activity</Link>
-                {auditLog && <Link to="/team?view=audit" className="text-link hover:underline">Audit log</Link>}
-              </span>
-            </Row>
+            {/* On a new app the logs are empty and the sidebar reaches them anyway (ADR 0069). */}
+            {(showFixHistory || showUserActivity || auditLog) && (
+              <Row term="Logs">
+                <span className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                  {showFixHistory && <Link to="/fixes" className="text-link hover:underline">Fix history</Link>}
+                  {showUserActivity && <Link to="/portfolio?view=users" className="text-link hover:underline">User activity</Link>}
+                  {auditLog && <Link to="/team?view=audit" className="text-link hover:underline">Audit log</Link>}
+                </span>
+              </Row>
+            )}
             <Row term="Created">
               <span className="text-xs text-fg-secondary">
                 <RelativeTime value={a.createdAt} />

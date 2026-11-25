@@ -943,8 +943,11 @@ function LiveCrawlCard({
                 value={maxPages}
                 onChange={(e) => setMaxPages(Math.min(50, Math.max(1, Number(e.target.value))))}
               />
+              {/* No dollar estimate: the price catalog has no Firecrawl rate, so
+                  any figure here would be invented (cost catalog, 2026-11-25). */}
               <p className="text-2xs text-fg-faint">
-                Firecrawl: ~1 credit/page · Claude: ~$0.01 per story gen · 20 pages ≈ $0.10–0.30 total
+                Each page uses Firecrawl credits and one model call drafts the stories. What a run cost shows on{' '}
+                <Link to="/cost" className="underline">AI spend</Link>.
               </p>
             </div>
             <div className="space-y-1">

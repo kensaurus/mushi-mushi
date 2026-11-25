@@ -20,7 +20,9 @@
  *              fix-worker draft falls back to its model's own check.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { setLlmPriceSource } from '../../supabase/functions/_shared/llm-cost.ts'
+import { fixturePriceSource } from './fixtures/price-book.ts'
 import { createFakeDb, findQueries, hasFilter, type FakeQuery, type FakeResult } from './__stubs__/fake-query-recorder.ts'
 
 const mocks = vi.hoisted(() => ({
@@ -294,6 +296,9 @@ describe('skips, with the reason stored', () => {
 })
 
 describe('a completed review', () => {
+  beforeEach(() => setLlmPriceSource(fixturePriceSource()))
+  afterEach(() => setLlmPriceSource(null))
+
   it('claims with a run token only when due, and stores the verdict, findings, reviewed head, model, tokens and cost', async () => {
     const { db, queries } = scripted()
     const d = deps()

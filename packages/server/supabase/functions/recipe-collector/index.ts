@@ -24,6 +24,8 @@ import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { designScanDue, refreshRecipeSnapshot, runDesignDeviance } from '../_shared/design-plane.ts'
 import { collectOrgPortfolio, collectProjectPhase2 } from '../_shared/recipe-phase2.ts'
+import { GAP_ALERT_PCT, reconcileLlmCosts, repriceTransientInvocations } from '../_shared/llm-cost-reconcile.ts'
+import { emitOpsEvent } from '../_shared/ops-events.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -134,8 +136,41 @@ async function handler(req: Request): Promise<Response> {
     }
   }
   await db.rpc('recipe_observations_prune', { p_days: 90 }).then(() => {}, () => {})
+  // Last step, once the llm_usage snapshots above are fresh: reconcile
+  // yesterday's priced ledger against what OpenAI / Anthropic billed
+  // (_shared/llm-cost-reconcile.ts). Skipped on a single-project POST.
+  let reconcile: Array<{ instanceId: string; status: string; reason?: string }> = []
+  let repriced: { checked: number; priced: number } | null = null
+  if (!only) {
+    // Calls priced while the price book was unreachable get their price now.
+    repriced = await repriceTransientInvocations(db)
+    try {
+      reconcile = await reconcileLlmCosts(db, {
+        alert: (projectId, { provider, day, result }) =>
+          emitOpsEvent(db, {
+            projectId,
+            input: {
+              category: 'alerts',
+              severity: 'warn',
+              kind: 'llm_cost.gap',
+              title: `AI cost check: the ledger and ${provider === 'openai' ? 'OpenAI' : 'Anthropic'} differ by more than ${GAP_ALERT_PCT}% on ${day}`,
+              facts: [
+                { label: 'Billed by provider', value: `$${(result.vendorUsd ?? 0).toFixed(4)}` },
+                { label: 'Mushi Mushi ledger', value: `$${(result.ledgerUsd ?? 0).toFixed(4)}` },
+                { label: 'Gap', value: result.gapPct == null ? `$${(result.gapUsd ?? 0).toFixed(4)}` : `${result.gapPct.toFixed(2)}%` },
+                { label: 'Unpriced calls', value: String(result.ledgerUnpricedCalls) },
+              ],
+              dedupeKey: `llm-cost-gap:${provider}:${day}`,
+              source: 'mushi',
+            },
+          }),
+      })
+    } catch (err) {
+      clog.error('llm cost reconciliation failed', { err: String(err) })
+    }
+  }
   clog.info('recipe collection complete', { total: ids.length, collected: batch.length })
-  return json({ ok: true, data: { total: ids.length, collected: batch.length, results } })
+  return json({ ok: true, data: { total: ids.length, collected: batch.length, results, reconcile, repriced } })
 }
 
 if (typeof Deno !== 'undefined') {

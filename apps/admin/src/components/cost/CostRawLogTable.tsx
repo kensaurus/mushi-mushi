@@ -30,7 +30,10 @@ export interface CostRow {
   model: string
   input_tokens: number
   output_tokens: number
-  cost_usd: number
+  /** null = unpriced: the shared price book had no price for the call. */
+  cost_usd: number | null
+  /** Why the call is unpriced; null when priced. */
+  unpriced_reason?: string | null
   occurred_at: string
   source?: 'invocation' | 'ledger'
   /** 'success' | 'error' for LLM calls; null for legacy ledger rows. */
@@ -171,7 +174,13 @@ export function CostRawLogTable({ projectId }: { projectId: string }) {
         enableSorting: true,
         cell: ({ row }) => (
           <div className="text-right">
-            <UsdAmount value={row.original.cost_usd} digits={5} />
+            {row.original.cost_usd == null ? (
+              <span className="text-2xs font-medium text-st-slow-ink" title={row.original.unpriced_reason ?? 'No price in the price book'}>
+                unpriced
+              </span>
+            ) : (
+              <UsdAmount value={row.original.cost_usd} digits={5} />
+            )}
           </div>
         ),
       },

@@ -109,6 +109,8 @@ interface LlmHealth {
     avgLatencyMs: number
     p95LatencyMs?: number
     costUsd?: number
+    /** Calls with no price in the price book; not in costUsd. */
+    unpricedCalls?: number
     lastFailureAt?: string | null
   }>
   recent: LlmRecent[]
@@ -691,6 +693,11 @@ function HealthPageContent() {
                         <SignalChip tone="info">avg {f.avgLatencyMs}ms</SignalChip>
                         <SignalChip tone="neutral">p95 {f.p95LatencyMs ?? 0}ms</SignalChip>
                         <SignalChip tone="brand">{costStr}</SignalChip>
+                        {(f.unpricedCalls ?? 0) > 0 && (
+                          <SignalChip tone="warn" title="No price in the price book for these calls; they are not in the cost.">
+                            {f.unpricedCalls} unpriced
+                          </SignalChip>
+                        )}
                         {f.fallbacks > 0 && (
                           <SignalChip tone="warn">
                             {f.fallbacks} fallback{f.fallbacks === 1 ? '' : 's'}

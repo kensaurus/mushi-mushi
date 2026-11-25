@@ -49,6 +49,10 @@ import { ctaTarget, dedupeHomeSections, healthWithoutRepeatedConnects, homeCards
 import { homeViewRedirect } from '../lib/pageHubs'
 import { usePageCopy } from '../lib/copy'
 import { IconDashboard } from '../components/icons'
+import type { PageFlowLink } from '../lib/pageLinks'
+
+/** No "Related:" row on a new app's Home: To-do, Bugs and Fixes are in the sidebar (ADR 0069). */
+const NO_RELATED_LINKS: PageFlowLink[] = []
 
 export function DashboardPage() {
   const { search } = useLocation()
@@ -144,6 +148,11 @@ function HomeToday() {
   const health = data && needsYou ? healthWithoutRepeatedConnects(data.health, needsYou.status === 'ok' ? (needsYou.data ?? []) : []) : null
   const cards = data ? homeCardsWithContent(shown ?? data) : null
   const showLeft = !openStep && !!cards && (cards.release || cards.sitemap || cards.week)
+  // While setup is open or the app has no data yet, Home drops what repeats the sidebar or the
+  // header: the Related row, the empty logs links, the checklist's second refresh (ADR 0069).
+  const hasFixes = (project?.fix_count ?? 0) > 0
+  const hasVisits = (data?.week.data ?? []).some((w) => w.id === 'sessions' && w.thisWeek + w.lastWeek > 0)
+  const sparse = !!openStep || !project || (project.report_count === 0 && !hasFixes)
 
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-dashboard">
@@ -166,9 +175,18 @@ function HomeToday() {
           ]
         }
         helpHowToUse={copy?.help?.howToUse ?? 'Every number opens the list it counts. Grey lights are not connected yet; their button says how to connect them.'}
+        helpRelatedLinks={sparse ? NO_RELATED_LINKS : undefined}
       >
         <FreshnessPill at={lastFetchedAt} isValidating={isValidating} channel={channelState} />
-        <RefreshIconButton onClick={() => void reload()} loading={isValidating} label="Refresh Home" />
+        {/* One refresh for the page: it re-reads the setup steps as well as Home. */}
+        <RefreshIconButton
+          onClick={() => {
+            setup.reload()
+            void reload()
+          }}
+          loading={isValidating}
+          label="Refresh Home"
+        />
       </PageHeaderBar>
 
       <PagePosture
@@ -196,7 +214,8 @@ function HomeToday() {
           first-report card above sends the test report in place and links the full guide: the
           checklist under it repeated "Send test report" for the same step (ADR 0069). */}
       {openStep && project && !showFirstReportHero && (
-        <SetupChecklist project={project} mode="banner" onRefresh={setup.reload} adminEndpointHost={setup.data?.admin_endpoint_host} />
+        // No refresh icon of its own: the page header's Refresh Home re-reads the steps too.
+        <SetupChecklist project={project} mode="banner" adminEndpointHost={setup.data?.admin_endpoint_host} />
       )}
 
       {error && !data ? (
@@ -244,6 +263,8 @@ function HomeToday() {
               <AccessCard
                 section={data.access}
                 auditLog={ent.has('audit_log')}
+                showFixHistory={hasFixes || !sparse}
+                showUserActivity={hasVisits || !sparse}
                 sdkLinkElsewhere={(needsYou?.data ?? []).some((n) => ctaTarget(n.action.to) === '/connect')}
               />
               {cards?.activity && <ActivityCard section={(shown ?? data).activity} />}

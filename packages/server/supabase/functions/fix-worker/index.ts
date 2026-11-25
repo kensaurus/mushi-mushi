@@ -135,7 +135,7 @@ import { FIX_EFFORT, FIX_FALLBACK } from '../_shared/models.ts';
 import { fixModelFor } from '../_shared/project-models.ts';
 import { claudeGenerateObject } from '../_shared/claude-messages.ts';
 import { getPromptForStage } from '../_shared/prompt-ab.ts'
-import { budgetSnapshot, checkAutofixBudget, dispatchTrigger, isSiblingDispatch } from '../_shared/autofix-budget.ts';
+import { budgetSnapshot, checkAutofixBudget, dispatchTrigger, fixCostReserve, isSiblingDispatch } from '../_shared/autofix-budget.ts';
 import { logLlmInvocation } from '../_shared/telemetry.ts';
 import { siblingDispatchRow } from '../_shared/sibling-dispatch.ts';
 import { dispatchPluginEventDetached } from '../_shared/plugins.ts';
@@ -490,6 +490,9 @@ Deno.serve(
       // 30-day spend is stamped on the dispatch row so the timeline shows it.
       // A failed budget read throws into the catch below (attempt + job fail
       // with the reason) instead of being read as "$0 spent".
+      // The estimate is the p95 of what fix attempts actually cost over 30
+      // days (floor $0.25 until 20 attempts), not a fixed guess.
+      const reserve = await fixCostReserve(db);
       const budget = await checkAutofixBudget(db, dispatch.project_id, {
         autofix_max_spend_usd: (settings?.autofix_max_spend_usd as number | null) ?? null,
         autofix_max_dispatches_per_day: (settings?.autofix_max_dispatches_per_day as number | null) ?? null,
@@ -497,7 +500,7 @@ Deno.serve(
           (settings?.autofix_approval_cost_threshold_usd as number | null) ?? null,
       }, {
         severity: report.severity as string | null,
-        estimatedCostUsd: 0.25,
+        estimatedCostUsd: reserve.usd,
         trigger: dispatchTrigger(dispatch.dispatch_metadata),
         excludeDispatchId: dispatch.id,
       });
@@ -507,7 +510,7 @@ Deno.serve(
           .update({
             dispatch_metadata: {
               ...((dispatch.dispatch_metadata as Record<string, unknown> | null) ?? {}),
-              autofix_budget: budgetSnapshot(budget),
+              autofix_budget: { ...budgetSnapshot(budget), estimated_cost_usd: reserve.usd, estimate_source: reserve.source, estimate_samples: reserve.samples },
             },
           })
           .eq('id', dispatch.id);
@@ -539,6 +542,7 @@ Deno.serve(
         ((dispatch.dispatch_metadata as Record<string, unknown> | null) ?? {}).approved === true;
       if (budget.requiresApproval && !dispatchApproved) {
         const approvalReason =
+          budget.approvalReason ??
           'Estimated dispatch cost exceeds approval threshold — approve in console before PR creation.';
         // Close the fix_attempt too — leaving it 'running' orphaned it
         // forever and the dispatch route's ALREADY_DISPATCHED guard then
