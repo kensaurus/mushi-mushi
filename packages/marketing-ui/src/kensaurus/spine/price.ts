@@ -33,8 +33,9 @@
  * API (what the adoption waves call):
  *
  *   const prices = makeDbPriceSource(admin)              // service-role client on kenji
- *   const prices = makeRemotePriceSource({ url, internalToken, externalProject })
+ *   const prices = makeRemotePriceSource({ url, routesToken, externalProject })
  *                                                        // any other project, via kensaurus-wallet-api
+ *                                                        // (routesToken read-only, or internalToken)
  *   const r = await priceFor(
  *     { provider: 'anthropic', model: 'claude-haiku-5-5',
  *       usage: { input: 1200, output: 300, cachedRead: 0, cacheWrite5m: 0 } },
@@ -358,21 +359,30 @@ export function makeDbPriceSource(db: PriceDbClient): PriceSource {
   })
 }
 
-/** Reads through kensaurus-wallet-api (`price` action with `book: true`). */
-export function makeRemotePriceSource(opts: {
-  url: string
-  internalToken: string
-  externalProject: string
-  fetchImpl?: typeof fetch
-}): PriceSource {
+/**
+ * Reads through kensaurus-wallet-api (`price` action with `book: true`). Pass
+ * the wallet `internalToken`, or the read-only `routesToken`
+ * (KENSAURUS_ROUTES_TOKEN): `price` accepts either, and the routes token can
+ * do nothing else.
+ */
+export function makeRemotePriceSource(
+  opts: {
+    url: string
+    externalProject: string
+    fetchImpl?: typeof fetch
+  } & (
+    | { internalToken: string; routesToken?: never }
+    | { routesToken: string; internalToken?: never }
+  ),
+): PriceSource {
   const doFetch = opts.fetchImpl ?? fetch
+  const auth: Record<string, string> = opts.routesToken
+    ? { 'x-kensaurus-routes-token': opts.routesToken }
+    : { 'x-kensaurus-internal-token': opts.internalToken ?? '' }
   return cachedSource(async (provider, model) => {
     const resp = await doFetch(opts.url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-kensaurus-internal-token': opts.internalToken,
-      },
+      headers: { 'Content-Type': 'application/json', ...auth },
       body: JSON.stringify({
         action: 'price',
         external_project: opts.externalProject,

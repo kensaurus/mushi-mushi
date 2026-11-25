@@ -183,10 +183,11 @@ describe('no local price table is left', () => {
     expect(src).toContain('priceLlmCall(')
   })
 
-  it('price.ts is the byte-identical copy of the yen-yen spine source', () => {
-    // The sha256 kensaurus-spine/edge/spine.lock.json (yen-yen) records for price.ts.
-    // A re-sync with scripts/spine-sync.mjs updates both.
-    const bytes = readFileSync(resolve(FUNCTIONS, '_shared/kensaurus/price.ts'), 'utf8').replace(/\r\n/g, '\n')
-    expect(createHash('sha256').update(bytes).digest('hex')).toBe('d2c3225bc29ca553bce149a6213011b305c7e3d66a3ba530b2b080d84d1ccff8')
+  it('prices from the vendored spine price.ts, unedited (its spine.lock.json hash)', () => {
+    // scripts/spine-sync.mjs (kensaurus/yen-yen) writes the copy and its lock; check:spine proves the rest.
+    expect(readFileSync(resolve(FUNCTIONS, '_shared/llm-cost.ts'), 'utf8')).toContain("from './kensaurus-spine/price.ts'")
+    const lock = JSON.parse(readFileSync(resolve(FUNCTIONS, '_shared/kensaurus-spine/spine.lock.json'), 'utf8')) as { files: Record<string, string> }
+    const bytes = readFileSync(resolve(FUNCTIONS, '_shared/kensaurus-spine/price.ts'), 'utf8').replace(/\r\n/g, '\n')
+    expect(createHash('sha256').update(bytes).digest('hex')).toBe(lock.files['price.ts'])
   })
 })

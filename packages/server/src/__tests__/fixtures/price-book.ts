@@ -5,7 +5,7 @@
  * so the arithmetic has something to check. Production reads the live
  * catalog in kensaurus-shared; nothing in the code path copies these numbers.
  */
-import type { PriceBook, PriceBookRow, PriceSource } from '../../../supabase/functions/_shared/kensaurus/price.ts'
+import type { PriceBook, PriceBookRow, PriceSource } from '../../../supabase/functions/_shared/kensaurus-spine/price.ts'
 
 const AT = '2026-01-01T00:00:00Z'
 

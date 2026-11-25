@@ -4,7 +4,7 @@
  *
  * Mushi Mushi keeps no price table of its own (owner rule, 2026-11-25: never
  * hard-code a price). Every cost comes from `priceFor` in the vendored
- * `kensaurus/price.ts`, reading the catalog in Supabase project
+ * `kensaurus-spine/price.ts` (the KENSAURUS spine), reading the catalog in Supabase project
  * kensaurus-shared through the kensaurus-wallet-api `price` action (the same
  * bridge hosted billing uses: KENSAURUS_WALLET_URL +
  * KENSAURUS_WALLET_INTERNAL_TOKEN). Rows are cached for 5 minutes per isolate.
@@ -29,7 +29,7 @@ import {
   priceFor,
   type PriceSource,
   type PriceUsage,
-} from './kensaurus/price.ts'
+} from './kensaurus-spine/price.ts'
 
 export interface LlmCostInput {
   model: string | null | undefined
