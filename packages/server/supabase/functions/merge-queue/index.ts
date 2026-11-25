@@ -48,6 +48,7 @@ import { cursorKeyById, cursorModelsCached, loadFollowupSettings } from '../_sha
 import { validateCursorModel } from '../_shared/review-followup.ts'
 import { createCursorAgentV1, getCursorAgent, getCursorRun } from '../_shared/cursor-cloud.ts'
 import { checksView, type ChecksView } from '../_shared/merge-queue.ts'
+import { requiredChecks } from '../_shared/github-pr-checks.ts'
 import { failedWorkflowRunIds } from '../_shared/merge-train.ts'
 import { runMergeQueue, type MergeQueueDeps } from './worker.ts'
 import { createHealthGate } from '../_shared/health-gate.ts'
@@ -62,7 +63,36 @@ async function githubChecks(token: string, ref: GithubRepoRef, sha: string): Pro
   })
   if (!res.ok) throw new Error(`GitHub check runs answered ${res.status}`)
   const body = (await res.json()) as { check_runs?: Array<{ id?: number; name?: string; status?: string; conclusion?: string | null; started_at?: string | null }> }
-  return checksView(body.check_runs ?? [])
+  return checksView(body.check_runs ?? [], await defaultBranchRequiredChecks(token, ref))
+}
+
+/**
+ * The checks the repo's default branch requires (rulesets), cached per repo
+ * for 10 minutes so a queue tick does not spend two GitHub calls per head.
+ * An unreadable answer is an empty set: every check holds, as before.
+ */
+const REQUIRED_CHECKS_TTL_MS = 10 * 60_000
+const requiredChecksCache = new Map<string, { at: number; names: Promise<ReadonlySet<string>> }>()
+
+function defaultBranchRequiredChecks(token: string, ref: GithubRepoRef): Promise<ReadonlySet<string>> {
+  const key = `${ref.owner}/${ref.repo}`.toLowerCase()
+  const hit = requiredChecksCache.get(key)
+  if (hit && Date.now() - hit.at < REQUIRED_CHECKS_TTL_MS) return hit.names
+  const names = (async (): Promise<ReadonlySet<string>> => {
+    try {
+      const repo = await fetch(`https://api.github.com/repos/${ref.owner}/${ref.repo}`, {
+        headers: { ...GH_HEADERS, Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(10_000),
+      })
+      if (!repo.ok) return new Set()
+      const branch = ((await repo.json()) as { default_branch?: string }).default_branch
+      return branch ? new Set(await requiredChecks(token, ref, branch)) : new Set()
+    } catch {
+      return new Set()
+    }
+  })()
+  requiredChecksCache.set(key, { at: Date.now(), names })
+  return names
 }
 
 /** GitHub's "Update branch": merges the base into the PR branch (202), or 422 on a conflict. */

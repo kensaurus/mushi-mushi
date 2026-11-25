@@ -2171,8 +2171,13 @@ export class MushiWidget {
     // outcome patches it in place. No auto-close: it stays until Done / ✕ / Esc.
     // A report blocked on the device never gets a receipt: the reporter stays
     // on the report step with their text and a plain "not sent" line.
+    const sentFrom = this.openCount;
     this.successTimer = setTimeout(() => {
       this.successTimer = null;
+      // Closed (and maybe reopened) within the breath: the receipt belongs to
+      // that panel, not this one. Without this, a reporter who sent, closed and
+      // reopened within 500 ms landed on the old receipt with their new text gone.
+      if (sentFrom !== this.openCount || !this.isOpen) return;
       if (isNotSentOutcome(settled)) {
         this.showNotSent(settled.failureKind, keptDrafts);
         return;
