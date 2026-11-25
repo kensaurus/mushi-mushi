@@ -1,13 +1,5 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "Unreleased",
-    "pending": true,
-    "versions": [],
-    "highlights": [],
-    "packages": []
-  },
-  {
     "majorMinor": "1.39",
     "headline": null,
     "pending": false,
@@ -1738,6 +1730,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.32.1",
       "0.32.0"
     ],
     "highlights": [
@@ -1761,7 +1754,7 @@
       },
       {
         "name": "@mushi-mushi/mcp",
-        "version": "0.32.0"
+        "version": "0.32.1"
       }
     ]
   },
