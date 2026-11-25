@@ -3,8 +3,8 @@
  * FILE: packages/server/supabase/functions/_shared/stt.ts
  * PURPOSE: Speech-to-text for the voice inbox (plan C2). OpenAI only:
  *          `gpt-transcribe` first (multi-language `languages[]` hint,
- *          $0.0045/min), same-key fallback to `gpt-4o-mini-transcribe`
- *          (single `language`, $0.003/min). Runs inside `withLlmFailover` so
+ *          priced per second from the shared catalog), same-key fallback to `gpt-4o-mini-transcribe`
+ *          (single `language`). Runs inside `withLlmFailover` so
  *          BYOK rotation, the hosted-wallet preflight and `markKeyUsed` apply
  *          exactly as they do for every other OpenAI call.
  *
@@ -25,6 +25,7 @@ import { withLlmFailover } from './llm-failover.ts'
 import { fetchWithTimeout } from './http.ts'
 import { createTrace } from './observability.ts'
 import { logLlmInvocation } from './telemetry.ts'
+import { priceLlmCall } from './llm-cost.ts'
 import { log as rootLog } from './logger.ts'
 
 const log = rootLog.child('stt')
@@ -38,12 +39,6 @@ export const STT_MAX_BYTES = 25 * 1024 * 1024
 export const STT_MAX_DURATION_SEC = 120
 /** Outbound timeout — a 2-minute clip transcribes in well under 30 s. */
 export const STT_TIMEOUT_MS = 30_000
-
-/** USD per audio minute, used for the cost estimate on the session row. */
-const STT_USD_PER_MINUTE: Record<string, number> = {
-  [STT_PRIMARY_MODEL]: 0.0045,
-  [STT_FALLBACK_MODEL]: 0.003,
-}
 
 export type AudioExtension = 'ogg' | 'm4a' | 'mp3' | 'webm' | 'wav'
 
@@ -135,7 +130,8 @@ export interface TranscribeAudioResult {
   language?: string
   durationSec?: number
   model: string
-  costUsd?: number
+  /** From the shared price catalog; null when unpriced (no duration or no price row). */
+  costUsd: number | null
   /** Which key answered (byok vs platform env) — mirrored on the session row. */
   keySource?: 'byok' | 'env'
 }
@@ -261,8 +257,12 @@ export async function transcribeAudio(
           ? json.duration
           : input.durationSec
     const latencyMs = Date.now() - startedAt
+    // Per-second rate from the shared price catalog (openai gpt-transcribe /
+    // gpt-4o-mini-transcribe rows). Unpriced (no duration, no row) is null.
     const costUsd =
-      durationSec !== undefined ? Number(((durationSec / 60) * (STT_USD_PER_MINUTE[usedModel] ?? 0)).toFixed(6)) : undefined
+      durationSec !== undefined
+        ? (await priceLlmCall({ model: usedModel, provider: 'openai', units: durationSec })).costUsd
+        : null
 
     span.end({ model: usedModel, latencyMs, durationSec, fallbackUsed: usedModel !== STT_PRIMARY_MODEL })
     void logLlmInvocation(db, {

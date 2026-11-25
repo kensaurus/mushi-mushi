@@ -68,7 +68,7 @@ import { resolveLlmKey, type ResolvedKey } from '../_shared/byok.ts'
 import { claudeGenerateObject } from '../_shared/claude-messages.ts'
 import { isClaudeRefusal, resolveClaudeModel } from '../_shared/claude-request.ts'
 import { isQuotaMessage } from '../_shared/llm-quota.ts'
-import { estimateCallCostUsd } from '../_shared/pricing.ts'
+import { priceLlmCall } from '../_shared/llm-cost.ts'
 import { recordLlmUsage, extractLlmUsage, servedModel } from '../_shared/llm-usage.ts'
 import { sanitizeForLLM } from '../_shared/sanitize.ts'
 import { mapWithConcurrency } from '../_shared/concurrency.ts'
@@ -869,7 +869,7 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
   })
   const model = servedModel(result, reviewModel)
   const tokens = extractLlmUsage(result)
-  const cost = estimateCallCostUsd(model, tokens.inputTokens ?? 0, tokens.outputTokens ?? 0)
+  const cost = (await priceLlmCall({ model, inputTokens: tokens.inputTokens, outputTokens: tokens.outputTokens })).costUsd
 
   const { data: saved, error: saveErr } = await ownWrite({
     status: 'completed',
@@ -905,7 +905,7 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
     model,
     input_tokens: tokens.inputTokens ?? null,
     output_tokens: tokens.outputTokens ?? null,
-    cost_usd: Math.round(cost * 10_000) / 10_000,
+    cost_usd: cost === null ? null : Math.round(cost * 10_000) / 10_000,
     reviewed_at: nowIso,
     completed_at: nowIso,
   })

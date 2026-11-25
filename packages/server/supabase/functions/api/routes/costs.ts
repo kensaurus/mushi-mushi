@@ -4,6 +4,8 @@
 //   GET /v1/admin/costs              — paginated llm_invocations (+ legacy llm_cost_usd)
 //   GET /v1/admin/costs/stats        — workspace health summary for banner + KPI strip
 //   GET /v1/admin/costs/summary      — aggregated cost by operation + model + day
+//   GET /v1/admin/costs/reconciliation — the daily vendor check for the project's org
+//   POST /v1/admin/costs/price-override — super-admin: price an unpriced model
 //
 // Primary telemetry: `llm_invocations` (telemetry.ts on every edge function).
 // Legacy `llm_cost_usd` ledger rows are merged into summary + search.
@@ -14,6 +16,9 @@ import { requireProjectAccess } from '../middleware/project.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 // One cost rule for the Costs page and the budget the LLM path enforces.
 import { resolveCostUsd } from '../../_shared/llm-budget.ts'
+import { providerForModel, setLlmPriceSource } from '../../_shared/llm-cost.ts'
+import { overrideRow, parsePriceOverride, writePriceOverride } from '../../_shared/price-override.ts'
+import { requireSuperAdmin } from '../../_shared/super-admin.ts'
 import type { Variables } from '../types.ts'
 
 function db() { return getServiceClient() }
@@ -27,7 +32,10 @@ interface CostRow {
   model: string
   input_tokens: number
   output_tokens: number
-  cost_usd: number
+  /** null = unpriced: the shared price catalog had no price for the call. */
+  cost_usd: number | null
+  /** Why the call is unpriced; null when priced. */
+  unpriced_reason: string | null
   occurred_at: string
   source: CostSource
   /** llm_invocations.status ('success' | 'error'); null for ledger rows. */
@@ -58,7 +66,9 @@ function invocationToRow(row: {
   created_at: string
   status?: string | null
   error_message?: string | null
+  unpriced_reason?: string | null
 }): CostRow {
+  const cost = resolveCostUsd(row.cost_usd)
   return {
     status: row.status ?? null,
     error_message: row.error_message ? String(row.error_message).slice(0, 300) : null,
@@ -68,7 +78,8 @@ function invocationToRow(row: {
     model: row.used_model,
     input_tokens: row.input_tokens ?? 0,
     output_tokens: row.output_tokens ?? 0,
-    cost_usd: resolveCostUsd(row.used_model, row.input_tokens, row.output_tokens, row.cost_usd),
+    cost_usd: cost,
+    unpriced_reason: cost === null ? (row.unpriced_reason ?? LEGACY_UNPRICED) : null,
     occurred_at: row.created_at,
     source: 'invocation',
   }
@@ -94,6 +105,7 @@ function ledgerToRow(row: {
     input_tokens: row.input_tokens ?? 0,
     output_tokens: row.output_tokens ?? 0,
     cost_usd: Number(row.cost_usd ?? 0),
+    unpriced_reason: null,
     occurred_at: row.occurred_at,
     source: 'ledger',
   }
@@ -118,6 +130,48 @@ type InvRow = {
   created_at: string
   status: string | null
   key_source: string | null
+  unpriced_reason: string | null
+}
+
+/** Reason shown for an old row that was never given a cost (before the shared catalog). */
+const LEGACY_UNPRICED = 'no cost recorded (before the shared price catalog)'
+
+/** Unpriced usage of one model in the window: what the Costs page lists under "Unpriced". */
+export interface UnpricedModelRow {
+  provider: string
+  model: string
+  calls: number
+  inputTokens: number
+  outputTokens: number
+  lastSeenAt: string
+  reason: string
+}
+
+/** Group unpriced invocation rows by model, most calls first. Pure. */
+export function groupUnpriced(
+  rows: Array<Pick<InvRow, 'used_model' | 'input_tokens' | 'output_tokens' | 'created_at' | 'unpriced_reason'>>,
+): UnpricedModelRow[] {
+  const by = new Map<string, UnpricedModelRow>()
+  for (const r of rows) {
+    const g = by.get(r.used_model) ?? {
+      provider: providerForModel(r.used_model),
+      model: r.used_model,
+      calls: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      lastSeenAt: r.created_at,
+      reason: r.unpriced_reason ?? LEGACY_UNPRICED,
+    }
+    g.calls += 1
+    g.inputTokens += r.input_tokens ?? 0
+    g.outputTokens += r.output_tokens ?? 0
+    if (r.created_at > g.lastSeenAt) {
+      g.lastSeenAt = r.created_at
+      if (r.unpriced_reason) g.reason = r.unpriced_reason
+    }
+    by.set(r.used_model, g)
+  }
+  return [...by.values()].sort((a, b) => b.calls - a.calls || a.model.localeCompare(b.model))
 }
 
 type LedgerRow = {
@@ -154,37 +208,21 @@ async function readAllPages<T>(
 
 /**
  * Spend recorded before `beforeIso`: the persisted cost summed in SQL
- * (`llm_spend_before`, migration 20261004163000), plus the rows without a
- * persisted cost priced here with resolveCostUsd, the budget's rule. Until the
- * migration is applied it reads every older row in pages instead.
+ * (`llm_spend_before`, migration 20261004163000), and how many older rows are
+ * unpriced (cost_usd NULL). Unpriced rows are counted, never re-priced. Until
+ * the migration is applied it reads every older row in pages instead.
  */
-async function spendBefore(projectId: string, beforeIso: string): Promise<number> {
+async function spendBefore(projectId: string, beforeIso: string): Promise<{ usd: number; unpricedCalls: number }> {
   const { data, error } = await db().rpc('llm_spend_before', { p_project_id: projectId, p_before: beforeIso })
   const missing = error && (error.code === 'PGRST202' || error.code === '42883')
   if (error && !missing) throw new CostStatsReadError(`llm_spend_before: ${error.message}`)
 
-  const priceRows = (rows: Array<Pick<InvRow, 'used_model' | 'input_tokens' | 'output_tokens' | 'cost_usd'>>) =>
-    rows.reduce((sum, r) => sum + resolveCostUsd(r.used_model, r.input_tokens, r.output_tokens, r.cost_usd), 0)
-
   if (!missing) {
     const sums = (data ?? {}) as { persisted_usd?: number | string | null; ledger_usd?: number | string | null; unpriced_rows?: number | null }
-    let total = Number(sums.persisted_usd ?? 0) + Number(sums.ledger_usd ?? 0)
-    if (Number(sums.unpriced_rows ?? 0) > 0) {
-      const unpriced = await readAllPages<Pick<InvRow, 'used_model' | 'input_tokens' | 'output_tokens' | 'cost_usd'>>(
-        'unpriced llm_invocations',
-        (from, to) =>
-          db()
-            .from('llm_invocations')
-            .select('used_model, input_tokens, output_tokens, cost_usd')
-            .eq('project_id', projectId)
-            .lt('created_at', beforeIso)
-            .is('cost_usd', null)
-            .order('created_at', { ascending: true })
-            .range(from, to),
-      )
-      total += priceRows(unpriced)
+    return {
+      usd: Number(sums.persisted_usd ?? 0) + Number(sums.ledger_usd ?? 0),
+      unpricedCalls: Number(sums.unpriced_rows ?? 0),
     }
-    return total
   }
 
   console.warn(JSON.stringify({ level: 'warn', msg: 'llm_spend_before missing: apply migration 20261004163000; paging older rows' }))
@@ -208,7 +246,14 @@ async function spendBefore(projectId: string, beforeIso: string): Promise<number
         .range(from, to),
     ),
   ])
-  return priceRows(olderInv) + olderLedger.reduce((sum, r) => sum + Number(r.cost_usd ?? 0), 0)
+  let usd = olderLedger.reduce((sum, r) => sum + Number(r.cost_usd ?? 0), 0)
+  let unpricedCalls = 0
+  for (const r of olderInv) {
+    const cost = resolveCostUsd(r.cost_usd)
+    if (cost === null) unpricedCalls++
+    else usd += cost
+  }
+  return { usd, unpricedCalls }
 }
 
 export function registerCostsRoutes(parent: Hono<{ Variables: Variables }>) {
@@ -257,6 +302,10 @@ export function registerCostsRoutes(parent: Hono<{ Variables: Variables }>) {
       byokCalls24h: 0,
       byokAnthropicConfigured: false,
       avgCostPerCall24h: 0,
+      unpricedCalls30d: 0,
+      unpricedCalls24h: 0,
+      unpricedCallsOlder: 0,
+      unpriced: [] as UnpricedModelRow[],
     }
 
     // A failed read answers with an error: an outage must not read as "$0".
@@ -271,7 +320,7 @@ export function registerCostsRoutes(parent: Hono<{ Variables: Variables }>) {
     let ledgerCount: number
     let invRows: InvRow[]
     let ledgerRows: LedgerRow[]
-    let olderSpendUsd: number
+    let older: { usd: number; unpricedCalls: number }
     try {
       const [projectRes, invCountRes, ledgerCountRes, settingsRes] = await Promise.all([
         db().from('projects').select('id, name').eq('id', projectId).maybeSingle(),
@@ -287,13 +336,13 @@ export function registerCostsRoutes(parent: Hono<{ Variables: Variables }>) {
 
       // Every row of the last 30 days, page by page. `.limit(10000)` returned
       // at most PostgREST's 1,000 rows, so a busy project's spend was cut off
-      // silently; the cost of a row is resolved in JS (resolveCostUsd), the
-      // same rule the LLM budget enforces.
+      // silently. A row's cost is its stored cost_usd (resolveCostUsd), the
+      // same rule the LLM budget enforces; NULL is unpriced and counted apart.
       ;[invRows, ledgerRows] = await Promise.all([
         readAllPages<InvRow>('llm_invocations', (from, to) =>
           db()
             .from('llm_invocations')
-            .select('function_name, stage, used_model, input_tokens, output_tokens, cost_usd, created_at, status, key_source')
+            .select('function_name, stage, used_model, input_tokens, output_tokens, cost_usd, created_at, status, key_source, unpriced_reason')
             .eq('project_id', projectId)
             .gte('created_at', since30d)
             .order('created_at', { ascending: false })
@@ -309,10 +358,10 @@ export function registerCostsRoutes(parent: Hono<{ Variables: Variables }>) {
             .range(from, to),
         ),
       ])
-      olderSpendUsd =
+      older =
         invocationCount > invRows.length || ledgerCount > ledgerRows.length
           ? await spendBefore(projectId, since30d)
-          : 0
+          : { usd: 0, unpricedCalls: 0 }
     } catch (err) {
       if (err instanceof CostStatsReadError) {
         return c.json({ ok: false, error: { code: 'DB_ERROR', message: 'Could not read LLM spend. Try again in a minute.' } }, 500)
@@ -340,9 +389,18 @@ export function registerCostsRoutes(parent: Hono<{ Variables: Variables }>) {
     const ops = new Set<string>()
     const models = new Set<string>()
 
+    const unpricedRows: InvRow[] = []
+    let unpricedCalls24h = 0
+
     const bumpInv = (row: InvRow) => {
-      const cost = resolveCostUsd(row.used_model, row.input_tokens, row.output_tokens, row.cost_usd)
+      const priced = resolveCostUsd(row.cost_usd)
       const at = row.created_at
+      // An unpriced call adds no dollars: it is counted and listed instead.
+      if (priced === null) {
+        unpricedRows.push(row)
+        if (at >= since24h) unpricedCalls24h += 1
+      }
+      const cost = priced ?? 0
       const operation = row.stage ? `${row.function_name}:${row.stage}` : row.function_name
 
       totalSpendUsd += cost
@@ -394,7 +452,7 @@ export function registerCostsRoutes(parent: Hono<{ Variables: Variables }>) {
     }
 
     // All-time total: the last 30 days above plus everything older.
-    totalSpendUsd += olderSpendUsd
+    totalSpendUsd += older.usd
 
     let topOperation: string | null = null
     let topOperationUsd = 0
@@ -415,7 +473,8 @@ export function registerCostsRoutes(parent: Hono<{ Variables: Variables }>) {
     }
 
     const totalCalls = invocationCount + ledgerCount
-    const avgCostPerCall24h = calls24h > 0 ? spend24hUsd / calls24h : 0
+    const pricedCalls24h = calls24h - unpricedCalls24h
+    const avgCostPerCall24h = pricedCalls24h > 0 ? spend24hUsd / pricedCalls24h : 0
     const spendSpike24h =
       prior24hSpendUsd >= 0.01 && spend24hUsd >= prior24hSpendUsd * 3 && spend24hUsd >= 0.05
 
@@ -483,6 +542,12 @@ export function registerCostsRoutes(parent: Hono<{ Variables: Variables }>) {
         byokCalls24h,
         byokAnthropicConfigured: Boolean(settingsRow?.byok_anthropic_key_ref),
         avgCostPerCall24h: Math.round(avgCostPerCall24h * 10000) / 10000,
+        // The spend totals above are PRICED spend. Unpriced calls (no price
+        // in the shared catalog) are counted and listed here, never as $0.
+        unpricedCalls30d: unpricedRows.length,
+        unpricedCalls24h,
+        unpricedCallsOlder: older.unpricedCalls,
+        unpriced: groupUnpriced(unpricedRows),
         topPriority,
         topPriorityLabel,
         topPriorityTo,
@@ -515,7 +580,7 @@ export function registerCostsRoutes(parent: Hono<{ Variables: Variables }>) {
     let invQuery = db()
       .from('llm_invocations')
       .select(
-        'id, project_id, function_name, stage, used_model, input_tokens, output_tokens, cost_usd, created_at, status, error_message',
+        'id, project_id, function_name, stage, used_model, input_tokens, output_tokens, cost_usd, created_at, status, error_message, unpriced_reason',
         { count: 'exact' },
       )
       .eq('project_id', projectId)
@@ -571,7 +636,8 @@ export function registerCostsRoutes(parent: Hono<{ Variables: Variables }>) {
             case 'model': return row.model
             case 'input_tokens': return row.input_tokens
             case 'output_tokens': return row.output_tokens
-            case 'cost_usd': return row.cost_usd
+            // Unpriced rows sort below every priced row in either order.
+            case 'cost_usd': return row.cost_usd ?? (ascending ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY)
             default: return row.occurred_at
           }
         }
@@ -632,26 +698,26 @@ export function registerCostsRoutes(parent: Hono<{ Variables: Variables }>) {
       day: string
       operation: string
       model: string
+      /** Priced spend only. */
       total_cost_usd: number
       calls: number
+      /** Calls the shared catalog could not price, counted, not added as $0. */
+      unpriced_calls: number
     }>()
 
-    const bump = (day: string, operation: string, model: string, cost: number) => {
+    const bump = (day: string, operation: string, model: string, cost: number | null) => {
       const key = `${day}|${operation}|${model}`
-      const existing = agg.get(key)
-      if (existing) {
-        existing.total_cost_usd += cost
-        existing.calls += 1
-      } else {
-        agg.set(key, { day, operation, model, total_cost_usd: cost, calls: 1 })
-      }
+      const row = agg.get(key) ?? { day, operation, model, total_cost_usd: 0, calls: 0, unpriced_calls: 0 }
+      row.calls += 1
+      if (cost === null) row.unpriced_calls += 1
+      else row.total_cost_usd += cost
+      agg.set(key, row)
     }
 
     for (const row of invRes.data ?? []) {
       const day = row.created_at?.slice(0, 10) ?? 'unknown'
       const operation = row.stage ? `${row.function_name}:${row.stage}` : row.function_name
-      const cost = resolveCostUsd(row.used_model, row.input_tokens, row.output_tokens, row.cost_usd)
-      bump(day, operation, row.used_model, cost)
+      bump(day, operation, row.used_model, resolveCostUsd(row.cost_usd))
     }
 
     for (const row of ledgerRes.data ?? []) {
@@ -661,6 +727,55 @@ export function registerCostsRoutes(parent: Hono<{ Variables: Variables }>) {
 
     const data = Array.from(agg.values()).sort((a, b) => b.day.localeCompare(a.day))
     return c.json({ ok: true, data })
+  })
+
+  // The daily vendor check (_shared/llm-cost-reconcile.ts, run by
+  // recipe-collector) for the project's organization: which providers have an
+  // admin key to check against, and the last 14 days of results.
+  r.get('/reconciliation', async (c) => {
+    const projectId = c.req.query('project_id')
+    if (!projectId) return c.json({ ok: false, error: { code: 'ERROR', message: 'project_id required' } }, 400)
+    const { data: project, error: projErr } = await db().from('projects').select('organization_id').eq('id', projectId).maybeSingle()
+    if (projErr) return c.json({ ok: false, error: { code: 'DB_ERROR', message: projErr.message } }, 500)
+    const orgId = (project as { organization_id?: string | null } | null)?.organization_id
+    if (!orgId) return c.json({ ok: true, data: { providers: [], rows: [] } })
+    const since = new Date(Date.now() - 14 * 86_400_000).toISOString().slice(0, 10)
+    const [instRes, rowsRes] = await Promise.all([
+      db().from('connector_instances').select('id, config, read_credential_ref').eq('organization_id', orgId).eq('kind', 'llm_usage').limit(50),
+      db().from('llm_cost_reconciliations')
+        .select('connector_instance_id, provider, day, status, vendor_usd, ledger_usd, ledger_unpriced_calls, gap_usd, gap_pct, detail, updated_at')
+        .eq('organization_id', orgId)
+        .gte('day', since)
+        .order('day', { ascending: false })
+        .limit(200),
+    ])
+    if (instRes.error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: instRes.error.message } }, 500)
+    if (rowsRes.error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: rowsRes.error.message } }, 500)
+    const instances = (instRes.data ?? []) as Array<{ id: string; config: { provider?: unknown } | null; read_credential_ref: string | null }>
+    // One entry per provider: an admin key on any of its instances is enough to check.
+    const providers = (['openai', 'anthropic'] as const).map((provider) => {
+      const mine = instances.filter((i) => i.config?.provider === provider)
+      return { provider, connected: mine.length > 0, hasAdminKey: mine.some((i) => Boolean(i.read_credential_ref)) }
+    })
+    return c.json({ ok: true, data: { providers, rows: rowsRes.data ?? [] } })
+  })
+
+  // "Add price" for an unpriced model (_shared/price-override.ts). Platform
+  // super-admin only: an override is global across every KENSAURUS app.
+  r.post('/price-override', requireSuperAdmin, async (c) => {
+    const parsed = parsePriceOverride(await c.req.json().catch(() => null))
+    if (!parsed.ok) return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: parsed.error } }, 400)
+    const userId = c.get('userId') as string
+    const row = overrideRow(parsed.value, `mushi-console:${userId}`, new Date())
+    const res = await writePriceOverride(row, {
+      url: Deno.env.get('KENSAURUS_WALLET_URL') ?? '',
+      token: Deno.env.get('KENSAURUS_WALLET_INTERNAL_TOKEN') ?? '',
+    })
+    if (!res.ok) return c.json({ ok: false, error: { code: res.code, message: res.message } }, res.status as 501 | 502 | 503)
+    // The next call of this model prices from the override; rows already
+    // written stay unpriced (the price did not exist when they ran).
+    setLlmPriceSource(null)
+    return c.json({ ok: true, data: { override: res.row } })
   })
 
   parent.route('/v1/admin/costs', r)

@@ -64,3 +64,23 @@ export function appUsageFacts(
   if (llmCostUsd != null) facts.push({ label: 'AI cost', value: formatUsd(llmCostUsd), zero: llmCostUsd <= 0 })
   return facts
 }
+
+/** The next paid plan, read from the live plan rows (never a literal). */
+export interface UpgradePlanHint {
+  display_name: string
+  monthly_price_usd: number
+  included_diagnoses_per_month?: number | null
+  retention_days: number
+  feature_flags: Record<string, unknown>
+}
+
+/** "Get 1,000 diagnoses a month, 90 days of history, an audit log and email support" from a plan row. Pure. */
+export function upgradeHintText(p: UpgradePlanHint): string {
+  const parts: string[] = []
+  if (p.included_diagnoses_per_month != null) parts.push(`${p.included_diagnoses_per_month.toLocaleString()} diagnoses a month`)
+  parts.push(`${p.retention_days} days of history`)
+  if (p.feature_flags.audit_log) parts.push('an audit log')
+  if (p.feature_flags.email_support) parts.push('email support')
+  const list = parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0]
+  return `Get ${list} on`
+}

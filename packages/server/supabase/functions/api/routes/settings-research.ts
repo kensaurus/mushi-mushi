@@ -3414,14 +3414,16 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       }),
     );
 
-    const byProvider = new Map<string, { provider: string; calls: number; costUsd: number; inputTokens: number; outputTokens: number; byokCalls: number }>();
+    const byProvider = new Map<string, { provider: string; calls: number; costUsd: number; unpricedCalls: number; inputTokens: number; outputTokens: number; byokCalls: number }>();
     for (const row of spendRes.data ?? []) {
       // A vendor-prefixed id (`openai/gpt-5.4`) is what Mushi sends to OpenRouter.
       const usedModel = (row.used_model as string | null) ?? '';
       const provider = usedModel.includes('/') ? 'openrouter' : providerFromModel(usedModel);
-      const cur = byProvider.get(provider) ?? { provider, calls: 0, costUsd: 0, inputTokens: 0, outputTokens: 0, byokCalls: 0 };
+      const cur = byProvider.get(provider) ?? { provider, calls: 0, costUsd: 0, unpricedCalls: 0, inputTokens: 0, outputTokens: 0, byokCalls: 0 };
       cur.calls++;
-      cur.costUsd += Number(row.cost_usd ?? 0);
+      // cost_usd NULL = no price in the shared catalog: counted, not added as $0.
+      if (row.cost_usd == null) cur.unpricedCalls++;
+      else cur.costUsd += Number(row.cost_usd);
       cur.inputTokens += Number(row.input_tokens ?? 0);
       cur.outputTokens += Number(row.output_tokens ?? 0);
       if (row.key_source === 'byok') cur.byokCalls++;

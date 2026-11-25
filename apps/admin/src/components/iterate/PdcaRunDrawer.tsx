@@ -139,7 +139,7 @@ export function PdcaRunDrawer({ run, open, onClose, onAbort, onTrigger, onRefres
                     <div className="flex flex-wrap items-center gap-2">
                       <ScoreBar score={iter.score} />
                       <span className="font-mono text-3xs text-fg-faint">
-                        {(iter.ms_elapsed / 1000).toFixed(1)}s · ${iter.model_cost_usd.toFixed(4)}
+                        {(iter.ms_elapsed / 1000).toFixed(1)}s · {iter.model_cost_usd == null ? 'unpriced' : `$${Number(iter.model_cost_usd).toFixed(4)}`}
                       </span>
                     </div>
                     {iter.critique_text && (

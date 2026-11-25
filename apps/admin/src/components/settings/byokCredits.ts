@@ -30,6 +30,8 @@ export interface ProviderSpend {
   provider: string
   calls: number
   costUsd: number
+  /** Calls with no price in the price book (not in costUsd). */
+  unpricedCalls?: number
   inputTokens: number
   outputTokens: number
   byokCalls: number
@@ -86,5 +88,6 @@ export function spendLine(s: ProviderSpend | undefined): string {
   if (!s || s.calls === 0) return 'No AI calls from this app through this service in the last 30 days.'
   const tokens = count.format(s.inputTokens + s.outputTokens)
   const calls = `${count.format(s.calls)} ${s.calls === 1 ? 'call' : 'calls'}`
-  return `This app, last 30 days: $${s.costUsd.toFixed(2)} across ${calls} (${tokens} tokens), ${count.format(s.byokCalls)} on your keys.`
+  const unpriced = s.unpricedCalls ? `, ${count.format(s.unpricedCalls)} not priced yet` : ''
+  return `This app, last 30 days: $${s.costUsd.toFixed(2)} across ${calls} (${tokens} tokens), ${count.format(s.byokCalls)} on your keys${unpriced}.`
 }

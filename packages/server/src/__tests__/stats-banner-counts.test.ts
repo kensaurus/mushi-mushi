@@ -126,9 +126,33 @@ describe('costs/stats', () => {
       },
     )
     const { body } = await get(`/v1/admin/costs/stats?project_id=${P}`)
-    // 0.01 in the window + 1 persisted + 0.5 ledger + 0 for the zero-token unpriced row.
+    // 0.01 in the window + 1 persisted + 0.5 ledger; the older unpriced row is counted, not priced.
     expect(body.data.totalSpendUsd).toBeCloseTo(1.51, 4)
+    expect(body.data.unpricedCallsOlder).toBe(1)
     expect(db.rpcCalls.map((c) => c.fn)).toContain('llm_spend_before')
+  })
+
+  it('keeps unpriced calls out of the dollar totals and lists them by model', async () => {
+    db = makeFakeDb(
+      {
+        projects: [{ id: P, name: 'glot.it' }],
+        project_settings: [{ project_id: P, byok_anthropic_key_ref: 'ref' }],
+        llm_invocations: [
+          invocation(1),
+          invocation(2, { cost_usd: null, used_model: 'claude-made-up-9', input_tokens: 500, output_tokens: 50, unpriced_reason: 'anthropic:claude-made-up-9: no price in force' }),
+          invocation(3, { cost_usd: null, used_model: 'claude-made-up-9', input_tokens: 100, output_tokens: 5, unpriced_reason: 'anthropic:claude-made-up-9: no price in force' }),
+        ],
+        llm_cost_usd: [],
+      },
+      { maxRows: 1000 },
+    )
+    const { body } = await get(`/v1/admin/costs/stats?project_id=${P}`)
+    expect(body.data.spend30dUsd).toBeCloseTo(0.01, 6)
+    expect(body.data.calls30d).toBe(3)
+    expect(body.data.unpricedCalls30d).toBe(2)
+    expect(body.data.unpriced).toEqual([
+      expect.objectContaining({ provider: 'anthropic', model: 'claude-made-up-9', calls: 2, inputTokens: 600, outputTokens: 55, reason: 'anthropic:claude-made-up-9: no price in force' }),
+    ])
   })
 
   it('answers a failed read with an error instead of $0', async () => {

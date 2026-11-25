@@ -2,7 +2,6 @@ import type { Hono } from 'npm:hono@4';
 import type { Variables } from '../types.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
-import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { dbError, callerProjectIds, isProjectAdmin, requireProjectAdmin, resolveOwnedProject } from '../shared.ts';
 import { loadLlmWindowStats } from '../../_shared/llm-window-stats.ts';
 import { log } from '../../_shared/logger.ts';
@@ -388,7 +387,10 @@ export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void 
         fallbacks: number;
         avgLatencyMs: number;
         p95LatencyMs: number;
+        /** Priced spend only. */
         costUsd: number;
+        /** Calls with no price in the shared catalog (cost_usd NULL), counted, not added as $0. */
+        unpricedCalls: number;
         lastFailureAt: string | null;
       }
     > = {};
@@ -408,6 +410,7 @@ export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void 
         avgLatencyMs: 0,
         p95LatencyMs: 0,
         costUsd: 0,
+        unpricedCalls: 0,
         lastFailureAt: null,
       };
       const fnAgg = byFunction[fnKey];
@@ -421,12 +424,10 @@ export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void 
         }
       }
       if (r.fallback_used) fnAgg.fallbacks += 1;
-      // Prefer the persisted cost_usd column Fall back to the
-      // shared estimator for ancient rows the backfill missed.
-      fnAgg.costUsd +=
-        r.cost_usd != null
-          ? Number(r.cost_usd)
-          : estimateCallCostUsd(r.used_model, r.input_tokens ?? 0, r.output_tokens ?? 0);
+      // The persisted cost_usd, priced at write time from the shared catalog.
+      // NULL is unpriced: counted, never re-priced or added as $0.
+      if (r.cost_usd != null) fnAgg.costUsd += Number(r.cost_usd);
+      else fnAgg.unpricedCalls += 1;
       fnLatency[fnKey] ??= [];
       fnLatency[fnKey].push(r.latency_ms ?? 0);
     }

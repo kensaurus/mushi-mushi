@@ -33,7 +33,7 @@ import { claudeGenerateObject, claudeStreamObject } from '../_shared/claude-mess
 import { resolveClaudeModel } from '../_shared/claude-request.ts';
 import { childTraceparent } from '../_shared/trace.ts';
 import { otlpSpan, setGenAiAttributes } from '../_shared/otlp-exporter.ts';
-import { estimateCallCostUsd } from '../_shared/pricing.ts';
+import { priceLlmCall } from '../_shared/llm-cost.ts';
 import { byokLiftsFreeCap, checkDiagnosisQuota, invalidateDiagnosisCache } from '../_shared/quota.ts';
 import { emitProductEvent } from '../_shared/product-events.ts';
 import { keepAlive } from '../_shared/background.ts';
@@ -722,7 +722,7 @@ ${ontologyContext}${inventoryContext}${mcpContextSection}`;
       if (_otlpSpanCtx) {
         const inputTokens = tokenUsage.promptTokens ?? null;
         const outputTokens = tokenUsage.completionTokens ?? null;
-        const costUsd = estimateCallCostUsd(usedModel, inputTokens ?? 0, outputTokens ?? 0);
+        const costUsd = (await priceLlmCall({ model: usedModel, inputTokens, outputTokens })).costUsd;
         setGenAiAttributes(_otlpSpanCtx, {
           operationName: 'chat',
           requestModel: modelId,

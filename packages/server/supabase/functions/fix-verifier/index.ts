@@ -52,7 +52,7 @@ import { log as rootLog } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import type { ResolvedKey } from '../_shared/byok.ts'
-import { estimateCallCostUsd } from '../_shared/pricing.ts'
+import { priceLlmCall } from '../_shared/llm-cost.ts'
 import { extractLlmUsage, recordLlmUsage, servedModel } from '../_shared/llm-usage.ts'
 import { sanitizeForLLM } from '../_shared/sanitize.ts'
 import { mapWithConcurrency } from '../_shared/concurrency.ts'
@@ -516,7 +516,7 @@ async function runSecondJudge(
   })
   const model = servedModel(result, judgeModel)
   const tokens = extractLlmUsage(result)
-  const cost = estimateCallCostUsd(model, tokens.inputTokens ?? 0, tokens.outputTokens ?? 0)
+  const cost = (await priceLlmCall({ model, inputTokens: tokens.inputTokens, outputTokens: tokens.outputTokens })).costUsd
   const record: SecondJudgeRecord = {
     provider: judgeProvider,
     model,
@@ -525,7 +525,7 @@ async function runSecondJudge(
     summary: review.summary,
     input_tokens: tokens.inputTokens ?? null,
     output_tokens: tokens.outputTokens ?? null,
-    cost_usd: Math.round(cost * 10_000) / 10_000,
+    cost_usd: cost === null ? null : Math.round(cost * 10_000) / 10_000,
     at,
   }
   return { state: { kind: 'result', record }, record }

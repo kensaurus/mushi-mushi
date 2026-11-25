@@ -24,7 +24,7 @@ import { sendBotMessage, sendSlackText } from '../_shared/slack.ts'
 import { createTrace } from '../_shared/observability.ts'
 import { tagLangfuseTrace } from '../_shared/sentry.ts'
 import { claudeGenerateObject, claudeGenerateText } from '../_shared/claude-messages.ts'
-import { estimateCallCostUsd } from '../_shared/pricing.ts'
+import { priceLlmCall } from '../_shared/llm-cost.ts'
 import { withLlmUsage } from '../_shared/llm-usage.ts'
 import { OPENAI_PRIMARY } from '../_shared/models.ts'
 import { PDCA_DEFAULT_MODEL, resolvePdcaModel } from '../_shared/pdca-models.ts'
@@ -371,7 +371,7 @@ Deno.serve(
 
         // Critic — use multi-key failover
         let critiqueResult: z.infer<typeof rubricSchema>
-        let costUsd = 0
+        let costUsd: number | null = 0
         const { result: criticResult } = await withAnthropicOrOpenAi(
           db,
           run.project_id as string,
@@ -382,7 +382,7 @@ Deno.serve(
               schema: rubricSchema,
               prompt: `${personaPrompt}\n\nGoal: ${goal}\n\nPage:\n${draft.slice(0, 5000)}\n\nEvaluate critically.`,
             }))
-            costUsd = estimateCallCostUsd(k.model ?? judgeModel, usage.promptTokens, usage.completionTokens)
+            costUsd = (await priceLlmCall({ model: k.model ?? judgeModel, inputTokens: usage.promptTokens, outputTokens: usage.completionTokens })).costUsd
             return object
           },
           async (k) => {
@@ -392,7 +392,7 @@ Deno.serve(
               schema: rubricSchema,
               prompt: `${personaPrompt}\n\nGoal: ${goal}\n\nPage:\n${draft.slice(0, 5000)}\n\nEvaluate critically.`,
             }))
-            costUsd = estimateCallCostUsd(k.model ?? OPENAI_PRIMARY, usage.promptTokens, usage.completionTokens)
+            costUsd = (await priceLlmCall({ model: k.model ?? OPENAI_PRIMARY, inputTokens: usage.promptTokens, outputTokens: usage.completionTokens })).costUsd
             return object
           },
           { feature: 'pdca-critic', tier: 'standard' },

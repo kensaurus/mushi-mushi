@@ -11,7 +11,6 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { fixModelFor, parseClaudeModelSetting, resolveStage1Model } from '../../supabase/functions/_shared/project-models.ts'
-import { estimateCallCostUsd } from '../../supabase/functions/_shared/pricing.ts'
 
 describe('resolveStage1Model', () => {
   it('keeps Haiku 4.5 on the AI SDK path when unset or at the column default', () => {
@@ -61,15 +60,7 @@ describe('fixModelFor (claude_default_model)', () => {
   })
 })
 
-describe('Haiku 5.5 long-prompt pricing', () => {
-  it('bills the base rate up to 100K prompt tokens', () => {
-    expect(estimateCallCostUsd('claude-haiku-5-5', 100_000, 1_000)).toBeCloseTo(0.0105, 6)
-  })
-
-  it('bills the whole call at the long rate above 100K', () => {
-    expect(estimateCallCostUsd('claude-haiku-5-5', 200_000, 1_000)).toBeCloseTo(0.1025, 6)
-  })
-})
+// Haiku 5.5 long-prompt pricing is the catalog's tier; llm-cost.test.ts covers it.
 
 describe('fast-filter wiring', () => {
   it('reads stage1_model and routes 5.x through claudeGenerateObject at low effort', () => {

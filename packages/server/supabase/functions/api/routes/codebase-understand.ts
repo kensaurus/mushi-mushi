@@ -22,7 +22,7 @@ import {
   THINKING_HEADROOM_TOKENS,
 } from '../../_shared/models.ts'
 import { claudeGenerateText, claudeStreamText } from '../../_shared/claude-messages.ts'
-import { estimateCallCostUsd } from '../../_shared/pricing.ts'
+import { priceLlmCall } from '../../_shared/llm-cost.ts'
 import { logLlmInvocation, extractAnthropicCacheUsage } from '../../_shared/telemetry.ts'
 import { withAnthropicOrOpenAi, LlmFailoverError } from '../../_shared/llm-failover.ts'
 import { resolveLlmKey } from '../../_shared/byok.ts'
@@ -351,7 +351,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
 
       const answer = result.text.trim()
       const latencyMs = Date.now() - started
-      const costUsd = estimateCallCostUsd(usedModel, inputTokens ?? 0, outputTokens ?? 0)
+      const costUsd = (await priceLlmCall({ model: usedModel, inputTokens, outputTokens })).costUsd
 
       await upsertCodebaseChatThread(db, {
         threadId,
@@ -534,7 +534,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
         outputTokens = usage?.completionTokens
 
         const latencyMs = Date.now() - started
-        const costUsd = estimateCallCostUsd(usedModel, inputTokens ?? 0, outputTokens ?? 0)
+        const costUsd = (await priceLlmCall({ model: usedModel, inputTokens, outputTokens })).costUsd
 
         await upsertCodebaseChatThread(db, {
           threadId,

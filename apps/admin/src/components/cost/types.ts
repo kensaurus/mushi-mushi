@@ -34,6 +34,11 @@ export interface CostStats {
   byokCalls24h: number
   byokAnthropicConfigured: boolean
   avgCostPerCall24h: number
+  /** Calls the shared price book could not price: counted, never added as $0 to the totals above. */
+  unpricedCalls30d: number
+  unpricedCalls24h: number
+  unpricedCallsOlder: number
+  unpriced: UnpricedModelRow[]
   topPriority: CostTopPriority
   topPriorityLabel: string | null
   topPriorityTo: string | null
@@ -67,15 +72,54 @@ export const EMPTY_COST_STATS: CostStats = {
   byokCalls24h: 0,
   byokAnthropicConfigured: false,
   avgCostPerCall24h: 0,
+  unpricedCalls30d: 0,
+  unpricedCalls24h: 0,
+  unpricedCallsOlder: 0,
+  unpriced: [],
   topPriority: 'no_project',
   topPriorityLabel: null,
   topPriorityTo: null,
+}
+
+/** One model's unpriced calls in the last 30 days (GET /v1/admin/costs/stats). */
+export interface UnpricedModelRow {
+  provider: string
+  model: string
+  calls: number
+  inputTokens: number
+  outputTokens: number
+  lastSeenAt: string
+  reason: string
+}
+
+/** One day's check of the ledger against the provider's bill. */
+export interface ReconcileRow {
+  connector_instance_id: string
+  provider: 'openai' | 'anthropic'
+  day: string
+  status: 'ok' | 'gap' | 'skipped' | 'error'
+  vendor_usd: number | string | null
+  ledger_usd: number | string | null
+  ledger_unpriced_calls: number
+  gap_usd: number | string | null
+  gap_pct: number | string | null
+  detail: Record<string, unknown> | null
+  updated_at: string
+}
+
+/** GET /v1/admin/costs/reconciliation */
+export interface CostReconciliation {
+  providers: Array<{ provider: 'openai' | 'anthropic'; connected: boolean; hasAdminKey: boolean }>
+  rows: ReconcileRow[]
 }
 
 export interface SummaryRow {
   day: string
   operation: string
   model: string
+  /** Priced spend only. */
   total_cost_usd: number
   calls: number
+  /** Calls in the bucket with no price in the price book (not in total_cost_usd). */
+  unpriced_calls?: number
 }

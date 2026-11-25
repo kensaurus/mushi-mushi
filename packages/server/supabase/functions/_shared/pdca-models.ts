@@ -15,7 +15,7 @@
 
 import { ANTHROPIC_SONNET_LATEST } from './models.ts'
 import { resolveClaudeModel } from './claude-request.ts'
-import { LLM_PRICING_PER_M_TOKENS } from './pricing.ts'
+import { KNOWN_MODEL_IDS } from './llm-cost.ts'
 
 /** Producer and critic default for a new PDCA run. */
 export const PDCA_DEFAULT_MODEL = ANTHROPIC_SONNET_LATEST
@@ -25,8 +25,8 @@ const CLAUDE_MODEL_ID_RE = /^claude-[a-z0-9][a-z0-9.-]{1,60}$/
 /**
  * Validation for `primary_model` / `judge_model` on POST /v1/admin/pdca.
  * Absent is fine (the default applies). Anything else must be a Claude id
- * that the runner can call and price: it resolves (retired ids map to the
- * default, dated Haiku to its alias) to a Claude model in the pricing table.
+ * that the runner can call: it resolves (retired ids map to the default,
+ * dated Haiku to its alias) to a Claude model Mushi knows (KNOWN_MODEL_IDS).
  * So the console's choices pass, and a typo such as `claude-foo` is refused
  * here instead of failing the run later.
  */
@@ -35,7 +35,7 @@ export function pdcaModelError(field: string, raw: unknown): string | null {
   const message = `${field} must be a Claude model id such as ${PDCA_DEFAULT_MODEL}.`
   if (typeof raw !== 'string' || !CLAUDE_MODEL_ID_RE.test(raw.trim())) return message
   const resolved = resolvePdcaModel(raw)
-  if (!resolved.startsWith('claude-') || !Object.hasOwn(LLM_PRICING_PER_M_TOKENS, resolved)) {
+  if (!resolved.startsWith('claude-') || !KNOWN_MODEL_IDS.has(resolved)) {
     return `${field} "${raw.trim().slice(0, 64)}" is not a Claude model Mushi knows. Use ${PDCA_DEFAULT_MODEL}, claude-opus-5-5, claude-fable-5-1 or claude-haiku-5-5.`
   }
   return null

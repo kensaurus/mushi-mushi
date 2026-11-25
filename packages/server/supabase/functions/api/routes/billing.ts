@@ -3,6 +3,7 @@ import type { Variables } from '../types.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { adminOrApiKey } from '../../_shared/auth.ts';
 import { getPlan, listPlans } from '../../_shared/plans.ts';
+import { annualDiscountPct, annualPricesByPlan } from '../../_shared/plan-annual-prices.ts';
 import { countPeriodUsage, llmCostByProjectSince, llmCostSince } from '../../_shared/billing-usage-counts.ts';
 import {
   countOrgUsage,
@@ -261,7 +262,7 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
     // Always send the plan catalog so the FE can render the upgrade modal
     // without a second round-trip — even when the user owns 0 projects. It
     // does not depend on the project read, so both run at once.
-    const [{ data: projects }, plans] = await Promise.all([
+    const [{ data: projects }, planRows, annualPrices] = await Promise.all([
       projectIdsForUser.length > 0
         ? db
             .from('projects')
@@ -270,7 +271,14 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
             .order('created_at', { ascending: true })
         : Promise.resolve({ data: [] as Array<{ id: string; name: string; organization_id: string | null }> }),
       listPlans(),
+      annualPricesByPlan(),
     ]);
+    // The annual price is the Stripe Price object checkout charges; the
+    // saving is derived from it, never a constant (cost catalog, 2026-11-25).
+    const plans = planRows.map((pl) => {
+      const annual = annualPrices[pl.id] ?? null;
+      return { ...pl, annual_price_usd: annual, annual_discount_pct: annualDiscountPct(Number(pl.monthly_price_usd), annual) };
+    });
 
     if (!projects || projects.length === 0) {
       return c.json({ ok: true, data: { projects: [], plans } });
