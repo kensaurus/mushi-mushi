@@ -30,6 +30,7 @@ interface State {
   /** What each update wrote, in order (stamped holds the row ids). */
   updates?: Row[]
   fixEventError?: { code: string; message: string } | null
+  updateError?: { message: string } | null
 }
 
 function makeDb(state: State) {
@@ -52,7 +53,7 @@ function makeDb(state: State) {
         eq: (_c: string, id: string) => {
           state.stamped.push(id)
           ;(state.updates ??= []).push(row)
-          return Promise.resolve({ error: null })
+          return Promise.resolve({ error: state.updateError ?? null })
         },
       }),
     }
@@ -201,6 +202,41 @@ describe('resolveLinkedSentryIssues', () => {
     expect(state.stamped).toEqual([])
     expect(state.fixEvents[0]).toMatchObject({ status: 'fail', dedupe_key: 'sentry_resolve_fail:4501' })
     expect(String(state.fixEvents[0].detail)).toContain('event:write')
+  })
+
+  // Issue 7863635600 (2026-11-24): a detector-owned issue (metric alert)
+  // cannot be resolved by hand; Sentry closes it when the condition clears.
+  const refusedManual = async () => json({ detail: 'Cannot manually resolve one or more issues.' }, 400)
+
+  it('marks a link Sentry refuses to resolve by hand, without resolving or archiving it', async () => {
+    const result = await rb.resolveLinkedSentryIssues(makeDb(state), input, { credentials: creds, fetchImpl: refusedManual })
+    expect(result.resolved).toEqual([])
+    expect(result.failed).toEqual([])
+    expect(result.sentryManaged).toEqual(['4501'])
+    expect(state.stamped).toEqual(['l1'])
+    expect(state.updates).toHaveLength(1)
+    expect(Object.keys(state.updates![0])).toEqual(['sentry_managed_at'])
+    expect(state.fixEvents[0]).toMatchObject({ status: 'pending', dedupe_key: 'sentry_resolve_managed:4501' })
+    expect(String(state.fixEvents[0].detail)).not.toContain('event:write')
+  })
+
+  it('does not ask Sentry again for a link it already refused', async () => {
+    state.links = [{ id: 'l1', external_id: '4501', sentry_managed_at: '2026-11-24T00:00:00Z' }]
+    let calls = 0
+    const result = await rb.resolveLinkedSentryIssues(makeDb(state), input, {
+      credentials: creds,
+      fetchImpl: async () => (calls++, json({})),
+    })
+    expect(result.skipped).toBe('no_links')
+    expect(calls).toBe(0)
+  })
+
+  it('keeps the refusal a failure when the mark cannot be saved, so it is retried', async () => {
+    state.updateError = { message: 'db down' }
+    const result = await rb.resolveLinkedSentryIssues(makeDb(state), input, { credentials: creds, fetchImpl: refusedManual })
+    expect(result.sentryManaged).toBeUndefined()
+    expect(result.failed[0].issueId).toBe('4501')
+    expect(state.fixEvents).toEqual([])
   })
 
   it('a redelivered failure hits the dedupe key instead of throwing or stacking', async () => {

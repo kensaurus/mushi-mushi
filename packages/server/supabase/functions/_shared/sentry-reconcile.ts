@@ -90,15 +90,23 @@ export async function reconcileSentryLinks(
   const archive = deps.archive ?? archiveLinkedSentryIssues;
   const batch = Math.max(1, deps.batch ?? RECONCILE_BATCH);
 
-  const { data, error } = await db
-    .from('report_external_issues')
-    .select('report_id, project_id, external_id, reports!inner(status, closed_reason)')
-    .eq('system', 'sentry')
-    .is('resolved_at', null)
-    .is('archived_at', null)
-    .in('reports.status', ['fixed', 'resolved', 'verified', 'dismissed'])
-    .order('created_at', { ascending: true })
-    .limit(RECONCILE_SCAN);
+  const scan = (skipManaged: boolean) => {
+    let q = db
+      .from('report_external_issues')
+      .select('report_id, project_id, external_id, reports!inner(status, closed_reason)')
+      .eq('system', 'sentry')
+      .is('resolved_at', null)
+      .is('archived_at', null);
+    // Issues Sentry closes itself (it refused a manual resolve) take no slot.
+    if (skipManaged) q = q.is('sentry_managed_at', null);
+    return q
+      .in('reports.status', ['fixed', 'resolved', 'verified', 'dismissed'])
+      .order('created_at', { ascending: true })
+      .limit(RECONCILE_SCAN);
+  };
+  let { data, error } = await scan(true);
+  // 42703 = migration 20261125120000 not applied yet: scan without the column.
+  if (error?.code === '42703') ({ data, error } = await scan(false));
   if (error) throw new Error(`Sentry reconcile lookup failed: ${error.message}`);
 
   // One entry per report: resolve and archive handle all of a report's links.

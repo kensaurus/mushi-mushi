@@ -62,6 +62,7 @@ interface SentryLinkRow {
   id: string;
   external_id: string;
   archived_at?: string | null;
+  sentry_managed_at?: string | null;
 }
 
 async function loadSentryLinks(
@@ -70,16 +71,21 @@ async function loadSentryLinks(
   reportId: string,
   onlyOpen: boolean,
 ): Promise<SentryLinkRow[]> {
-  let q = db
-    .from('report_external_issues')
-    .select('id, external_id, archived_at')
-    .eq('report_id', reportId)
-    .eq('project_id', projectId)
-    .eq('system', 'sentry');
-  if (onlyOpen) q = q.is('resolved_at', null);
-  const { data, error } = await q;
+  const read = (columns: string) => {
+    let q = db
+      .from('report_external_issues')
+      .select(columns)
+      .eq('report_id', reportId)
+      .eq('project_id', projectId)
+      .eq('system', 'sentry');
+    if (onlyOpen) q = q.is('resolved_at', null);
+    return q;
+  };
+  let { data, error } = await read('id, external_id, archived_at, sentry_managed_at');
+  // 42703 = migration 20261125120000 not applied yet: read without the column.
+  if (error?.code === '42703') ({ data, error } = await read('id, external_id, archived_at'));
   if (error) throw new Error(`report_external_issues lookup failed: ${error.message}`);
-  return (data ?? []) as SentryLinkRow[];
+  return (data ?? []) as unknown as SentryLinkRow[];
 }
 
 /**
@@ -153,6 +159,9 @@ export interface SentryResolveBackResult {
   failed: Array<{ issueId: string; error: string }>;
   /** Issues Sentry answered 404 for (deleted or merged away): stamped, not retried. */
   gone?: string[];
+  /** Issues Sentry refused to resolve by hand because it closes them itself
+   *  (metric and other detector issues): left open, marked, not retried. */
+  sentryManaged?: string[];
   skipped?: 'no_links' | 'no_credentials';
 }
 
@@ -170,12 +179,22 @@ function isGoneInSentry(err: unknown): boolean {
   return err instanceof SentryApiError && err.status === 404;
 }
 
+/**
+ * Sentry's 400 "Cannot manually resolve one or more issues": the issue's
+ * status belongs to a Sentry detector (a metric alert or uptime issue), which
+ * resolves it when the condition clears. No token scope or retry changes that
+ * (issue 7863635600, 2026-11-24).
+ */
+export function isManualResolveRefused(err: unknown): boolean {
+  return err instanceof SentryApiError && err.status === 400 && /cannot manually resolve/i.test(err.message);
+}
+
 async function recordFixEvent(
   db: SupabaseClient,
   row: {
     fixAttemptId: string | null;
     projectId: string;
-    status: 'ok' | 'fail';
+    status: 'ok' | 'fail' | 'pending';
     label: string;
     detail: string;
     dedupeKey: string;
@@ -225,9 +244,10 @@ export async function resolveLinkedSentryIssues(
   const { projectId, reportId, fixAttemptId, prUrl } = input;
   const how = prUrl ? `after ${prUrl} merged` : 'after the report was marked fixed in Mushi';
   // Only numeric Sentry issue ids (what ingest links). Any other `sentry`
-  // link shape is left to resolveExternalIssue.
-  const links = (await loadSentryLinks(db, projectId, reportId, true)).filter((l) =>
-    /^\d+$/.test(l.external_id),
+  // link shape is left to resolveExternalIssue. Links Sentry already refused
+  // to resolve by hand are skipped: asking again only gets the same 400.
+  const links = (await loadSentryLinks(db, projectId, reportId, true)).filter(
+    (l) => /^\d+$/.test(l.external_id) && !l.sentry_managed_at,
   );
   if (links.length === 0) return { resolved: [], failed: [], skipped: 'no_links' };
 
@@ -289,6 +309,29 @@ export async function resolveLinkedSentryIssues(
         await db.from('report_external_issues').update({ resolved_at: new Date().toISOString(), archived_at: null }).eq('id', link.id);
         log.warn('Sentry issue no longer exists; link closed', { projectId, reportId, issueId: link.external_id });
         (result.gone ??= []).push(link.external_id);
+        continue;
+      }
+      if (isManualResolveRefused(err)) {
+        // Not resolved and not archived: only marked, so no caller asks again.
+        const { error: markErr } = await db
+          .from('report_external_issues')
+          .update({ sentry_managed_at: new Date().toISOString() })
+          .eq('id', link.id);
+        if (!markErr) {
+          log.warn('Sentry closes this issue itself; manual resolve refused, link left open', { projectId, reportId, issueId: link.external_id });
+          await recordFixEvent(db, {
+            fixAttemptId,
+            projectId,
+            status: 'pending',
+            label: `Sentry issue ${link.external_id} closes on its own`,
+            detail: 'Sentry does not let anyone resolve this issue by hand: its alert resolves it when the condition clears. It stays open in Sentry until then.',
+            dedupeKey: `sentry_resolve_managed:${link.external_id}`,
+          });
+          (result.sentryManaged ??= []).push(link.external_id);
+          continue;
+        }
+        log.error('Sentry refused a manual resolve and marking the link failed', { linkId: link.id, err: markErr.message });
+        result.failed.push({ issueId: link.external_id, error: `manual resolve refused; mark failed: ${markErr.message}`.slice(0, 300) });
         continue;
       }
       const message = String(err instanceof Error ? err.message : err).slice(0, 300);
