@@ -33,6 +33,7 @@ import {
 } from '@mushi-mushi/core/reporter-ui';
 import type { MushiLocale } from './i18n';
 import type * as Views from './widget-views';
+import { icon, TYPE_ICON_IDS, type WidgetIconName } from './widget-icons';
 import {
   buildBrandFooterHref,
   DESCRIPTION_MAX_LENGTH,
@@ -74,6 +75,16 @@ export interface WidgetRenderCtx {
   /** Current description text (kept in sync on input). */
   draftLength: number;
   canSend: boolean;
+  /** Characters still needed before Send goes through (0 when ready). */
+  charsNeeded: number;
+  /** The minimum length, for the meter ring. */
+  minLength: number;
+  /** Send was pressed below the minimum: the meter turns red until it is met. */
+  lengthNudge: boolean;
+  /** Shake the meter once (the render right after the refused Send). */
+  nudgeShake: boolean;
+  /** The header BETA chip's disclosure is open. */
+  betaOpen: boolean;
   submitting: boolean;
   screenshotCapturing: boolean;
   screenshotAttached: boolean;
@@ -151,12 +162,16 @@ export interface WidgetRenderCtx {
 export interface ViewRegions {
   header: string;
   lead: string;
+  /** Report screen only: the length meter under the textarea (re-rendered per keystroke). */
+  meter?: string;
   body: string;
   footer: string;
 }
 
 const esc = escapeHtml;
 const BUILTIN_CHIPS = ['bug', 'slow', 'visual', 'confusing'] as const;
+/** Ring circumference for r = 8 (the meter's SVG). */
+const RING = 50.27;
 /** For a custom locale object written before `widget.hideLauncher` existed. */
 const HIDE_LAUNCHER_FALLBACK = 'Hide the bug button for this visit';
 
@@ -228,12 +243,28 @@ function renderHeader(ctx: WidgetRenderCtx, title: string, back = false): string
   const menu = items.length
     ? `<div class="mushi-menu-wrap">${btn('toggle-more-nav', '⋯', 'mushi-icon-btn', ` aria-haspopup="menu" aria-expanded="${ctx.showMoreNav}" aria-label="${esc(p.moreOptions)}"`)}${ctx.showMoreNav ? `<div class="mushi-menu" role="menu">${items.join('')}</div>` : ''}</div>`
     : '';
+  // On the report screen the picked type's icon replaces the host favicon (ADR 0070).
+  const typeBadge = ctx.step === 'report' && ctx.chip && TYPE_ICON_IDS.has(ctx.chip)
+    ? `<span class="mushi-header-type" aria-hidden="true">${icon(ctx.chip as WidgetIconName)}</span>`
+    : '';
   const lead = back
     ? btn('back', '←', 'mushi-icon-btn', ` aria-label="${esc(ctx.locale.widget.back)}"`)
-    : ctx.pageFaviconHref
+    : typeBadge || (ctx.pageFaviconHref
       ? `<img class="mushi-header-host-icon" src="${esc(ctx.pageFaviconHref)}" alt="" referrerpolicy="no-referrer" width="20" height="20" />`
-      : '';
-  return `${lead}<h2 id="mushi-title" class="mushi-title">${esc(title)}</h2>${pill}${menu}${btn('close', '✕', 'mushi-icon-btn', ` aria-label="${esc(ctx.locale.widget.close)}"`)}`;
+      : '');
+  const beta = ctx.step === 'report' && ctx.config.betaMode?.enabled ? renderBetaChip(ctx) : '';
+  return `${lead}<h2 id="mushi-title" class="mushi-title">${esc(title)}</h2>${beta}${pill}${menu}${btn('close', '✕', 'mushi-icon-btn', ` aria-label="${esc(ctx.locale.widget.close)}"`)}`;
+}
+
+/**
+ * The beta notice as a header chip (ADR 0070): one word in the header, the
+ * message, contact link, perks and changelog in a disclosure under it. A
+ * button, not a hover tooltip, so touch and keyboard users can open it.
+ */
+function renderBetaChip(ctx: WidgetRenderCtx): string {
+  const strip = ctx.locale.flows.betaStrip;
+  const chip = btn('toggle-beta', 'Beta', 'mushi-beta-chip', ` aria-expanded="${ctx.betaOpen}" aria-controls="mushi-beta-pop" aria-label="${esc(strip.ariaLabel)}"`);
+  return ctx.betaOpen ? `${chip}${renderBetaStrip(ctx)}` : chip;
 }
 
 export function renderOutdatedBanner(ctx: WidgetRenderCtx): string {
@@ -257,19 +288,53 @@ function chipLabel(ctx: WidgetRenderCtx, id: string): string {
   if (id === 'idea' || id === 'feature') return ctx.config.featureRequestLabel || ctx.rc.categories.idea;
   const custom = ctx.resolveCustomCategory(id);
   if (custom) return custom.label;
+  if (id === 'other') return ctx.locale.step1.categories.other;
   return (ctx.rc.categories as Record<string, string>)[id] ?? '';
 }
 
-function chip(ctx: WidgetRenderCtx, id: string, index: number, selected: string | null): string {
+/**
+ * One report-type tile (ADR 0070): its colour, its icon, its label. A radio in
+ * a roving-tabindex radiogroup; the checked tile (or the first) is the one Tab stop.
+ */
+function tile(ctx: WidgetRenderCtx, id: string, index: number, selected: string | null): string {
   const on = selected === id;
-  // Roving tabindex: the checked chip (or the first) is the one Tab stop.
   const tab = on || (selected === null && index === 0) ? '0' : '-1';
-  return `<button type="button" class="mushi-chip" role="radio" aria-checked="${on}" tabindex="${tab}" data-action="chip" data-category="${esc(id)}">${esc(chipLabel(ctx, id))}</button>`;
+  const custom = TYPE_ICON_IDS.has(id) ? undefined : ctx.resolveCustomCategory(id);
+  const glyph = custom
+    ? custom.icon ? `<span class="mushi-tile-emoji" aria-hidden="true">${esc(custom.icon)}</span>` : icon('other')
+    : icon((TYPE_ICON_IDS.has(id) ? id : 'other') as WidgetIconName);
+  return `<button type="button" class="mushi-tile" role="radio" aria-checked="${on}" tabindex="${tab}" data-action="chip" data-category="${esc(id)}"><span class="mushi-tile-ico">${glyph}</span><span class="mushi-tile-label">${esc(chipLabel(ctx, id))}</span><span class="mushi-tile-check" aria-hidden="true">${icon('check')}</span></button>`;
+}
+
+/** Textarea prompt for the picked type: the host's idea text, the locale's per-type prompt, then the old placeholders. */
+function promptFor(ctx: WidgetRenderCtx): string {
+  const s3 = ctx.locale.step3;
+  const prompts = ctx.locale.panel.prompts ?? {};
+  const id = ctx.chip;
+  if (id === 'idea') return ctx.config.featureRequestDescription || prompts.idea || s3.featurePlaceholder;
+  if (id && id in prompts) return prompts[id as keyof typeof prompts] || s3.descriptionPlaceholder;
+  return prompts.other || s3.descriptionPlaceholder;
+}
+
+/** The ring + "N more" under the textarea; a check and the shortcut once Send can go. */
+function renderMeter(ctx: WidgetRenderCtx): string {
+  const p = ctx.locale.panel;
+  const max = ctx.draftLength > DESCRIPTION_MAX_LENGTH - 400
+    ? `<span class="mushi-count-max">${ctx.draftLength}/${DESCRIPTION_MAX_LENGTH}</span>`
+    : '';
+  if (!ctx.charsNeeded) {
+    const hint = esc(ctx.locale.step3.submitHint.replace('{key}', submitShortcutKey(readPlatform())));
+    return `<span class="mushi-count ok" id="mushi-hint" data-role="hint">${icon('check')}<span>${hint}</span>${max}</span>`;
+  }
+  const done = ctx.minLength > 0 ? Math.min(1, (ctx.minLength - ctx.charsNeeded) / ctx.minLength) : 0;
+  const offset = (RING * (1 - done)).toFixed(2);
+  const left = (p.charsLeft ?? '{n} more characters').replace('{n}', String(ctx.charsNeeded));
+  return `<span class="mushi-count${ctx.lengthNudge ? ' nudge' : ''}${ctx.nudgeShake ? ' shake' : ''}" id="mushi-hint" data-role="hint"><svg class="mushi-ring" viewBox="0 0 20 20" aria-hidden="true"><circle class="mushi-ring-track" cx="10" cy="10" r="8"/><circle class="mushi-ring-fill" cx="10" cy="10" r="8" stroke-dasharray="${RING}" stroke-dashoffset="${offset}"/></svg><span>${esc(left)}</span>${max}</span>`;
 }
 
 function intentOptions(ctx: WidgetRenderCtx): string[] {
   const id = ctx.chip;
-  if (!id || id === 'idea') return [];
+  if (!id || id === 'idea' || id === 'other') return [];
   const custom = ctx.resolveCustomCategory(id);
   if (custom) return custom.intents ?? [];
   const list = (ctx.locale.step2.intents as Record<string, string[] | undefined>)[id] ?? [];
@@ -286,6 +351,8 @@ function intentOptions(ctx: WidgetRenderCtx): string[] {
 function reportTypeIds(config: WidgetRenderCtx['config']): { primary: string[]; more: string[] } {
   const primary: string[] = [...BUILTIN_CHIPS];
   if (config.featureRequestCard !== false) primary.push('idea');
+  // "Other" closes the 3×2 grid: an explicit "none of these" (ADR 0070).
+  primary.push('other');
   const seen = new Set(primary);
   const more: string[] = [];
   for (const { id } of config.categories ?? []) {
@@ -302,8 +369,8 @@ function reportView(ctx: WidgetRenderCtx): ViewRegions {
   const s3 = t.step3;
   const { primary, more: extra } = reportTypeIds(ctx.config);
   const ids = ctx.showAllCategories ? [...primary, ...extra] : primary;
-  const chips = ids.map((id, i) => chip(ctx, id, i, ids.includes(ctx.chip ?? '') ? ctx.chip : null)).join('');
-  const more = extra.length && !ctx.showAllCategories ? btn('show-all-categories', esc(p.more), 'mushi-chip mushi-chip-more') : '';
+  const tiles = ids.map((id, i) => tile(ctx, id, i, ids.includes(ctx.chip ?? '') ? ctx.chip : null)).join('');
+  const more = extra.length && !ctx.showAllCategories ? `<div class="mushi-more-row">${btn('show-all-categories', esc(p.more), 'mushi-chip mushi-chip-sm mushi-chip-more')}</div>` : '';
   const intents = intentOptions(ctx);
   const intentRow = intents.length
     ? `<div class="mushi-chips mushi-intents" role="radiogroup" aria-label="${esc(chipLabel(ctx, ctx.chip!))}">${intents
@@ -314,13 +381,18 @@ function reportView(ctx: WidgetRenderCtx): ViewRegions {
   const shotLabel = ctx.screenshotCapturing ? s3.screenshotCapturing : ctx.screenshotError ? s3.screenshotRetry : s3.screenshotButton;
   const elLabel = ctx.elementCapturing ? s3.elementCapturing : ctx.elementError ? s3.elementFailed : ctx.elementSelected ? s3.elementSelected : p.pointAt;
   const spin = '<span class="mushi-spinner" aria-hidden="true"></span>';
+  // Attachments are icon tools (camera, crosshair) with the label as tooltip
+  // and accessible name; an attached screenshot becomes its own thumbnail.
+  const tool = (action: string, glyph: string, label: string, cls: string, busy: boolean, badge: boolean) =>
+    btn(action, `${busy ? spin : glyph}${badge ? `<span class="mushi-tool-badge" aria-hidden="true">${icon('check')}</span>` : ''}`, `mushi-tool${cls}`, `${busy ? ' disabled' : ''} aria-label="${esc(label)}" title="${esc(label)}"`);
+  const shotTools = `${ctx.callbacks.onScreenshotAnnotateRequest ? tool('annotate-screenshot', icon('pencil'), p.markUp, '', false, false) : ''}${ctx.allowScreenshotRemove ? tool('remove-screenshot', icon('close'), p.remove, '', false, false) : ''}`;
   const shot = ctx.screenshotAttached && ctx.screenshotPreview
-    ? `<figure class="mushi-screenshot-preview${ctx.previewOpen ? ' open' : ''}"><button type="button" class="mushi-thumb" data-action="toggle-preview" aria-expanded="${ctx.previewOpen}"><img src="${esc(ctx.screenshotPreview)}" alt="${esc(s3.screenshotPreviewAlt)}" /></button><figcaption><span class="mushi-attach-name">${esc(s3.screenshotAttached)}</span>${ctx.screenshotHint ? `<span class="mushi-screenshot-hint">${esc(ctx.screenshotHint)}</span>` : ''}<span class="mushi-attach-actions">${ctx.callbacks.onScreenshotAnnotateRequest ? btn('annotate-screenshot', esc(p.markUp), 'mushi-link-btn') : ''}${ctx.allowScreenshotRemove ? btn('remove-screenshot', esc(p.remove), 'mushi-link-btn') : ''}</span></figcaption></figure><div class="mushi-annotate-host" data-role="annotate-host"></div>`
+    ? `<figure class="mushi-screenshot-preview${ctx.previewOpen ? ' open' : ''}"><button type="button" class="mushi-thumb" data-action="toggle-preview" aria-expanded="${ctx.previewOpen}" title="${esc(s3.screenshotAttached)}"><img src="${esc(ctx.screenshotPreview)}" alt="${esc(s3.screenshotPreviewAlt)}" /><span class="mushi-tool-badge" aria-hidden="true">${icon('check')}</span></button><figcaption><span class="mushi-shot-tools">${shotTools}</span>${ctx.screenshotHint ? `<span class="mushi-screenshot-hint">${esc(ctx.screenshotHint)}</span>` : ''}<span class="mushi-sr">${esc(s3.screenshotAttached)}</span></figcaption></figure><div class="mushi-annotate-host" data-role="annotate-host"></div>`
     : ctx.screenshotAvailable
-      ? btn('screenshot', `${ctx.screenshotCapturing ? spin : '<span aria-hidden="true">📷</span>'}${esc(shotLabel)}`, `mushi-attach-btn${ctx.screenshotError ? ' error' : ''}`, `${ctx.screenshotCapturing ? ' disabled' : ''} aria-label="${esc(shotLabel)}"`)
+      ? tool('screenshot', icon('camera'), shotLabel, ctx.screenshotError ? ' error' : '', ctx.screenshotCapturing, false)
       : '';
   const element = ctx.elementAvailable
-    ? btn('element', `${ctx.elementCapturing ? spin : '<span aria-hidden="true">⌖</span>'}${esc(elLabel)}`, `mushi-attach-btn${ctx.elementSelected ? ' active' : ''}${ctx.elementError ? ' error' : ''}`, `${ctx.elementCapturing ? ' disabled' : ''} aria-label="${esc(elLabel)}"`)
+    ? tool('element', icon('crosshair'), elLabel, `${ctx.elementSelected ? ' active' : ''}${ctx.elementError ? ' error' : ''}`, ctx.elementCapturing, ctx.elementSelected)
     : '';
   const reason = ctx.screenshotError && ctx.screenshotErrorReason
     ? `<p class="mushi-note mushi-error-inline" role="status" data-role="screenshot-reason">${esc(s3.screenshotErrors[ctx.screenshotErrorReason])}${ctx.callbacks.onScreenshotShareTabRequest ? ` ${btn('screenshot-share-tab', esc(s3.screenshotShareTab), 'mushi-link-btn')}` : ''}</p>`
@@ -332,16 +404,16 @@ function reportView(ctx: WidgetRenderCtx): ViewRegions {
     ? `<p class="mushi-note mushi-error-inline" data-role="not-sent">${esc(ctx.submitNotSent === 'throttled' ? s3.notSentThrottled : s3.notSentBlocked)}</p>`
     : '';
   const who = ctx.identifiedUser?.name ?? ctx.identifiedUser?.email;
-  const feature = ctx.chip === 'idea';
-
-  const hint = ctx.canSend
-    ? esc(s3.submitHint.replace('{key}', submitShortcutKey(readPlatform())))
-    : esc(ctx.rc.ui.addWords);
+  const privacyShort = p.privacyShort ?? 'Only the developer sees this';
+  // Footer: one 🔒 line (the full sentence is its tooltip and screen-reader
+  // text) beside Send. Send is never disabled for length: the meter says why.
+  const privacy = `<span class="mushi-privacy" title="${esc(p.privacy)}">${icon('lock')}<span class="mushi-privacy-text" aria-hidden="true">${esc(privacyShort)}${who ? ` · ${esc(who)}` : ''}</span><span class="mushi-sr">${esc(p.privacy)}${who ? ` ${esc(who)}` : ''}</span></span>`;
   return {
     header: renderHeader(ctx, ctx.config.expandedTitle || p.title),
-    lead: `<textarea class="mushi-textarea" data-role="description" rows="3" maxlength="${DESCRIPTION_MAX_LENGTH}" placeholder="${esc(feature ? s3.featurePlaceholder : s3.descriptionPlaceholder)}" aria-label="${esc(p.title)}" aria-describedby="mushi-hint"></textarea>`,
-    body: `${ctx.config.betaMode?.enabled ? renderBetaStrip(ctx) : ''}<div class="mushi-chips"><div class="mushi-chip-group" role="radiogroup" aria-label="${esc(p.title)}">${chips}</div>${more}</div>${intentRow}${review}<div class="mushi-attachments">${shot}${element}</div>${reason}${notSent}<p class="mushi-note">🔒 ${esc(p.privacy)}</p>${who ? `<p class="mushi-note">👤 ${esc(who)}</p>` : ''}${ctx.draftLength > DESCRIPTION_MAX_LENGTH - 400 ? `<p class="mushi-note" aria-live="polite">${ctx.draftLength}/${DESCRIPTION_MAX_LENGTH}</p>` : ''}${ctx.launcherDismissible ? `<p class="mushi-note">${btn('hide-launcher', esc(t.widget.hideLauncher ?? HIDE_LAUNCHER_FALLBACK), 'mushi-link-btn')}</p>` : ''}`,
-    footer: `<span class="mushi-footer-hint" id="mushi-hint" data-role="hint">${hint}</span><button type="button" class="mushi-submit" data-action="submit" aria-disabled="${!ctx.canSend || ctx.submitting}"${ctx.submitting ? ' aria-busy="true"' : ''}>${esc(ctx.submitting ? t.widget.submitting : p.send)}</button>`,
+    lead: `<div class="mushi-tiles" role="radiogroup" aria-label="${esc(p.typeQuestion ?? p.title)}">${tiles}</div>${more}${intentRow}<textarea class="mushi-textarea" data-role="description" rows="3" maxlength="${DESCRIPTION_MAX_LENGTH}" placeholder="${esc(promptFor(ctx))}" aria-label="${esc(promptFor(ctx))}" aria-describedby="mushi-hint"></textarea>`,
+    meter: renderMeter(ctx),
+    body: `${review}<div class="mushi-attachments">${shot}${element}</div>${reason}${notSent}${ctx.launcherDismissible ? `<p class="mushi-note">${btn('hide-launcher', esc(t.widget.hideLauncher ?? HIDE_LAUNCHER_FALLBACK), 'mushi-link-btn')}</p>` : ''}`,
+    footer: `${privacy}<button type="button" class="mushi-submit" data-action="submit" data-ready="${ctx.canSend}" aria-disabled="${ctx.submitting}"${ctx.submitting ? ' aria-busy="true"' : ''}>${esc(ctx.submitting ? t.widget.submitting : p.send)}${ctx.submitting ? '' : icon('send')}</button>`,
   };
 }
 
@@ -376,7 +448,7 @@ function renderBetaStrip(ctx: WidgetRenderCtx): string {
   const appName = esc(beta.appName ?? 'This app');
   const message = beta.message ? esc(beta.message) : esc(strip.defaultMessage).replace('{appName}', appName);
   const perks = beta.perks ?? [];
-  return `<div class="mushi-beta-strip" role="note" aria-label="${esc(strip.ariaLabel)}"><p><span class="mushi-beta-tag">Beta</span> ${message}</p>${betaContact(ctx)}${perks.length ? `<ul class="mushi-beta-perks">${perks.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}${renderBetaChangelog(ctx)}</div>`;
+  return `<div class="mushi-beta-strip mushi-beta-pop" id="mushi-beta-pop" role="note" aria-label="${esc(strip.ariaLabel)}"><p>${message}</p>${betaContact(ctx)}${perks.length ? `<ul class="mushi-beta-perks">${perks.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}${renderBetaChangelog(ctx)}</div>`;
 }
 
 // ─── Receipt (§1.1 Success) ───────────────────────────────────────
@@ -405,11 +477,22 @@ function receipt(ctx: WidgetRenderCtx): string {
   }
   const sla = esc((ctx.config.responseSlaLabel ?? '').trim() || s.slaDefault);
   if (!ctx.lastReportId) {
-    return `<div class="mushi-success-receipt" role="status"><p class="mushi-success-sla">${sla}</p><p class="mushi-note"><span class="mushi-spinner" aria-hidden="true"></span> ${esc(s.delivering)}</p></div>`;
+    return `<div class="mushi-success-receipt" role="status"><p class="mushi-success-sla">${icon('clock')}<span>${sla}</span></p><p class="mushi-note"><span class="mushi-spinner" aria-hidden="true"></span> ${esc(s.delivering)}</p></div>`;
   }
   const id = esc(ctx.lastReportId);
   const dashboard = (ctx.config.dashboardUrl ?? '').replace(/\/$/, '');
-  return `<div class="mushi-success-receipt" role="status"><p class="mushi-success-sla">${sla}</p><p class="mushi-note">${esc(s.receipt)} <button type="button" class="mushi-success-receipt-id" data-action="copy-report-id" data-copy-id="${id}" aria-label="Copy report id ${id}">#${esc(ctx.lastReportId.slice(0, 8))}</button>${dashboard ? ` · <a class="mushi-link-btn" href="${esc(`${dashboard}/reports/${encodeURIComponent(ctx.lastReportId)}`)}" target="_blank" rel="noopener noreferrer">${esc(s.trackOnMushi)} ↗</a>` : ''}</p>${ctx.lastSubmitScreenshotDropped ? `<p class="mushi-note mushi-warn">${esc(s.screenshotDropped)}</p>` : ''}</div>`;
+  return `<div class="mushi-success-receipt" role="status"><p class="mushi-success-sla">${icon('clock')}<span>${sla}</span></p><p class="mushi-note">${esc(s.receipt)} <button type="button" class="mushi-success-receipt-id" data-action="copy-report-id" data-copy-id="${id}" aria-label="Copy report id ${id}">#${esc(ctx.lastReportId.slice(0, 8))}</button>${dashboard ? ` · <a class="mushi-link-btn" href="${esc(`${dashboard}/reports/${encodeURIComponent(ctx.lastReportId)}`)}" target="_blank" rel="noopener noreferrer">${esc(s.trackOnMushi)} ↗</a>` : ''}</p>${ctx.lastSubmitScreenshotDropped ? `<p class="mushi-note mushi-warn">${esc(s.screenshotDropped)}</p>` : ''}</div>`;
+}
+
+/**
+ * The success mark (ADR 0070): a ring that draws itself, then a check and
+ * "Got it" once the server confirmed the report (until then, the ring only).
+ */
+function successMark(ctx: WidgetRenderCtx): string {
+  const got = Boolean(ctx.lastReportId);
+  const check = got ? '<path class="mushi-success-check" d="M31 51l13 13 26-27"/>' : '';
+  const title = got ? `<p class="mushi-success-title">${esc(ctx.locale.panel.delivered ?? 'Got it')}</p>` : '';
+  return `<div class="mushi-success-stamp" aria-hidden="true"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="44"/>${check}</svg></div>${title}`;
 }
 
 function skeleton(label: string, rows = 3): string {
@@ -425,7 +508,7 @@ function successView(ctx: WidgetRenderCtx): ViewRegions {
   return {
     header: renderHeader(ctx, failure ?? ctx.rc.ui.sent),
     lead: '',
-    body: `<div class="mushi-success"><div class="mushi-success-stamp" aria-hidden="true"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="44"/></svg><span class="mushi-success-stamp-label">受</span></div><time class="mushi-success-meta" datetime="${stamp.toISOString()}">${esc(formatReceiptTime(stamp, ctx.config.locale === 'auto' ? undefined : ctx.config.locale))}</time>${receipt(ctx)}${failure ? '' : betaReceipt(ctx) + (ctx.views?.renderOptIns(ctx) ?? '')}${ctx.rewardsState ? renderSuccessRewards(ctx) : ''}</div>`,
+    body: `<div class="mushi-success">${failure ? '' : successMark(ctx)}<time class="mushi-success-meta" datetime="${stamp.toISOString()}">${esc(formatReceiptTime(stamp, ctx.config.locale === 'auto' ? undefined : ctx.config.locale))}</time>${receipt(ctx)}${failure ? '' : betaReceipt(ctx) + (ctx.views?.renderOptIns(ctx) ?? '')}${ctx.rewardsState ? renderSuccessRewards(ctx) : ''}</div>`,
     footer: `${canTrack ? btn('track-report', esc(s.trackReport), 'mushi-btn') : '<span></span>'}${btn('done', esc(s.done), 'mushi-submit')}`,
   };
 }

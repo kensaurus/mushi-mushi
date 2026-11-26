@@ -33,10 +33,14 @@ import {
   MUSHI_MOTION,
   MUSHI_ON_ACCENT,
   MUSHI_REPORTER_STATUS,
+  MUSHI_REPORT_TYPE_COLORS,
+  MUSHI_REPORT_TYPE_WASH,
   MUSHI_TYPE,
   MUSHI_Z,
   mushiPalette,
   resolveWidgetAccent,
+  type MushiReportTypeId,
+  type MushiReportTypeTone,
   type MushiThemeMode,
 } from '@mushi-mushi/core';
 
@@ -79,6 +83,10 @@ export interface WidgetThemeVars {
   statusFixing: { fg: string; bg: string; border: string };
   statusFixed: { fg: string; bg: string; border: string };
   statusClosedBg: string;
+  /** Report-type tile colours (core MUSHI_REPORT_TYPE_COLORS) for this mode. */
+  reportTypes: Record<MushiReportTypeId, MushiReportTypeTone>;
+  /** Tile fill: `solid` at these opacities (unpicked, picked). */
+  reportTypeWash: { wash: number; strong: number };
   fontDisplay: string;
   fontBody: string;
   fontMono: string;
@@ -130,6 +138,8 @@ export function getWidgetThemeVars(
     statusReview: status.review,
     statusFixing: status.fixing,
     statusFixed: status.fixed,
+    reportTypes: MUSHI_REPORT_TYPE_COLORS[mode],
+    reportTypeWash: MUSHI_REPORT_TYPE_WASH[mode],
     statusClosedBg: isDark ? 'rgba(242,235,221,0.06)' : 'rgba(14,13,11,0.05)',
     fontDisplay: MUSHI_TYPE.fontDisplay,
     fontBody: MUSHI_TYPE.fontBody,
