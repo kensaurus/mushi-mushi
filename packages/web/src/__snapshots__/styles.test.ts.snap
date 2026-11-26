@@ -310,6 +310,12 @@ exports[`getWidgetStyles > matches stable CSS snapshot markers 1`] = `
     .mushi-beta-chip:hover, .mushi-beta-chip[aria-expanded="true"] { border-color: var(--_fg); }
     .mushi-beta-pop { position: absolute; left: 12px; right: 12px; top: calc(100% + 4px); z-index: 3; display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; background: var(--_bg); border: 1px solid var(--_border); border-radius: 10px; box-shadow: var(--_shadow); font-size: 13px; line-height: 1.45; }
     .mushi-beta-pop p { margin: 0; }
+    /* Phone sheet: the header keeps its one-line title by dropping the icon badge (the stripe still shows the type). */
+    @media (max-width: 480px) {
+      .mushi-header { gap: 4px; padding-left: 12px; }
+      .mushi-header-type, .mushi-header-host-icon { display: none; }
+      .mushi-header .mushi-pill-btn { padding: 0 10px; }
+    }
     .mushi-title:focus { outline: none; }
     .mushi-header-host-icon { width: 20px; height: 20px; margin-right: 8px; border-radius: 4px; object-fit: contain; }
     .mushi-header .mushi-icon-btn:first-child { margin-left: -10px; }
@@ -393,7 +399,7 @@ exports[`getWidgetStyles > matches stable CSS snapshot markers 1`] = `
     .mushi-count.shake { animation: mushi-nudge 320ms ease-out; }
     .mushi-count.nudge .mushi-ring-fill { stroke: var(--_err); }
     .mushi-count-max { margin-left: 6px; font-variant-numeric: tabular-nums; }
-    .mushi-panel.mushi-nudge .mushi-textarea { border-color: var(--_err); }
+    .mushi-panel.mushi-nudge .mushi-textarea { border-color: var(--_err); outline-color: var(--_err); }
     @keyframes mushi-nudge { 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
 
     /* ── Attachments: icon tools, the screenshot as a thumbnail ── */
@@ -411,7 +417,7 @@ exports[`getWidgetStyles > matches stable CSS snapshot markers 1`] = `
     .mushi-attach-btn.active { border-color: var(--_ok); }
     .mushi-attach-btn.error { border-color: var(--_err); color: var(--_err); }
     .mushi-attach-btn[disabled] { cursor: progress; opacity: .75; }
-    .mushi-screenshot-preview { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; margin: 0; }
+    .mushi-screenshot-preview { display: flex; align-items: center; gap: 8px; flex: 0 1 auto; min-width: 0; margin: 0; }
     .mushi-screenshot-preview.open { flex-direction: column; align-items: stretch; width: 100%; }
     .mushi-thumb { position: relative; flex: none; padding: 0; border: 1px solid var(--_ok); border-radius: 8px; background: var(--_surface); line-height: 0; overflow: visible; cursor: zoom-in; }
     .mushi-thumb img { display: block; width: 64px; height: 44px; border-radius: 7px; object-fit: cover; }
