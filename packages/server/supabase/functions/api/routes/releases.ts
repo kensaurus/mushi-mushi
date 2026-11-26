@@ -502,7 +502,7 @@ export function registerReleasesRoutes(app: Hono<{ Variables: Variables }>) {
     title: z.string().min(1).optional(),
     body_md: z.string().optional(),
     version: z.string().min(1).optional(),
-    fulfilled_ticket_ids: z.array(z.string().uuid()).optional(),
+    fulfilled_ticket_ids: z.array(z.string().uuid()).max(1000).optional(),
   })
 
   app.patch('/v1/admin/releases/:id', writeAuth, async (c) => {

@@ -1,4 +1,5 @@
 import { z } from 'npm:zod@3'
+import { boundedArray } from './bounded-array.ts'
 
 // ---------------------------------------------------------------------------
 // Reporter identity (data contract)
@@ -70,21 +71,21 @@ export const reportSubmissionSchema = z.object({
     nearestTestid: z.string().max(120).optional(),
   }).passthrough(),
 
-  consoleLogs: z.array(z.object({
+  consoleLogs: boundedArray(z.object({
     level: z.enum(['log', 'warn', 'error', 'info', 'debug']),
     message: z.string(),
     timestamp: z.number(),
     stack: z.string().optional(),
-  })).optional(),
+  }), 500).optional(),
 
-  networkLogs: z.array(z.object({
+  networkLogs: boundedArray(z.object({
     method: z.string(),
     url: z.string(),
     status: z.number(),
     duration: z.number(),
     timestamp: z.number(),
     error: z.string().optional(),
-  })).optional(),
+  }), 500).optional(),
 
   performanceMetrics: z.object({
     fcp: z.number().optional(),
@@ -95,11 +96,11 @@ export const reportSubmissionSchema = z.object({
     ttfb: z.number().optional(),
     longTasks: z.number().optional(),
   }).optional(),
-  timeline: z.array(z.object({
+  timeline: boundedArray(z.object({
     ts: z.number(),
     kind: z.enum(['route', 'click', 'request', 'log', 'screen']),
     payload: z.record(z.unknown()),
-  })).optional(),
+  }), 500).optional(),
 
   screenshotDataUrl: z
     .string()
@@ -107,7 +108,7 @@ export const reportSubmissionSchema = z.object({
     .optional(),
   selectedElement: z.any().optional(),
   /** rrweb / lite rolling-buffer events (compressed server-side). */
-  replayEvents: z.array(z.record(z.unknown())).max(500).optional(),
+  replayEvents: boundedArray(z.record(z.unknown()), 500).optional(),
   /**
    * Free-form host metadata. Reporter identity rides here under either
    * `user` (nested — see {@link reporterIdentitySchema}) or the flat
@@ -139,7 +140,7 @@ export const reportSubmissionSchema = z.object({
    * the admin /reports drawer and the Triage LLM, both of which
    * tolerate arbitrary structured data.
    */
-  breadcrumbs: z.array(z.object({
+  breadcrumbs: boundedArray(z.object({
     timestamp: z.number(),
     category: z.enum([
       'navigation',
@@ -155,7 +156,7 @@ export const reportSubmissionSchema = z.object({
     level: z.enum(['debug', 'info', 'warning', 'error']),
     message: z.string().max(2000),
     data: z.record(z.unknown()).optional(),
-  })).max(100).optional(),
+  }), 100).optional(),
 
   /**
    * Sticky tags from `Mushi.setTag()` / `Mushi.setTags()`. Hard-cap on
@@ -191,14 +192,14 @@ export const reportSubmissionSchema = z.object({
       ip_address: z.string().max(80).optional(),
     }).optional(),
     tags: z.record(z.union([z.string(), z.number(), z.boolean()])).optional(),
-    breadcrumbs: z.array(z.object({
+    breadcrumbs: boundedArray(z.object({
       timestamp: z.number().optional(),
       category: z.string().optional(),
       level: z.string().optional(),
       message: z.string().optional(),
       type: z.string().optional(),
       data: z.record(z.unknown()).optional(),
-    })).max(100).optional(),
+    }), 100).optional(),
     issueUrl: z.string().max(2000).optional(),
   }).optional(),
 
@@ -354,8 +355,8 @@ export const codeHealthFindingSchema = z.object({
 
 export const codeHealthIngestSchema = z
   .object({
-    metrics: z.array(metricPointSchema).max(50).optional(),
-    findings: z.array(codeHealthFindingSchema).max(200).optional(),
+    metrics: boundedArray(metricPointSchema, 50).optional(),
+    findings: boundedArray(codeHealthFindingSchema, 200).optional(),
   })
   // Reject unknown top-level keys so unexpected CI payload fields are not
   // silently stripped and persisted. Returns 400 with a clear parse error.
