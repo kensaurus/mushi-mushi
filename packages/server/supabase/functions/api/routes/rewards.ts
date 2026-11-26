@@ -106,7 +106,7 @@ const webhookCreateSchema = z.object({
   // Optional: when omitted we mint a cryptographically-strong secret and return
   // it once (API-key style). Hosts paste it into MUSHI_REWARDS_SECRET.
   secret: z.string().min(16).max(256).optional(),
-  events: z.array(z.string()).default(['reward.tier_changed']),
+  events: z.array(z.string().max(80)).max(50).default(['reward.tier_changed']),
 })
 
 /** Mint a URL-safe 32-byte webhook signing secret. */
@@ -1195,7 +1195,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
       return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'The request body was not valid JSON.' } }, 400)
     }
 
-    const parsed = z.array(rewardRuleUpsertSchema).safeParse(raw)
+    const parsed = z.array(rewardRuleUpsertSchema).max(200).safeParse(raw)
     if (!parsed.success) {
       return c.json({ ok: false, error: { code: 'INVALID_RULES', message: plainIssues('Check the rules:', parsed.error.issues), issues: parsed.error.issues } }, 422)
     }
@@ -1249,7 +1249,7 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
       return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'The request body was not valid JSON.' } }, 400)
     }
 
-    const parsed = z.array(rewardTierUpsertSchema).safeParse(raw)
+    const parsed = z.array(rewardTierUpsertSchema).max(200).safeParse(raw)
     if (!parsed.success) {
       return c.json({ ok: false, error: { code: 'INVALID_TIERS', issues: parsed.error.issues } }, 422)
     }

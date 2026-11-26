@@ -105,12 +105,12 @@ export const testRefSchema = z.object({
 const expectedOutcomeSchema = z.object({
   summary: z.string().max(400).optional(),
   response: z.object({
-    status_in: z.array(z.number().int().min(100).max(599)).optional(),
+    status_in: z.array(z.number().int().min(100).max(599)).max(50).optional(),
     json_path: z.array(z.object({
       path: z.string().min(1).max(200),
       op: z.enum(['exists', 'equals', 'not_equals', 'contains', 'gt', 'gte', 'lt', 'lte', 'matches']),
       value: z.unknown().optional(),
-    })).optional(),
+    })).max(50).optional(),
   }).optional(),
   database: z.object({
     table: z.string().min(1).max(120),
@@ -130,11 +130,11 @@ export const elementSchema = z.object({
   id: slug,
   type: z.enum(ELEMENT_TYPES),
   action: z.string().min(1).max(300),
-  backend: z.array(apiDepSchema).optional().default([]),
-  db_writes: z.array(dbDepSchema).optional().default([]),
-  db_reads: z.array(dbDepSchema).optional().default([]),
+  backend: z.array(apiDepSchema).max(100).optional().default([]),
+  db_writes: z.array(dbDepSchema).max(100).optional().default([]),
+  db_reads: z.array(dbDepSchema).max(100).optional().default([]),
   crud: z.enum(['C', 'R', 'U', 'D', 'none']).optional().default('none'),
-  verified_by: z.array(testRefSchema).optional().default([]),
+  verified_by: z.array(testRefSchema).max(100).optional().default([]),
   user_story: z.string().max(400).optional(),
   status: z.enum(STATUSES).optional(),
   last_verified: z.string().optional(),
@@ -151,7 +151,7 @@ export const pageSchema = z.object({
   title: z.string().max(200).optional(),
   user_story: z.string().max(400).optional(),
   auth_required: z.boolean().optional().default(true),
-  elements: z.array(elementSchema).optional().default([]),
+  elements: z.array(elementSchema).max(500).optional().default([]),
   notes: z.string().max(1000).optional(),
 })
 export type Page = z.infer<typeof pageSchema>
@@ -162,8 +162,8 @@ export const userStorySchema = z.object({
   persona: z.string().max(120).optional(),
   description: z.string().max(2000).optional(),
   goal: z.string().max(400).optional(),
-  pages: z.array(slug).optional().default([]),
-  tags: z.array(z.string().max(40)).optional().default([]),
+  pages: z.array(slug).max(1000).optional().default([]),
+  tags: z.array(z.string().max(40)).max(50).optional().default([]),
 })
 export type UserStory = z.infer<typeof userStorySchema>
 
@@ -220,12 +220,12 @@ export const inventorySchema = z.object({
       'schema_version must start with "2." (this validator targets v2)',
     ),
   app: appSchema,
-  user_stories: z.array(userStorySchema).optional().default([]),
-  pages: z.array(pageSchema).min(1, 'inventory.yaml must declare at least one page'),
+  user_stories: z.array(userStorySchema).max(1000).optional().default([]),
+  pages: z.array(pageSchema).min(1, 'inventory.yaml must declare at least one page').max(1000),
   dependencies: z
     .object({
-      apis: z.array(z.unknown()).optional().default([]),
-      databases: z.array(z.unknown()).optional().default([]),
+      apis: z.array(z.unknown()).max(500).optional().default([]),
+      databases: z.array(z.unknown()).max(500).optional().default([]),
     })
     .optional()
     .default({ apis: [], databases: [] }),
