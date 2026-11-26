@@ -1,11 +1,22 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "Unreleased",
-    "pending": true,
-    "versions": [],
+    "majorMinor": "1.40",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "1.40.0"
+    ],
     "highlights": [],
-    "packages": []
+    "packages": [
+      {
+        "name": "@mushi-mushi/core",
+        "version": "1.40.0"
+      },
+      {
+        "name": "@mushi-mushi/web",
+        "version": "1.40.0"
+      }
+    ]
   },
   {
     "majorMinor": "1.39",
@@ -1739,6 +1750,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.32.2",
       "0.32.1",
       "0.32.0"
     ],
@@ -1763,7 +1775,7 @@
       },
       {
         "name": "@mushi-mushi/mcp",
-        "version": "0.32.1"
+        "version": "0.32.2"
       }
     ]
   },

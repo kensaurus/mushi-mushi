@@ -36,7 +36,7 @@ Mushi Mushi's npm packages ship on independent semver tracks (see [npm](https://
 
 | Package | Version |
 | --- | --- |
-| @mushi-mushi/core, @mushi-mushi/web | 1.39.x |
+| @mushi-mushi/core, @mushi-mushi/web | 1.40.x |
 | @mushi-mushi/react | 1.35.x |
 | @mushi-mushi/react-native | 0.26.x |
 | @mushi-mushi/cli | 0.42.x |
