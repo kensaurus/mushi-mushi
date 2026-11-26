@@ -4,11 +4,52 @@ import {
   MUSHI_DURATION,
   MUSHI_GEOMETRY,
   MUSHI_MOTION,
+  MUSHI_REPORT_TYPE_COLORS,
+  MUSHI_REPORT_TYPE_WASH,
   mushiTokens,
   resolveWidgetAccent,
   safeWidgetHex,
   mushiPalette,
 } from './design-tokens';
+
+type Rgb = [number, number, number];
+const fromHex = (h: string): Rgb => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)) as Rgb;
+const over = ({ rgb, a }: { rgb: Rgb; a: number }, bg: Rgb): Rgb => rgb.map((c, i) => c * a + bg[i]! * (1 - a)) as Rgb;
+const lum = (rgb: Rgb) => {
+  const [r, g, b] = rgb.map((c) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+};
+const contrast = (x: Rgb, y: Rgb) => {
+  const [a, b] = [lum(x), lum(y)].sort((p, q) => q - p);
+  return (a! + 0.05) / (b! + 0.05);
+};
+
+describe('MUSHI_REPORT_TYPE_COLORS (WCAG AA in both modes)', () => {
+  // The panel defaults to system Canvas: white in light mode, #121212 in Chrome's dark mode.
+  const canvas: Record<'light' | 'dark', Rgb> = { light: [255, 255, 255], dark: [18, 18, 18] };
+  for (const mode of ['light', 'dark'] as const) {
+    for (const [id, tone] of Object.entries(MUSHI_REPORT_TYPE_COLORS[mode])) {
+      it(`${mode} ${id}: border ≥ 3:1 on the panel, ink ≥ 4.5:1 on both washes`, () => {
+        const bg = canvas[mode];
+        expect(contrast(fromHex(tone.solid), bg)).toBeGreaterThanOrEqual(3);
+        const { wash, strong } = MUSHI_REPORT_TYPE_WASH[mode];
+        for (const a of [wash, strong]) {
+          expect(contrast(fromHex(tone.ink), over({ rgb: fromHex(tone.solid), a }, bg))).toBeGreaterThanOrEqual(4.5);
+        }
+      });
+    }
+  }
+
+  it('gives every type a distinct hue', () => {
+    for (const mode of ['light', 'dark'] as const) {
+      const solids = Object.values(MUSHI_REPORT_TYPE_COLORS[mode]).map((t) => t.solid);
+      expect(new Set(solids).size).toBe(solids.length);
+    }
+  });
+});
 
 describe('safeWidgetHex', () => {
   it('accepts valid hex colours', () => {

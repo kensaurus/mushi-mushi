@@ -13,6 +13,7 @@ import { isPlausibleReporterEmail, reporterToastMessage, type ReporterCopy } fro
 import { getLocale, type MushiLocale } from './i18n';
 import type * as Views from './widget-views';
 import { getWidgetStyles } from './styles';
+import { TYPE_ICON_IDS } from './widget-icons';
 import { contrastingInk, safeCssColor } from './build-widget-theme';
 import { readPageFaviconHref, MUSHI_COPY, MUSHI_GEOMETRY, MUSHI_TIER_COLORS } from '@mushi-mushi/core';
 import { FEATURE_REQUEST_INTENT, REPORTER_READ_DEADLINE_MS, bindFaviconFallbacks, isNotSentOutcome, isSubmitShortcut, loadAssistantSession, saveAssistantSession, clearAssistantSession, readLauncherDismissed, routeMatches, withDeadline, writeLauncherDismissed } from './widget-helpers';
@@ -62,7 +63,7 @@ function loadViews(): Promise<ViewsModule> {
 }
 
 /** Panel regions, in DOM order. `lead` + `body` share the scroll container. */
-const REGIONS = ['notice', 'header', 'lead', 'body', 'footer', 'brand'] as const;
+const REGIONS = ['notice', 'header', 'lead', 'meter', 'body', 'footer', 'brand'] as const;
 type Region = (typeof REGIONS)[number];
 
 /** Form fields whose value, focus and caret survive a region patch. */
@@ -113,6 +114,14 @@ export class MushiWidget {
   private showAllCategories = false;
   /** Header overflow menu. */
   private showMoreNav = false;
+  /** Send was pressed below the minimum; the meter stays red until the text is long enough. */
+  private lengthNudge = false;
+  /** Shake the meter on the next render only (not on every later keystroke). */
+  private nudgeShake = false;
+  /** The header BETA chip's disclosure (ADR 0070). */
+  private betaOpen = false;
+  /** A pointer tap picked a type: move focus to the textarea after the patch. */
+  private focusDescriptionNext = false;
   private screenshotAttached = false;
   private screenshotCapturing = false;
   private screenshotError = false;
@@ -321,7 +330,9 @@ export class MushiWidget {
       el.dataset.region = r;
       this.regionEls[r] = el;
     }
-    this.scroller.append(this.regionEls.lead, this.regionEls.body);
+    // The meter has its own region so typing re-renders it alone, never the
+    // textarea in `lead` (an IME composition would break mid-word).
+    this.scroller.append(this.regionEls.lead, this.regionEls.meter, this.regionEls.body);
     this.live = document.createElement('div');
     this.live.className = 'mushi-sr';
     this.live.setAttribute('role', 'status');
@@ -430,10 +441,13 @@ export class MushiWidget {
     // Drafts only survive patches WITHIN a session.
     this.drafts = {};
     this.intent = null;
+    this.lengthNudge = false;
+    this.betaOpen = false;
     this.step = 'report';
     const cat = options?.category;
     const custom = cat ? this.resolveCustomCategory(cat) : undefined;
-    this.chip = options?.featureRequest ? 'idea' : custom ? cat! : cat && cat !== 'other' && BUILTIN.includes(cat) ? cat : null;
+    // 'other' is a tile now (ADR 0070), so it preselects like the rest.
+    this.chip = options?.featureRequest ? 'idea' : custom ? cat! : cat && BUILTIN.includes(cat) ? cat : null;
     this.showAllCategories = Boolean(custom);
     this.removeToast();
     this.barClearance = this.measureFixedBars();
@@ -446,6 +460,7 @@ export class MushiWidget {
     this.isOpen = false;
     this.showAllCategories = false;
     this.showMoreNav = false;
+    this.betaOpen = false;
     this.render();
     this.restoreOpenerFocus();
     this.callbacks.onClose();
@@ -1450,7 +1465,10 @@ export class MushiWidget {
 
   private renderPanel(): void {
     const panel = this.panel;
-    panel.className = `mushi-panel ${this.config.position}${this.isOpen ? ' open' : ' closed'}`;
+    panel.className = `mushi-panel ${this.config.position}${this.isOpen ? ' open' : ' closed'}${this.lengthNudge && this.step === 'report' ? ' mushi-nudge' : ''}`;
+    // The picked built-in type tints the header stripe and intent chips (ADR 0070).
+    if (this.step === 'report' && this.chip && TYPE_ICON_IDS.has(this.chip)) panel.dataset.cat = this.chip;
+    else delete panel.dataset.cat;
     panel.style.zIndex = String(this.config.zIndex + 1);
     this.applyInsetVars(panel);
     if (!this.isOpen) {
@@ -1467,10 +1485,12 @@ export class MushiWidget {
       void this.preloadViews().then(() => { if (this.isOpen) this.render(); });
     }
     const view = renderView(ctx);
+    this.nudgeShake = false;
     const next: Record<Region, string> = {
       notice: renderOutdatedBanner(ctx),
       header: view.header,
       lead: view.lead,
+      meter: view.meter ?? '',
       body: view.body,
       footer: view.footer,
       brand: renderBrandFooter(ctx),
@@ -1502,10 +1522,13 @@ export class MushiWidget {
         panel.classList.add('mushi-swap');
       }
       this.focusView();
+    } else if (this.focusDescriptionNext) {
+      panel.querySelector<HTMLElement>('[data-role="description"]')?.focus({ preventScroll: true });
     } else if (active && !active.isConnected && activeKey) {
       // A patch replaced the focused control: put focus on its replacement.
       (panel.querySelector<HTMLElement>(activeKey))?.focus();
     }
+    this.focusDescriptionNext = false;
     if (opening) this.attachViewportHandlers(panel);
     if (!this.brandImpressionSent && this.config.brandFooter === true) {
       this.brandImpressionSent = true;
@@ -1513,9 +1536,17 @@ export class MushiWidget {
     }
   }
 
-  /** On a new surface: the report textarea, else the title, so screen readers announce where they are. */
+  /**
+   * On a new surface: the report screen's first step (the checked or first
+   * type tile; the textarea when a type was preset or text is drafted), else
+   * the textarea, else the title, so screen readers announce where they are.
+   */
   private focusView(): void {
-    const target = this.panel.querySelector<HTMLElement>('[data-role="description"]')
+    const firstStep = this.step === 'report' && !this.chip && !(this.drafts.description ?? '').trim()
+      ? this.panel.querySelector<HTMLElement>('.mushi-tile[tabindex="0"]')
+      : null;
+    const target = firstStep
+      ?? this.panel.querySelector<HTMLElement>('[data-role="description"]')
       ?? this.panel.querySelector<HTMLElement>('#mushi-title');
     if (!target) return;
     if (target.id === 'mushi-title') target.tabIndex = -1;
@@ -1828,6 +1859,12 @@ export class MushiWidget {
       || (this.screenshotAttached && this.screenshotByUser);
   }
 
+  /** Characters still needed for Send (0 once `canSend()`), for the meter. */
+  private charsNeeded(): number {
+    if (this.canSend()) return 0;
+    return Math.max(1, this.effectiveMinLength() - (this.drafts.description ?? '').trim().length);
+  }
+
   private unreadCount(): number {
     return this.reporterReports.reduce((sum, report) => sum + (report.unread_count ?? 0), 0);
   }
@@ -1846,6 +1883,11 @@ export class MushiWidget {
       intent: this.intent,
       showAllCategories: this.showAllCategories,
       draftLength: (this.drafts.description ?? '').length,
+      charsNeeded: this.charsNeeded(),
+      minLength: this.effectiveMinLength(),
+      lengthNudge: this.lengthNudge,
+      nudgeShake: this.nudgeShake,
+      betaOpen: this.betaOpen,
       launcherDismissible: this.config.dismissible && this.triggerEl !== null,
       canSend: this.canSend(),
       submitting: this.submitting,
@@ -1927,15 +1969,24 @@ export class MushiWidget {
       if (el.dataset.voteId) { void this.voteFeatureBoard(el.dataset.voteId); return; }
       const action = el.dataset.action;
       if (!action && el.dataset.reportId) { void this.openThread(el.dataset.reportId); return; }
+      // detail > 0: a real pointer click (keyboard activation and .click() report 0).
+      if (action === 'chip' && e.detail > 0) this.focusDescriptionNext = true;
       if (action) this.handleAction(action, el);
     });
     panel.addEventListener('input', (e) => {
       const el = e.target as HTMLTextAreaElement;
       const role = el.dataset?.role;
       if (!role) return;
+      const wasReady = role === 'description' && this.canSend();
       this.drafts[role] = el.value;
       if (el.tagName === 'TEXTAREA' && role !== 'description') autoGrow(el);
-      if (role === 'description') this.render();
+      if (role === 'description') {
+        if (!wasReady && this.canSend()) {
+          this.lengthNudge = false;
+          this.announce(this.locale.panel.ready ?? 'Ready to send');
+        }
+        this.render();
+      }
     });
     panel.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -1952,6 +2003,12 @@ export class MushiWidget {
     if (e.key === 'Escape') {
       e.preventDefault();
       if (this.showMoreNav) { this.showMoreNav = false; this.render(); return; }
+      if (this.betaOpen) {
+        this.betaOpen = false;
+        this.render();
+        this.panel.querySelector<HTMLElement>('[data-action="toggle-beta"]')?.focus();
+        return;
+      }
       if (this.step === 'report-detail') { this.goBack(); return; }
       this.close();
       return;
@@ -1993,7 +2050,8 @@ export class MushiWidget {
       case 'back': this.goBack(); return;
       case 'brand-footer': this.callbacks.onBrandFooterClick?.(); return;
       case 'hide-launcher': this.dismissLauncherForSession(); return;
-      case 'toggle-more-nav': this.showMoreNav = !this.showMoreNav; this.render(); return;
+      case 'toggle-more-nav': this.showMoreNav = !this.showMoreNav; this.betaOpen = false; this.render(); return;
+      case 'toggle-beta': this.betaOpen = !this.betaOpen; this.showMoreNav = false; this.render(); return;
       case 'show-all-categories': this.showAllCategories = true; this.render(); return;
       case 'chip': {
         const id = el.dataset.category ?? '';
@@ -2094,8 +2152,11 @@ export class MushiWidget {
     const live = this.panel.querySelector<HTMLTextAreaElement>('[data-role="description"]');
     if (live) this.drafts.description = live.value;
     if (!this.canSend()) {
+      this.lengthNudge = true;
+      this.nudgeShake = true;
+      this.render();
       this.announce(this.rc.ui.addWords);
-      live?.focus();
+      this.panel.querySelector<HTMLTextAreaElement>('[data-role="description"]')?.focus();
       return;
     }
     // A screenshot taken by this Send (on-report) is shown first, never sent unseen.

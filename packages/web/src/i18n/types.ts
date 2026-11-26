@@ -114,8 +114,23 @@ export interface MushiLocale {
     pointAt: string;
     remove: string;
     markUp: string;
-    /** Privacy line under the attachments. */
+    /** Privacy sentence: the tooltip and screen-reader text of the footer 🔒 line. */
     privacy: string;
+    /**
+     * The footer 🔒 line itself, a few words (ADR 0070). Optional so a custom
+     * locale written before 1.40 still type-checks; English fills the gap.
+     */
+    privacyShort?: string;
+    /** Accessible name of the report-type tile group. */
+    typeQuestion?: string;
+    /** Textarea prompt per picked type; `other` is also the prompt before a pick. */
+    prompts?: Partial<Record<'bug' | 'slow' | 'visual' | 'confusing' | 'idea' | 'other', string>>;
+    /** Length meter under the textarea; `{n}` = characters still needed. */
+    charsLeft?: string;
+    /** Announced once when the description reaches the minimum. */
+    ready?: string;
+    /** Big line under the success check. */
+    delivered?: string;
     send: string;
     /** Header pill that opens "Your reports". */
     yourReports: string;

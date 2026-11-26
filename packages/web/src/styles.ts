@@ -61,7 +61,17 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
     easeStamp,
     zBanner,
     fabSize,
+    reportTypes,
+    reportTypeWash,
   } = v;
+  // Report-type colours (ADR 0070): a tile carries its own; the panel carries
+  // the picked one for the header stripe and the intent chips.
+  const typeVars = Object.entries(reportTypes)
+    .map(([id, t]) => `.mushi-tile[data-category="${id}"], .mushi-panel[data-cat="${id}"] { --_cat: ${t.solid}; --_cat-ink: ${t.ink}; }`)
+    .join('\n    ');
+  const neutral = reportTypes.other;
+  const washPct = Math.round(reportTypeWash.wash * 100);
+  const strongPct = Math.round(reportTypeWash.strong * 100);
 
   const { durationFast } = MUSHI_MOTION;
   const { instant: durInstant, panel: durPanel } = MUSHI_DURATION;
@@ -309,14 +319,16 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
        accent-filled action per view. */
     .mushi-panel {
       position: fixed;
-      /* One screen, free text first: wider and taller than the old 3-step
-         card so the whole report fits without an inner scroll on desktop. */
-      width: calc(${panelWidth}px + 40px);
+      /* One screen: type tiles, then the words (ADR 0070). Wide enough for a
+         3-column tile grid and a one-line header, without an inner scroll. */
+      width: calc(${panelWidth}px + 60px);
       max-width: calc(100vw - 32px);
       max-height: min(calc(${panelMaxHeight}px + 160px), calc(100dvh - 96px - var(--mushi-keyboard-inset, 0px)));
       background: var(--_bg);
       color: var(--_fg);
-      border: 1px solid var(--_border);
+      /* WCAG 1.4.11: the panel edge reads at 3:1 on a page of its own colour
+         (38% ink: about 3.6:1 on white, 3.2:1 on near-black). --mushi-border wins. */
+      border: 1px solid var(--mushi-border, color-mix(in oklab, var(--_fg) 38%, var(--_bg)));
       border-radius: var(--_radius);
       box-shadow: var(--_shadow);
       overflow: hidden;
@@ -367,11 +379,24 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
     }
     .mushi-panel :focus-visible { outline: 2px solid var(--_accent); outline-offset: 2px; }
     .mushi-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-    .mushi-notice:empty, .mushi-lead:empty, .mushi-footer:empty, .mushi-brand:empty { display: none; }
+    .mushi-notice:empty, .mushi-lead:empty, .mushi-meter:empty, .mushi-footer:empty, .mushi-brand:empty { display: none; }
     .mushi-outdated { margin: 8px 12px 0; padding: 8px 10px; border-radius: 8px; background: var(--_surface); font-size: 12px; }
 
-    .mushi-header { display: flex; align-items: center; gap: 8px; min-height: 56px; padding: 6px 6px 6px 16px; border-bottom: 1px solid var(--_border); }
-    .mushi-title { flex: 1; min-width: 0; margin: 0; font-size: 16px; font-weight: 600; line-height: 1.25; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
+    .mushi-header { position: relative; z-index: 2; display: flex; align-items: center; gap: 6px; min-height: 56px; padding: 6px 6px 6px 16px; border-bottom: 1px solid var(--_border); }
+    /* The picked type tints the header: a 3px stripe and its icon badge. */
+    .mushi-panel[data-cat] .mushi-header { box-shadow: inset 0 3px 0 var(--_cat); }
+    .mushi-header-type { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 28px; height: 28px; border-radius: 8px; background: var(--_cat-wash-strong); color: var(--_cat-ink); }
+    .mushi-title { flex: 1 1 auto; min-width: 3em; margin: 0; font-size: 16px; font-weight: 600; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .mushi-beta-chip { flex: none; min-height: 24px; padding: 2px 7px; border: 1px solid var(--_border); border-radius: 6px; background: var(--_surface); color: var(--_fg); font: inherit; font-size: 11px; font-weight: 700; letter-spacing: .06em; cursor: pointer; }
+    .mushi-beta-chip:hover, .mushi-beta-chip[aria-expanded="true"] { border-color: var(--_fg); }
+    .mushi-beta-pop { position: absolute; left: 12px; right: 12px; top: calc(100% + 4px); z-index: 3; display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; background: var(--_bg); border: 1px solid var(--_border); border-radius: 10px; box-shadow: var(--_shadow); font-size: 13px; line-height: 1.45; }
+    .mushi-beta-pop p { margin: 0; }
+    /* Phone sheet: the header keeps its one-line title by dropping the icon badge (the stripe still shows the type). */
+    @media (max-width: ${panelSheetBreakpoint}px) {
+      .mushi-header { gap: 4px; padding-left: 12px; }
+      .mushi-header-type, .mushi-header-host-icon { display: none; }
+      .mushi-header .mushi-pill-btn { padding: 0 10px; }
+    }
     .mushi-title:focus { outline: none; }
     .mushi-header-host-icon { width: 20px; height: 20px; margin-right: 8px; border-radius: 4px; object-fit: contain; }
     .mushi-header .mushi-icon-btn:first-child { margin-left: -10px; }
@@ -388,9 +413,14 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
     .mushi-menu-item:hover { background: var(--_surface); }
 
     .mushi-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 12px; padding: 12px 16px 16px; scrollbar-width: thin; }
-    .mushi-body { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+    .mushi-lead, .mushi-body { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
     .mushi-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 10px 12px 12px 16px; border-top: 1px solid var(--_border); }
     .mushi-footer-hint { flex: 1; min-width: 0; font-size: 12px; color: var(--_muted); }
+    /* One icon line in the footer; the full sentence is its tooltip and the screen-reader text. */
+    .mushi-privacy { display: inline-flex; align-items: center; gap: 6px; flex: 1; min-width: 0; font-size: 12px; color: var(--_muted); }
+    .mushi-privacy .mushi-ico { width: 14px; height: 14px; }
+    .mushi-privacy-text { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .mushi-submit .mushi-ico { width: 16px; height: 16px; stroke-width: 2.4; }
     .mushi-brand-footer { padding: 6px 12px 8px; text-align: center; font-size: 11px; color: var(--_muted); }
     .mushi-brand-link { color: inherit; text-decoration: none; }
     .mushi-brand-link:hover { text-decoration: underline; }
@@ -400,28 +430,78 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
     .mushi-input { flex: 1; min-width: 0; min-height: 44px; padding: 10px 12px; resize: none; }
     .mushi-textarea:focus, .mushi-input:focus { outline: 2px solid var(--_accent); outline-offset: 1px; border-color: transparent; }
     .mushi-textarea::placeholder, .mushi-input::placeholder { color: var(--_muted); opacity: 1; }
+    .mushi-ico { flex: none; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
     .mushi-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-    .mushi-chip-group { display: contents; }
     .mushi-chip { min-height: 44px; padding: 0 14px; border: 1px solid var(--_border); border-radius: 999px; background: none; color: var(--_fg); font: inherit; font-size: 13px; cursor: pointer; }
     .mushi-chip:hover { background: var(--_surface); }
     .mushi-chip[aria-checked="true"] { background: var(--_fg); border-color: var(--_fg); color: var(--_bg); }
     .mushi-chip-more { border-style: dashed; color: var(--_muted); }
     .mushi-chip-sm { padding: 0 12px; font-size: 12px; }
-    .mushi-attachments { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; }
+    /* Intent sub-chips take the picked type's colour. */
+    .mushi-intents .mushi-chip { border-color: var(--_cat, var(--_border)); }
+    .mushi-intents .mushi-chip:hover { background: var(--_cat-wash, var(--_surface)); }
+    .mushi-intents .mushi-chip[aria-checked="true"] { background: var(--_cat, var(--_fg)); border-color: var(--_cat, var(--_fg)); color: var(--_bg); }
+
+    /* ── Report-type tiles (ADR 0070): one tap, colour + icon first ── */
+    .mushi-tile { --_cat: ${neutral.solid}; --_cat-ink: ${neutral.ink}; }
+    .mushi-tile, .mushi-panel[data-cat] { --_cat-wash: color-mix(in srgb, var(--_cat) ${washPct}%, transparent); --_cat-wash-strong: color-mix(in srgb, var(--_cat) ${strongPct}%, transparent); }
+    ${typeVars}
+    .mushi-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+    .mushi-tile { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-width: 0; min-height: 78px; padding: 10px 4px 8px; border: 1px solid var(--_cat); border-radius: 12px; background: var(--_cat-wash); color: var(--_fg); font: inherit; font-size: 13px; font-weight: 600; line-height: 1.2; text-align: center; overflow-wrap: anywhere; cursor: pointer; transition: background-color ${durInstant}ms ease-out, transform ${durInstant}ms ease-out; }
+    .mushi-tile:hover { background: var(--_cat-wash-strong); }
+    .mushi-tile:active { transform: scale(.97); }
+    .mushi-tile[aria-checked="true"] { background: var(--_cat-wash-strong); box-shadow: 0 0 0 1px var(--_cat), inset 0 0 0 1px var(--_cat); }
+    .mushi-tile-ico { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 10px; background: var(--_bg); color: var(--_cat-ink); }
+    .mushi-tile-ico .mushi-ico { width: 22px; height: 22px; }
+    .mushi-tile[data-category="other"] .mushi-tile-ico .mushi-ico { stroke-width: 3.4; }
+    .mushi-tile[aria-checked="true"] .mushi-tile-ico { background: var(--_cat); color: var(--_bg); }
+    .mushi-tile-emoji { font-size: 20px; line-height: 1; }
+    .mushi-tile-check { position: absolute; top: 5px; right: 5px; display: none; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: var(--_cat); color: var(--_bg); }
+    .mushi-tile-check .mushi-ico { width: 12px; height: 12px; stroke-width: 3; }
+    .mushi-tile[aria-checked="true"] .mushi-tile-check { display: inline-flex; }
+    .mushi-more-row { display: flex; justify-content: flex-end; }
+
+    /* ── Length meter under the textarea (its own region: typing never
+       re-renders the textarea, so IME composition survives) ── */
+    .mushi-meter { display: flex; justify-content: flex-end; margin-top: -6px; }
+    .mushi-count { display: inline-flex; align-items: center; gap: 6px; min-height: 20px; font-size: 12px; color: var(--_muted); }
+    .mushi-ring { width: 18px; height: 18px; transform: rotate(-90deg); }
+    .mushi-ring circle { fill: none; stroke-width: 2.5; }
+    .mushi-ring-track { stroke: var(--_border); }
+    .mushi-ring-fill { stroke: var(--_cat, var(--_fg)); stroke-linecap: round; transition: stroke-dashoffset ${durInstant}ms ease-out; }
+    .mushi-count.ok { color: var(--_ok); }
+    .mushi-count.ok .mushi-ico { width: 16px; height: 16px; stroke-width: 2.6; }
+    .mushi-count.nudge { color: var(--_err); font-weight: 600; }
+    .mushi-count.shake { animation: mushi-nudge 320ms ease-out; }
+    .mushi-count.nudge .mushi-ring-fill { stroke: var(--_err); }
+    .mushi-count-max { margin-left: 6px; font-variant-numeric: tabular-nums; }
+    .mushi-panel.mushi-nudge .mushi-textarea { border-color: var(--_err); outline-color: var(--_err); }
+    @keyframes mushi-nudge { 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
+
+    /* ── Attachments: icon tools, the screenshot as a thumbnail ── */
+    .mushi-attachments { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .mushi-tool { position: relative; display: inline-flex; align-items: center; justify-content: center; flex: none; width: 44px; height: 44px; padding: 0; border: 1px solid var(--_border); border-radius: 10px; background: var(--_surface); color: var(--_fg); font: inherit; cursor: pointer; }
+    .mushi-tool:hover { border-color: var(--_muted); }
+    .mushi-tool .mushi-ico { width: 20px; height: 20px; }
+    .mushi-tool.active { border-color: var(--_ok); color: var(--_ok); }
+    .mushi-tool.error { border-color: var(--_err); color: var(--_err); }
+    .mushi-tool[disabled] { cursor: progress; opacity: .75; }
+    .mushi-tool-badge { position: absolute; top: -5px; right: -5px; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: var(--_ok); color: var(--_bg); }
+    .mushi-tool-badge .mushi-ico { width: 10px; height: 10px; stroke-width: 3.4; }
     .mushi-attach-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 12px; border: 1px solid var(--_border); border-radius: 10px; background: var(--_surface); color: var(--_fg); font: inherit; font-size: 13px; cursor: pointer; }
     .mushi-attach-btn:hover { border-color: var(--_muted); }
     .mushi-attach-btn.active { border-color: var(--_ok); }
     .mushi-attach-btn.error { border-color: var(--_err); color: var(--_err); }
     .mushi-attach-btn[disabled] { cursor: progress; opacity: .75; }
-    .mushi-screenshot-preview { display: flex; align-items: flex-start; gap: 10px; width: 100%; margin: 0; }
-    .mushi-screenshot-preview.open { flex-direction: column; }
-    .mushi-thumb { flex: none; padding: 0; border: 1px solid var(--_border); border-radius: 8px; background: var(--_surface); line-height: 0; overflow: hidden; cursor: zoom-in; }
-    .mushi-thumb img { display: block; width: 72px; height: 54px; object-fit: cover; }
+    .mushi-screenshot-preview { display: flex; align-items: center; gap: 8px; flex: 0 1 auto; min-width: 0; margin: 0; }
+    .mushi-screenshot-preview.open { flex-direction: column; align-items: stretch; width: 100%; }
+    .mushi-thumb { position: relative; flex: none; padding: 0; border: 1px solid var(--_ok); border-radius: 8px; background: var(--_surface); line-height: 0; overflow: visible; cursor: zoom-in; }
+    .mushi-thumb img { display: block; width: 64px; height: 44px; border-radius: 7px; object-fit: cover; }
+    .mushi-shot-tools { display: flex; align-items: center; gap: 6px; }
     .mushi-screenshot-preview.open .mushi-thumb { cursor: zoom-out; }
     .mushi-screenshot-preview.open .mushi-thumb img { width: 100%; height: auto; max-height: 40vh; object-fit: contain; }
     .mushi-screenshot-preview figcaption { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 13px; }
     .mushi-screenshot-hint { font-size: 12px; color: var(--_muted); }
-    .mushi-attach-actions { display: flex; gap: 14px; }
     .mushi-annotate-host { width: 100%; }
     .mushi-annotate-host:empty { display: none; }
     .mushi-note { margin: 0; font-size: 12px; line-height: 1.45; color: var(--_muted); }
@@ -435,6 +515,8 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
     .mushi-submit { min-width: 88px; padding: 0 20px; border: 0; background: var(--_accent); color: var(--_accent-fg); font-weight: 600; }
     .mushi-submit:hover { filter: brightness(1.08); }
     .mushi-submit[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+    /* Send stays enabled (NN/g: no disabled submit); below the minimum it only looks lighter and the meter says why. */
+    .mushi-submit[data-ready="false"] { background: color-mix(in oklab, var(--_accent) 72%, var(--_bg)); }
     .mushi-submit[aria-busy="true"], .mushi-btn[aria-busy="true"] { cursor: progress; opacity: .75; }
     .mushi-check { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 14px; cursor: pointer; }
     .mushi-check input { width: 18px; height: 18px; margin: 0; accent-color: var(--_fg); }
@@ -442,22 +524,23 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
     .mushi-optins { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; width: 100%; margin-top: 4px; text-align: left; }
     .mushi-beta-strip { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 10px; background: var(--_surface); font-size: 13px; }
     .mushi-beta-strip p { margin: 0; }
-    .mushi-beta-tag { padding: 0 6px; border-radius: 4px; background: var(--_fg); color: var(--_bg); font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
     .mushi-beta-perks, .mushi-changelog ul { margin: 0; padding-left: 18px; font-size: 12px; }
     .mushi-changelog summary { font-size: 12px; color: var(--_muted); cursor: pointer; }
     .mushi-spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; vertical-align: -2px; animation: mushi-spin .8s linear infinite; }
     @keyframes mushi-spin { to { transform: rotate(360deg); } }
 
     .mushi-success { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px 0 4px; text-align: center; }
-    .mushi-success-stamp { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 72px; height: 72px; color: var(--_accent); }
+    /* A check that draws itself in the success colour (ADR 0070), then the words. */
+    .mushi-success-stamp { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 72px; height: 72px; color: var(--_ok); }
     .mushi-success-stamp svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-    .mushi-success-stamp circle { fill: none; stroke: currentColor; stroke-width: 3; stroke-dasharray: 280; stroke-dashoffset: 280; transform: rotate(-90deg); transform-origin: center; animation: mushi-ring 600ms ease-out 60ms forwards; }
-    .mushi-success-stamp-label { font-size: 24px; font-weight: 600; opacity: 0; transform: rotate(-6deg); animation: mushi-press 300ms ease-out 450ms forwards; }
+    .mushi-success-stamp circle { fill: color-mix(in oklab, var(--_ok) 10%, transparent); stroke: currentColor; stroke-width: 4; stroke-dasharray: 280; stroke-dashoffset: 280; transform: rotate(-90deg); transform-origin: center; animation: mushi-ring 480ms ease-out 60ms forwards; }
+    .mushi-success-check { fill: none; stroke: currentColor; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 62; stroke-dashoffset: 62; animation: mushi-ring 300ms ease-out 460ms forwards; }
     @keyframes mushi-ring { to { stroke-dashoffset: 0; } }
-    @keyframes mushi-press { from { opacity: 0; transform: rotate(-6deg) scale(1.3); } to { opacity: 1; transform: rotate(-6deg) scale(1); } }
+    .mushi-success-title { margin: 0; font-size: 18px; font-weight: 700; }
     .mushi-success-meta { font-size: 12px; color: var(--_muted); }
     .mushi-success-receipt { display: flex; flex-direction: column; align-items: center; gap: 6px; }
-    .mushi-success-sla { margin: 0; font-size: 15px; }
+    .mushi-success-sla { display: inline-flex; align-items: center; gap: 6px; margin: 0; padding: 6px 12px; border-radius: 999px; background: color-mix(in oklab, var(--_ok) 12%, var(--_bg)); color: var(--_fg); font-size: 13px; text-align: left; }
+    .mushi-success-sla .mushi-ico { width: 16px; height: 16px; color: var(--_ok); }
     .mushi-success-receipt-id { min-height: 24px; padding: 2px 6px; border: 1px dashed var(--_border); border-radius: 6px; background: none; color: inherit; font-family: ui-monospace, monospace; font-size: 12px; cursor: pointer; }
     .mushi-success-rewards { width: 100%; }
     .mushi-success-pts-award { font-size: 20px; font-weight: 700; }
@@ -812,8 +895,8 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
         animation-iteration-count: 1 !important;
         transition-duration: 0.001ms !important;
       }
-      .mushi-success-stamp circle { stroke-dashoffset: 0; }
-      .mushi-success-stamp-label { opacity: 1; }
+      .mushi-success-stamp circle, .mushi-success-check { stroke-dashoffset: 0; }
+      .mushi-count.shake, .mushi-tile:active { animation: none; transform: none; }
     }
   `;
 }

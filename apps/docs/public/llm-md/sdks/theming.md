@@ -36,7 +36,7 @@ Add attributes to the tag you pasted:
 | --- | --- | --- |
 | `data-accent` | Colour of the Send button and the launcher's underline | `#rgb`, `#rrggbb`, `rgb()`, `hsl()`, `oklch()` |
 | `data-accent-text` | Text colour on the accent (picked for you when left out) | the same, plus `black` or `white` |
-| `data-theme` | Light or dark widget | `auto` (default), `light`, `dark`, `inherit` (read your page's class or `data-theme`) |
+| `data-theme` | Light or dark widget. `auto` follows the visitor's OS setting, so an app that is light only should set `light` (or `inherit`) | `auto` (default), `light`, `dark`, `inherit` (read your page's class or `data-theme`) |
 | `data-position` | Corner for the launcher | `bottom-right` (default), `bottom-left`, `top-right`, `top-left` |
 | `data-locale` | Widget language | `auto` (browser language, default), `en`, `ja`, `th`, `es`, `zh`; region tags such as `ja-JP` work |
 | `data-hide-on-routes` | Pages where the launcher stays hidden | comma-separated [route rules](#route-rules) |
@@ -124,7 +124,7 @@ are the browser's own page colours, so they flip with light and dark mode.
 | `--mushi-fg` | Main text | `CanvasText` (black) | `CanvasText` (white) |
 | `--mushi-muted` | Hints and secondary text | text at 64% | text at 64% |
 | `--mushi-surface` | Inputs and cards inside the panel | background mixed with 6% text | background mixed with 6% text |
-| `--mushi-border` | Hairlines and outlines | text at 16% | text at 16% |
+| `--mushi-border` | Hairlines and outlines; the panel edge is darker by default (text at 38%) so it reads at 3:1 on a page of the same colour | text at 16% | text at 16% |
 | `--mushi-accent` | Send button, launcher underline, focus rings | `widget.accent`, else your page's `accent-color` or `theme-color` (when it reads at 3:1), else the text colour | same |
 | `--mushi-accent-fg` | Text on the accent | black or white, whichever reads better | same |
 | `--mushi-success` | "Sent" states | `#2D7A55` | `#3A9E6E` |
@@ -134,6 +134,22 @@ are the browser's own page colours, so they flip with light and dark mode.
 
 These 13 names are a public contract: a test in the SDK fails if one is
 renamed or removed.
+
+## Report type colours
+
+The report panel opens on six tiles, one per kind of report, each with its own
+icon and colour: Bug (red), Slow (amber), Looks wrong (violet), Confusing
+(blue), Idea (green) and Other (grey). The picked type tints the panel header
+and the prompt in the text box changes to match it. These colours come from
+`MUSHI_REPORT_TYPE_COLORS` in `@mushi-mushi/core`, with a light and a dark set
+that each reach WCAG AA on the panel. They are not CSS tokens: your accent
+still colours the Send button and focus rings, and the type colours never
+replace it ([ADR 0070](https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0070-report-screen-leads-with-colour-coded-type-tiles.md)).
+
+Your own `widget.categories` stay behind **More…**. A category whose `id` is
+`bug`, `slow`, `visual` or `confusing` relabels that tile and keeps its colour.
+Set `featureRequestLabel` to rename the Idea tile and `featureRequestDescription`
+to change its prompt.
 
 ## Contrast rule
 

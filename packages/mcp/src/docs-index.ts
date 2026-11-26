@@ -1956,7 +1956,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/sdks/theming",
     markdown: "sdks/theming.md",
     keywords: ["sdks", "theming", "bug", "widget"],
-    headings: ["Three easy ways", "1. Script tag (Lovable, Bolt, plain HTML)", "2. In code", "3. In the console", "What can be set where", "CSS tokens", "Contrast rule", "Route rules"],
+    headings: ["Three easy ways", "1. Script tag (Lovable, Bolt, plain HTML)", "2. In code", "3. In the console", "What can be set where", "CSS tokens", "Report type colours", "Contrast rule"],
     excerpt: "Match the Mushi Mushi bug widget to your app: accent, theme, corner, language and hidden pages from a script tag, code or the console, plus 13 CSS tokens.",
   },
   {
