@@ -66,7 +66,7 @@ export const ja: MushiLocale = {
   },
   panel: {
     title: 'フィードバック',
-    more: 'その他…',
+    more: 'ほかの種類…',
     pointAt: '場所を指定',
     remove: '削除',
     markUp: '印をつける',

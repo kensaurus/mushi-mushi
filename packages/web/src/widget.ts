@@ -446,7 +446,8 @@ export class MushiWidget {
     this.step = 'report';
     const cat = options?.category;
     const custom = cat ? this.resolveCustomCategory(cat) : undefined;
-    this.chip = options?.featureRequest ? 'idea' : custom ? cat! : cat && cat !== 'other' && BUILTIN.includes(cat) ? cat : null;
+    // 'other' is a tile now (ADR 0070), so it preselects like the rest.
+    this.chip = options?.featureRequest ? 'idea' : custom ? cat! : cat && BUILTIN.includes(cat) ? cat : null;
     this.showAllCategories = Boolean(custom);
     this.removeToast();
     this.barClearance = this.measureFixedBars();
