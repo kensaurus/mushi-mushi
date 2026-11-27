@@ -142,6 +142,44 @@ describe('buildTimeline', () => {
     expect(tl.surfaces[0].frames.map((f) => f.point_id)).toEqual(['release:v1', 'release:v2'])
   })
 
+  it('orders the release stops by version, keeping each stop’s date-window work and Unreleased last', () => {
+    // glot.it, 2026-05-19: 1.3.0 published, then a 1.0.1 hotfix, then 1.2.3 drafted.
+    const tl = buildTimeline({
+      releases: [
+        { id: 'r130', version: '1.3.0', title: null, status: 'published', published_at: '2026-05-19T02:32:56Z', created_at: '2026-05-19T02:32:44Z', fixed_report_ids: [] },
+        { id: 'r101', version: '1.0.1', title: null, status: 'published', published_at: '2026-05-19T08:28:39Z', created_at: '2026-05-19T04:06:36Z', fixed_report_ids: [] },
+        { id: 'r123', version: '1.2.3', title: null, status: 'draft', published_at: null, created_at: '2026-05-19T08:31:01Z', fixed_report_ids: [] },
+      ],
+      runs: [run({ id: 'a', started_at: '2026-05-19T05:00:00Z' }), run({ id: 'b', started_at: '2026-05-20T00:00:00Z' })],
+      reports: [],
+      baselines: [],
+      pageScores: [],
+      now,
+    })
+    expect(tl.points.map((p) => [p.label, p.runs.map((r) => r.id)])).toEqual([
+      ['1.0.1', ['a']],
+      ['1.2.3', []],
+      ['1.3.0', []],
+      ['Unreleased', ['b']],
+    ])
+  })
+
+  it('keeps date order when any release version is not semver', () => {
+    const tl = buildTimeline({
+      releases: [
+        { id: 'n2', version: '2026.05', title: null, status: 'published', published_at: '2026-05-02T00:00:00Z', created_at: '2026-05-02T00:00:00Z', fixed_report_ids: [] },
+        { id: 'n1', version: 'spring launch', title: null, status: 'published', published_at: '2026-05-01T00:00:00Z', created_at: '2026-05-01T00:00:00Z', fixed_report_ids: [] },
+        { id: 'n0', version: '9.0.0', title: null, status: 'published', published_at: '2026-04-01T00:00:00Z', created_at: '2026-04-01T00:00:00Z', fixed_report_ids: [] },
+      ],
+      runs: [],
+      reports: [],
+      baselines: [],
+      pageScores: [],
+      now,
+    })
+    expect(tl.points.map((p) => p.label)).toEqual(['9.0.0', 'spring launch', '2026.05'])
+  })
+
   it('lists the month’s biggest score moves first', () => {
     const tl = buildTimeline({
       releases: [],

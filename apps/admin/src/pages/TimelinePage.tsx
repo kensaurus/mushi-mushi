@@ -19,7 +19,7 @@ import { useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import { Badge, Card, EmptyState, Input, Skeleton, StatCard, Toggle } from '../components/ui'
+import { Badge, Btn, Card, EmptyState, Input, Skeleton, StatCard, Toggle } from '../components/ui'
 import { formatRelative } from '../components/ui/metrics'
 import { PageLoadError } from '../components/PageLoadError'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -27,6 +27,8 @@ import { TimelineRail } from '../components/timeline/TimelineRail'
 import { ScreenHistory } from '../components/timeline/ScreenHistory'
 import { canEditTimeline, PinButton, RunLinks, VIEWER_EDIT_HINT } from '../components/timeline/TimelineControls'
 import { useActiveOrgRole } from '../lib/useActiveOrgRole'
+import { useSetupStatus } from '../lib/useSetupStatus'
+import { requestOpenProjectSwitcher, useProjectScopeMode } from '../lib/projectScope'
 import { useEntitlements } from '../lib/useEntitlements'
 import { apiFetchMutate } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
@@ -49,7 +51,16 @@ export function TimelinePage() {
   return <ProjectTimeline key={projectId} projectId={projectId} />
 }
 
+/**
+ * A timeline is one app's releases and screens, so "All apps" cannot combine
+ * it. Under All apps the header names the app and an empty timeline offers
+ * the switcher: it used to show the last app you opened, empty, with nothing
+ * saying which (2026-11-27).
+ */
 function ProjectTimeline({ projectId }: { projectId: string }) {
+  const setup = useSetupStatus(projectId)
+  const appName = setup.activeProject?.project_name ?? null
+  const allApps = useProjectScopeMode() === 'all'
   const path = `/v1/admin/projects/${projectId}/timeline`
   const q = usePageData<TimelineData>(path)
   const d = q.data
@@ -70,6 +81,7 @@ function ProjectTimeline({ projectId }: { projectId: string }) {
     <div className={PAGE_CONTENT_STACK}>
       <PageHeaderBar
         title="Timeline"
+        projectScope={appName}
         helpTitle="What is the Timeline?"
         helpWhatIsIt="How your app got better, release by release: the bugs each release fixed, the screens your coding agent improved, the scorecard's average, what the AI checks cost, and a screenshot of every screen for each release so you can drag between the before and the after."
         helpHowToUse="Run mushi-ux scorecard --sync (or a UX run) on your computer, then press Pin current screens to keep this release's screenshots. Pick a release on the rail to see what it closed; pick a screen to compare its releases. Pinned shots are kept for the last releases you choose below; mark one Keep forever to keep it beyond that."
@@ -81,8 +93,15 @@ function ProjectTimeline({ projectId }: { projectId: string }) {
 
       {d && points.length === 0 && surfaces.length === 0 && (
         <EmptyState
-          title="Nothing on the timeline yet"
-          description="Score your app's pages on your computer with mushi-ux scorecard --url <your app> --profile-dir <signed-in browser profile> --sync, or run a UX run. Each run lands here; pin its screenshots to a release to start the before and after."
+          title={appName ? `Nothing on ${appName}'s timeline yet` : 'Nothing on the timeline yet'}
+          description={`${allApps ? 'The timeline shows one app at a time. ' : ''}Score your app's pages on your computer with mushi-ux scorecard --url <your app> --profile-dir <signed-in browser profile> --sync, or run a UX run. Each run lands here; pin its screenshots to a release to start the before and after.`}
+          action={
+            allApps ? (
+              <Btn size="sm" variant="ghost" onClick={requestOpenProjectSwitcher} data-testid="timeline-switch-app">
+                Show another app's timeline
+              </Btn>
+            ) : undefined
+          }
         />
       )}
 

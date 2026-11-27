@@ -147,10 +147,18 @@ export function defaultPair<T extends { viewport: string; url: string | null }>(
   return { before: at.length > 1 ? at[0] : null, after: at[at.length - 1] }
 }
 
-/** A version label to suggest for "Pin current screens": the newest release without shots, else today. */
+/**
+ * A version label to suggest for "Pin current screens". With releases: the
+ * newest one (the rail is in version order) while it has no shots, else
+ * empty so you name the next version. An older release without shots is
+ * already out: glot.it's field said 1.2.3 under 1.3.0 (2026-11-27).
+ * Without releases: today.
+ */
 export function suggestVersion(points: readonly TimelinePoint[], today: Date): string {
-  const open = [...points].reverse().find((p) => p.kind === 'release' && p.version && p.baselines === 0)
-  return open?.version ?? today.toISOString().slice(0, 10)
+  const releases = points.filter((p) => p.kind === 'release' && p.version)
+  if (!releases.length) return today.toISOString().slice(0, 10)
+  const newest = releases[releases.length - 1]
+  return newest.baselines === 0 ? newest.version! : ''
 }
 
 /** Keyboard step for the comparison handle: arrows move 2 %, with Shift 10 %, Home/End to the edges. */

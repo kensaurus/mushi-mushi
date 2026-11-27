@@ -234,6 +234,17 @@ Verify the change landed (e.g. via the Supabase MCP `list_tables` / `pg_proc`
 lookups or a `SET ROLE` smoke test) and check `get_advisors` for new ERROR-level
 findings before declaring the deploy done.
 
+**GraphQL exposure advisors (policy).** `pg_graphql_anon_table_exposed` is
+fixed per table: revoke `anon`. `pg_graphql_authenticated_table_exposed`
+(about 217 tables, aggregated) is accepted for every table members read under
+RLS: it keeps `GRANT SELECT … TO authenticated` plus a member policy such as
+`private.is_project_member(project_id)`, and RLS decides the rows (see
+`20260527020000` section 6 and ADR 0073 decision 1). Such a table grants
+`authenticated` SELECT only, never INSERT, UPDATE, DELETE or TRUNCATE (RLS does
+not cover TRUNCATE). A table only the service role touches revokes both
+roles, which also removes it from the GraphQL schema (`migration_progress`,
+`llm_run_reservations`). New tables pick one of the two in their migration.
+
 **Jul 2026 reliability trio** (CLI auth + SDK config + backend hardening — see
 [`docs/operators/sdk-reliability-overhaul.md`](operators/sdk-reliability-overhaul.md)):
 

@@ -81,6 +81,8 @@ export interface PromptLabData {
     recentSamples: DatasetSample[]
   }
   fineTuningJobs?: FineTuningJob[]
+  /** OPENAI_WEBHOOK_SECRET is set on the server (never its value). Absent from older servers. */
+  fineTuningWebhookConfigured?: boolean
 }
 
 export const STAGE_LABELS: Record<string, string> = {

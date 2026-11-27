@@ -26,6 +26,8 @@ const ICON_BTN = '!px-1.5'
 
 interface FineTuningJobsCardProps {
   jobs: FineTuningJob[]
+  /** OPENAI_WEBHOOK_SECRET is set on the server. Undefined: an older server that does not say. */
+  webhookConfigured?: boolean
   onChange: () => void | Promise<void>
 }
 
@@ -51,7 +53,7 @@ const VENDOR_OPTIONS = [
 // Anthropic direct is deliberately absent: it has no public fine-tuning API,
 // so a job for it could never train (the server refuses it at create time).
 
-export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) {
+export function FineTuningJobsCard({ jobs, webhookConfigured, onChange }: FineTuningJobsCardProps) {
   const toast = useToast()
   const [busy, setBusy] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
@@ -235,6 +237,16 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
           <p className="text-2xs text-fg-faint">
             Vendor-side fine-tunes for the rare case where prompts alone aren't enough. Workflow: <span className="font-mono">Create → Export → Submit → Check status → Validate → Promote</span>.
           </p>
+          {webhookConfigured !== undefined && (
+            <p className="mt-1 flex flex-wrap items-center gap-1.5 text-2xs text-fg-muted" data-testid="fine-tuning-webhook-state">
+              <Badge className={webhookConfigured ? CHIP_TONE.ok : CHIP_TONE.neutral}>{webhookConfigured ? 'OpenAI webhook on' : 'OpenAI webhook not configured'}</Badge>
+              <span>
+                {webhookConfigured
+                  ? 'OpenAI moves a job on as soon as it finishes; Check status still works.'
+                  : 'Jobs move on when you press Check status. To have OpenAI update them, the server needs OPENAI_WEBHOOK_SECRET.'}
+              </span>
+            </p>
+          )}
         </div>
         <Btn size="sm" className="shrink-0 whitespace-nowrap" onClick={() => { setAskingStage(true); setStageError(null) }} disabled={creating} loading={creating}>
           New job

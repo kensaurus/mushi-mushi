@@ -272,6 +272,9 @@ export function registerPromptLabRoutes(app: Hono<{ Variables: Variables }>): vo
           recentSamples,
         },
         fineTuningJobs,
+        // Whether POST /v1/webhooks/fine-tuning/openai can accept anything
+        // (fine-tuning.ts fails closed without the secret). Never the value.
+        fineTuningWebhookConfigured: Boolean(Deno.env.get('OPENAI_WEBHOOK_SECRET')?.trim()),
       },
     });
   });

@@ -306,7 +306,7 @@ export function PromptLabPage() {
     <div id="prompt-lab-fine-tuning" className="scroll-mt-4">
       <DisclosurePanel title="Advanced: fine-tuning & synthetic" open={advancedOpen} onOpenChange={setAdvancedOpen}>
         <div className="space-y-4">
-          <FineTuningJobsCard jobs={data.fineTuningJobs ?? []} onChange={reload} />
+          <FineTuningJobsCard jobs={data.fineTuningJobs ?? []} webhookConfigured={data.fineTuningWebhookConfigured} onChange={reload} />
           <SyntheticReportsCard />
         </div>
       </DisclosurePanel>
