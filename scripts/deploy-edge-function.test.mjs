@@ -141,26 +141,30 @@ describe('readVerifyJwtFromConfig', () => {
 // Supabase answers HTTP 413 ("Function source code exceeds the maximum
 // deployment size (5 MB)") on a size it measures itself. `api` deployed at
 // 4,559,475 compacted upload bytes and failed at 4,639,303 (#571,
-// 2026-10-22). Stay under the last size known to deploy, so CI fails here
-// instead of the deploy failing after merge. Over budget: move a
-// self-contained route group to `api-ext` (see _shared/edge-proxy.ts).
-const API_UPLOAD_BUDGET_BYTES = 4_540_000
+// 2026-10-22); `api-ext` deployed at 4,566,436 and failed at 4,866,750
+// (#1252, 2026-11-27, which had measured only `api`). Stay under the last
+// size known to deploy, so CI fails here instead of the deploy failing after
+// merge. Over budget: move a self-contained route group to `api-loop` (or a
+// new overflow function), see _shared/edge-proxy.ts.
+const UPLOAD_BUDGET_BYTES = { api: 4_540_000, 'api-ext': 4_540_000, 'api-loop': 4_540_000 }
 
 describe('api upload size', () => {
-  it('stays under the last size known to deploy', () => {
-    const root = fileURLToPath(new URL('../', import.meta.url))
-    const fnDir = join(root, 'packages/server/supabase/functions/api')
-    const walk = (d) => readdirSync(d).flatMap((n) => {
-      const p = join(d, n)
-      return statSync(p).isDirectory() ? walk(p) : [p]
+  for (const [slug, budget] of Object.entries(UPLOAD_BUDGET_BYTES)) {
+    it(`${slug} stays under the last size known to deploy`, () => {
+      const root = fileURLToPath(new URL('../', import.meta.url))
+      const fnDir = join(root, 'packages/server/supabase/functions', slug)
+      const walk = (d) => readdirSync(d).flatMap((n) => {
+        const p = join(d, n)
+        return statSync(p).isDirectory() ? walk(p) : [p]
+      })
+      const files = functionUploadFiles(functionUploadRoots(walk(fnDir), join(fnDir, 'index.ts')))
+      const bytes = files.reduce((n, f) => n + compactSource(ts, relative(root, f), readFileSync(f)).length, 0)
+      assert.ok(
+        bytes < budget,
+        `${slug} uploads ${bytes} bytes (budget ${budget}); move a route group to another overflow function`,
+      )
     })
-    const files = functionUploadFiles(functionUploadRoots(walk(fnDir), join(fnDir, 'index.ts')))
-    const bytes = files.reduce((n, f) => n + compactSource(ts, relative(root, f), readFileSync(f)).length, 0)
-    assert.ok(
-      bytes < API_UPLOAD_BUDGET_BYTES,
-      `api uploads ${bytes} bytes (budget ${API_UPLOAD_BUDGET_BYTES}); move a route group to api-ext`,
-    )
-  })
+  }
 })
 
 describe('deployInfoSource (shared with mushi selfhost up)', () => {

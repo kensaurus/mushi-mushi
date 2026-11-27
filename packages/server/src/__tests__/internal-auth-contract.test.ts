@@ -47,6 +47,10 @@ const PUBLIC_BY_DESIGN: Record<string, string> = {
   // CI runner, inventory and Ask Mushi paths here, and every route keeps its
   // own adminOrApiKey / apiKeyAuth / jwtAuth gate on the forwarded headers.
   'api-ext': 'Per-route JWT / API-key auth via _shared/auth middlewares (routes forwarded from api)',
+  // The second overflow half (api-ext over the deployment size limit, 2026-11-27):
+  // UX runs, fresh-eyes, scorecard, timeline, captures, personas, security proof,
+  // release kits and fine-tuning, each route with its own gate on the forwarded headers.
+  'api-loop': 'Per-route JWT / API-key auth via _shared/auth middlewares (routes forwarded from api)',
   // Health check — verify_jwt=false by design so external monitors, load
   // balancers, and synthetic checks can reach it without credentials. Exposes
   // no user data (only {status, db, version}); DB probe is a no-table

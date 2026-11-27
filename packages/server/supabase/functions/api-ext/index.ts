@@ -21,7 +21,7 @@
  *          roadmap, submission and redemption review, Tremendous webhook),
  *          the per-app Home, setup gaps and the release batch (console ops
  *          plan P1), the Health check registry (plan-simplicity-2026-10 Phase 1), local workers (`mushi work --daemon`, ADR 0048), repo clean-up (ADR 0051)
- *          fresh-eyes runs (ADR 0053), the UX scorecard (ADR 0067), the iteration timeline (ADR 0072), UX captures from any driver (ADR 0073), project personas and test accounts (ADR 0073), the Journey optimizer (ADR 0058), the public free Production Check and
+ *          the Journey optimizer (ADR 0058), the public free Production Check and
  *          scoreboard (docs /check and /proof, GTM plan November 2026), and the
  *          cookieless landing page-view count with the daily GTM scorecard
  *          (landing-visits.ts), the design CI push and recipe drift
@@ -34,6 +34,11 @@
  *          worker heartbeat, which `api` now serves itself (one invocation
  *          each instead of two). api-ext still registers those two routes for
  *          callers that reach it directly.
+ *
+ *          The loop's route groups (UX runs, fresh-eyes runs, the UX scorecard,
+ *          timeline, captures, personas, security proof, release kits,
+ *          fine-tuning) run in `api-loop` (2026-11-27,
+ *          api-ext over the deployment size limit).
  */
 
 import { Hono } from 'npm:hono@4'
@@ -57,7 +62,6 @@ import { registerAnthropicModelRoutes } from '../api/routes/anthropic-models.ts'
 import { registerSdkUpgradeRoutes } from '../api/routes/sdk-upgrade.ts'
 import { registerQaCoverageRoutes } from '../api/routes/qa-coverage.ts'
 import { registerFullstackAuditRoutes } from '../api/routes/fullstack-audit.ts'
-import { registerUxRunsRoutes } from '../api/routes/ux-runs.ts'
 import { registerVulnerabilityRoutes } from '../api/routes/vulnerabilities.ts'
 import { registerSiteAuditRoutes } from '../api/routes/site-audit.ts'
 import { registerMergeQueueRoutes } from '../api/routes/merge-queue.ts'
@@ -81,11 +85,6 @@ import { registerGithubConnectRoutes } from '../api/routes/github-connect.ts'
 import { registerReleaseBatchRoutes } from '../api/routes/release-batch.ts'
 import { registerWorkRoutes } from '../api/routes/work.ts'
 import { registerRepoHousekeepingRoutes } from '../api/routes/repo-housekeeping.ts'
-import { registerFreshEyesRoutes } from '../api/routes/fresh-eyes.ts'
-import { registerUxScorecardRoutes } from '../api/routes/ux-scorecard.ts'
-import { registerUxTimelineRoutes } from '../api/routes/ux-timeline.ts'
-import { registerUxCaptureRoutes } from '../api/routes/ux-captures.ts'
-import { registerPersonaRoutes } from '../api/routes/personas.ts'
 import { registerJourneyRoutes } from '../api/routes/journeys.ts'
 import { registerProductionCheckRoutes } from '../api/routes/production-check.ts'
 import { registerPublicScoreboardRoutes } from '../api/routes/public-scoreboard.ts'
@@ -96,9 +95,6 @@ import { registerSpendLedgerRoutes } from '../api/routes/spend-ledger.ts'
 import { registerAccountsRegisterRoutes } from '../api/routes/accounts-register.ts'
 import { registerOpsRoutes } from '../api/routes/ops.ts'
 import { registerKensaurusOpsRoutes } from '../api/routes/kensaurus-ops.ts'
-import { registerSecurityProofRoutes } from '../api/routes/security-proof.ts'
-import { registerReleaseKitRoutes } from '../api/routes/release-kits.ts'
-import { registerFineTuningRoutes } from '../api/routes/fine-tuning.ts'
 
 ensureSentry('api-ext')
 
@@ -125,7 +121,6 @@ registerAnthropicModelRoutes(app)
 registerSdkUpgradeRoutes(app)
 registerQaCoverageRoutes(app)
 registerFullstackAuditRoutes(app)
-registerUxRunsRoutes(app)
 registerVulnerabilityRoutes(app)
 registerSiteAuditRoutes(app)
 registerMergeQueueRoutes(app)
@@ -149,12 +144,6 @@ registerGithubConnectRoutes(app)
 registerReleaseBatchRoutes(app)
 registerWorkRoutes(app)
 registerRepoHousekeepingRoutes(app)
-registerFreshEyesRoutes(app)
-registerUxScorecardRoutes(app)
-registerUxTimelineRoutes(app)
-// UX captures from any driver (ADR 0073) and project personas (ADR 0073).
-registerUxCaptureRoutes(app)
-registerPersonaRoutes(app)
 registerJourneyRoutes(app)
 registerProductionCheckRoutes(app)
 registerPublicScoreboardRoutes(app)
@@ -169,12 +158,6 @@ registerAccountsRegisterRoutes(app)
 registerOpsRoutes(app)
 // Providers & AI routes (operator only): proxy to the kensaurus-ops API on kenji.
 registerKensaurusOpsRoutes(app)
-// Security proof and release kits (Plan 025 P4-P6, ADR 0074): CI scan results, a release's proof,
-// its kit for a product video, and store media uploads as approval requests.
-registerSecurityProofRoutes(app)
-registerReleaseKitRoutes(app)
-// Fine-tuning jobs and the OpenAI fine-tuning webhook (moved from api for its size budget, 2026-11-27).
-registerFineTuningRoutes(app)
 
 app.notFound((c) => c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'No such route.' } }, 404))
 
