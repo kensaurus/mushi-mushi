@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/security-proof
 
 ---
 title: Security proof
-description: Each release's Security proof: the scans your own CI ran for the commit it ships. Dependencies, secrets, an optional AI review, a live scan.
+description: "Each release's Security proof: the scans your own CI ran for the commit it ships. Dependencies, secrets, an optional AI review, a live scan."
 ---
 
 # Security proof

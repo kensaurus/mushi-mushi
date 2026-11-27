@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/timeline
 
 ---
 title: Timeline
-description: The Timeline shows your app release by release: bugs fixed, screens improved, scores, AI cost and a before/after of every screen.
+description: "The Timeline shows your app release by release: bugs fixed, screens improved, scores, AI cost and a before/after of every screen."
 robots:
   index: false
   follow: true

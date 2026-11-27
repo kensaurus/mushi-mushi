@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/release-kits
 
 ---
 title: Release kits
-description: A release kit gathers a release's screenshots, flow clips, changelog and brand colours for a product video, and store media you approve.
+description: "A release kit gathers a release's screenshots, flow clips, changelog and brand colours for a product video, and store media you approve."
 ---
 
 # Release kits
