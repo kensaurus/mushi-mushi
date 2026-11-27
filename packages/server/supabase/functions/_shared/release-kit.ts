@@ -211,6 +211,7 @@ export function changelogLines(bodyMd: string | null | undefined): string[] {
     .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
     .replace(/[*_`~]+/g, '')
     .replace(/<[^>]+>/g, '')
+    .replace(/[<>]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
   const bullets = bodyMd.split(/\r?\n/).map((l) => /^\s*(?:[-*+]|\d+[.)])\s+(.*)$/.exec(l)?.[1]).filter((x): x is string => !!x).map(clean).filter(Boolean)

@@ -54,7 +54,7 @@ export function parseUiautomator(xml: string): NativeNode[] {
   const out: NativeNode[] = []
   for (const m of xml.matchAll(/<node\b([^>]*?)\/?>/g)) {
     const attrs: Record<string, string> = {}
-    for (const a of m[1]!.matchAll(/([\w:-]+)="([^"]*)"/g)) attrs[a[1]!] = decodeXml(a[2]!)
+    for (const a of m[1]!.matchAll(/\s([\w:-]+)="([^"]*)"/g)) attrs[a[1]!] = decodeXml(a[2]!)
     const bounds = /^\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]$/.exec(attrs.bounds ?? '')
     const visible = attrs['visible-to-user'] !== 'false' && (!bounds || (Number(bounds[3]) > Number(bounds[1]) && Number(bounds[4]) > Number(bounds[2])))
     out.push({

@@ -19,12 +19,24 @@
  * Templates for Maestro, adb and the iOS simulator: docs/templates/ux-native/.
  */
 
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { closeSync, existsSync, fstatSync, openSync, readdirSync, readFileSync, readSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { nativeFacts, parseMaestroHierarchy, parseUiautomator, pngSize, type NativeNode } from './native-facts.js'
 import { fileScorecard, type ScorecardFileOutcome } from './scorecard.js'
 import { scorecardPageKey, type UxCause, type UxPageFacts, type UxPageScore } from './scorecard-rubric.js'
 import { consoleBaseUrl, type SyncConfig } from './sync.js'
+
+/** A file's size and first 32 bytes, read through one descriptor so both describe the same file. */
+function sizeAndHead(file: string): { size: number; head: Uint8Array } {
+  const fd = openSync(file, 'r')
+  try {
+    const head = Buffer.alloc(32)
+    const n = readSync(fd, head, 0, 32, 0)
+    return { size: fstatSync(fd).size, head: head.subarray(0, n) }
+  } finally {
+    closeSync(fd)
+  }
+}
 
 export const UPLOAD_PLATFORMS = ['ios', 'android', 'flutter', 'react_native', 'capacitor', 'web', 'other'] as const
 export type UploadPlatform = (typeof UPLOAD_PLATFORMS)[number]
@@ -54,9 +66,9 @@ export function readScreens(dir: string, opts: { scale?: number } = {}): Capture
     let settledSize: { width: number; height: number } | null = null
     for (const s of shots) {
       const file = join(folder, `${s}.png`)
-      const size = statSync(file).size
+      const { size, head } = sizeAndHead(file)
       if (size > UPLOAD_MAX_PNG_BYTES) throw new Error(`${file} is ${(size / 1024 / 1024).toFixed(1)} MB; a screenshot may be at most 8 MB.`)
-      const dims = pngSize(readFileSync(file).subarray(0, 32))
+      const dims = pngSize(head)
       if (!dims) throw new Error(`${file} is not a PNG. (In Windows PowerShell 5.1, \`adb exec-out screencap -p > x.png\` corrupts it: run the template in bash or Git Bash.)`)
       if (s === 'settled' || !settledSize) settledSize = dims
     }

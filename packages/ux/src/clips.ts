@@ -61,7 +61,12 @@ const SLUG_RE = /[^a-z0-9]+/g
 
 /** Pure: a file-safe name for a flow ("Sign up!" → "sign-up"). */
 export function clipSlug(name: string): string {
-  return name.toLowerCase().replace(SLUG_RE, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'flow'
+  const s = name.toLowerCase().replace(SLUG_RE, '-')
+  let a = 0
+  let b = s.length
+  while (a < b && s[a] === '-') a++
+  while (b > a && s[b - 1] === '-') b--
+  return s.slice(a, b).slice(0, 60) || 'flow'
 }
 
 /**

@@ -14,7 +14,7 @@
  *   <dir>/pages/<screen>/facts.json    optional, with any of the page facts
  */
 
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { closeSync, existsSync, fstatSync, openSync, readdirSync, readFileSync, readSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 const UX_CAPTURE_MAX_PAGES = 60;
@@ -27,6 +27,18 @@ interface CapturePage {
 }
 
 const PNG_SIG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+
+/** A file's size and first 32 bytes, read through one descriptor so both describe the same file. */
+function sizeAndHead(file: string): { size: number; head: Uint8Array } {
+  const fd = openSync(file, 'r');
+  try {
+    const head = Buffer.alloc(32);
+    const n = readSync(fd, head, 0, 32, 0);
+    return { size: fstatSync(fd).size, head: head.subarray(0, n) };
+  } finally {
+    closeSync(fd);
+  }
+}
 
 /** Width and height from a PNG's header, or null when it is not a PNG. @internal Exported for tests. */
 export function pngDimensions(bytes: Uint8Array): { width: number; height: number } | null {
@@ -57,8 +69,9 @@ export function readCapturePages(dir: string): CapturePage[] {
     let dims: { width: number; height: number } | null = null;
     for (const s of shots) {
       const file = join(folder, `${s}.png`);
-      if (statSync(file).size > UX_CAPTURE_MAX_PNG_BYTES) throw new Error(`${file} is over 8 MB.`);
-      const d = pngDimensions(readFileSync(file).subarray(0, 32));
+      const { size, head } = sizeAndHead(file);
+      if (size > UX_CAPTURE_MAX_PNG_BYTES) throw new Error(`${file} is over 8 MB.`);
+      const d = pngDimensions(head);
       if (!d) throw new Error(`${file} is not a PNG.`);
       dims = d;
     }

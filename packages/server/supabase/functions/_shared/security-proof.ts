@@ -144,7 +144,7 @@ function advisoryIdsIn(...texts: unknown[]): string[] {
   const out = new Set<string>()
   for (const t of texts) {
     if (typeof t !== 'string') continue
-    for (const m of t.matchAll(ADVISORY_ID)) out.add(m[0].toUpperCase().replace(/^GHSA/, 'GHSA'))
+    for (const m of t.matchAll(ADVISORY_ID)) out.add(m[0].toUpperCase())
   }
   return [...out].map((id) => (id.startsWith('GHSA') ? `GHSA${id.slice(4).toLowerCase()}` : id))
 }

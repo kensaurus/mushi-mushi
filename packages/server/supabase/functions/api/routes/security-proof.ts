@@ -161,7 +161,7 @@ async function postResult(c: Context, deps: SecurityRouteDeps): Promise<Response
   } catch (err) {
     if (err instanceof SecurityMigrationPending) return jsonError(c, 'MIGRATION_PENDING', err.message, 409)
     const message = err instanceof Error ? err.message : String(err)
-    if (/^Not a |JSON|reported an error/.test(message)) return jsonError(c, 'UNREADABLE_REPORT', `Mushi could not read that ${b.tool} result: ${message.slice(0, 160)}`, 422)
+    if (message.startsWith('Not a ') || /JSON|reported an error/.test(message)) return jsonError(c, 'UNREADABLE_REPORT', `Mushi could not read that ${b.tool} result: ${message.slice(0, 160)}`, 422)
     slog.warn('security result not stored', { projectId, tool: b.tool, err: message.slice(0, 200) })
     return jsonError(c, 'DB_ERROR', 'The scan result could not be stored. The next run sends it again.', 500)
   }
