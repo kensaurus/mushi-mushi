@@ -23,7 +23,7 @@ export interface ProjectGroup {
 /** Chip tone per group colour; unset groups read as neutral. */
 export function groupTone(color: ProjectGroupColor | null): keyof typeof CHIP_TONE {
   if (!color || color === 'neutral') return 'neutral'
-  return `${color}Subtle` as keyof typeof CHIP_TONE
+  return color
 }
 
 const ACTIVE_GROUP_STORAGE_KEY = 'mushi:active_project_group'

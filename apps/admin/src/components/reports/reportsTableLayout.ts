@@ -16,7 +16,8 @@ export const REPORTS_TABLE_COL = {
   summary: 'w-auto',
   /** Status word above the 4-step bar and "n of 4": "Classified" fits on one line. */
   status: 'w-[7rem]',
-  severity: 'w-[3.25rem]',
+  /** "▲ Crit" SeverityPill (glyph + word). */
+  severity: 'w-[4.25rem]',
   action: 'w-[7rem]',
 } as const
 
@@ -26,8 +27,8 @@ export const REPORTS_STICKY_LEAD = {
   col3Left: '2.25rem', /* w-1 + w-8 */
 } as const
 
-/** Lead (2.25rem) + summary floor (34rem) + status, severity, action (17.25rem). */
-export const REPORTS_TABLE_MIN_W = 'min-w-[53.5rem]'
+/** Lead (2.25rem) + summary floor (34rem) + status, severity, action (18.25rem). */
+export const REPORTS_TABLE_MIN_W = 'min-w-[54.5rem]'
 
 /** Max width of the action stack (recency bar + CTA row + in-flow kebab). */
 export const REPORTS_ACTION_STACK_MAX = 'max-w-[9.75rem]' as const

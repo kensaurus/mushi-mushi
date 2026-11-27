@@ -17,6 +17,7 @@ import { useToast } from '../../lib/toast'
 import { docsUrl } from '../../lib/docsUrl'
 import { LINK_ACCENT } from '../../lib/chipTone'
 import type { OpsKeyMinted } from '../../lib/opsTypes'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 /** @internal Exported for tests. The lines to run once, with the key filled in. */
 export function opsKeySnippets(key: string, apiUrl: string): Array<{ label: string; text: string }> {
@@ -66,14 +67,14 @@ export function OpsKeyRow({ projectId, projectName }: { projectId: string; proje
         <div className="space-y-2" data-testid={`ops-key-revealed-${projectId}`}>
           <p className="text-2xs font-semibold text-warn-foreground">▲ Shown once. Copy it into your server's secrets now; Mushi Mushi keeps only its hash.</p>
           <div className="flex items-center gap-2">
-            <code className="min-w-0 flex-1 truncate rounded-xs bg-surface-overlay px-2 py-1 font-mono text-2xs text-fg">{minted.key}</code>
+            <code className={`min-w-0 flex-1 truncate rounded-xs ${CHIP_TONE.neutral} px-2 py-1 font-mono text-2xs`}>{minted.key}</code>
             <CopyButton value={minted.key} label="Copy ops key" />
           </div>
           {opsKeySnippets(minted.key, RESOLVED_EXTERNAL_API_URL).map((s) => (
             <div key={s.label} className="space-y-0.5">
               <p className="text-2xs font-semibold text-fg-secondary">{s.label}</p>
               <div className="flex items-start gap-2">
-                <pre className="min-w-0 flex-1 overflow-x-auto rounded-xs bg-surface-overlay px-2 py-1 font-mono text-2xs text-fg">{s.text}</pre>
+                <pre className={`min-w-0 flex-1 overflow-x-auto rounded-xs ${CHIP_TONE.neutral} px-2 py-1 font-mono text-2xs`}>{s.text}</pre>
                 <CopyButton value={s.text} label={`Copy: ${s.label}`} />
               </div>
             </div>

@@ -89,10 +89,10 @@ interface AntiGamingEvent {
 }
 
 const EVENT_BADGE: Record<AntiGamingEvent['event_type'], string> = {
-  multi_account: CHIP_TONE.warnSubtle,
-  velocity_anomaly: CHIP_TONE.dangerSubtle,
-  manual_flag: CHIP_TONE.dangerSubtle,
-  unflag: CHIP_TONE.okSubtle,
+  multi_account: CHIP_TONE.warn,
+  velocity_anomaly: CHIP_TONE.danger,
+  manual_flag: CHIP_TONE.danger,
+  unflag: CHIP_TONE.ok,
 }
 
 /** Words for each event type; rows showed `velocity_anomaly` verbatim (audit 2026-11-21). */
@@ -659,7 +659,7 @@ export function AntiGamingPage() {
                         {isCollapsed ? '▸' : '▾'}
                       </span>
                       <span className="font-mono text-xs text-fg truncate">{group.label}</span>
-                      <Badge className="bg-surface-overlay text-fg-muted text-3xs">{group.count}</Badge>
+                      <Badge tone="neutral" className="text-3xs">{group.count}</Badge>
                       {group.sublabel && (
                         <SignalChip tone="neutral" className="truncate max-w-48">
                           {group.sublabel}
@@ -884,10 +884,10 @@ function DeviceCard({ device: d, isExpanded, isBusy, onToggleExpand, onFlag, onU
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               {d.cross_account_flagged && (
-                <Badge tone="dangerSubtle">cross-account</Badge>
+                <Badge tone="danger">cross-account</Badge>
               )}
               {d.flagged_as_suspicious && !d.cross_account_flagged && (
-                <Badge tone="dangerSubtle">flagged</Badge>
+                <Badge tone="danger">flagged</Badge>
               )}
               <code className="text-2xs font-mono text-fg-secondary truncate">
                 fp:{d.device_fingerprint.slice(0, 16)}…
@@ -1037,7 +1037,7 @@ function WithheldRedemptionRow({
       <div className="flex-1 min-w-0 space-y-0.5">
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium truncate">@{handle}</span>
-          <Badge tone="warnSubtle">{redemption.kind.replace(/_/g, ' ')}</Badge>
+          <Badge tone="warn">{redemption.kind.replace(/_/g, ' ')}</Badge>
           {redemption.face_value_usd && (
             <span className="text-xs text-fg-secondary">${redemption.face_value_usd} gift card</span>
           )}

@@ -36,7 +36,7 @@ function ChannelBadge({ enabled, provider }: { enabled: boolean; provider: 'conf
   const badge = reporterChannelBadge(enabled, provider)
   // Off is the switch's own state: no second "Off" chip beside it (2026-11-19).
   if (badge.kind === 'off') return null
-  const tone = badge.kind === 'server_missing' ? 'warnSubtle' : badge.kind === 'ready' ? 'okSubtle' : 'neutral'
+  const tone = badge.kind === 'server_missing' ? 'warn' : badge.kind === 'ready' ? 'ok' : 'neutral'
   return (
     <span data-testid="reporter-channel-badge" data-kind={badge.kind}>
       <Badge tone={tone}>{badge.label}</Badge>

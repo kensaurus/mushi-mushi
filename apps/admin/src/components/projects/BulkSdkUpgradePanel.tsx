@@ -144,7 +144,7 @@ function RowStatus({
   }
   if (status === 'running' || status === 'awaiting_lockfile') {
     return wrap(
-      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-2xs font-medium ${CHIP_TONE.infoSubtle}`}>
+      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-2xs font-medium ${CHIP_TONE.info}`}>
         {spinner} {label}
       </span>,
     )
@@ -155,7 +155,7 @@ function RowStatus({
         href={prUrl}
         target="_blank"
         rel="noopener noreferrer"
-        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-2xs font-medium hover:bg-ok-muted/40 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus ${CHIP_TONE.okSubtle}`}
+        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-2xs font-medium hover:bg-ok-muted/40 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus ${CHIP_TONE.ok}`}
       >
         <IconCheck className="h-3.5 w-3.5" aria-hidden /> {label}
         <IconExternalLink className="h-3.5 w-3.5 opacity-60" aria-hidden />
@@ -164,14 +164,14 @@ function RowStatus({
   }
   if (status === 'completed_no_pr') {
     return wrap(
-      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-2xs font-medium ${CHIP_TONE.infoSubtle}`}>
+      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-2xs font-medium ${CHIP_TONE.info}`}>
         <IconCheck className="h-3.5 w-3.5" aria-hidden /> {label}
       </span>,
     )
   }
   if (status === 'failed') {
     return wrap(
-      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-2xs font-medium ${CHIP_TONE.dangerSubtle}`}>
+      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-2xs font-medium ${CHIP_TONE.danger}`}>
         {label}
       </span>,
       'assertive',
@@ -195,15 +195,15 @@ const RELEASE_STATUS_LABELS: Record<string, string> = {
   failed: 'Release failed',
 }
 const RELEASE_STATUS_COLORS: Record<string, string> = {
-  pr_opened: CHIP_TONE.infoSubtle,
-  blocked: CHIP_TONE.dangerSubtle,
-  ready_to_merge: CHIP_TONE.okSubtle,
-  merging: CHIP_TONE.infoSubtle,
-  merged: CHIP_TONE.okSubtle,
-  deploying: CHIP_TONE.infoSubtle,
-  deployed: CHIP_TONE.okSubtle,
-  verified: CHIP_TONE.okSubtle,
-  failed: CHIP_TONE.dangerSubtle,
+  pr_opened: CHIP_TONE.info,
+  blocked: CHIP_TONE.danger,
+  ready_to_merge: CHIP_TONE.ok,
+  merging: CHIP_TONE.info,
+  merged: CHIP_TONE.ok,
+  deploying: CHIP_TONE.info,
+  deployed: CHIP_TONE.ok,
+  verified: CHIP_TONE.ok,
+  failed: CHIP_TONE.danger,
 }
 
 function ReleaseStatusPill({
@@ -524,7 +524,7 @@ export function BulkUpgradeToolbar({ bulk }: { bulk: BulkSdkUpgrade }) {
         </button>
       </Tooltip>
       {failedCount > 0 && (
-        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-medium ${CHIP_TONE.dangerSubtle}`} role="status">
+        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-medium ${CHIP_TONE.danger}`} role="status">
           {failedCount} PR{failedCount === 1 ? '' : 's'} failed
         </span>
       )}

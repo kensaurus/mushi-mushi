@@ -54,7 +54,7 @@ export function UxRunProgress({ run, surfaces }: { run: UxRunListItem; surfaces:
     <Card className="p-3">
       <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1" aria-live="polite">
-        <Badge tone={phase === 'failed' ? 'dangerSubtle' : phase === 'done' ? 'okSubtle' : 'infoSubtle'}>
+        <Badge tone={phase === 'failed' ? 'danger' : phase === 'done' ? 'ok' : 'info'}>
           {live && <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-current motion-safe:animate-pulse" aria-hidden />}
           {UX_PHASE_LABEL[phase] ?? phase}
         </Badge>

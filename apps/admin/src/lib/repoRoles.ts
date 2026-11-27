@@ -30,11 +30,11 @@ export interface RepoRoleMeta {
 }
 
 const REPO_ROLE_META: Record<RepoRole, RepoRoleMeta> = {
-  frontend: { label: 'Frontend', Icon: IconGlobe, tone: 'brandSubtle' },
-  backend: { label: 'Backend', Icon: IconNetwork, tone: 'okSubtle' },
-  monorepo: { label: 'Monorepo', Icon: IconProjects, tone: 'infoSubtle' },
-  mobile: { label: 'Mobile', Icon: IconMobile, tone: 'accentSubtle' },
-  ai: { label: 'AI', Icon: IconIntelligence, tone: 'accentSubtle' },
+  frontend: { label: 'Frontend', Icon: IconGlobe, tone: 'brand' },
+  backend: { label: 'Backend', Icon: IconNetwork, tone: 'ok' },
+  monorepo: { label: 'Monorepo', Icon: IconProjects, tone: 'info' },
+  mobile: { label: 'Mobile', Icon: IconMobile, tone: 'accent' },
+  ai: { label: 'AI', Icon: IconIntelligence, tone: 'accent' },
   infra: { label: 'Infra', Icon: IconStorage, tone: 'neutral' },
   docs: { label: 'Docs', Icon: IconNote, tone: 'neutral' },
   other: { label: 'Other', Icon: IconGit, tone: 'neutral' },

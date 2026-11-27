@@ -29,10 +29,10 @@ type SdkDisplayResolutionTone =
   | 'unknown'
 
 const STATUS_TONE: Record<Exclude<SdkDisplayResolutionTone, 'unknown'>, string> = {
-  'up-to-date': CHIP_TONE.okSubtle,
-  'catalog-ahead': CHIP_TONE.infoSubtle,
-  'upgrade-available': CHIP_TONE.warnSubtle,
-  deprecated: CHIP_TONE.dangerSubtle,
+  'up-to-date': CHIP_TONE.ok,
+  'catalog-ahead': CHIP_TONE.info,
+  'upgrade-available': CHIP_TONE.warn,
+  deprecated: CHIP_TONE.danger,
 }
 
 function shortPackageName(package_: string | null): string {

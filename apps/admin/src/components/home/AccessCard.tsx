@@ -13,9 +13,9 @@ import { HomeSectionBody } from './HomeSectionBody'
 import { groupHomeKeys } from '../../lib/homeView'
 
 const SDK_TONE: Record<SdkFreshness, { tone: BadgeTone; text: string }> = {
-  'up-to-date': { tone: 'okSubtle', text: 'Up to date' },
-  outdated: { tone: 'warnSubtle', text: 'Update available' },
-  deprecated: { tone: 'dangerSubtle', text: 'No longer supported' },
+  'up-to-date': { tone: 'ok', text: 'Up to date' },
+  outdated: { tone: 'warn', text: 'Update available' },
+  deprecated: { tone: 'danger', text: 'No longer supported' },
   unknown: { tone: 'neutral', text: 'Version not seen yet' },
 }
 

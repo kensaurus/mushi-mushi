@@ -28,6 +28,7 @@ import {
 import { createPortal } from 'react-dom'
 import { Badge } from '../ui'
 import type { ReportBreadcrumbLite } from './types'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 interface Props {
   breadcrumbs?: ReportBreadcrumbLite[] | null
@@ -187,7 +188,7 @@ export function BreadcrumbPeek({
               </p>
             </div>
             {breadcrumbs && breadcrumbs.length > PEEK_LIMIT && (
-              <span className="shrink-0 rounded-sm bg-surface-overlay px-1.5 py-px text-2xs text-fg-muted">
+              <span className={`shrink-0 rounded-sm ${CHIP_TONE.neutral} px-1.5 py-px text-2xs`}>
                 +{breadcrumbs.length - PEEK_LIMIT} earlier
               </span>
             )}

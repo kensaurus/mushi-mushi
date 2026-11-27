@@ -63,35 +63,35 @@ interface AccentTheme {
 
 const ACCENT_THEMES: Record<AccentTone, AccentTheme> = {
   info: {
-    chip: CHIP_TONE.infoSubtle,
+    chip: CHIP_TONE.info,
     header: 'bg-info/10 border-info/25',
     rail: 'border-l-info/55',
     text: 'text-info-foreground',
     pill: 'sdk',
   },
   warn: {
-    chip: CHIP_TONE.warnSubtle,
+    chip: CHIP_TONE.warn,
     header: 'bg-warn/10 border-warn/25',
     rail: 'border-l-warn/55',
     text: 'text-warn-foreground',
     pill: 'tool',
   },
   ok: {
-    chip: CHIP_TONE.okSubtle,
+    chip: CHIP_TONE.ok,
     header: 'bg-ok/10 border-ok/25',
     rail: 'border-l-ok/55',
     text: 'text-ok-foreground',
     pill: 'runtime',
   },
   brand: {
-    chip: CHIP_TONE.brandSubtle,
+    chip: CHIP_TONE.brand,
     header: 'bg-brand/10 border-brand/25',
     rail: 'border-l-brand/55',
     text: 'text-brand',
     pill: 'neutral',
   },
   accent: {
-    chip: CHIP_TONE.accentSubtle,
+    chip: CHIP_TONE.accent,
     header: 'bg-accent/10 border-accent/25',
     rail: 'border-l-accent/55',
     text: 'text-accent-foreground',
@@ -151,9 +151,9 @@ const PIPELINE_LINKS: PipelineLink[] = [
 ]
 
 const TONE_BADGE: Record<'feature' | 'fix' | 'breaking' | 'note', string> = {
-  feature:  CHIP_TONE.brandSubtle,
-  fix:      CHIP_TONE.okSubtle,
-  breaking: CHIP_TONE.dangerSubtle,
+  feature:  CHIP_TONE.brand,
+  fix:      CHIP_TONE.ok,
+  breaking: CHIP_TONE.danger,
   note:     CHIP_TONE.neutral,
 }
 const TONE_LABEL: Record<'feature' | 'fix' | 'breaking' | 'note', string> = {
@@ -182,15 +182,15 @@ function VersionPill({
 }) {
   const toneClass =
     tone === 'sdk'
-      ? CHIP_TONE.infoSubtle
+      ? CHIP_TONE.info
       : tone === 'admin'
-        ? CHIP_TONE.accentSubtle
+        ? CHIP_TONE.accent
         : tone === 'tool'
-          ? CHIP_TONE.warnSubtle
+          ? CHIP_TONE.warn
           : tone === 'plugin'
-            ? CHIP_TONE.accentSubtle
+            ? CHIP_TONE.accent
             : tone === 'runtime'
-              ? CHIP_TONE.okSubtle
+              ? CHIP_TONE.ok
               : 'border-edge/70 bg-surface-overlay text-fg-secondary'
   return (
     <span
@@ -515,7 +515,7 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
               theme={ACCENT_THEMES.brand}
               trailing={
                 whatsNew.hasUnread ? (
-                  <span className={`inline-flex items-center rounded-full px-1.5 py-px text-2xs font-medium shrink-0 ${CHIP_TONE.brandSubtle}`}>
+                  <span className={`inline-flex items-center rounded-full px-1.5 py-px text-2xs font-medium shrink-0 ${CHIP_TONE.brand}`}>
                     Unread
                   </span>
                 ) : undefined

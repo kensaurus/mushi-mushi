@@ -280,13 +280,13 @@ const SDK_CARD_CHIP_LABEL: Record<CardStatus, string> = {
 const STATUS_TONE: Record<CardStatus, { dot: string; chip: string; headline: string; subtitle: string }> = {
   healthy: {
     dot: 'bg-ok',
-    chip: CHIP_TONE.okSubtle,
+    chip: CHIP_TONE.ok,
     headline: 'Feedback widget is connected',
     subtitle: 'Your app is checking in — new bug reports should appear within seconds.',
   },
   'endpoint-mismatch': {
     dot: 'bg-danger',
-    chip: CHIP_TONE.dangerSubtle,
+    chip: CHIP_TONE.danger,
     headline: 'SDK is pointed at the wrong backend',
     subtitle: 'Reports may be landing somewhere else. Fix your API endpoint env var and rebuild.',
   },
@@ -299,14 +299,14 @@ const STATUS_TONE: Record<CardStatus, { dot: string; chip: string; headline: str
   },
   cold: {
     dot: 'bg-warn',
-    chip: CHIP_TONE.warnSubtle,
+    chip: CHIP_TONE.warn,
     headline: 'No app activity in 7+ days',
     subtitle: 'The SDK may have been removed from a recent deploy, or the API key was rotated.',
   },
   // Not installed yet is the next setup step, not a failure: no red for a new app.
   never: {
     dot: 'bg-info',
-    chip: CHIP_TONE.infoSubtle,
+    chip: CHIP_TONE.info,
     headline: 'SDK not connected yet',
     subtitle: 'Your API key exists but your app has never used it — usually missing env vars in the build.',
   },
@@ -1025,7 +1025,7 @@ export function SdkConnectivityEmptyState({
   return (
     <Card className="p-5 space-y-4 border-dashed">
       <div className="flex items-center gap-2 text-2xs font-mono text-fg-secondary font-semibold">
-        <Badge tone="infoSubtle">Connectivity check</Badge>
+        <Badge tone="info">Connectivity check</Badge>
         <span>{headline}</span>
       </div>
       <SdkHealthSummary

@@ -64,12 +64,12 @@ export const HEALTH_RANK: Record<HealthTone, number> = {
  * quiet card carries no badge.
  */
 export const HEALTH_BADGE_TONE: Record<HealthTone, BadgeTone> = {
-  critical: 'dangerSubtle',
+  critical: 'danger',
   'not-connected': 'neutral',
-  silent: 'warnSubtle',
+  silent: 'warn',
   warn: 'neutral',
   quiet: 'neutral',
-  ok: 'okSubtle',
+  ok: 'ok',
 }
 
 /** `null` = no badge (the stats row says it). */

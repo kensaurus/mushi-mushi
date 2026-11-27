@@ -151,7 +151,7 @@ export function ReporterOutboxPanel({ projectId }: { projectId: string }) {
                 <Card className="p-3 space-y-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-2 min-w-0">
-                      <Badge tone="infoSubtle">{TYPE_LABEL[msg.notification_type] ?? msg.notification_type}</Badge>
+                      <Badge tone="info">{TYPE_LABEL[msg.notification_type] ?? msg.notification_type}</Badge>
                       {msg.report_id ? (
                         <Link
                           to={`/reports/${msg.report_id}`}

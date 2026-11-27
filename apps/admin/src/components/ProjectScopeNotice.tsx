@@ -11,6 +11,7 @@ import { useLocation } from 'react-router-dom'
 import { useActiveProjectId } from './ProjectSwitcher'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { allAppsSupportFor, requestOpenProjectSwitcher, useProjectScopeMode } from '../lib/projectScope'
+import { Callout } from './ui/fields'
 
 /** Views of a one-app page that still show every app. */
 const ALL_APPS_HUB_VIEWS: Record<string, readonly string[]> = { '/portfolio': ['apps', 'growth'] }
@@ -43,29 +44,27 @@ export function ProjectScopeNotice() {
   // (layout shift on /reports and /fixes, mushi-ux audit 2026-10-24).
   const name = setup.activeProject?.project_name ?? null
   return (
-    <p
-      // A banner, not a footnote: the header chip now names the same app, and
-      // a grey hairline under it read as decoration (report ee6547f5).
-      className="mb-3 flex flex-wrap items-center gap-x-1.5 rounded-md border border-edge-subtle/80 border-l-2 border-l-info/55 bg-info-muted px-2.5 py-2 text-xs text-fg-secondary"
-      role="status"
-      data-testid="project-scope-notice"
-    >
-      <span>
-        This page shows one app at a time:{' '}
-        {name ? (
-          <span className="font-medium text-fg">{name}</span>
-        ) : (
-          <span aria-hidden="true" className="inline-block h-3 w-20 rounded-xs bg-surface-overlay/60 align-middle motion-safe:animate-pulse" />
-        )}
-        .
-      </span>
-      <button
-        type="button"
-        onClick={requestOpenProjectSwitcher}
-        className="text-link underline hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 rounded-xs"
-      >
-        Switch app
-      </button>
-    </p>
+    // A banner, not a footnote (report ee6547f5): the info Callout, so it has
+    // an icon, an edge and padding instead of a tinted line (2026-11-27).
+    <Callout tone="info" role="status" data-testid="project-scope-notice" className="mb-3 text-xs text-fg-secondary">
+      <p className="flex flex-wrap items-center gap-x-1.5">
+        <span>
+          This page shows one app at a time:{' '}
+          {name ? (
+            <span className="font-medium text-fg">{name}</span>
+          ) : (
+            <span aria-hidden="true" className="inline-block h-3 w-20 rounded-xs bg-surface-overlay/60 align-middle motion-safe:animate-pulse" />
+          )}
+          .
+        </span>
+        <button
+          type="button"
+          onClick={requestOpenProjectSwitcher}
+          className="text-link underline hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 rounded-xs"
+        >
+          Switch app
+        </button>
+      </p>
+    </Callout>
   )
 }

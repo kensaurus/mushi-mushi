@@ -15,7 +15,7 @@ import { Badge, Section } from '../ui'
 import { IconNetwork } from '../icons'
 import { usePageData } from '../../lib/usePageData'
 import { reportGroupLabel, reportGroupSeverity, type ReportGroupLike } from '../../lib/reportGroupDisplay'
-import { SEVERITY_TRAFFIC_BADGE } from '../../lib/severityTraffic'
+import { severityChipTone } from '../../lib/chipTone'
 import { pluralize } from '../../lib/format'
 
 interface ClusterGroup extends ReportGroupLike {
@@ -63,7 +63,7 @@ export function BugClusterList() {
                   {g.report_count} {pluralize(g.report_count, 'report')}
                 </span>
                 <span className="min-w-0 flex-1 basis-48 wrap-break-word text-xs font-medium text-fg">{reportGroupLabel(g)}</span>
-                {severity && <Badge className={SEVERITY_TRAFFIC_BADGE[severity] ?? SEVERITY_TRAFFIC_BADGE.low}>{severity}</Badge>}
+                {severity && <Badge className={severityChipTone(severity)}>{severity}</Badge>}
                 {state && <Badge tone={state.tone}>{state.label}</Badge>}
                 {main && (
                   <Link to={`/reports/${main}`} className="shrink-0 text-2xs font-medium text-brand hover:underline">

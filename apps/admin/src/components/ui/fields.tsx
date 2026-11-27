@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { IconInfo } from '../icons';
+import { IconAlertTriangle, IconCheck, IconInfo } from '../icons';
 import { LabelHelp } from './layout';
 import { Tooltip } from './misc';
 
@@ -131,41 +131,73 @@ export function LongFormText({ value, className = '', tone = 'fg', maxWidth = 'm
 
 type CalloutTone = 'neutral' | 'info' | 'ok' | 'warn' | 'danger'
 
+// A banner is a tinted panel with a full edge in its tone, a 2px leading bar
+// and an icon (owner 2026-11-27: a tint alone read as highlighted text).
 const CALLOUT_TONE: Record<CalloutTone, string> = {
-  neutral: 'border-l-2 border-edge-subtle bg-surface-overlay',
-  info:    'border-l-2 border-info/55 bg-info-muted',
-  ok:      'border-l-2 border-ok/50 bg-ok-muted',
-  warn:    'border-l-2 border-warn/50 bg-warn-muted',
-  danger:  'border-l-2 border-danger/45 bg-danger-muted',
+  neutral: 'border-neutral-edge/60 border-l-neutral-edge bg-surface-overlay',
+  info:    'border-info-edge/60 border-l-info-edge bg-info-muted',
+  ok:      'border-ok-edge/60 border-l-ok-edge bg-ok-muted',
+  warn:    'border-warn-edge/60 border-l-warn-edge bg-warn-muted',
+  danger:  'border-danger-edge/60 border-l-danger-edge bg-danger-muted',
+}
+
+const CALLOUT_ICON_TONE: Record<CalloutTone, string> = {
+  neutral: 'text-fg-muted',
+  info: 'text-info-foreground',
+  ok: 'text-ok-foreground',
+  warn: 'text-warn-foreground',
+  danger: 'text-danger-foreground',
+}
+
+function defaultCalloutIcon(tone: CalloutTone): ReactNode {
+  if (tone === 'ok') return <IconCheck />
+  if (tone === 'warn' || tone === 'danger') return <IconAlertTriangle />
+  if (tone === 'info') return <IconInfo />
+  return null
 }
 
 interface CalloutProps {
   children: ReactNode
   tone?: CalloutTone
   label?: string
+  /** Leading icon. Defaults to the tone's (info i, ok check, warn/danger triangle);
+   *  pass `null` for none. */
   icon?: ReactNode
   /** Optional right-aligned action (link, button, badge). Sits on the same
    *  row as the label so calls like "Classification failed — Retry" fit
    *  without bespoke flex markup at the call site. */
   action?: ReactNode
   className?: string
+  role?: 'status' | 'alert' | 'note'
+  'data-testid'?: string
 }
 
-export function Callout({ children, tone = 'neutral', label, icon, action, className = '' }: CalloutProps) {
+export function Callout({ children, tone = 'neutral', label, icon, action, className = '', role, 'data-testid': testId }: CalloutProps) {
+  const glyph = icon === undefined ? defaultCalloutIcon(tone) : icon
+  const glyphEl = glyph ? (
+    <span aria-hidden="true" className={`mt-px shrink-0 [&>svg]:h-3.5 [&>svg]:w-3.5 ${CALLOUT_ICON_TONE[tone]}`}>{glyph}</span>
+  ) : null
   return (
-    <div className={`rounded-md border border-edge-subtle/80 px-2.5 py-2 ${CALLOUT_TONE[tone]} ${className}`}>
+    <div role={role} data-testid={testId} className={`rounded-md border border-l-2 px-2.5 py-2 ${CALLOUT_TONE[tone]} ${className}`}>
       {(label || action) && (
         <div className="mb-1.5 flex items-center justify-between gap-2">
           {label && (
-            <div className="flex items-center gap-1.5 text-3xs font-semibold text-fg-secondary min-w-0">
-              {icon && <span className="text-fg-muted shrink-0 [&>svg]:h-3.5 [&>svg]:w-3.5">{icon}</span>}
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-fg min-w-0">
+              {glyphEl}
               <span className="truncate">{label}</span>
             </div>
           )}
           {action && <div className="shrink-0">{action}</div>}
         </div>
       )}
-      <div className="min-w-0">{children}</div>
+      {!label && glyphEl ? (
+        <div className="flex min-w-0 items-start gap-2">
+          {glyphEl}
+          <div className="min-w-0 flex-1">{children}</div>
+        </div>
+      ) : (
+        <div className="min-w-0">{children}</div>
+      )}
     </div>
   )
 }

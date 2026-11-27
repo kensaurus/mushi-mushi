@@ -27,7 +27,7 @@ import {
   type UxScorecardRow,
 } from '../../lib/uxScorecard'
 
-const SEVERITY_TONE = { high: 'dangerSubtle', medium: 'warnSubtle', low: 'infoSubtle' } as const
+const SEVERITY_TONE = { high: 'danger', medium: 'warn', low: 'info' } as const
 /** Viewports offered for the next run: desktop first (console apps), a laptop, a phone. */
 const VIEWPORTS = ['1440x900', '1280x800', '390x844'] as const
 
@@ -104,7 +104,7 @@ export function UxScorecardView({ projectId, runId, onPickRun }: { projectId: st
         <ViewportSetting projectId={projectId} value={d.viewport} onSaved={q.reload} />
         {d.run.model && <span>scored by {d.run.model}</span>}
         {d.rubricVersion && <span title="Trends compare runs of the same rubric version only">rubric {d.rubricVersion}</span>}
-        {d.run.status !== 'done' && <Badge tone={d.run.status === 'failed' ? 'dangerSubtle' : 'infoSubtle'}>{d.run.status === 'failed' ? 'Failed' : 'Running'}</Badge>}
+        {d.run.status !== 'done' && <Badge tone={d.run.status === 'failed' ? 'danger' : 'info'}>{d.run.status === 'failed' ? 'Failed' : 'Running'}</Badge>}
       </div>
       {d.run.error && <p className="text-xs text-danger">{d.run.error}</p>}
 
@@ -127,8 +127,8 @@ export function UxScorecardView({ projectId, runId, onPickRun }: { projectId: st
                 <li key={c.patternKey} className="rounded-md border border-edge-subtle px-3 py-2 text-xs">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <Badge tone={SEVERITY_TONE[c.severity]}>{c.severity}</Badge>
-                    <Badge tone="infoSubtle">{UX_DIMENSION_LABEL[c.dimension]}</Badge>
-                    {c.kind === 'contradiction' && <Badge tone="warnSubtle">Two views disagree</Badge>}
+                    <Badge tone="info">{UX_DIMENSION_LABEL[c.dimension]}</Badge>
+                    {c.kind === 'contradiction' && <Badge tone="warn">Two views disagree</Badge>}
                     <span className="font-medium text-fg">{c.title}</span>
                     {report ? (
                       <Link className="ml-auto text-brand underline underline-offset-2" to={`/reports/${report.id}`}>

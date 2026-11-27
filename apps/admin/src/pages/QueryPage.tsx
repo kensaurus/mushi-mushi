@@ -383,7 +383,7 @@ export function QueryPage() {
         helpHowToUse={copy?.help?.howToUse ?? 'Use the Ask tab to run queries. History pins favorites. Schema lists approved tables.'}
       >
         {stats.errors24h > 0 || stats.runs24h > 0 ? (
-          <Badge className={stats.errors24h > 0 ? CHIP_TONE.dangerSubtle : CHIP_TONE.okSubtle}>
+          <Badge className={stats.errors24h > 0 ? CHIP_TONE.danger : CHIP_TONE.ok}>
             {stats.errors24h > 0 ? `${stats.errors24h} failed today` : `${stats.runs24h} asked today`}
           </Badge>
         ) : null}
@@ -633,7 +633,7 @@ export function QueryPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5 mb-0.5">
                           {run.mode === 'raw' && (
-                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded-micro text-2xs font-mono font-medium ${CHIP_TONE.warnSubtle}`}>SQL</span>
+                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded-micro text-2xs font-mono font-medium ${CHIP_TONE.warn}`}>SQL</span>
                           )}
                           <p className="text-sm text-fg font-medium break-words line-clamp-3">
                             {run.question}

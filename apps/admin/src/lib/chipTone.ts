@@ -1,62 +1,55 @@
 /**
- * WCAG AA chip / pill / tinted-surface copy — pair muted backgrounds with
- * *-foreground text tokens. Never use `text-accent` on `bg-accent/*` /
- * `bg-accent-muted` (fails on dark theme); `text-accent-foreground` is the
- * AA-safe copy token for those washes.
+ * The console's one tone scale for chips, tags, pills and inline banners.
+ *
+ * 2026-11-27 (owner: "bare background colour text on many of the uiux —
+ * really bad — fix all of them universally"): every recipe is a tinted fill,
+ * its `*-foreground` ink AND a 1px inset edge in the same hue
+ * (`inset-ring inset-ring-<tone>-edge`). The fill alone read as a highlighter
+ * stroke, not a component. The edge is inset, so nothing grows: the #1141
+ * density rule ("contrast, weight and edges, never size") still holds. It is
+ * Tailwind's separate inset-ring layer, not `ring-inset`: `ring-inset` would
+ * also turn every `focus-visible:ring-2` focus ring inward.
+ *
+ * - Text on every fill clears WCAG AA (4.5:1) and every edge clears 3:1 on
+ *   surface, raised and overlay, in light and dark:
+ *   packages/server/src/__tests__/console-tone-contrast.test.ts.
+ * - Never hand-roll `bg-*-muted text-*` or `bg-ok/15 text-ok`: use a tone here
+ *   through `Badge`, `SeverityPill`, `Callout`, or the class string itself.
+ *   `pnpm check:tinted-text` fails on a tinted fill with text and no edge.
+ * - Don't append `border` / `ring-1` / `inset-ring` to a recipe: it carries its edge.
+ * - The `*Subtle` (60 % alpha) and `brandSubtle` variants were folded into the
+ *   solid tones (an alpha fill's contrast depends on what sits under it).
  */
 
 export const CHIP_TONE = {
-  accent: 'bg-accent-muted text-accent-foreground',
-  accentSubtle: 'bg-accent-muted/60 text-accent-foreground',
-  brand: 'bg-brand-subtle text-brand',
-  brandSubtle: 'bg-brand/15 text-brand',
-  warn: 'bg-warn-muted text-warn-foreground',
-  warnSubtle: 'bg-warn-muted/60 text-warn-foreground',
-  danger: 'bg-danger-muted text-danger-foreground',
-  dangerSubtle: 'bg-danger-muted/60 text-danger-foreground',
-  ok: 'bg-ok-muted text-ok-foreground',
-  okSubtle: 'bg-ok-muted/60 text-ok-foreground',
-  info: 'bg-info-muted text-info-foreground',
-  infoSubtle: 'bg-info-muted/60 text-info-foreground',
-  neutral: 'bg-surface-overlay text-fg-secondary',
+  ok: 'bg-ok-muted text-ok-foreground inset-ring inset-ring-ok-edge',
+  warn: 'bg-warn-muted text-warn-foreground inset-ring inset-ring-warn-edge',
+  danger: 'bg-danger-muted text-danger-foreground inset-ring inset-ring-danger-edge',
+  info: 'bg-info-muted text-info-foreground inset-ring inset-ring-info-edge',
+  accent: 'bg-accent-muted text-accent-foreground inset-ring inset-ring-accent-edge',
+  brand: 'bg-brand-subtle text-brand-foreground inset-ring inset-ring-brand-edge',
+  /** Medium severity (yellow), between High's warn and Low's ok. */
+  medium: 'bg-sev-medium-muted text-sev-medium-foreground inset-ring inset-ring-sev-medium-edge',
+  neutral: 'bg-surface-overlay text-fg-secondary inset-ring inset-ring-neutral-edge',
 } as const
+
+type ChipToneKey = keyof typeof CHIP_TONE
 
 /**
  * Soft selected / pressed chip on a plain surface (trigger pickers, filter
- * toggles). Prefer this over hand-rolled `bg-brand/12 text-brand border
- * border-brand/28` — `text-brand-foreground` clears WCAG AA on the muted
- * brand wash, and the recipe already owns its single border.
+ * toggles). Selection is the violet accent (DESIGN-SYSTEM "Red means a
+ * failure"). The recipe owns its single border.
  */
-// 2026-11-18: selection is the violet accent (DESIGN-SYSTEM "Red means a failure, nothing
-// else"); the old amber wash read as a warning on the trigger picker.
 export const SELECTED_TONE =
-  'bg-accent-muted text-accent-foreground border border-accent/40'
+  'bg-accent-muted text-accent-foreground border border-accent-edge'
 
 /** Idle companion for SELECTED_TONE on the same control set. */
 export const SELECTED_TONE_IDLE =
   'border-edge-subtle bg-surface-raised text-fg-muted hover:text-fg'
 
-/**
- * Header PageHeaderBar severity Badge fallbacks (brand / neutral) so pages
- * stop inlining non-tokenized class strings in severity ternaries.
- */
-export const HEADER_BADGE_TONE = {
-  brand: 'bg-surface-overlay text-fg-secondary',
-  neutral: 'bg-surface-overlay text-fg-muted',
-} as const
-
 /** Links on plain (non-tinted) surfaces — accent hue, AA on surface bg. */
 export const LINK_ACCENT =
   'text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity'
-
-/** Inline meta chip tones for RecommendedAction / dashboards. */
-export const META_CHIP_TONE = {
-  neutral: CHIP_TONE.neutral,
-  info: CHIP_TONE.infoSubtle,
-  ok: CHIP_TONE.okSubtle,
-  warn: CHIP_TONE.warnSubtle,
-  danger: CHIP_TONE.dangerSubtle,
-} as const
 
 /**
  * Pull-request lifecycle chips, GitHub's convention: open green, merged
@@ -66,10 +59,10 @@ export const META_CHIP_TONE = {
  */
 export const PR_STATE_TONE_KEY = {
   draft: 'neutral',
-  open: 'okSubtle',
+  open: 'ok',
   merged: 'accent',
-  closed: 'dangerSubtle',
-} as const satisfies Record<string, keyof typeof CHIP_TONE>
+  closed: 'danger',
+} as const satisfies Record<string, ChipToneKey>
 
 /** Chip classes for a PR state; undefined for a state GitHub doesn't define, so callers keep their own fallback. */
 export function prStateChipTone(state: string | null | undefined): string | undefined {
@@ -81,18 +74,7 @@ export function prStateChipTone(state: string | null | undefined): string | unde
 export type StatusSeverity = 'ok' | 'warn' | 'danger' | 'neutral' | 'info'
 
 export function statusChipTone(severity: StatusSeverity): string {
-  switch (severity) {
-    case 'ok':
-      return CHIP_TONE.okSubtle
-    case 'warn':
-      return CHIP_TONE.warnSubtle
-    case 'danger':
-      return CHIP_TONE.dangerSubtle
-    case 'info':
-      return CHIP_TONE.infoSubtle
-    default:
-      return CHIP_TONE.neutral
-  }
+  return CHIP_TONE[severity] ?? CHIP_TONE.neutral
 }
 
 /**
@@ -143,15 +125,39 @@ export const SEVERITY_SURFACE: Record<
   SurfaceSeverity,
   { ring: string; bg: string; text: string; dot: string }
 > = {
-  ok: { ring: 'border-ok/40', bg: 'bg-ok-muted', text: 'text-ok-foreground', dot: 'bg-ok' },
-  info: { ring: 'border-info/40', bg: 'bg-info-muted', text: 'text-info-foreground', dot: 'bg-info' },
-  warn: { ring: 'border-warn/40', bg: 'bg-warn-muted', text: 'text-warn-foreground', dot: 'bg-warn' },
-  crit: { ring: 'border-danger/40', bg: 'bg-danger-muted', text: 'text-danger-foreground', dot: 'bg-danger' },
-  danger: { ring: 'border-danger/40', bg: 'bg-danger-muted', text: 'text-danger-foreground', dot: 'bg-danger' },
+  ok: { ring: 'border-ok-edge', bg: 'bg-ok-muted', text: 'text-ok-foreground', dot: 'bg-ok' },
+  info: { ring: 'border-info-edge', bg: 'bg-info-muted', text: 'text-info-foreground', dot: 'bg-info' },
+  warn: { ring: 'border-warn-edge', bg: 'bg-warn-muted', text: 'text-warn-foreground', dot: 'bg-warn' },
+  crit: { ring: 'border-danger-edge', bg: 'bg-danger-muted', text: 'text-danger-foreground', dot: 'bg-danger' },
+  danger: { ring: 'border-danger-edge', bg: 'bg-danger-muted', text: 'text-danger-foreground', dot: 'bg-danger' },
   neutral: {
-    ring: 'border-edge',
+    ring: 'border-neutral-edge',
     bg: 'bg-surface-raised',
     text: 'text-fg',
     dot: 'bg-fg-muted',
   },
+}
+
+/**
+ * Bug severity as a chip tone and a shape (WCAG 1.4.1: never colour alone).
+ * The same hues as the intent-coloured actions: Crit = Fix red, High =
+ * Triage amber (lib/actionIntent.ts). Rendered by `SeverityPill`.
+ */
+const SEVERITY_TONE = {
+  critical: { tone: 'danger', glyph: '▲', label: 'Critical', short: 'Crit' },
+  high: { tone: 'warn', glyph: '◆', label: 'High', short: 'High' },
+  medium: { tone: 'medium', glyph: '●', label: 'Medium', short: 'Med' },
+  low: { tone: 'ok', glyph: '○', label: 'Low', short: 'Low' },
+  unscored: { tone: 'neutral', glyph: '·', label: 'Not scored', short: '—' },
+} as const satisfies Record<string, { tone: ChipToneKey; glyph: string; label: string; short: string }>
+
+type SeverityToneKey = keyof typeof SEVERITY_TONE
+
+export function severityTone(severity: string | null | undefined): (typeof SEVERITY_TONE)[SeverityToneKey] {
+  return SEVERITY_TONE[(severity ?? 'unscored') as SeverityToneKey] ?? SEVERITY_TONE.unscored
+}
+
+/** Chip classes for a bug severity (critical / high / medium / low). */
+export function severityChipTone(severity: string | null | undefined): string {
+  return CHIP_TONE[severityTone(severity).tone]
 }

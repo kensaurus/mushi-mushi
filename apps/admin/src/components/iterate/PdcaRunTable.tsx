@@ -3,11 +3,12 @@
  * PURPOSE: Runs list with status badges, progress, and row actions.
  */
 
-import { Badge, Btn, EmptyState, RelativeTime } from '../ui'
+import { Btn, EmptyState, RelativeTime } from '../ui'
+import { StatusPill } from '../signal/StatusMark'
 import { IconChevronRight } from '../icons'
 import { ScoreBar } from './ScoreBar'
 import type { PdcaRun } from './types'
-import { STATUS_CLS, STATUS_LABEL, personaLabel } from './types'
+import { RUN_STATE, STATUS_LABEL, personaLabel } from './types'
 
 interface Props {
   runs: PdcaRun[]
@@ -21,7 +22,7 @@ interface Props {
 }
 
 function statusBadge(status: PdcaRun['status']) {
-  return <Badge className={STATUS_CLS[status]}>{STATUS_LABEL[status]}</Badge>
+  return <StatusPill status={RUN_STATE[status]} label={STATUS_LABEL[status]} />
 }
 
 export function PdcaRunTable({ runs, projectName, onOpen, onAbort, onTrigger, busyIds }: Props) {

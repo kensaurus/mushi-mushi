@@ -69,10 +69,10 @@ export const EMPTY_NOTIFICATIONS_STATS: NotificationStats = {
 export type NotificationTabId = 'overview' | 'inbox' | 'outbox' | 'setup'
 
 export const TYPE_BADGE: Record<string, string> = {
-  classified: CHIP_TONE.infoSubtle,
-  fixed: CHIP_TONE.okSubtle,
-  fix_failed: CHIP_TONE.dangerSubtle,
-  reward: CHIP_TONE.warnSubtle,
+  classified: CHIP_TONE.info,
+  fixed: CHIP_TONE.ok,
+  fix_failed: CHIP_TONE.danger,
+  reward: CHIP_TONE.warn,
   comment_reply: 'bg-surface-overlay text-fg-muted border border-edge-subtle',
 }
 

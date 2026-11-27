@@ -2,7 +2,7 @@ import React from 'react';
 import type { ReactNode } from 'react';
 import { ConfigHelp } from '../ConfigHelp';
 import { isDevFacingHint } from '../../lib/devHintCopy';
-import { CHIP_TONE } from '../../lib/chipTone';
+import { CHIP_TONE, severityTone } from '../../lib/chipTone';
 import { ContainedBlock } from '../report-detail/ReportSurface';
 import { InfoHint } from './fields';
 import { RelativeTime, formatRelative } from './metrics';
@@ -43,19 +43,85 @@ interface BadgeProps {
    * dropped on the floor — the chip had no accessible name at all.
    */
   'aria-label'?: string
-  /** WCAG-safe tinted chip — pairs muted bg with *-foreground text via chipTone.ts */
+  /** Tone from the one scale in lib/chipTone.ts: tinted fill + ink + inset edge.
+   *  Defaults to `neutral` unless `className` brings its own `bg-*` recipe. */
   tone?: BadgeTone
+  /** Leading glyph or icon (decorative; the text carries the meaning). */
+  icon?: ReactNode
 }
 
-export function Badge({ children, className = '', title, tone, 'aria-label': ariaLabel }: BadgeProps) {
-  const toneClass = tone ? CHIP_TONE[tone] : ''
+/**
+ * The console's chip / tag / pill (plan tag, Beta, counts, labels, states
+ * without a run glyph). Shape is fixed here — 12px semibold, 6px side
+ * padding, small radius, 1px inset edge from the tone — so no call site
+ * paints bare tinted text (owner 2026-11-27). A run state uses `StatusPill`,
+ * a bug severity `SeverityPill`.
+ */
+export function Badge({ children, className = '', title, tone, icon, 'aria-label': ariaLabel }: BadgeProps) {
+  const toneClass = tone ? CHIP_TONE[tone] : /(?:^|\s)bg-/.test(className) ? '' : CHIP_TONE.neutral
   return (
     <span
       title={title}
       aria-label={ariaLabel}
-      className={`inline-flex items-center px-1 py-px rounded-xs text-2xs leading-tight font-semibold ${toneClass} ${className}`.trim()}
+      className={`inline-flex items-center gap-1 px-1.5 py-px rounded-sm text-2xs leading-tight font-semibold ${toneClass} ${className}`.trim()}
     >
+      {icon && <span aria-hidden="true" className="shrink-0 leading-none">{icon}</span>}
       {children}
+    </span>
+  )
+}
+
+/** A number in a chip: sidebar counts, tab counts, "+3". Capped at 99+.
+ *  Tone from the one scale; neutral for inventory, a status tone for "needs you". */
+export function CountBadge({
+  count,
+  tone = 'neutral',
+  label,
+  className = '',
+}: {
+  count: number
+  tone?: BadgeTone
+  /** Accessible name ("3 failed fixes"); the number alone is ambiguous. */
+  label?: string
+  className?: string
+}) {
+  return (
+    <span
+      role={label ? 'img' : undefined}
+      aria-label={label}
+      title={label}
+      className={`inline-flex min-w-5 shrink-0 items-center justify-center rounded-full px-1 text-2xs leading-4 font-semibold tabular-nums ${CHIP_TONE[tone]} ${className}`.trim()}
+    >
+      {count > 99 ? '99+' : count}
+    </span>
+  )
+}
+
+/** A bug severity as a chip: glyph + word in the severity tone (never colour
+ *  alone, WCAG 1.4.1). Crit = the Fix red, High = the Triage amber. */
+export function SeverityPill({
+  severity,
+  short = false,
+  className = '',
+}: {
+  severity: string | null | undefined
+  /** "Crit" / "High" / "Med" / "Low" for dense table cells. */
+  short?: boolean
+  className?: string
+}) {
+  const s = severityTone(severity)
+  return (
+    <span
+      title={`Severity: ${s.label}`}
+      // The glyph is decorative and "Med" is short: the accessible name is the full word.
+      role="img"
+      aria-label={`Severity ${s.label}`}
+      data-severity={severity ?? 'unscored'}
+      data-testid="severity-pill"
+      className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap px-1.5 py-px rounded-sm text-2xs leading-tight font-semibold ${CHIP_TONE[s.tone]} ${className}`.trim()}
+    >
+      <span aria-hidden="true" className="leading-none">{s.glyph}</span>
+      {short ? s.short : s.label}
     </span>
   )
 }
@@ -64,8 +130,8 @@ export function Badge({ children, className = '', title, tone, 'aria-label': ari
  *  alone). One home for the recipe, design-deviance, code-health and
  *  full-stack audit lists; anything else renders Info. */
 export function FindingSeverityBadge({ severity }: { severity: unknown }) {
-  if (severity === 'error') return <Badge tone="dangerSubtle">Error</Badge>
-  if (severity === 'warn') return <Badge tone="warnSubtle">Warning</Badge>
+  if (severity === 'error') return <Badge tone="danger">Error</Badge>
+  if (severity === 'warn') return <Badge tone="warn">Warning</Badge>
   return <Badge tone="neutral">Info</Badge>
 }
 
@@ -328,9 +394,9 @@ export function Section({ title, children, className = '', action, icon, freshne
 /** Neutral chrome surface for informational help strips (de-amber rule). */
 const HELP_BANNER_TONE: Record<'neutral' | 'warn' | 'danger' | 'info', string> = {
   neutral: 'border-chrome-border bg-chrome text-fg-secondary',
-  warn: 'border-warn/30 bg-warn-muted text-fg',
-  danger: 'border-danger/30 bg-danger-muted text-fg',
-  info: 'border-info/30 bg-info-muted text-fg',
+  warn: 'border-warn-edge bg-warn-muted text-fg', // mushi-mushi-allowlist: HelpBanner adds `border`
+  danger: 'border-danger-edge bg-danger-muted text-fg', // mushi-mushi-allowlist: HelpBanner adds `border`
+  info: 'border-info-edge bg-info-muted text-fg', // mushi-mushi-allowlist: HelpBanner adds `border`
 }
 
 export interface HelpBannerProps {
@@ -493,10 +559,10 @@ export function FreshnessPill({ at, isValidating, channel, className = '' }: Fre
     ? 'bg-ok'
     : 'bg-fg-faint'
   const ringClass = dropped
-    ? 'ring-1 ring-danger/40 border-danger/40'
+    ? 'ring-1 ring-danger-edge border-danger-edge'
     : isValidating
-    ? 'border-info/30'
-    : 'border-edge-subtle'
+    ? 'border-info-edge'
+    : 'border-neutral-edge'
   const label = dropped
     ? 'Realtime channel dropped — data may be stale'
     : isValidating

@@ -6,8 +6,8 @@ import { type ToolSpec, type McpScope } from '../../lib/mcpCatalog'
 
 export function scopeBadgeTone(scope: McpScope): string {
   return scope === 'mcp:write'
-    ? CHIP_TONE.warnSubtle
-    : CHIP_TONE.infoSubtle
+    ? CHIP_TONE.warn
+    : CHIP_TONE.info
 }
 
 /**
@@ -21,13 +21,13 @@ export function scopeBadgeTone(scope: McpScope): string {
 export function toolCardChips(spec: Pick<ToolSpec, 'scope' | 'hints'>): Array<{ label: string; tone: string; title: string }> {
   const chips: Array<{ label: string; tone: string; title: string }> = []
   if (spec.scope === 'mcp:read' && !spec.hints.readOnly) {
-    chips.push({ label: 'writes', tone: CHIP_TONE.warnSubtle, title: 'Will mutate data. Your client should prompt for confirmation.' })
+    chips.push({ label: 'writes', tone: CHIP_TONE.warn, title: 'Will mutate data. Your client should prompt for confirmation.' })
   }
   if (spec.scope === 'mcp:write' && spec.hints.readOnly) {
     chips.push({ label: 'read-only', tone: CHIP_TONE.neutral, title: 'Client can auto-approve. No side effects.' })
   }
   if (spec.hints.destructive) {
-    chips.push({ label: 'destructive', tone: CHIP_TONE.dangerSubtle, title: 'Can remove data from report queues. Confirm every call.' })
+    chips.push({ label: 'destructive', tone: CHIP_TONE.danger, title: 'Can remove data from report queues. Confirm every call.' })
   }
   if (spec.scope === 'mcp:write' && spec.hints.idempotent) {
     chips.push({ label: 'safe to retry', tone: CHIP_TONE.neutral, title: 'Calling twice with the same args is safe.' })

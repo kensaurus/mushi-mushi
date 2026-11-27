@@ -56,10 +56,10 @@ const PROVIDER_LABELS: Record<AuthProvider, string> = {
 }
 
 const AVATAR_TONE: Record<AuthProvider, string> = {
-  google:  CHIP_TONE.infoSubtle + ' ring-info/40',
+  google:  CHIP_TONE.info + ' ring-info/40',
   apple:   'bg-surface-overlay text-fg ring-edge',
-  email:   CHIP_TONE.brandSubtle + ' ring-brand/40',
-  github:  CHIP_TONE.accentSubtle + ' ring-brand/40',
+  email:   CHIP_TONE.brand + ' ring-brand/40',
+  github:  CHIP_TONE.accent + ' ring-brand/40',
   unknown: 'bg-surface-overlay text-fg-muted ring-edge-subtle',
 }
 

@@ -18,7 +18,6 @@
 
 import { Badge, Btn } from '../ui'
 import { ContainedBlock } from '../report-detail/ReportSurface'
-import { CHIP_TONE } from '../../lib/chipTone'
 import { ENTERPRISE_MAILTO, isSalesLedPlan } from '../../lib/salesContact'
 
 interface PlanCatalogEntry {
@@ -318,12 +317,12 @@ export function PlanComparisonTable({
               <div className="flex flex-wrap items-center justify-center gap-1">
                 <span className="text-sm font-semibold text-fg">{p.display_name}</span>
                 {isPopular && (
-                  <Badge className="bg-brand-subtle text-brand text-3xs">
+                  <Badge tone="brand" className="text-3xs">
                     Most popular
                   </Badge>
                 )}
                 {isCurrent && (
-                  <Badge className={`${CHIP_TONE.okSubtle} text-3xs`}>
+                  <Badge tone="ok" className="text-3xs">
                     Your plan
                   </Badge>
                 )}

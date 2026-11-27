@@ -7,7 +7,7 @@
  * alarm. They now show a neutral chip that opens the report.
  */
 
-import { CHIP_TONE } from '../../lib/chipTone'
+import { reportRowIntent, type ActionIntent } from '../../lib/actionIntent'
 
 const FIXED_STATUSES = new Set(['fixed', 'verified', 'resolved'])
 
@@ -16,7 +16,7 @@ const FIXED_STATUSES = new Set(['fixed', 'verified', 'resolved'])
  * The Status column already says "✓ Fixed"; a green "Fixed ✓" button beside
  * it said it twice (R2 sweep 2026-11-18), so a closed row's action is "View".
  */
-export function closedRowAction(status: string): { label: string; className: string } | null {
-  if (FIXED_STATUSES.has(status) || status === 'dismissed') return { label: 'View', className: `${CHIP_TONE.neutral} hover:text-fg` }
+export function closedRowAction(status: string): { label: string; intent: ActionIntent } | null {
+  if (FIXED_STATUSES.has(status) || status === 'dismissed') return { label: 'View', intent: reportRowIntent(status) }
   return null
 }

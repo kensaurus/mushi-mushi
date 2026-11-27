@@ -541,7 +541,7 @@ function RequestRow({ r, data, onChanged }: { r: PlacementRequestRow; data: CiPl
   return (
     <li className="flex flex-col gap-1 py-2 text-xs" data-testid={`ci-placement-request-${r.id}`}>
       <div className="flex flex-wrap items-center gap-2">
-        <Badge tone={status.tone === 'ok' ? 'okSubtle' : status.tone === 'danger' ? 'dangerSubtle' : status.tone === 'warn' ? 'warnSubtle' : status.tone === 'info' ? 'infoSubtle' : 'neutral'}>{status.label}</Badge>
+        <Badge tone={status.tone === 'ok' ? 'ok' : status.tone === 'danger' ? 'danger' : status.tone === 'warn' ? 'warn' : status.tone === 'info' ? 'info' : 'neutral'}>{status.label}</Badge>
         <span className="font-mono text-fg">{r.payload.repo}</span>
         <span className="font-mono text-fg-secondary">{requestSummary(r)}</span>
         <span className="text-2xs text-fg-muted">
@@ -711,7 +711,7 @@ export function CiPlacementSection({
         <ul className="flex flex-col gap-1 text-xs" data-testid="ci-placement-watches">
           {watches.map((w) => (
             <li key={w.id} className="flex flex-wrap items-center gap-2">
-              <Badge tone={w.status === 'alert' ? 'dangerSubtle' : 'infoSubtle'}>{WATCH_STATUS[w.status].label}</Badge>
+              <Badge tone={w.status === 'alert' ? 'danger' : 'info'}>{WATCH_STATUS[w.status].label}</Badge>
               <span className="font-mono text-fg">{w.repo}</span>
               <span className="text-fg-secondary">
                 {w.variable} {w.new_value === null ? 'removed' : `→ ${w.new_value}`} · {w.jobs_seen}/10 jobs

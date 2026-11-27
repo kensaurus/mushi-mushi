@@ -7,6 +7,7 @@
 import type { SetupProject, SetupStepDiagnostic } from './useSetupStatus'
 import type { ProjectSnapshot } from './projectSnapshotTypes'
 import { sdkFreshness } from './heartbeat'
+import { CHIP_TONE } from './chipTone'
 import {
   projectInitials,
   projectInitialsThemeIndex,
@@ -19,11 +20,11 @@ export {
 }
 
 const INITIALS_CHIP_THEMES = [
-  'bg-info-muted/50 text-info-foreground border border-info/25 border-info/35',
-  'bg-brand/12 text-brand border border-brand/28 border-brand/35',
-  'bg-warn-muted/50 text-warn-foreground border-warn/35',
-  'bg-ok-muted/50 text-ok-foreground border border-ok/25 border-ok/35',
-  'bg-accent-muted/55 text-accent-foreground border-accent/35',
+  CHIP_TONE.info,
+  CHIP_TONE.brand,
+  CHIP_TONE.warn,
+  CHIP_TONE.ok,
+  CHIP_TONE.accent,
 ] as const
 
 /** Stable accent so the same project always gets the same initials colour. */

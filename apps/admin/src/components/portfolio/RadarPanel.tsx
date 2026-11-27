@@ -66,7 +66,7 @@ export function checkFixPrompt(d: Pick<Detector, 'title' | 'reason' | 'findings'
 
 function glyphFor(d: Detector): { tone: SignalTone; word: string } {
   if (d.state === 'error') return { tone: 'off', word: 'Could not finish' }
-  return radarBadge(d).tone === 'dangerSubtle' ? { tone: 'danger', word: 'Error' } : { tone: 'warn', word: 'Warning' }
+  return radarBadge(d).tone === 'danger' ? { tone: 'danger', word: 'Error' } : { tone: 'warn', word: 'Warning' }
 }
 
 export function RadarPanel({

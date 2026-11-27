@@ -161,16 +161,16 @@ const ACTIVITY_KIND_LABEL: Record<ActivityKind, string> = {
 
 function ciBadge(b: RepoBranch): { label: string; className: string } {
   const c = b.check_run_conclusion?.toLowerCase()
-  if (c === 'success') return { label: 'CI passing', className: CHIP_TONE.okSubtle }
-  if (c === 'failure' || c === 'timed_out') return { label: `CI ${c}`, className: CHIP_TONE.dangerSubtle }
-  if (c === 'action_required') return { label: 'CI action required', className: CHIP_TONE.warnSubtle }
+  if (c === 'success') return { label: 'CI passing', className: CHIP_TONE.ok }
+  if (c === 'failure' || c === 'timed_out') return { label: `CI ${c}`, className: CHIP_TONE.danger }
+  if (c === 'action_required') return { label: 'CI action required', className: CHIP_TONE.warn }
   const s = b.check_run_status?.toLowerCase()
   if (s === 'in_progress' || s === 'queued' || s === 'pending') {
-    return { label: `CI ${s.replace(/_/g, ' ')}`, className: CHIP_TONE.infoSubtle }
+    return { label: `CI ${s.replace(/_/g, ' ')}`, className: CHIP_TONE.info }
   }
-  if (b.status === 'failed') return { label: 'Failed', className: CHIP_TONE.dangerSubtle }
-  if (b.status === 'completed' && b.pr_url) return { label: 'PR open', className: CHIP_TONE.infoSubtle }
-  if (b.status === 'running' || b.status === 'queued') return { label: b.status, className: CHIP_TONE.infoSubtle }
+  if (b.status === 'failed') return { label: 'Failed', className: CHIP_TONE.danger }
+  if (b.status === 'completed' && b.pr_url) return { label: 'PR open', className: CHIP_TONE.info }
+  if (b.status === 'running' || b.status === 'queued') return { label: b.status, className: CHIP_TONE.info }
   return { label: b.status, className: 'bg-surface-overlay text-fg-muted' }
 }
 

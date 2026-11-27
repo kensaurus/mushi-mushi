@@ -8,6 +8,7 @@
 
 import type { HealthTone } from '../lib/useNavCounts'
 import { SidebarHealthDot } from './SidebarHealthDot'
+import { CountBadge } from './ui/layout'
 
 interface AttentionProps {
   tone: HealthTone
@@ -35,14 +36,5 @@ export function SidebarNavCount({ count, label, attention }: Props) {
     )
   }
   if (count <= 0) return null
-  return (
-    <span
-      role="img"
-      aria-label={label}
-      title={label}
-      className="ml-auto text-2xs font-medium tabular-nums text-fg-muted"
-    >
-      {count > 99 ? '99+' : count}
-    </span>
-  )
+  return <CountBadge count={count} label={label} className="ml-auto" />
 }

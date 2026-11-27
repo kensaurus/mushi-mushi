@@ -308,7 +308,7 @@ export function FeedbackModal({ onClose, initialType = 'bug', onSubmitted }: Fee
 
               {/* Error */}
               {error && (
-                <p role="alert" className={`text-2xs rounded-sm border px-2 py-1.5 leading-snug ${CHIP_TONE.dangerSubtle}`}>
+                <p role="alert" className={`text-2xs rounded-sm px-2 py-1.5 leading-snug ${CHIP_TONE.danger}`}>
                   {error}
                 </p>
               )}

@@ -42,8 +42,8 @@ export function toldText(r: Pick<TimelineRelease, 'status' | 'credit_summary' | 
   const s = r.credit_summary
   if (!s) return { text: 'Reporters told: unknown', tone: 'neutral' }
   if (s.credited === 0) return { text: 'No reporters to tell', tone: 'neutral' }
-  if (s.told >= s.credited) return { text: `All ${pluralizeWithCount(s.credited, 'reporter')} told`, tone: 'okSubtle' }
-  return { text: `${s.told} of ${pluralizeWithCount(s.credited, 'reporter')} told`, tone: 'warnSubtle' }
+  if (s.told >= s.credited) return { text: `All ${pluralizeWithCount(s.credited, 'reporter')} told`, tone: 'ok' }
+  return { text: `${s.told} of ${pluralizeWithCount(s.credited, 'reporter')} told`, tone: 'warn' }
 }
 
 interface Props {
@@ -102,7 +102,7 @@ export function ReleaseTimeline({ onOpen }: Props) {
                       </>
                     )}
                   </span>
-                  <Badge tone={fixes > 0 ? 'infoSubtle' : 'neutral'}>{pluralizeWithCount(fixes, 'fix', 'fixes')}</Badge>
+                  <Badge tone={fixes > 0 ? 'info' : 'neutral'}>{pluralizeWithCount(fixes, 'fix', 'fixes')}</Badge>
                   <Badge tone={told.tone}>{told.text}</Badge>
                 </span>
               </button>

@@ -95,7 +95,7 @@ export function ProjectFavicon({
       <span
         aria-hidden="true"
         title={domain ? `${source.project_name} (favicon unavailable)` : source.project_name}
-        className={`shrink-0 inline-flex items-center justify-center rounded-md border font-semibold leading-none ${theme} ${className}`}
+        className={`shrink-0 inline-flex items-center justify-center rounded-md font-semibold leading-none ${theme} ${className}`}
         style={{ width: chipSize, height: chipSize, fontSize: Math.max(9, size - 7) }}
       >
         {initials}

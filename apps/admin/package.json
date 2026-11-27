@@ -10,7 +10,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint src/",
-    "lint:tokens": "node ../../scripts/check-design-tokens.mjs && node ../../scripts/audit-chip-contrast.mjs --strict && node ../../scripts/check-motion-properties.mjs && node ../../scripts/audit-page-scaffold.mjs --cluster",
+    "lint:tokens": "node ../../scripts/check-design-tokens.mjs && node ../../scripts/audit-chip-contrast.mjs --strict && node ../../scripts/audit-tinted-text.mjs --strict && node ../../scripts/check-motion-properties.mjs && node ../../scripts/audit-page-scaffold.mjs --cluster",
     "audit:page-scaffold": "node ../../scripts/audit-page-scaffold.mjs",
     "audit:page-scaffold:cluster": "node ../../scripts/audit-page-scaffold.mjs --cluster --write",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.sw.json",

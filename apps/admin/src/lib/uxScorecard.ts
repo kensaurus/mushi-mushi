@@ -86,9 +86,9 @@ export interface UxScorecardData {
 
 /** A score's tone: red when the page misleads or blocks (1–4), amber for a real problem (5–6), green otherwise. */
 export function scoreTone(score: number): BadgeTone {
-  if (score <= 4) return 'dangerSubtle'
-  if (score <= 6) return 'warnSubtle'
-  return 'okSubtle'
+  if (score <= 4) return 'danger'
+  if (score <= 6) return 'warn'
+  return 'ok'
 }
 
 /** "+2", "−1", or null for no change or no earlier run. */

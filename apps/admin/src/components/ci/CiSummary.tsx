@@ -13,6 +13,7 @@ import { ciVerdict, ciWindowCounts, formatPercent, formatSeconds, type CiJobOutc
 import { IconAlertTriangle, IconCheck, IconGauge, IconInfo, IconPlay } from '../icons'
 import { CI_OUTCOME_STYLE, CiOutcomeLegend } from './ciOutcome'
 import { CiWeekHeat } from './CiWeekHeat'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 const VERDICT_TONE = {
   ok: { Icon: IconCheck, icon: 'text-ok' },
@@ -102,7 +103,7 @@ export function CiSummary({ overview }: { overview: CiOverview }) {
           label="Half the jobs wait at most"
           value={formatSeconds(stats.queueP50s)}
           detail={`1 job in 20 waits ${formatSeconds(stats.queueP95s)} or more`}
-          tone={stats.queueP95s != null && stats.queueP95s >= 600 ? 'bg-warn-muted text-warn-foreground' : CI_OUTCOME_STYLE.waiting.chip}
+          tone={stats.queueP95s != null && stats.queueP95s >= 600 ? `${CHIP_TONE.warn}` : CI_OUTCOME_STYLE.waiting.chip}
           href="#ci-timeline"
         />
         <Tile

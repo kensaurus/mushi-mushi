@@ -25,7 +25,7 @@ interface ReportGroup {
   }>
 }
 
-import { SEVERITY_TRAFFIC_BADGE } from '../../lib/severityTraffic'
+import { severityChipTone } from '../../lib/chipTone'
 import { reportGroupCategory, reportGroupLabel, reportGroupSeverity } from '../../lib/reportGroupDisplay'
 import { apiErrorMessage } from '../../lib/humanizeApiError'
 
@@ -103,9 +103,7 @@ export function GroupsPanel() {
               {groups.map((g) => {
                 const severity = reportGroupSeverity(g)
                 const category = reportGroupCategory(g)
-                const sevTone = severity
-                  ? SEVERITY_TRAFFIC_BADGE[severity] ?? SEVERITY_TRAFFIC_BADGE.low
-                  : SEVERITY_TRAFFIC_BADGE.low
+                const sevTone = severityChipTone(severity ?? 'low')
                 const firstReport = g.reports?.[0]
                 return (
                   <tr key={g.id} className="border-t border-edge-subtle align-top">

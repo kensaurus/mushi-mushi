@@ -11,6 +11,7 @@
  */
 
 import type { HealthTone } from '../lib/useNavCounts'
+import { CountBadge, type BadgeTone } from './ui/layout'
 
 interface Props {
   /** Health tone. 'idle' renders a muted dot (no issues, no action). */
@@ -33,28 +34,27 @@ const TONE_DOT: Record<HealthTone | 'loading', string> = {
   danger: 'bg-danger',
 }
 
-const TONE_TEXT: Record<HealthTone | 'loading', string> = {
-  loading: 'text-fg-faint',
-  idle: 'text-fg-faint',
-  ok: 'text-ok',
-  warn: 'text-warn',
-  danger: 'text-danger',
+/** A count is a CountBadge in the tone (fill + edge), not coloured digits. */
+const TONE_BADGE: Record<HealthTone | 'loading', BadgeTone> = {
+  loading: 'neutral',
+  idle: 'neutral',
+  ok: 'ok',
+  warn: 'warn',
+  danger: 'danger',
 }
 
 export function SidebarHealthDot({ tone, count, label, hideWhenZero = false }: Props) {
   if (hideWhenZero && (count ?? 0) === 0) return null
   const showCount = typeof count === 'number' && count > 0
+  if (showCount) return <CountBadge count={count!} tone={TONE_BADGE[tone]} label={label} className="ml-auto" />
   return (
     <span
       role="img"
       aria-label={label}
       title={label}
-      className="ml-auto inline-flex items-center gap-1 text-2xs font-medium"
+      className="ml-auto inline-flex items-center"
     >
       <span className={`inline-block w-1.5 h-1.5 rounded-full ${TONE_DOT[tone]}`} />
-      {showCount && (
-        <span className={TONE_TEXT[tone]}>{count! > 99 ? '99+' : count}</span>
-      )}
     </span>
   )
 }

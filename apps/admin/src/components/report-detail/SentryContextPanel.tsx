@@ -20,7 +20,6 @@ import { Section, Badge, Btn, CodeValue } from '../ui'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
 import { formatRelative as formatAgo } from '../ui/metrics'
-import { CHIP_TONE } from '../../lib/chipTone'
 import { IconBolt, IconExternalLink, IconClock, IconLink, IconAlertTriangle } from '../icons'
 import type {
   ReportBreadcrumb,
@@ -350,17 +349,17 @@ export function SentryContextPanel({
                 <span className="font-mono text-fg-secondary">{link.external_id}</span>
               )}
               {link.resolved_at ? (
-                <Badge className={CHIP_TONE.okSubtle} title={new Date(link.resolved_at).toLocaleString()}>
+                <Badge tone="ok" title={new Date(link.resolved_at).toLocaleString()}>
                   Resolved in Sentry {formatAgo(link.resolved_at)}
                 </Badge>
               ) : link.archived_at ? (
-                <Badge className={CHIP_TONE.neutral} title={new Date(link.archived_at).toLocaleString()}>
+                <Badge tone="neutral" title={new Date(link.archived_at).toLocaleString()}>
                   Archived in Sentry {formatAgo(link.archived_at)}
                 </Badge>
               ) : closeKind ? (
-                <Badge className={CHIP_TONE.warnSubtle}>Still open in Sentry</Badge>
+                <Badge tone="warn">Still open in Sentry</Badge>
               ) : (
-                <Badge className={CHIP_TONE.neutral}>Resolves in Sentry when the fix merges</Badge>
+                <Badge tone="neutral">Resolves in Sentry when the fix merges</Badge>
               )}
             </li>
           ))}

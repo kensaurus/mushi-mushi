@@ -11,7 +11,7 @@ export interface McpQuickstartStepProps {
 export function McpQuickstartStep({ n, title, body, tone }: McpQuickstartStepProps) {
   const badgeTone =
     tone === 'done'
-      ? CHIP_TONE.okSubtle
+      ? CHIP_TONE.ok
       : tone === 'next'
         ? 'bg-brand text-brand-fg border-brand'
         : 'bg-surface-overlay text-fg-muted border-edge-subtle'

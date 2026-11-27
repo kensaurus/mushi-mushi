@@ -169,8 +169,8 @@ function buildGithubCiEnv(projectId: string, apiKey: string, env: ProjectMushiEn
 }
 
 function scopeBadgeTone(scope: string): string {
-  if (scope === 'mcp:write') return CHIP_TONE.dangerSubtle
-  if (scope === 'mcp:read') return CHIP_TONE.infoSubtle
+  if (scope === 'mcp:write') return CHIP_TONE.danger
+  if (scope === 'mcp:read') return CHIP_TONE.info
   return 'bg-surface-overlay text-fg-muted border border-edge-subtle'
 }
 

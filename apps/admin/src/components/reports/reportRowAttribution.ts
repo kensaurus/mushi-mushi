@@ -3,6 +3,7 @@
  */
 
 import { shortReporterKey } from '../../lib/reporterKey'
+import { CHIP_TONE } from '../../lib/chipTone'
 import { isReporterKeyHash } from '../report-detail/reporterPresence'
 import type { ReportRow } from './types'
 
@@ -114,48 +115,48 @@ export function captureMode(
   if (job) {
     return {
       label: 'mushi',
-      tone: 'bg-surface-overlay text-fg-muted border border-edge-subtle',
+      tone: CHIP_TONE.neutral,
       tooltip: `Filed by Mushi Mushi's scheduled ${job.label} (${job.job}), not by a user.`,
     }
   }
   if (row?.source === 'sentry') {
     return {
       label: 'sentry',
-      tone: 'bg-surface-overlay text-fg-muted border border-edge-subtle',
+      tone: CHIP_TONE.neutral,
       tooltip: 'Sent by your Sentry project (an error alert or Sentry user feedback), not the in-app widget.',
     }
   }
   if (!trigger) {
     return {
       label: 'user',
-      tone: 'bg-brand/12 text-brand border border-brand/28',
+      tone: CHIP_TONE.brand,
       tooltip: 'User opened the widget and described what they felt.',
     }
   }
   if (trigger === 'window-error' || trigger === 'unhandled-rejection') {
     return {
       label: 'auto',
-      tone: 'bg-info-muted text-info-foreground border-info/30',
+      tone: CHIP_TONE.info,
       tooltip: `Auto-captured on ${trigger === 'window-error' ? 'JS error' : 'unhandled rejection'}.`,
     }
   }
   if (trigger === 'captureException' || trigger === 'captureMessage' || trigger.startsWith('node-')) {
     return {
       label: 'server',
-      tone: 'bg-warn-muted/50 text-warn-foreground border-warn/30',
+      tone: CHIP_TONE.warn,
       tooltip: 'Forwarded from a backend service via the Node SDK.',
     }
   }
   if (trigger === 'shake') {
     return {
       label: 'shake',
-      tone: 'bg-accent-muted/60 text-accent-foreground border-accent/35',
+      tone: CHIP_TONE.accent,
       tooltip: 'Shake-to-report from mobile.',
     }
   }
   return {
     label: trigger.slice(0, 8),
-    tone: 'bg-surface-overlay text-fg-muted border-edge-subtle',
+    tone: CHIP_TONE.neutral,
     tooltip: `Custom trigger: ${trigger}`,
   }
 }
@@ -212,22 +213,22 @@ export const LAYER_PILL: Record<
 > = {
   frontend: {
     label: 'FE',
-    tone: 'bg-info-muted/45 text-info-foreground border-info/35',
+    tone: CHIP_TONE.info,
     tooltip: 'Frontend / browser surface',
   },
   backend: {
     label: 'BE',
-    tone: 'bg-warn-muted/45 text-warn-foreground border-warn/35',
+    tone: CHIP_TONE.warn,
     tooltip: 'Backend inventory surface',
   },
   server: {
     label: 'API',
-    tone: 'bg-warn-muted/45 text-warn-foreground border-warn/35',
+    tone: CHIP_TONE.warn,
     tooltip: 'Server-side SDK capture',
   },
   mobile: {
     label: 'RN',
-    tone: 'bg-accent-muted/50 text-accent-foreground border-accent/35',
+    tone: CHIP_TONE.accent,
     tooltip: 'React Native mobile surface',
   },
 }

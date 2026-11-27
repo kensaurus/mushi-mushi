@@ -337,7 +337,7 @@ export function CiTimeline({ jobs }: { jobs: CiJob[] }) {
                   </span>
                   <button
                     type="button"
-                    className="h-7 flex-1 rounded-sm bg-surface-overlay/50 px-2 text-left text-2xs whitespace-nowrap text-fg-secondary hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+                    className="h-7 flex-1 rounded-sm border border-neutral-edge bg-surface-overlay/50 px-2 text-left text-2xs whitespace-nowrap text-fg-secondary hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
                     aria-expanded={showGithub}
                     onClick={() => setShowGithub((v) => !v)}
                   >

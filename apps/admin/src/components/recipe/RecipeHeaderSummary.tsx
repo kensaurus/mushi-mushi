@@ -15,7 +15,7 @@ import { StatusGlyph, TONE_INK } from '../signal/StatusGlyph'
 
 /** Rank of a tone for "which is worse": red over amber over the rest. */
 function toneRank(tone: string): number {
-  return tone === 'danger' || tone === 'dangerSubtle' ? 2 : tone === 'warn' || tone === 'warnSubtle' ? 1 : 0
+  return tone === 'danger' || tone === 'danger' ? 2 : tone === 'warn' || tone === 'warn' ? 1 : 0
 }
 
 function relativeOrNull(iso: string | null | undefined): string | null {

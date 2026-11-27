@@ -201,7 +201,7 @@ export function GitHubConnectCard({ projectId, returnTo, currentRepoUrl, onConne
         </div>
         {accessMissing && phase.kind !== 'picking' && phase.kind !== 'saving' ? (
           <span data-testid="github-access-missing">
-            <Badge tone="warnSubtle">
+            <Badge tone="warn">
               <span aria-hidden="true">{'⚠'} </span>
               {GITHUB_ACCESS_LABEL.repo_no_access}
             </Badge>
@@ -209,7 +209,7 @@ export function GitHubConnectCard({ projectId, returnTo, currentRepoUrl, onConne
         ) : (
           connectedName &&
           phase.kind !== 'picking' &&
-          phase.kind !== 'saving' && <Badge tone="okSubtle">{GITHUB_ACCESS_LABEL.connected}: {connectedName}</Badge>
+          phase.kind !== 'saving' && <Badge tone="ok">{GITHUB_ACCESS_LABEL.connected}: {connectedName}</Badge>
         )}
       </div>
 
@@ -286,7 +286,7 @@ export function GitHubConnectCard({ projectId, returnTo, currentRepoUrl, onConne
                     <div className="min-w-0">
                       <p className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-fg">
                         <span className="truncate">{r.fullName}</span>
-                        {suggested && <Badge tone="okSubtle" className="shrink-0">Matches this app</Badge>}
+                        {suggested && <Badge tone="ok" className="shrink-0">Matches this app</Badge>}
                       </p>
                       <p className="text-2xs text-fg-muted">
                         {r.private ? 'Private' : 'Public'} · branch {r.defaultBranch}

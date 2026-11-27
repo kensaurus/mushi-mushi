@@ -142,7 +142,7 @@ interface ProjectOption {
 
 const TIER_BADGE: Record<string, string> = {
   free:        'bg-surface-overlay text-fg-secondary',
-  explorer:    CHIP_TONE.infoSubtle,
+  explorer:    CHIP_TONE.info,
   contributor: 'bg-brand/12 text-brand border border-brand/28',
   // A tier is a name, not a warning: no amber (2026-11-19).
   champion:    'bg-surface-overlay text-fg border border-fg-secondary/40',
@@ -264,7 +264,7 @@ export function OverviewTab({ projectId = null }: { projectId?: string | null } 
         {feedData && feedData.stats_24h.top_actions.length > 0 && (
           <div className="mb-3 flex flex-wrap gap-1.5">
             {feedData.stats_24h.top_actions.map(({ action, count }) => (
-              <span key={action} className="inline-flex items-center gap-1 rounded bg-surface-overlay px-2 py-0.5 text-2xs text-fg-muted">
+              <span key={action} className={`inline-flex items-center gap-1 rounded ${CHIP_TONE.neutral} px-2 py-0.5 text-2xs`}>
                 {/* The action's own name, as Activity rules and the Simulator spell it. */}
                 <span className="font-mono text-fg">{action}</span>
                 <span className="text-fg-faint">×{count}</span>
@@ -765,12 +765,12 @@ function ContributorDrawer({
   }, [overrideTier, tierReason, endUserId, reloadDetail, onDataChange, toast])
 
   const ACTION_TONE: Record<string, string> = {
-    report_submit:                 CHIP_TONE.okSubtle,
-    screen_view_unique_per_day:    CHIP_TONE.infoSubtle,
+    report_submit:                 CHIP_TONE.ok,
+    screen_view_unique_per_day:    CHIP_TONE.info,
     session_minute:                'bg-brand/12 text-brand border border-brand/28',
-    comment_posted:                CHIP_TONE.okSubtle,
+    comment_posted:                CHIP_TONE.ok,
     app_launch:                    'bg-surface-overlay text-fg-secondary',
-    quest_completed:               CHIP_TONE.warnSubtle,
+    quest_completed:               CHIP_TONE.warn,
   }
 
   const profileRows: DetailRowItem[] = detail?.profile
@@ -907,7 +907,7 @@ function ContributorDrawer({
               <div className="font-semibold text-warn-foreground mb-1">Anti-fraud flags to review</div>
               <div className="flex flex-wrap gap-1.5 mt-1">
                 {detail.profile.anti_fraud_flags.map((f) => (
-                  <Badge key={f} className={`${CHIP_TONE.warnSubtle} text-2xs`}>{flagLabel(f)}</Badge>
+                  <Badge key={f} className={`${CHIP_TONE.warn} text-2xs`}>{flagLabel(f)}</Badge>
                 ))}
               </div>
             </div>
@@ -975,7 +975,7 @@ function ActivityEventRow({
                 <span className="font-semibold text-fg tabular-nums font-mono">+{event.points_awarded} pts</span>
               )}
               {rejected && (
-                <Badge className="bg-surface-overlay text-fg-faint text-2xs">rejected</Badge>
+                <Badge tone="neutral" className="text-2xs">rejected</Badge>
               )}
               {rejected && event.rejected_reason && (
                 <span className="text-fg-faint text-2xs truncate max-w-36">{event.rejected_reason}</span>
@@ -1539,7 +1539,7 @@ export function IdentityProvidersSection({ canEdit }: { canEdit: boolean }) {
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span className="text-xs font-medium text-fg capitalize">{p.provider}</span>
-              <Badge className={p.enabled ? CHIP_TONE.okSubtle + ' text-2xs' : 'bg-surface-overlay text-fg-muted text-2xs'}>
+              <Badge className={p.enabled ? CHIP_TONE.ok + ' text-2xs' : `${CHIP_TONE.neutral} text-2xs`}>
                 {p.enabled ? 'Active' : 'Disabled'}
               </Badge>
             </div>
@@ -1591,10 +1591,10 @@ interface DisputeRow {
 }
 
 const DISPUTE_BADGE: Record<string, string> = {
-  open:         CHIP_TONE.warnSubtle,
-  under_review: CHIP_TONE.infoSubtle,
-  approved:     CHIP_TONE.okSubtle,
-  denied:       CHIP_TONE.dangerSubtle,
+  open:         CHIP_TONE.warn,
+  under_review: CHIP_TONE.info,
+  approved:     CHIP_TONE.ok,
+  denied:       CHIP_TONE.danger,
   withdrawn:    'bg-surface-overlay text-fg-muted',
 }
 
@@ -1713,10 +1713,10 @@ interface PayoutRow {
 }
 
 const PAYOUT_BADGE: Record<string, string> = {
-  paid:       CHIP_TONE.okSubtle,
-  pending:    CHIP_TONE.warnSubtle,
-  processing: CHIP_TONE.infoSubtle,
-  failed:     CHIP_TONE.dangerSubtle,
+  paid:       CHIP_TONE.ok,
+  pending:    CHIP_TONE.warn,
+  processing: CHIP_TONE.info,
+  failed:     CHIP_TONE.danger,
   withheld:   'bg-surface-overlay text-fg-muted',
   cancelled:  'bg-surface-overlay text-fg-muted',
 }
@@ -2101,18 +2101,18 @@ export function QuestsTab({ canEdit, paused = false, projectId = null }: { canEd
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="font-medium text-xs text-fg">{q.name}</span>
                     <Badge
-                      className={state.tone === 'on' ? `text-2xs ${CHIP_TONE.okSubtle}` : 'text-2xs bg-surface-overlay text-fg-muted'}
+                      className={state.tone === 'on' ? `text-2xs ${CHIP_TONE.ok}` : `text-2xs ${CHIP_TONE.neutral}`}
                       title={state.tone === 'paused' ? 'Rewards are off for this app, so this quest awards nothing until you turn them on.' : undefined}
                     >
                       {state.label}
                     </Badge>
-                    <Badge className="text-2xs bg-surface-overlay text-fg-secondary">+{q.completion_points} pts</Badge>
-                    {q.repeatable && <Badge className={`text-2xs ${CHIP_TONE.infoSubtle}`}>Repeatable</Badge>}
+                    <Badge tone="neutral" className="text-2xs">+{q.completion_points} pts</Badge>
+                    {q.repeatable && <Badge tone="info" className="text-2xs">Repeatable</Badge>}
                   </div>
                   {q.description && <p className="text-2xs text-fg-muted mt-0.5">{q.description}</p>}
                   <div className="flex gap-1.5 flex-wrap mt-1.5">
                     {q.steps.map((s, i) => (
-                      <span key={i} className="text-2xs bg-surface-overlay rounded px-1.5 py-0.5 text-fg-secondary">
+                      <span key={i} className={`text-2xs ${CHIP_TONE.neutral} rounded px-1.5 py-0.5`}>
                         {i + 1}. {s.label}
                       </span>
                     ))}
@@ -2345,8 +2345,8 @@ export function SandboxSimulatorTab() {
                       {row.unknown ? '–' : row.subtotal.toLocaleString()}
                     </td>
                     <td className="py-1.5 pl-3">
-                      {row.unknown && <Badge className={`${CHIP_TONE.warnSubtle} text-2xs`}>unknown action</Badge>}
-                      {row.capped && <Badge className={`${CHIP_TONE.infoSubtle} text-2xs`}>daily cap applied</Badge>}
+                      {row.unknown && <Badge tone="warn" className="text-2xs">unknown action</Badge>}
+                      {row.capped && <Badge tone="info" className="text-2xs">daily cap applied</Badge>}
                     </td>
                   </tr>
                 ))}

@@ -58,7 +58,7 @@ export const CONSOLE_LEVEL_PILL: Record<
     dot: 'bg-warn',
   },
   info: {
-    pill: `${CHIP_TONE.infoSubtle} ring-1 ring-info/10`,
+    pill: `${CHIP_TONE.info}`,
     row: 'border-l-info/45 bg-info/[0.03]',
     dot: 'bg-info',
   },
@@ -68,7 +68,7 @@ export const CONSOLE_LEVEL_PILL: Record<
     dot: 'bg-fg-faint',
   },
   debug: {
-    pill: `${CHIP_TONE.brandSubtle} ring-1 ring-brand/10`,
+    pill: `${CHIP_TONE.brand}`,
     row: 'border-l-brand/35 bg-brand/[0.03]',
     dot: 'bg-brand/70',
   },
@@ -77,11 +77,11 @@ export const CONSOLE_LEVEL_PILL: Record<
 export type TimelineKind = 'route' | 'click' | 'request' | 'log' | 'screen'
 
 export const TIMELINE_KIND_PILL: Record<TimelineKind, string> = {
-  route: CHIP_TONE.brandSubtle,
-  click: CHIP_TONE.warnSubtle,
-  request: CHIP_TONE.infoSubtle,
+  route: CHIP_TONE.brand,
+  click: CHIP_TONE.warn,
+  request: CHIP_TONE.info,
   log: CHIP_TONE.neutral,
-  screen: CHIP_TONE.okSubtle,
+  screen: CHIP_TONE.ok,
 }
 
 export function formatTimelineTime(ts: number): string {
@@ -107,9 +107,9 @@ const META_PILL_BASE =
   'inline-flex items-center rounded-sm border px-1.5 py-0.5 text-2xs font-semibold tabular-nums'
 
 const PLATFORM_PILL: Record<string, string> = {
-  ios: `${META_PILL_BASE} ${CHIP_TONE.infoSubtle}`,
-  android: `${META_PILL_BASE} ${CHIP_TONE.okSubtle}`,
-  web: `${META_PILL_BASE} ${CHIP_TONE.brandSubtle}`,
+  ios: `${META_PILL_BASE} ${CHIP_TONE.info}`,
+  android: `${META_PILL_BASE} ${CHIP_TONE.ok}`,
+  web: `${META_PILL_BASE} ${CHIP_TONE.brand}`,
   macos: `${META_PILL_BASE} bg-surface-overlay text-fg-secondary border-edge-subtle`,
   darwin: `${META_PILL_BASE} bg-surface-overlay text-fg-secondary border-edge-subtle`,
   windows: `${META_PILL_BASE} bg-surface-overlay text-fg-secondary border-edge-subtle`,
@@ -142,17 +142,17 @@ export function platformPillClass(platform: string): string {
 }
 
 export const BROWSER_CHIP: Record<'browser' | 'engine' | 'os', string> = {
-  browser: CHIP_TONE.infoSubtle,
+  browser: CHIP_TONE.info,
   engine: 'border-edge-subtle bg-surface-overlay/50 text-fg-secondary',
-  os: CHIP_TONE.brandSubtle,
+  os: CHIP_TONE.brand,
 }
 
 const HTTP_METHOD_PILL: Record<string, string> = {
-  GET: `${META_PILL_BASE} ${CHIP_TONE.infoSubtle} uppercase tracking-wide`,
-  POST: `${META_PILL_BASE} ${CHIP_TONE.okSubtle} uppercase tracking-wide`,
-  PUT: `${META_PILL_BASE} ${CHIP_TONE.warnSubtle} uppercase tracking-wide`,
-  PATCH: `${META_PILL_BASE} ${CHIP_TONE.warnSubtle} uppercase tracking-wide`,
-  DELETE: `${META_PILL_BASE} ${CHIP_TONE.dangerSubtle} uppercase tracking-wide`,
+  GET: `${META_PILL_BASE} ${CHIP_TONE.info} uppercase tracking-wide`,
+  POST: `${META_PILL_BASE} ${CHIP_TONE.ok} uppercase tracking-wide`,
+  PUT: `${META_PILL_BASE} ${CHIP_TONE.warn} uppercase tracking-wide`,
+  PATCH: `${META_PILL_BASE} ${CHIP_TONE.warn} uppercase tracking-wide`,
+  DELETE: `${META_PILL_BASE} ${CHIP_TONE.danger} uppercase tracking-wide`,
   HEAD: `${META_PILL_BASE} ${CHIP_TONE.neutral} uppercase tracking-wide`,
   OPTIONS: `${META_PILL_BASE} ${CHIP_TONE.neutral} uppercase tracking-wide`,
 }

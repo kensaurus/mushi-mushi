@@ -28,9 +28,9 @@ function isStale(s: WikiSource, now: number): boolean {
 
 const STATUS_COPY: Record<string, { label: string; tone: string }> = {
   pending: { label: 'Waiting to be read', tone: CHIP_TONE.neutral },
-  indexing: { label: 'Reading docs…', tone: CHIP_TONE.brandSubtle },
-  ready: { label: 'Ready', tone: CHIP_TONE.okSubtle },
-  failed: { label: 'Failed', tone: CHIP_TONE.dangerSubtle },
+  indexing: { label: 'Reading docs…', tone: CHIP_TONE.brand },
+  ready: { label: 'Ready', tone: CHIP_TONE.ok },
+  failed: { label: 'Failed', tone: CHIP_TONE.danger },
 }
 
 interface KnowledgeNode {
@@ -169,7 +169,7 @@ export function ExploreKnowledgePanel({ projectId }: Props) {
             {sources.map((s) => {
               const stale = isStale(s, now)
               const status = stale
-                ? { label: 'Stuck', tone: CHIP_TONE.warnSubtle }
+                ? { label: 'Stuck', tone: CHIP_TONE.warn }
                 : STATUS_COPY[s.status] ?? { label: s.status, tone: CHIP_TONE.neutral }
               const ingest = s.config?.last_ingest
               const capped =

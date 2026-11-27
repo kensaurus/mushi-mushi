@@ -31,6 +31,7 @@ import { Badge, CodeValue } from './ui'
 import { SignalChip } from './report-detail/ReportSurface'
 import { prStateChipTone } from '../lib/chipTone'
 import { readVizToken } from '../lib/vizTokens'
+import { CHIP_TONE } from '../lib/chipTone'
 
 export interface FixTimelineEvent {
   // Lock-step with the DB constraint on `fix_events.kind`
@@ -432,7 +433,7 @@ export function FixGitGraph({
                     {e.label}
                   </span>
                   <span
-                    className="shrink-0 rounded-sm bg-surface-overlay/40 px-1 py-px font-mono text-3xs tabular-nums text-fg-faint"
+                    className={`shrink-0 rounded-sm ${CHIP_TONE.neutral} px-1 py-px font-mono text-3xs tabular-nums`}
                     title={new Date(e.at).toISOString()}
                   >
                     {new Date(e.at).toLocaleTimeString(undefined, {

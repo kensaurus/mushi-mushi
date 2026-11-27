@@ -18,6 +18,7 @@ import { IconCamera, IconIntelligence } from '../icons'
 import { summaryPlace } from './summaryPlace'
 import type { ReportDetail } from './types'
 import { isSampleModel, SAMPLE_EXPLANATION_LABEL } from '../../lib/reportInternals'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 export function ClassificationFields({ report, showInternals = false }: { report: ReportDetail; showInternals?: boolean }) {
   const reproductionHint = (report.stage1_classification as { reproductionHint?: string } | null)?.reproductionHint
@@ -128,7 +129,7 @@ function ModelFooter({ model, latency, showInternals }: { model: string | null; 
       )}
       {latency != null && (
         <Tooltip content="End-to-end classification latency (Stage-1 only).">
-          <span className="inline-flex items-center gap-1 rounded-sm bg-surface-overlay/35 px-1.5 py-px text-2xs font-mono tabular-nums text-fg-muted cursor-help">
+          <span className={`inline-flex items-center gap-1 rounded-sm ${CHIP_TONE.neutral} px-1.5 py-px text-2xs font-mono tabular-nums cursor-help`}>
             <span className="text-3xs font-semibold text-fg-secondary not-italic font-sans">Latency</span>
             {latency.toLocaleString()} ms
           </span>

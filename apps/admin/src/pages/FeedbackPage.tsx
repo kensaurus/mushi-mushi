@@ -49,7 +49,7 @@ import {
   RelativeTime,
   SegmentedControl,
 } from '../components/ui'
-import { CHIP_TONE, HEADER_BADGE_TONE } from '../lib/chipTone'
+import { CHIP_TONE } from '../lib/chipTone'
 import { PageLoadError } from '../components/PageLoadError'
 
 type ListFilter = 'all' | 'bug' | 'feature'
@@ -289,12 +289,12 @@ export function FeedbackPage() {
         <Badge
           className={
             bannerSeverity === 'ok'
-              ? CHIP_TONE.okSubtle
+              ? CHIP_TONE.ok
               : bannerSeverity === 'brand'
-                ? HEADER_BADGE_TONE.brand
+                ? CHIP_TONE.neutral
                 : bannerSeverity === 'warn'
-                  ? CHIP_TONE.warnSubtle
-                  : CHIP_TONE.infoSubtle
+                  ? CHIP_TONE.warn
+                  : CHIP_TONE.info
           }
         >
           {stats.awaitingReply > 0 ? `${stats.awaitingReply} REPLY` : `${stats.activeTickets} ACTIVE`}

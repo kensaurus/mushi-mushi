@@ -74,13 +74,13 @@ function badgeToneClass(
 ): string {
   switch (tone) {
     case 'ok':
-      return CHIP_TONE.okSubtle
+      return CHIP_TONE.ok
     case 'danger':
-      return CHIP_TONE.dangerSubtle
+      return CHIP_TONE.danger
     case 'warn':
-      return CHIP_TONE.warnSubtle
+      return CHIP_TONE.warn
     case 'info':
-      return CHIP_TONE.infoSubtle
+      return CHIP_TONE.info
     default:
       return 'bg-surface-overlay text-fg-muted'
   }
@@ -174,7 +174,7 @@ export function ReportBranchGraph({ fix, traceUrl, className = '' }: Props) {
       ? {
           label: 'Branch',
           value: (
-            <code className="rounded-sm bg-surface-overlay/45 px-1.5 py-px font-mono text-2xs text-fg-secondary">
+            <code className={`rounded-sm ${CHIP_TONE.neutral} px-1.5 py-px font-mono text-2xs`}>
               {fix.branch}
             </code>
           ),
@@ -199,7 +199,7 @@ export function ReportBranchGraph({ fix, traceUrl, className = '' }: Props) {
       ? {
           label: 'Commit',
           value: (
-            <code className="rounded-sm bg-surface-overlay/45 px-1.5 py-px font-mono text-2xs tabular-nums text-fg">
+            <code className={`rounded-sm ${CHIP_TONE.neutral} px-1.5 py-px font-mono text-2xs tabular-nums`}>
               {fix.commit_sha.slice(0, 7)}
             </code>
           ),
@@ -265,7 +265,7 @@ export function ReportBranchGraph({ fix, traceUrl, className = '' }: Props) {
             </SignalChip>
           )}
         </span>
-        <span className="shrink-0 rounded-sm bg-surface-overlay/40 px-1.5 py-px font-mono text-2xs text-fg-faint" aria-hidden>
+        <span className={`shrink-0 rounded-sm ${CHIP_TONE.neutral} px-1.5 py-px font-mono text-2xs`} aria-hidden>
           {open ? '▾' : '▸'}
         </span>
       </button>

@@ -45,19 +45,19 @@ const TONES: Record<
   },
   info: {
     wrap: 'ring-1 ring-info/25 bg-info-muted/12',
-    iconWrap: `${CHIP_TONE.infoSubtle} ring-1 ring-info/30`,
+    iconWrap: `${CHIP_TONE.info}`,
     value: 'text-info-foreground',
     chip: 'text-fg-muted',
   },
   ok: {
     wrap: 'ring-1 ring-ok/25 bg-ok-muted/10',
-    iconWrap: `${CHIP_TONE.okSubtle} ring-1 ring-ok/30`,
+    iconWrap: `${CHIP_TONE.ok}`,
     value: 'text-ok-foreground',
     chip: 'text-fg-muted',
   },
   warn: {
     wrap: 'ring-1 ring-warn/25 bg-warn-muted/12',
-    iconWrap: `${CHIP_TONE.warnSubtle} ring-1 ring-warn/30`,
+    iconWrap: `${CHIP_TONE.warn}`,
     value: 'text-warn-foreground',
     chip: 'text-fg-muted',
   },

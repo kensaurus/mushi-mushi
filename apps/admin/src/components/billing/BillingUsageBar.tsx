@@ -77,9 +77,9 @@ interface UsageHeadline {
 }
 
 const USAGE_CHIP_TONE: Record<UsageTone, string> = {
-  ok: CHIP_TONE.okSubtle,
-  warn: CHIP_TONE.warnSubtle,
-  danger: CHIP_TONE.dangerSubtle,
+  ok: CHIP_TONE.ok,
+  warn: CHIP_TONE.warn,
+  danger: CHIP_TONE.danger,
   muted: 'bg-surface-overlay text-fg-muted',
 }
 

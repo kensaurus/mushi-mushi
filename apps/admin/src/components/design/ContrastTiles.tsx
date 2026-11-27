@@ -15,7 +15,7 @@ import { formatRatio } from './designTokens'
 function Verdict({ pair }: { pair: ContrastPairResult }) {
   if (pair.pass === true) {
     return (
-      <Badge tone="okSubtle" className="gap-1">
+      <Badge tone="ok" className="gap-1">
         <RecipeStateGlyph glyph="check" />
         <span data-verdict="pass">Pass</span>
       </Badge>
@@ -23,7 +23,7 @@ function Verdict({ pair }: { pair: ContrastPairResult }) {
   }
   if (pair.pass === false) {
     return (
-      <Badge tone="dangerSubtle" className="gap-1">
+      <Badge tone="danger" className="gap-1">
         <RecipeStateGlyph glyph="cross" />
         <span data-verdict="fail">Fail</span>
       </Badge>

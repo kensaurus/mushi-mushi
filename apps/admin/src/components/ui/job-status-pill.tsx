@@ -50,7 +50,7 @@ export function JobStatusPill({
       <span
         role="status"
         aria-live="polite"
-        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${CHIP_TONE.brandSubtle}`}
+        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${CHIP_TONE.brand}`}
       >
         {SPINNER}
         {runningLabel}
@@ -67,7 +67,7 @@ export function JobStatusPill({
         <span
           role="status"
           aria-live="polite"
-          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${CHIP_TONE.infoSubtle}`}
+          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${CHIP_TONE.info}`}
         >
           {SPINNER}
           Refreshing lockfile…
@@ -84,7 +84,7 @@ export function JobStatusPill({
         rel="noopener noreferrer"
         role="status"
         aria-live="polite"
-        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium hover:opacity-90 motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus ${CHIP_TONE.okSubtle}`}
+        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium hover:opacity-90 motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus ${CHIP_TONE.ok}`}
       >
         <IconCheck className="h-3.5 w-3.5" aria-hidden />
         PR opened
@@ -99,7 +99,7 @@ export function JobStatusPill({
         <span
           role="status"
           aria-live="polite"
-          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${CHIP_TONE.okSubtle}`}
+          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${CHIP_TONE.ok}`}
         >
           <IconCheck className="h-3.5 w-3.5" aria-hidden />
           All up to date
@@ -114,7 +114,7 @@ export function JobStatusPill({
         <span
           role="status"
           aria-live="assertive"
-          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${CHIP_TONE.dangerSubtle}`}
+          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${CHIP_TONE.danger}`}
         >
           Failed
         </span>

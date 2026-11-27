@@ -381,7 +381,7 @@ export function ReportTriageBar({
           )}
           {dispatchState.status === 'failed' && dispatchState.error && (
             <span
-              className={`rounded-sm px-2 py-1 text-2xs max-w-xs text-right ${CHIP_TONE.dangerSubtle}`}
+              className={`rounded-sm px-2 py-1 text-2xs max-w-xs text-right ${CHIP_TONE.danger}`}
               title={failure?.raw ?? dispatchState.error}
             >
               {failure ? (
@@ -395,7 +395,7 @@ export function ReportTriageBar({
           )}
           {(dispatchState.status === 'skipped' || dispatchState.status === 'completed_no_pr') &&
             dispatchState.error && (
-              <span className={`rounded-sm px-2 py-1 text-2xs max-w-xs text-right ${CHIP_TONE.warnSubtle}`}>
+              <span className={`rounded-sm px-2 py-1 text-2xs max-w-xs text-right ${CHIP_TONE.warn}`}>
                 {dispatchState.error}
               </span>
             )}

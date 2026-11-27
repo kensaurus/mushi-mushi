@@ -3,30 +3,30 @@ import { CHIP_TONE } from './chipTone'
 export const SEVERITY: Record<string, string> = {
   critical: CHIP_TONE.danger,
   high: CHIP_TONE.warn,
-  medium: CHIP_TONE.brandSubtle,
+  medium: CHIP_TONE.brand,
   low: CHIP_TONE.ok,
 }
 
 export const PIPELINE_STATUS: Record<string, string> = {
-  pending: CHIP_TONE.warnSubtle,
-  running: CHIP_TONE.infoSubtle,
-  exporting: CHIP_TONE.infoSubtle,
-  exported: CHIP_TONE.infoSubtle,
-  training: CHIP_TONE.accentSubtle,
-  trained: CHIP_TONE.accentSubtle,
-  validating: CHIP_TONE.infoSubtle,
-  validated: CHIP_TONE.okSubtle,
-  promoted: CHIP_TONE.okSubtle,
-  rejected: CHIP_TONE.dangerSubtle,
-  completed: CHIP_TONE.okSubtle,
-  merged: CHIP_TONE.okSubtle,
-  failed: CHIP_TONE.dangerSubtle,
-  error: CHIP_TONE.dangerSubtle,
-  dead_letter: CHIP_TONE.dangerSubtle,
-  skipped: CHIP_TONE.warnSubtle,
-  skipped_no_context: CHIP_TONE.warnSubtle,
-  skipped_no_sandbox: CHIP_TONE.warnSubtle,
-  skipped_unsupported_agent: CHIP_TONE.warnSubtle,
+  pending: CHIP_TONE.warn,
+  running: CHIP_TONE.info,
+  exporting: CHIP_TONE.info,
+  exported: CHIP_TONE.info,
+  training: CHIP_TONE.accent,
+  trained: CHIP_TONE.accent,
+  validating: CHIP_TONE.info,
+  validated: CHIP_TONE.ok,
+  promoted: CHIP_TONE.ok,
+  rejected: CHIP_TONE.danger,
+  completed: CHIP_TONE.ok,
+  merged: CHIP_TONE.ok,
+  failed: CHIP_TONE.danger,
+  error: CHIP_TONE.danger,
+  dead_letter: CHIP_TONE.danger,
+  skipped: CHIP_TONE.warn,
+  skipped_no_context: CHIP_TONE.warn,
+  skipped_no_sandbox: CHIP_TONE.warn,
+  skipped_unsupported_agent: CHIP_TONE.warn,
 }
 
 export const CATEGORY_LABELS: Record<string, string> = {
@@ -212,9 +212,9 @@ export const FILTER_OPTIONS = {
 export type SemanticBannerTone = 'ok' | 'warn' | 'danger'
 
 const SEMANTIC_BANNER_TONE: Record<SemanticBannerTone, string> = {
-  ok: 'border-ok/25 bg-ok-muted/40 text-ok-foreground',
-  warn: 'border-warn/30 bg-warn-muted/40 text-warn-foreground',
-  danger: 'border-danger/30 bg-danger-muted/40 text-danger-foreground',
+  ok: 'border-ok-edge bg-ok-muted text-ok-foreground', // mushi-mushi-allowlist: callers pair it with `border` (HomeSectionBody)
+  warn: 'border-warn-edge bg-warn-muted text-warn-foreground', // mushi-mushi-allowlist: callers pair it with `border` (HomeSectionBody)
+  danger: 'border-danger-edge bg-danger-muted text-danger-foreground', // mushi-mushi-allowlist: callers pair it with `border` (HomeSectionBody)
 }
 
 export function semanticBannerTone(tone: SemanticBannerTone): string {
@@ -244,4 +244,3 @@ export const NODE_COLORS: Record<string, string> = {
   user_story:   'oklch(0.78 0.12 85)',
 }
 
-export { META_CHIP_TONE } from './chipTone'

@@ -81,10 +81,10 @@ function renderCell(col: string, val: unknown): ReactNode {
   // Severity
   if (colL === 'severity') {
     const map: Record<string, string> = {
-      critical: CHIP_TONE.dangerSubtle,
-      high:     CHIP_TONE.warnSubtle,
-      medium:   CHIP_TONE.warnSubtle,
-      low:      CHIP_TONE.infoSubtle,
+      critical: CHIP_TONE.danger,
+      high:     CHIP_TONE.warn,
+      medium:   CHIP_TONE.warn,
+      low:      CHIP_TONE.info,
     }
     const label: Record<string, string> = { critical: 'P0 critical', high: 'P1 high', medium: 'P2 medium', low: 'P3 low' }
     return <CellBadge cls={map[strL] ?? 'bg-surface-raised text-fg-secondary border border-edge-subtle'}>{label[strL] ?? str}</CellBadge>
@@ -94,15 +94,15 @@ function renderCell(col: string, val: unknown): ReactNode {
   if (colL === 'status') {
     const map: Record<string, string> = {
       new:        'bg-brand/12 text-brand border border-brand/28',
-      pending:    CHIP_TONE.infoSubtle,
-      submitted:  CHIP_TONE.infoSubtle,
-      queued:     CHIP_TONE.infoSubtle,
-      classified: CHIP_TONE.okSubtle,
-      grouped:    CHIP_TONE.okSubtle,
-      fixing:     CHIP_TONE.warnSubtle,
-      fixed:      CHIP_TONE.okSubtle,
+      pending:    CHIP_TONE.info,
+      submitted:  CHIP_TONE.info,
+      queued:     CHIP_TONE.info,
+      classified: CHIP_TONE.ok,
+      grouped:    CHIP_TONE.ok,
+      fixing:     CHIP_TONE.warn,
+      fixed:      CHIP_TONE.ok,
       dismissed:  'bg-surface-raised text-fg-muted border border-edge-subtle',
-      failed:     CHIP_TONE.dangerSubtle,
+      failed:     CHIP_TONE.danger,
     }
     return <CellBadge cls={map[strL] ?? 'bg-surface-raised text-fg-secondary border border-edge-subtle'}>{str}</CellBadge>
   }
@@ -110,10 +110,10 @@ function renderCell(col: string, val: unknown): ReactNode {
   // Category
   if (colL === 'category') {
     const map: Record<string, string> = {
-      bug:       CHIP_TONE.dangerSubtle,
-      slow:      CHIP_TONE.warnSubtle,
-      visual:    CHIP_TONE.accentSubtle,
-      confusing: CHIP_TONE.infoSubtle,
+      bug:       CHIP_TONE.danger,
+      slow:      CHIP_TONE.warn,
+      visual:    CHIP_TONE.accent,
+      confusing: CHIP_TONE.info,
       other:     'bg-surface-raised text-fg-muted border border-edge-subtle',
     }
     return <CellBadge cls={map[strL] ?? 'bg-surface-raised text-fg-secondary border border-edge-subtle'}>{str}</CellBadge>
@@ -122,9 +122,9 @@ function renderCell(col: string, val: unknown): ReactNode {
   // Verification status
   if (colL === 'verification_status') {
     const map: Record<string, string> = {
-      passed:  CHIP_TONE.okSubtle,
-      failed:  CHIP_TONE.dangerSubtle,
-      pending: CHIP_TONE.infoSubtle,
+      passed:  CHIP_TONE.ok,
+      failed:  CHIP_TONE.danger,
+      pending: CHIP_TONE.info,
     }
     return <CellBadge cls={map[strL] ?? 'bg-surface-raised text-fg-secondary border border-edge-subtle'}>{str}</CellBadge>
   }

@@ -68,6 +68,7 @@ export function DirectionPhoneMock({ label, roles, word, sample }: DirectionPhon
           </span>
           <span
             className="flex h-8 min-w-11 shrink-0 items-center justify-center px-1 text-sm font-bold"
+            // mushi-mushi-allowlist: the host app's own palette (a design direction mock)
             style={{ background: roles.reward, color: roles.canvas, borderRadius: Math.min(r, 8), fontFamily: roles.fontLabel }}
           >
             3
@@ -79,6 +80,7 @@ export function DirectionPhoneMock({ label, roles, word, sample }: DirectionPhon
           <div className="flex flex-col items-center gap-2 py-3">
             <span
               className="flex h-14 w-14 items-center justify-center text-lg"
+              // mushi-mushi-allowlist: the host app's own palette (a design direction mock)
               style={{ background: roles.choiceBg, color: roles.choiceFg, borderRadius: '50%' }}
             >
               ▶
@@ -131,6 +133,7 @@ export function DirectionPhoneMock({ label, roles, word, sample }: DirectionPhon
           <span
             data-mock="cta"
             className="flex min-h-14 w-full items-center justify-center font-bold"
+            // mushi-mushi-allowlist: the host app's own palette (a design direction mock)
             style={{ background: roles.action, color: roles.onAction, borderRadius: r, fontFamily: roles.fontBody, fontSize: 17 }}
           >
             Continue

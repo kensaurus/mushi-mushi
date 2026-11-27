@@ -24,8 +24,8 @@ import {
 
 describe('elementStateMeta', () => {
   it('maps each of the five states to its own plain-English label, glyph and tone', () => {
-    expect(elementStateMeta('ok')).toMatchObject({ state: 'ok', label: 'OK', glyph: 'check', tone: 'okSubtle' })
-    expect(elementStateMeta('drift')).toMatchObject({ state: 'drift', label: 'Needs attention', glyph: 'triangle', tone: 'warnSubtle' })
+    expect(elementStateMeta('ok')).toMatchObject({ state: 'ok', label: 'OK', glyph: 'check', tone: 'ok' })
+    expect(elementStateMeta('drift')).toMatchObject({ state: 'drift', label: 'Needs attention', glyph: 'triangle', tone: 'warn' })
     expect(elementStateMeta('unknown')).toMatchObject({ state: 'unknown', label: 'Not checked yet', glyph: 'question', tone: 'neutral' })
     expect(elementStateMeta('not_connected')).toMatchObject({
       state: 'not_connected',
@@ -33,7 +33,7 @@ describe('elementStateMeta', () => {
       glyph: 'ring',
       tone: 'neutral',
     })
-    expect(elementStateMeta('error')).toMatchObject({ state: 'error', label: 'Check failed', glyph: 'cross', tone: 'dangerSubtle' })
+    expect(elementStateMeta('error')).toMatchObject({ state: 'error', label: 'Check failed', glyph: 'cross', tone: 'danger' })
   })
 
   it('an unknown element that WAS checked reads "Not confirmed", never "Not checked yet" beside a check time', () => {

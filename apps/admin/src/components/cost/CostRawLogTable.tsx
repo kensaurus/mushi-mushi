@@ -16,7 +16,6 @@ import {
   SelectField,
 } from '../ui'
 import { PageLoadError } from '../PageLoadError'
-import { CHIP_TONE } from '../../lib/chipTone'
 import { SINCE_HOURS, costLogQuery } from './costLogQuery'
 import { OperationChip } from '../OperationChip'
 import { ModelChip, TokenIn, TokenOut, UsdAmount } from './CostDisplayChips'
@@ -193,7 +192,7 @@ export function CostRawLogTable({ projectId }: { projectId: string }) {
           if (!status) return <span className="text-fg-faint">—</span>
           if (status === 'success') return <span className="text-2xs text-fg-muted">OK</span>
           return (
-            <Badge className={CHIP_TONE.dangerSubtle} title={row.original.error_message ?? 'The call failed.'}>
+            <Badge tone="danger" title={row.original.error_message ?? 'The call failed.'}>
               Failed
             </Badge>
           )
@@ -243,9 +242,9 @@ export function CostRawLogTable({ projectId }: { projectId: string }) {
           {(failedOnly || since) && (
             <div className="flex flex-wrap items-center gap-1.5 pt-1">
               {failedOnly && (
-                <Badge className={CHIP_TONE.dangerSubtle}>Failed calls only</Badge>
+                <Badge tone="danger">Failed calls only</Badge>
               )}
-              {since && <Badge className={CHIP_TONE.neutral}>Last {since}</Badge>}
+              {since && <Badge tone="neutral">Last {since}</Badge>}
               <Btn
                 size="sm"
                 variant="ghost"

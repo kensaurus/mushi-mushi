@@ -62,7 +62,7 @@ import type {
   IntelligenceReport,
   ModernizationFinding,
 } from '../components/intelligence/types'
-import { CHIP_TONE, HEADER_BADGE_TONE } from '../lib/chipTone'
+import { CHIP_TONE } from '../lib/chipTone'
 
 const TABS: Array<{ id: IntelligenceTabId; label: string; description: string }> = [
   {
@@ -422,14 +422,14 @@ export function IntelligencePage() {
             <Badge
               className={
                 bannerSeverity === 'ok'
-                  ? CHIP_TONE.okSubtle
+                  ? CHIP_TONE.ok
                   : bannerSeverity === 'danger'
-                    ? CHIP_TONE.dangerSubtle
+                    ? CHIP_TONE.danger
                     : bannerSeverity === 'warn'
-                      ? CHIP_TONE.warnSubtle
+                      ? CHIP_TONE.warn
                       : bannerSeverity === 'brand'
-                        ? HEADER_BADGE_TONE.brand
-                        : HEADER_BADGE_TONE.neutral
+                        ? CHIP_TONE.neutral
+                        : CHIP_TONE.neutral
               }
             >
               {!stats.hasAnyProject

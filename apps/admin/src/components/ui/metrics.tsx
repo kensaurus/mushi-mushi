@@ -1,7 +1,6 @@
 import React, { useId, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { META_CHIP_TONE } from '../../lib/tokens';
 import { IconAlertTriangle, IconBell, IconCheck, IconEye, IconTerminal, IconArrowRight } from '../icons';
 import { statLinkLabel } from '../../lib/statCardLinks';
 import { InfoHint, MetricHelpTrigger } from './fields';
@@ -246,12 +245,11 @@ function RecommendedActionCtaEl({ cta, describedBy }: { cta: RecommendedActionCt
   )
 }
 
-const META_CHIP_TONES: Record<NonNullable<RecommendedActionMeta['tone']>, string> = META_CHIP_TONE
 
 const INLINE_ACTION_TONES: Record<NonNullable<RecommendedActionInlineAction['tone']>, string> = {
   primary: 'bg-brand text-brand-fg hover:bg-brand-hover',
   ghost: 'bg-surface-overlay text-fg-secondary hover:text-fg hover:bg-surface-raised border border-edge',
-  danger: CHIP_TONE.dangerSubtle + ' hover:bg-danger-muted/70',
+  danger: CHIP_TONE.danger + ' hover:bg-danger-muted/70',
 }
 
 function InlineActionEl({ action }: { action: RecommendedActionInlineAction }) {
@@ -320,7 +318,7 @@ export function RecommendedAction({
             {meta.map((m, i) => (
               <li
                 key={`${m.label}-${i}`}
-                className={`inline-flex items-center gap-1 px-1.5 py-px rounded-sm text-2xs ${META_CHIP_TONES[m.tone ?? 'neutral']}`}
+                className={`inline-flex items-center gap-1 px-1.5 py-px rounded-sm text-2xs ${CHIP_TONE[m.tone ?? 'neutral']}`}
               >
                 <span className="font-semibold text-2xs opacity-70">{m.label}</span>
                 <span className="font-mono">{m.value}</span>
@@ -536,7 +534,7 @@ const METRIC_SECTION_META: Record<
 > = {
   shows: {
     Icon: IconEye,
-    chipClass: CHIP_TONE.infoSubtle,
+    chipClass: CHIP_TONE.info,
   },
   counted: {
     Icon: IconTerminal,
@@ -544,7 +542,7 @@ const METRIC_SECTION_META: Record<
   },
   takeaway: {
     Icon: IconCheck,
-    chipClass: CHIP_TONE.okSubtle,
+    chipClass: CHIP_TONE.ok,
   },
 }
 

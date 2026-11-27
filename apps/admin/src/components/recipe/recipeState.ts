@@ -45,7 +45,7 @@ export interface ElementStateMeta {
 const OK: ElementStateMeta = {
   state: 'ok',
   label: 'OK',
-  tone: 'okSubtle',
+  tone: 'ok',
   glyph: 'check',
   description: 'Checked recently, and nothing needs fixing.',
   // Green edge: every box reads red, amber or green at a glance (journeys 2026-10-27).
@@ -55,7 +55,7 @@ const OK: ElementStateMeta = {
 const DRIFT: ElementStateMeta = {
   state: 'drift',
   label: 'Needs attention',
-  tone: 'warnSubtle',
+  tone: 'warn',
   glyph: 'triangle',
   description: 'Something here does not match what your app expects. The card says what and how to fix it.',
   cardEdge: 'border-2 border-warn/60',
@@ -89,7 +89,7 @@ const NOT_CONNECTED: ElementStateMeta = {
 const ERROR: ElementStateMeta = {
   state: 'error',
   label: 'Check failed',
-  tone: 'dangerSubtle',
+  tone: 'danger',
   glyph: 'cross',
   description: 'The last check could not finish, so Mushi Mushi cannot say if this works.',
   cardEdge: 'border-2 border-danger/60',

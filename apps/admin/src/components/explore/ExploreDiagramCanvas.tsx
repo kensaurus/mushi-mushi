@@ -50,7 +50,7 @@ function DiagramComponentNode({ data }: NodeProps<Node<DiagramFlowData>>) {
         <div className="min-w-0 flex-1 truncate text-xs font-medium text-fg">{data.label}</div>
         {(data.reportCount ?? 0) > 0 && (
           <span
-            className={`shrink-0 rounded-sm px-1 text-3xs font-semibold ${CHIP_TONE.dangerSubtle}`}
+            className={`shrink-0 rounded-sm px-1 text-3xs font-semibold ${CHIP_TONE.danger}`}
             title={`${data.reportCount} open bug report${data.reportCount === 1 ? '' : 's'}`}
             data-testid="diagram-node-reports"
           >
@@ -59,7 +59,7 @@ function DiagramComponentNode({ data }: NodeProps<Node<DiagramFlowData>>) {
         )}
         {(data.findingCount ?? 0) > 0 && (
           <span
-            className={`shrink-0 rounded-sm px-1 text-3xs font-semibold ${CHIP_TONE.warnSubtle}`}
+            className={`shrink-0 rounded-sm px-1 text-3xs font-semibold ${CHIP_TONE.warn}`}
             title={`${data.findingCount} code finding${data.findingCount === 1 ? '' : 's'}`}
             data-testid="diagram-node-findings"
           >

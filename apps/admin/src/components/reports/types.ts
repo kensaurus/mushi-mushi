@@ -5,7 +5,6 @@
  *          import these.
  */
 
-import { severityLabel } from '../../lib/tokens'
 
 export interface ReportRow {
   id: string
@@ -161,23 +160,6 @@ export function severityStripeClass(severity: string | null): string {
  * is already terminal so dispatching another attempt would just be noise.
  */
 export const DISPATCH_ELIGIBLE_STATUSES = new Set(['classified', 'fixing'])
-
-/**
- * Single-letter severity for dense scan rows — pairs with the coloured
- * stripe so `C` / `H` / `M` / `L` stays legible once triagers learn the
- * palette. Always render inside an element that sets `title` to the full
- * label so hover keeps the full form one motion away.
- */
-export function severityLabelShort(s: string | null): string {
-  if (!s) return '—'
-  switch (s) {
-    case 'critical': return 'Crit'
-    case 'high':     return 'High'
-    case 'medium':   return 'Med'
-    case 'low':      return 'Low'
-    default:         return severityLabel(s)
-  }
-}
 
 function parseTime(iso: string | null | undefined): number | null {
   if (!iso) return null

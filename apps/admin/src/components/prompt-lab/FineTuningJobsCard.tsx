@@ -32,7 +32,7 @@ interface FineTuningJobsCardProps {
 /** Fine-tune lifecycle chips — pending stays quiet; rejected is warn (not danger). */
 function fineTuneStatusTone(status: string): string {
   if (status === 'pending') return CHIP_TONE.neutral
-  if (status === 'rejected') return CHIP_TONE.warnSubtle
+  if (status === 'rejected') return CHIP_TONE.warn
   return runStatusChipTone(status)
 }
 

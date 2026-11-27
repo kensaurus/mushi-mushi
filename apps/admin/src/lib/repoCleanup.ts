@@ -93,20 +93,20 @@ export interface CleanupView {
 }
 
 export const CLEANUP_STATUS: Record<CleanupStatus, { label: string; tone: BadgeTone }> = {
-  pending_approval: { label: 'Waiting for approval', tone: 'warnSubtle' },
-  approved: { label: 'Approved, not run', tone: 'infoSubtle' },
+  pending_approval: { label: 'Waiting for approval', tone: 'warn' },
+  approved: { label: 'Approved, not run', tone: 'info' },
   rejected: { label: 'Rejected', tone: 'neutral' },
-  executing: { label: 'Running', tone: 'infoSubtle' },
-  executed: { label: 'Done', tone: 'okSubtle' },
-  failed: { label: 'Did not run', tone: 'dangerSubtle' },
+  executing: { label: 'Running', tone: 'info' },
+  executed: { label: 'Done', tone: 'ok' },
+  failed: { label: 'Did not run', tone: 'danger' },
   expired: { label: 'Expired', tone: 'neutral' },
 }
 
 export const OUTCOME: Record<CleanupItemResult['outcome'], { label: string; tone: BadgeTone }> = {
-  done: { label: 'Done', tone: 'okSubtle' },
-  refused: { label: 'Refused', tone: 'warnSubtle' },
+  done: { label: 'Done', tone: 'ok' },
+  refused: { label: 'Refused', tone: 'warn' },
   skipped: { label: 'Skipped', tone: 'neutral' },
-  failed: { label: 'Failed', tone: 'dangerSubtle' },
+  failed: { label: 'Failed', tone: 'danger' },
   not_run: { label: 'Not run', tone: 'neutral' },
 }
 

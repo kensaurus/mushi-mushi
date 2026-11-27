@@ -17,7 +17,6 @@ import {
 } from '../../lib/pdcaBottleneck'
 import type { PdcaStageId } from '../../lib/pdca'
 import type { SdkStatus } from '../SdkVersionBadge'
-import { CHIP_TONE } from '../../lib/chipTone'
 import {
   HEARTBEAT_HINT,
   HEARTBEAT_LABEL,
@@ -154,7 +153,7 @@ function ProjectMetaRow({ project }: { project: ProjectFolderTabItem }) {
         </span>
       ) : null}
       {critical > 0 ? (
-        <Badge className={`${CHIP_TONE.dangerSubtle} text-3xs px-1 py-0`}>
+        <Badge tone="danger" className="text-3xs px-1 py-0">
           {critical} critical
         </Badge>
       ) : null}

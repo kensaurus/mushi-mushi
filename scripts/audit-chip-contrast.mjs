@@ -7,7 +7,7 @@
  *  2. bg-{sem}/N opacity tints + raw text-{sem} (e.g. bg-ok/15 text-ok)
  *
  * Line-scoped scan of quoted / static template class strings.
- * Skips CHIP_TONE / chipTone lines and canonical brandSubtle.
+ * Skips CHIP_TONE / chipTone lines and the legacy brand chip pairing.
  *
  * Usage: node scripts/audit-chip-contrast.mjs [--strict]
  */
@@ -28,7 +28,7 @@ const MUTED_BG_RE = new RegExp(
 const OPACITY_BG_RE = new RegExp(
   String.raw`\bbg-(?:${SEMANTIC.join('|')})\/[\d.]+\b`,
 )
-/** `--color-*-subtle` aliases to muted in index.css; brand chip is canonical in CHIP_TONE.brand / brandSubtle */
+/** `--color-*-subtle` aliases to muted in index.css; the brand chip lives in CHIP_TONE.brand (bare-tint shape: scripts/audit-tinted-text.mjs) */
 const BRAND_CHIP_ALLOW_RE =
   /\bbg-brand-subtle(?:\/[\d.]+)?\b.*\btext-brand\b|\btext-brand\b.*\bbg-brand-subtle(?:\/[\d.]+)?\b|\bbg-brand\/12\b.*\btext-brand\b|\btext-brand\b.*\bbg-brand\/12\b/
 const RAW_TEXT_RE = new RegExp(

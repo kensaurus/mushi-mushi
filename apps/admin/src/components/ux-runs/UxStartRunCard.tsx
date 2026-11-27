@@ -18,6 +18,7 @@ import { useState, type ReactNode } from 'react'
 import { CodeValue, DisclosurePanel, SegmentedControl } from '../ui'
 import { UxCloudRunCard } from './UxCloudRunCard'
 import { StatusPill } from '../signal/StatusMark'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 const STUDIO_COMMAND = 'mushi ux ui'
 
@@ -84,7 +85,7 @@ export function UxStartRunCard({ hasRuns, projectId }: { hasRuns: boolean; proje
         <ol className="grid gap-3 sm:grid-cols-3" aria-label="Where each step happens">
           {uxRunSteps(where).map((w, i) => (
             <li key={w.where} className="flex min-w-0 gap-2">
-              <span aria-hidden className="mt-px inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-surface-overlay text-3xs font-semibold tabular-nums text-fg">
+              <span aria-hidden className={`mt-px inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${CHIP_TONE.neutral} text-3xs font-semibold tabular-nums`}>
                 {i + 1}
               </span>
               <div className="min-w-0">

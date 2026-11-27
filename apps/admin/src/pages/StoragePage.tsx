@@ -165,10 +165,10 @@ function validateProvider(m: StorageSetting & StorageSecretDraft): ValidationHin
 
 const STORAGE_CHIP_TONE = {
   neutral: CHIP_TONE.neutral,
-  ok: CHIP_TONE.okSubtle,
+  ok: CHIP_TONE.ok,
   info: CHIP_TONE.neutral,
-  warn: CHIP_TONE.warnSubtle,
-  danger: CHIP_TONE.dangerSubtle,
+  warn: CHIP_TONE.warn,
+  danger: CHIP_TONE.danger,
 } as const
 
 const STORAGE_TABS: Array<{ id: StorageTabId; label: string; description: string }> = [

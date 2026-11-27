@@ -54,11 +54,11 @@ const STAGE_LABEL: Record<string, string> = {
 
 const STAGE_TONE: Record<string, string> = {
   idle: 'bg-surface-overlay text-fg-muted',
-  queueing: CHIP_TONE.infoSubtle,
-  queued: CHIP_TONE.infoSubtle,
-  running: `${CHIP_TONE.infoSubtle} animate-pulse`,
-  completed: CHIP_TONE.okSubtle,
-  failed: CHIP_TONE.dangerSubtle,
+  queueing: CHIP_TONE.info,
+  queued: CHIP_TONE.info,
+  running: `${CHIP_TONE.info} animate-pulse`,
+  completed: CHIP_TONE.ok,
+  failed: CHIP_TONE.danger,
 }
 
 function totalTokens(a: FixAttempt | null): string | null {
@@ -203,14 +203,14 @@ export function FixProgressStream({ reportId, dispatchState, hasFixHistory = tru
             {latest.files_changed.slice(0, 6).map((file) => (
               <code
                 key={file}
-                className="inline-flex max-w-full truncate rounded-sm bg-surface-overlay/45 px-1.5 py-px font-mono text-3xs text-fg-secondary"
+                className={`inline-flex max-w-full truncate rounded-sm ${CHIP_TONE.neutral} px-1.5 py-px font-mono text-3xs`}
                 title={file}
               >
                 {file}
               </code>
             ))}
             {latest.files_changed.length > 6 && (
-              <span className="inline-flex items-center rounded-sm bg-surface-overlay/30 px-1.5 py-px text-3xs text-fg-faint">
+              <span className={`inline-flex items-center rounded-sm ${CHIP_TONE.neutral} px-1.5 py-px text-3xs`}>
                 +{latest.files_changed.length - 6} more
               </span>
             )}

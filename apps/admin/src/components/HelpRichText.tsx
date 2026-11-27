@@ -10,6 +10,7 @@
  */
 
 import React from 'react'
+import { CHIP_TONE } from '../lib/chipTone'
 
 function parseInline(text: string): React.ReactNode[] {
   // Split on backtick spans and **bold** spans
@@ -27,7 +28,7 @@ function parseInline(text: string): React.ReactNode[] {
           {
             key: match.index,
             className:
-              'rounded bg-surface-overlay/50 px-1 py-px font-mono text-3xs text-fg-secondary',
+              `rounded ${CHIP_TONE.neutral} px-1 py-px font-mono text-3xs`,
           },
           raw.slice(1, -1),
         ),

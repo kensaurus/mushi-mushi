@@ -17,7 +17,7 @@ import { CHIP_TONE, runStatusChipTone } from '../../lib/chipTone'
 const STATUS_CLS: Record<FixStageNodeData['status'], string> = {
   // Flow idle ≠ lifecycle "pending" (warn) — keep quiet until the stage activates.
   pending: CHIP_TONE.neutral,
-  active: `${CHIP_TONE.brandSubtle} text-fg mushi-running-glow`,
+  active: `${CHIP_TONE.brand} text-fg mushi-running-glow`,
   done: runStatusChipTone('done'),
   failed: runStatusChipTone('failed'),
   skipped: runStatusChipTone('skipped'),
@@ -45,7 +45,8 @@ function FixStageNodeInner({ data }: NodeProps) {
         <span
           aria-hidden="true"
           className="inline-flex h-4 w-4 items-center justify-center rounded-sm font-bold text-3xs leading-none shrink-0"
-          style={{ backgroundColor: stageColor + '33', color: stageColor }}
+          // mushi-mushi-allowlist: per-stage hue; the tile has its own 1px edge in that hue
+          style={{ backgroundColor: stageColor + '33', color: stageColor, boxShadow: `inset 0 0 0 1px ${stageColor}99` }}
         >
           {node.letter}
         </span>

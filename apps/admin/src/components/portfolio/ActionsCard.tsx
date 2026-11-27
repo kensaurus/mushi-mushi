@@ -33,12 +33,12 @@ interface ActionRow {
 }
 
 const STATUS: Record<ActionRow['status'], { label: string; tone: BadgeTone }> = {
-  pending_approval: { label: 'Waiting for approval', tone: 'warnSubtle' },
-  approved: { label: 'Approved, not run', tone: 'infoSubtle' },
+  pending_approval: { label: 'Waiting for approval', tone: 'warn' },
+  approved: { label: 'Approved, not run', tone: 'info' },
   rejected: { label: 'Rejected', tone: 'neutral' },
-  executing: { label: 'Running', tone: 'infoSubtle' },
-  executed: { label: 'Done', tone: 'okSubtle' },
-  failed: { label: 'Failed', tone: 'dangerSubtle' },
+  executing: { label: 'Running', tone: 'info' },
+  executed: { label: 'Done', tone: 'ok' },
+  failed: { label: 'Failed', tone: 'danger' },
   expired: { label: 'Expired', tone: 'neutral' },
 }
 

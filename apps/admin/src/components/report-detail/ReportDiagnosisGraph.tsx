@@ -48,22 +48,22 @@ const LANE_DOT: Record<DiagnosisLane, string> = {
 }
 
 const VERDICT_TONE: Record<DiagnosisGraph['verdict']['tone'], string> = {
-  ok: CHIP_TONE.okSubtle,
-  warn: CHIP_TONE.warnSubtle,
-  danger: CHIP_TONE.dangerSubtle,
-  info: CHIP_TONE.infoSubtle,
+  ok: CHIP_TONE.ok,
+  warn: CHIP_TONE.warn,
+  danger: CHIP_TONE.danger,
+  info: CHIP_TONE.info,
 }
 
 function stateChip(node: DiagnosisNode): { label: string; tone: string } | null {
-  if (node.state === 'failed') return { label: 'failed', tone: CHIP_TONE.dangerSubtle }
-  if (node.needsLook) return { label: node.confidence != null ? `check · ${Math.round(node.confidence * 100)}%` : 'check this', tone: CHIP_TONE.warnSubtle }
-  if (node.state === 'pending') return { label: 'in progress', tone: CHIP_TONE.infoSubtle }
+  if (node.state === 'failed') return { label: 'failed', tone: CHIP_TONE.danger }
+  if (node.needsLook) return { label: node.confidence != null ? `check · ${Math.round(node.confidence * 100)}%` : 'check this', tone: CHIP_TONE.warn }
+  if (node.state === 'pending') return { label: 'in progress', tone: CHIP_TONE.info }
   // Unchecked: the title says it ("Not graded yet"); a "not checked" chip
   // under it said it twice (round-3 sweep 2026-11-19).
   if (node.state === 'unchecked') return null
-  if (node.state === 'open') return { label: 'your move', tone: CHIP_TONE.infoSubtle }
-  if (node.state === 'done') return { label: 'done', tone: CHIP_TONE.okSubtle }
-  if (node.confidence != null) return { label: `${Math.round(node.confidence * 100)}%`, tone: CHIP_TONE.okSubtle }
+  if (node.state === 'open') return { label: 'your move', tone: CHIP_TONE.info }
+  if (node.state === 'done') return { label: 'done', tone: CHIP_TONE.ok }
+  if (node.confidence != null) return { label: `${Math.round(node.confidence * 100)}%`, tone: CHIP_TONE.ok }
   return null
 }
 

@@ -449,7 +449,7 @@ function ExperimentsTab({ experiments, loading, error, errorCode, onRetry, onOpe
                   <span className="sm:hidden">{statusBadge(e.status)}</span>
                   <span className="text-xs tabular-nums text-fg-muted">{e.experiment_variants?.length ?? 0} variants</span>
                   {e.bandit_enabled
-                    ? <Badge className={CHIP_TONE.brandSubtle}>Shifts to winner</Badge>
+                    ? <Badge tone="brand">Shifts to winner</Badge>
                     : <span className="text-xs text-fg-muted">Even split</span>}
                   <span className="text-xs text-fg-muted sm:hidden"><RelativeTime value={e.created_at} /></span>
                 </div>
@@ -458,7 +458,7 @@ function ExperimentsTab({ experiments, loading, error, errorCode, onRetry, onOpe
               <td role="cell" className="hidden px-3 py-2 tabular-nums text-xs md:table-cell">{e.experiment_variants?.length ?? 0}</td>
               <td role="cell" className="hidden px-3 py-2 md:table-cell">
                 {e.bandit_enabled
-                  ? <Badge className={CHIP_TONE.brandSubtle}>Shifts to winner</Badge>
+                  ? <Badge tone="brand">Shifts to winner</Badge>
                   : <span className="text-xs text-fg-muted">Even split</span>}
               </td>
               <td role="cell" className="hidden px-3 py-2 text-xs text-fg-muted sm:table-cell"><RelativeTime value={e.created_at} /></td>
@@ -732,10 +732,10 @@ function ExperimentDrawer({ experiment, open, onClose, onLaunch, onStop, onRefre
         <div className="flex flex-wrap gap-2 items-center">
           {statusBadge(experiment.status)}
           {experiment.bandit_enabled && (
-            <Badge className={CHIP_TONE.brandSubtle}>Shifts to winner</Badge>
+            <Badge tone="brand">Shifts to winner</Badge>
           )}
           {experiment.winner_variant_id && (
-            <Badge className={CHIP_TONE.okSubtle}>Winner found</Badge>
+            <Badge tone="ok">Winner found</Badge>
           )}
           <div className="ml-auto flex gap-2">
             {experiment.status === 'draft' && variants.length >= 2 && (
@@ -799,7 +799,7 @@ function ExperimentDrawer({ experiment, open, onClose, onLaunch, onStop, onRefre
                   </div>
                 </div>
                 {experiment.winner_variant_id === v.id && (
-                  <Badge className={CHIP_TONE.okSubtle}>Winner</Badge>
+                  <Badge tone="ok">Winner</Badge>
                 )}
               </div>
             ))}

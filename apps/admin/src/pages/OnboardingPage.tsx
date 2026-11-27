@@ -57,6 +57,7 @@ import { askMushiPanel } from '../lib/useAskMushiPanel'
 import { PageLoadError } from '../components/PageLoadError'
 import { Mascot } from '../components/mascot/Mascot'
 import { FIRST_RUN_NAME_PROJECT, onboardingTabGuide } from '../lib/fieldGuide'
+import { CHIP_TONE } from '../lib/chipTone'
 
 const SetupCopilotPage = lazy(() => import('./SetupCopilotPage').then((m) => ({ default: m.SetupCopilotPage })))
 
@@ -771,7 +772,7 @@ export function OnboardingPage() {
               <h3 className="text-sm font-semibold text-fg">Ask about this page</h3>
               <p className="mt-0.5 text-xs leading-relaxed text-fg-muted">
                 Press{' '}
-                <kbd className="rounded-sm bg-surface-overlay px-1 py-px font-mono text-2xs text-fg-secondary">
+                <kbd className={`rounded-sm ${CHIP_TONE.neutral} px-1 py-px font-mono text-2xs`}>
                   Cmd/Ctrl+J
                 </kbd>
                 {' '}or run{' '}

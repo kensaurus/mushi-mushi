@@ -178,14 +178,14 @@ function sinceToIso(since: string): string | null {
  * neutral record, not a status (round-2 review 2026-11-18).
  */
 function actionTone(action: string): string {
-  if (action.endsWith('.failed')) return CHIP_TONE.dangerSubtle
+  if (action.endsWith('.failed')) return CHIP_TONE.danger
   if (
     action.endsWith('.deleted') ||
     action.endsWith('.revoked') ||
     action.endsWith('.uninstalled') ||
     action.endsWith('.disconnected')
   ) {
-    return CHIP_TONE.warnSubtle
+    return CHIP_TONE.warn
   }
   return 'bg-surface-overlay text-fg-secondary'
 }
@@ -821,9 +821,9 @@ export function AuditPage() {
         }
       >
         {stats.auditLogEntitlement ? (
-          <Badge tone="okSubtle">Audit enabled</Badge>
+          <Badge tone="ok">Audit enabled</Badge>
         ) : (
-          <Badge tone="warnSubtle">{stats.planDisplayName} — upgrade for audit</Badge>
+          <Badge tone="warn">{stats.planDisplayName} — upgrade for audit</Badge>
         )}
         <Btn variant="primary" size="sm" onClick={exportCsv} disabled={logs.length === 0} data-dav-anchor="audit:act">
           Export CSV

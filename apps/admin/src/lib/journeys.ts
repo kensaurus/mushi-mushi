@@ -159,8 +159,8 @@ export const KIND_SOURCE: Record<JourneyFindingKind, 'visits' | 'scan' | 'watch'
 }
 
 export const SEVERITY_TONE: Record<JourneySeverity, BadgeTone> = {
-  high: 'dangerSubtle',
-  medium: 'warnSubtle',
+  high: 'danger',
+  medium: 'warn',
   low: 'neutral',
 }
 

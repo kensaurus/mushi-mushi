@@ -123,13 +123,13 @@ export function ObservedRouteCard({ route, maxEventCount }: Props) {
             heading="Test IDs"
             empty="No data-testid attributes seen on this route yet."
             items={route.testids}
-            chipClassName={`${CHIP_TONE.infoSubtle} ring-1 ring-info/25`}
+            chipClassName={`${CHIP_TONE.info}`}
           />
           <DetailColumn
             heading="API paths"
             empty="No same-origin API requests seen on this route yet."
             items={route.apis}
-            chipClassName={`${CHIP_TONE.okSubtle} ring-1 ring-ok/25`}
+            chipClassName={`${CHIP_TONE.ok}`}
           />
         </div>
       )}
@@ -171,8 +171,8 @@ function ChipCountSummary({
 }) {
   const previewClass =
     tone === 'info'
-      ? CHIP_TONE.infoSubtle + ' ring-1 ring-info/25'
-      : CHIP_TONE.okSubtle + ' ring-1 ring-ok/25'
+      ? CHIP_TONE.info
+      : CHIP_TONE.ok
   // Show first preview chip + count to give the user a "feel" for what the
   // SDK observed without dumping the whole list (tier-C density).
   const first = previewItems[0]
