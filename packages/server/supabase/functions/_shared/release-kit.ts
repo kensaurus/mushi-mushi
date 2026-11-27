@@ -199,6 +199,17 @@ export function kitReadiness(assets: readonly KitAssetRow[], preset: KitPreset):
   return { ready: problems.length === 0, screenshots, videos, problems, recommended }
 }
 
+/** Plain text with every HTML tag removed, repeated until none is left, and no stray angle bracket. */
+function stripTags(s: string): string {
+  let out = s
+  let prev: string
+  do {
+    prev = out
+    out = out.replace(/<[^>]*>/g, '')
+  } while (out !== prev)
+  return out.replace(/[<>]/g, '')
+}
+
 /**
  * The changelog lines a video tells: the release's Markdown bullets (or its
  * first sentences), links and emphasis stripped, at most 12 lines of 140
@@ -206,12 +217,10 @@ export function kitReadiness(assets: readonly KitAssetRow[], preset: KitPreset):
  */
 export function changelogLines(bodyMd: string | null | undefined): string[] {
   if (!bodyMd) return []
-  const clean = (s: string) => s
+  const clean = (s: string) => stripTags(s)
     .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
     .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
     .replace(/[*_`~]+/g, '')
-    .replace(/<[^>]+>/g, '')
-    .replace(/[<>]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
   const bullets = bodyMd.split(/\r?\n/).map((l) => /^\s*(?:[-*+]|\d+[.)])\s+(.*)$/.exec(l)?.[1]).filter((x): x is string => !!x).map(clean).filter(Boolean)
