@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 248 pages, generated from llms.txt. @internal Exported for tests. */
+/** 250 pages, generated from llms.txt. @internal Exported for tests. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — one place to improve your AI-built app",
