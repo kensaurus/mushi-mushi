@@ -121,7 +121,12 @@ export type UxScorecardPage = z.infer<typeof UxScorecardPage>
 
 export const UxScorecardSnapshot = z.object({
   status: z.enum(['running', 'done', 'failed', 'stopped']),
-  start_url: z.string().url().max(500),
+  /**
+   * The live app the pages were captured on. Omitted by a run POST /v1/ux/captures
+   * opened (a native app has no URL, ADR 0073): its start_url and its line
+   * (platform, device) stay as that route wrote them.
+   */
+  start_url: z.string().url().max(500).optional(),
   viewport: z.string().regex(VIEWPORT_RE),
   /** Who scored the pages: 'server' (the platform route), or the local transport and its model. */
   scored_by: z.string().max(120),
@@ -176,8 +181,7 @@ export function scorecardRunRow(s: UxScorecardSnapshot, ctx: { projectId: string
     agent: UX_SCORECARD_REPORTER,
     model: s.scored_by.slice(0, 120),
     status: s.status,
-    start_url: s.start_url,
-    detail: `viewport ${s.viewport}`,
+    ...(s.start_url !== undefined ? { start_url: s.start_url, detail: `viewport ${s.viewport}` } : {}),
     cli_version: s.cli_version ?? null,
     counts: { pages: s.pages.length, scored: scored.length, failed: s.pages.filter((p) => p.error).length, mean: mean == null ? null : Math.round(mean * 10) / 10, causes: s.causes?.length ?? 0, prompt: UX_SCORECARD_PROMPT_VERSION },
     ...(s.causes ? { findings: s.causes } : {}),

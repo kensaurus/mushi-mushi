@@ -18,6 +18,7 @@ export {
   type FreshAsk,
   type FreshEyesFinding,
   type FreshEyesOptions,
+  type FreshEyesPersona,
   type FreshEyesResult,
   type FreshEyesSession,
   type FreshEyesStep,
@@ -70,6 +71,8 @@ export {
   type ScorecardResult,
 } from './scorecard.js'
 export * from './scorecard-rubric.js'
+export { nativeFacts, nodesToContent, parseMaestroHierarchy, parseUiautomator, pngSize, screenPath, type NativeNode } from './native-facts.js'
+export { readScreens, uploadCaptures, UPLOAD_MAX_PAGES, UPLOAD_MAX_PNG_BYTES, UPLOAD_PLATFORMS, UPLOAD_SOURCES, type CapturedScreen, type UploadOptions, type UploadPlatform, type UploadResult, type UploadSource } from './upload.js'
 export {
   loadState,
   saveState,

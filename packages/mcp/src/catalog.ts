@@ -1104,6 +1104,41 @@ export const TOOL_CATALOG: ToolSpec[] = [
     hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
     useCase: 'Record one in ten visitors for the next day so I can see where people get stuck.',
   },
+  // ── Native UX captures and personas (Plan 025 P2/P3, ADR 0073) ──────
+  {
+    name: 'upload_ux_captures',
+    title: 'Upload app screenshots to the UX scorecard',
+    description:
+      'Open a UX scorecard run for screens another driver captured (a Maestro flow, adb screencap, the iOS simulator, an SDK debug build or a browser), so each screen is scored on the same written rubric as a web page (ADR 0073). ' +
+      'platform is ios | android | flutter | react_native | capacitor | web | other; optional device ("Pixel 8 (API 35)"), source (maestro | adb | simctl | sdk | playwright | other), app (a name), viewport ("390x844"), maxCostUsd (0.05–20, caps the scoring budget the run reserves) and projectId. ' +
+      'pages is 1 to 60 of { facts, shots }: facts are the scorecard page facts { key, path (starts with /), label, title, headings, text, controls, settleMs (null), axe (null), overflowX, consoleErrors, cls, viewport { width, height } } and shots is ["settled"] or ["early", "settled"]. ' +
+      'Returns { runId, reservedUsd, uploads: [{ page, name, signedUrl }], next }: PUT each PNG (Content-Type image/png, at most 8 MB) to its signedUrl, then score each page with POST next.score { facts, shots: [name] }, group with POST next.group, and close the run with PUT next.finish. ' +
+      'On the stdio server, dir instead reads <dir>/pages/<screen>/settled.png (plus early.png, facts.json, an Android window.xml or a Maestro hierarchy.json) and does the uploads itself; score=true also scores, groups and closes the run. ' +
+      'Refused with 402 when the AI budget cannot cover the run. Viewers cannot upload. Write: it stores screenshots and a run; nothing in the app or repo changes.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    useCase: 'Score my Android app’s onboarding screens like the web pages.',
+  },
+  {
+    name: 'list_personas',
+    title: 'List the app’s personas',
+    description:
+      'Return the user profiles a first-time user test or a PDCA critic can play for one project (ADR 0073): each persona { id, name, goal, locale, device (desktop | mobile | tablet), expertise (new | casual | power), accessibility (screen_reader, low_vision, keyboard_only, reduced_motion, color_blind, motor, plain_language), patienceSteps (the step cap), costCapUsd (the most one test may spend on Mushi Mushi\'s AI calls), brief (the words the visitor model reads), runs (its last 12 tests: status, ttfv_seconds, reached, steps) }, plus presets, the test-account setting { mode: off | mushi | hook } and the AI budget { monthlyUsd, spentUsd, heldUsd }. Optional projectId. Read-only.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'Which personas can test my app, and how did each do last time?',
+  },
+  {
+    name: 'start_fresh_eyes',
+    title: 'Start a first-time user test',
+    description:
+      'Queue a first-time user test (fresh eyes, ADR 0053) for the user\'s own local worker: an AI that has never seen the app tries one goal from its start page while Mushi Mushi times every step and notes where it got stuck. ' +
+      'Optional personaId (from list_personas: the visitor\'s device, language, needs and step cap), url (default: the app\'s known address), goal (default: the persona\'s goal, else the last one, else "sign up and start using the app"), sessions (1–5, default 3), successText (words on screen that mean the goal was reached), dryRun (true: look around only, file nothing; false, the default, files what stops the visitor as reports) and projectId. ' +
+      'It never signs up with test accounts: only an owner or admin can grant those, from the console. Answers 409 NO_WORKER with the one thing to do when no computer of the user\'s can run it, 402 when the AI budget cannot cover the run, 404 PERSONA_NOT_FOUND. Returns { runId, status: "queued", runner, personaId, reservedUsd }. Write: it queues a run that may file reports. The result shows on the console\'s First-time user test page.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    useCase: 'Have a Japanese phone user try to sign up and tell me where they get stuck.',
+  },
 ];
 
 export interface ResourceSpec {

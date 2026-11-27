@@ -2,15 +2,15 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-11-27 · **848** routes.
+> Generated: 2026-11-27 · **854** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 244 |
+| `adminOrApiKey` | 249 |
 | `apiKeyAuth` | 60 |
-| `jwtAuth` | 421 |
+| `jwtAuth` | 422 |
 | `jwtOrApiKey` | 1 |
 | `public` | 69 |
 | `unknown` | 53 |
@@ -486,6 +486,10 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/admin/projects/:pid/integrations/probe/:kind` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | POST | `/v1/admin/projects/:pid/integrations/slack/test` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
 | POST | `/v1/admin/projects/:pid/integrations/teams/test` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/settings-research.ts` |
+| GET | `/v1/admin/projects/:pid/personas` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/personas.ts` |
+| POST | `/v1/admin/projects/:pid/personas` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/personas.ts` |
+| DELETE | `/v1/admin/projects/:pid/personas/:id` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/personas.ts` |
+| PATCH | `/v1/admin/projects/:pid/personas/:id` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/personas.ts` |
 | GET | `/v1/admin/projects/:pid/platform-rollup` | `jwtAuth` | `packages/server/supabase/functions/api/routes/qa-coverage.ts` |
 | GET | `/v1/admin/projects/:pid/pull-requests` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/pull-requests.ts` |
 | POST | `/v1/admin/projects/:pid/pull-requests/:owner/:repo/:number/merge` | `jwtAuth` | `packages/server/supabase/functions/api/routes/pull-requests.ts` |
@@ -506,6 +510,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/projects/:pid/sdk-upgrade/:id/stream` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/sdk-upgrade.ts` |
 | POST | `/v1/admin/projects/:pid/sdk-upgrade/:id/sync` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/sdk-upgrade.ts` |
 | GET | `/v1/admin/projects/:pid/sdk-upgrade/in-flight` | `jwtAuth` | `packages/server/supabase/functions/api/routes/sdk-upgrade.ts` |
+| PUT | `/v1/admin/projects/:pid/test-accounts` | `jwtAuth` | `packages/server/supabase/functions/api/routes/personas.ts` |
 | GET | `/v1/admin/projects/:pid/timeline` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-timeline.ts` |
 | POST | `/v1/admin/projects/:pid/timeline/baselines` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-timeline.ts` |
 | PATCH | `/v1/admin/projects/:pid/timeline/baselines/:id` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-timeline.ts` |
@@ -849,6 +854,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/tester/wallet/catalog` | `jwtAuth` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
 | GET | `/v1/tester/wallet/history` | `jwtAuth` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
 | POST | `/v1/tester/wallet/redeem` | `jwtAuth` | `packages/server/supabase/functions/api/routes/tester-marketplace.ts` |
+| POST | `/v1/ux/captures` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-captures.ts` |
 | POST | `/v1/webhooks/fine-tuning/openai` | `public` | `packages/server/supabase/functions/api/routes/fine-tuning.ts` |
 | POST | `/v1/webhooks/github` | `public` | `packages/server/supabase/functions/api/routes/public.ts` |
 | GET | `/v1/webhooks/github/app-authorize` | `public` | `packages/server/supabase/functions/api/routes/github-connect.ts` |

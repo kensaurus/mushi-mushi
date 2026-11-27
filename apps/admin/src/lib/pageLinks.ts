@@ -102,6 +102,11 @@ export const PAGE_FLOW_LINKS: Record<string, PageFlowLink[]> = {
     { to: '/releases', label: 'Releases', blurb: 'Publish the next release' },
     { to: '/reports', label: 'Bugs', blurb: 'The bugs each release fixed' },
   ],
+  personas: [
+    { to: '/first-user-test', label: 'First-time user test', blurb: 'Test as one of them' },
+    { to: '/ux-runs?view=scorecard', label: 'UX scorecard', blurb: 'Every page scored' },
+    { to: '/settings', label: 'Settings', blurb: 'AI keys and alerts' },
+  ],
   iterate: [
     { to: '/ux-runs', label: 'UX runs', blurb: 'Screen-by-screen agent runs' },
     { to: '/fixes', label: 'Fixes', blurb: 'Fix attempts' },

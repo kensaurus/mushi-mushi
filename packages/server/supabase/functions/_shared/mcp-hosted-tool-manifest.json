@@ -560,5 +560,32 @@
     "method": "GET",
     "path": "/v1/admin/findings/{findingId}",
     "required": ["findingId"]
+  },
+  "upload_ux_captures": {
+    "scope": "mcp:write",
+    "description": "Open a UX scorecard run for screens a native driver captured (Maestro, adb, the iOS simulator, an SDK debug build) and get one signed upload URL per screenshot.",
+    "method": "POST",
+    "path": "/v1/ux/captures",
+    "required": ["platform", "pages"],
+    "requiresProject": true,
+    "body": { "projectId": "{projectId}", "platform": "{platform}", "device": "{device}", "source": "{source}", "app": "{app}", "viewport": "{viewport}", "maxCostUsd": "{maxCostUsd}", "pages": "{pages}" },
+    "hints": { "destructive": false, "idempotent": false }
+  },
+  "list_personas": {
+    "scope": "mcp:read",
+    "description": "The app's personas (who a first-time user test plays), the presets, the test-account setting and the AI budget runs reserve from.",
+    "method": "GET",
+    "path": "/v1/admin/projects/{projectId}/personas",
+    "requiresProject": true,
+    "hints": { "destructive": false, "idempotent": true }
+  },
+  "start_fresh_eyes": {
+    "scope": "mcp:write",
+    "description": "Queue a first-time user test for the user's own local worker, optionally as one of the app's personas. Never with test accounts.",
+    "method": "POST",
+    "path": "/v1/admin/projects/{projectId}/fresh-eyes",
+    "requiresProject": true,
+    "body": { "personaId": "{personaId}", "url": "{url}", "goal": "{goal}", "sessions": "{sessions}", "successText": "{successText}", "dryRun": "{dryRun}" },
+    "hints": { "destructive": false, "idempotent": false }
   }
 }

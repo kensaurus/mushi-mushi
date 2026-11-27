@@ -15,6 +15,7 @@
  */
 
 import { hostOnline } from './work-lanes.ts'
+import { isPersonaId, type ClaimPersona } from './personas.ts'
 
 /** A first-time visitor's goal when the app has none set; the console lets the person change it. */
 export const DEFAULT_FRESH_EYES_GOAL = 'sign up and start using the app'
@@ -31,8 +32,23 @@ export const FRESH_EYES_QUEUED_PER_HOUR = 6
 export const FRESH_EYES_QUEUE_RATE_SCOPE = 'fresh_eyes_queue'
 /** A queued run nobody took in this long stops, with a reason. */
 export const FRESH_EYES_QUEUED_TTL_MS = 24 * 3_600_000
-/** An operator's grant to mint test accounts lasts this long after Run now. */
+/** An owner's or admin's grant to make test accounts lasts this long after Run now. */
 export const ACCOUNT_GRANT_MS = 2 * 3_600_000
+
+/**
+ * Where a project's test accounts come from (project_settings.fresh_eyes_accounts,
+ * ADR 0073; it replaced "Mushi's own project only", ADR 0053):
+ *   off   — none (default): a test stops at the sign-up wall;
+ *   mushi — this Mushi deployment's own sign-in, for an app that signs in there
+ *           (operators only: it makes users in Mushi's own auth);
+ *   hook  — the app's own backend makes them (test-account-hook.ts).
+ */
+export type TestAccountMode = 'off' | 'mushi' | 'hook'
+export const TEST_ACCOUNT_MODES: readonly TestAccountMode[] = ['off', 'mushi', 'hook']
+
+export function testAccountMode(raw: unknown): TestAccountMode {
+  return raw === 'mushi' || raw === 'hook' ? raw : 'off'
+}
 
 type Parsed<T> = { ok: true; value: T } | { ok: false; message: string }
 
@@ -44,8 +60,10 @@ export interface FreshEyesRequest {
   successText: string | null
   /** Look around only: no account, nothing filed. */
   dryRun: boolean
-  /** Sign up with synthetic test accounts (operator, Mushi's own project). */
+  /** Sign up with test accounts (an owner or admin, from the console, where the project opted in). */
   withAccount: boolean
+  /** The project persona the visitors play (ADR 0073), or null for the plain first-time visitor. */
+  personaId: string | null
 }
 
 const CONTROL = /[\u0000-\u001f\u007f]/
@@ -74,7 +92,7 @@ export function startUrl(raw: unknown): string | null {
 export function parseFreshEyesRequest(raw: unknown): Parsed<FreshEyesRequest> {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { ok: false, message: 'Send a JSON body.' }
   const b = raw as Record<string, unknown>
-  const allowed = new Set(['url', 'goal', 'sessions', 'successText', 'dryRun', 'withAccount'])
+  const allowed = new Set(['url', 'goal', 'sessions', 'successText', 'dryRun', 'withAccount', 'personaId'])
   const unknown = Object.keys(b).find((k) => !allowed.has(k))
   if (unknown) return { ok: false, message: `Unknown field "${unknown.slice(0, 40)}".` }
   const url = startUrl(b.url)
@@ -95,7 +113,12 @@ export function parseFreshEyesRequest(raw: unknown): Parsed<FreshEyesRequest> {
   const dryRun = b.dryRun === true
   const withAccount = b.withAccount === true
   if (dryRun && withAccount) return { ok: false, message: 'A look-around run uses no account. Pick one of the two.' }
-  return { ok: true, value: { url, goal, sessions, successText, dryRun, withAccount } }
+  let personaId: string | null = null
+  if (b.personaId != null && b.personaId !== '') {
+    if (!isPersonaId(b.personaId)) return { ok: false, message: "personaId must be the id of one of this app's personas." }
+    personaId = b.personaId.toLowerCase()
+  }
+  return { ok: true, value: { url, goal, sessions, successText, dryRun, withAccount, personaId } }
 }
 
 /** A run id in the CLI's format (`20261028-091500-ab12`), UTC. */
@@ -132,11 +155,31 @@ export function defaultStartUrl(known: { lastRun?: string | null; siteWatch?: st
 }
 
 /**
- * Test accounts are offered only where minting can work: an operator, in a
- * console session (never an API key), on Mushi's own project.
+ * Test accounts are offered only where they can work (ADR 0073): the project
+ * opted in, the person is its owner or admin, in a console session (never an
+ * API key, so no agent or MCP tool can grant them), and for accounts in
+ * Mushi's own sign-in, an operator of this deployment.
  */
-export function canUseTestAccount(ctx: { isOperator: boolean; authMethod: string | undefined; projectId: string; selfProjectId: string | null | undefined }): boolean {
-  return ctx.isOperator && ctx.authMethod !== 'apiKey' && !!ctx.selfProjectId && ctx.selfProjectId.toLowerCase() === ctx.projectId.toLowerCase()
+export interface TestAccountAsker {
+  mode: TestAccountMode
+  role: string | null | undefined
+  isOperator: boolean
+  authMethod: string | undefined
+}
+
+export function canUseTestAccount(ctx: TestAccountAsker): boolean {
+  if (ctx.mode === 'off' || ctx.authMethod === 'apiKey') return false
+  if (ctx.role !== 'owner' && ctx.role !== 'admin') return false
+  return ctx.mode === 'hook' || ctx.isOperator
+}
+
+/** Why test accounts are not offered, in one sentence; null when they are. */
+export function testAccountUnavailable(ctx: TestAccountAsker): string | null {
+  if (canUseTestAccount(ctx)) return null
+  if (ctx.mode === 'off') return 'Test accounts are off for this app. An owner or admin can turn them on under Personas → Test accounts.'
+  if (ctx.authMethod === 'apiKey') return 'Test accounts are granted only from the console, never through an API key.'
+  if (ctx.role !== 'owner' && ctx.role !== 'admin') return 'Only an owner or admin of this app can start a test with test accounts.'
+  return "Accounts in Mushi's own sign-in are made only by this Mushi's operators."
 }
 
 // ── Can a computer take it ──────────────────────────────────────────────────
@@ -234,19 +277,42 @@ export interface QueuedFreshEyesRow {
   started_at: string
   account_granted_by: string | null
   account_grant_until: string | null
+  /** The persona the visitors play (ADR 0073); absent on rows read before it existed. */
+  persona_id?: string | null
 }
 
-/** True when the claim may mint test accounts: the grant is unexpired, made by an operator, and the claiming computer is that operator's. */
-export function accountGrantUsable(row: Pick<QueuedFreshEyesRow, 'account_granted_by' | 'account_grant_until' | 'project_id'>, ctx: { hostOwnerId: string; isOperator: (userId: string) => boolean; selfProjectId: string | null | undefined; now: Date }): boolean {
+/**
+ * True when the claim may make test accounts (ADR 0073): the grant is
+ * unexpired, the claiming computer belongs to the person who granted it, the
+ * project still has test accounts on, and accounts in Mushi's own sign-in are
+ * still granted by an operator.
+ */
+export function accountGrantUsable(
+  row: Pick<QueuedFreshEyesRow, 'account_granted_by' | 'account_grant_until'>,
+  ctx: { hostOwnerId: string; mode: TestAccountMode; isOperator: (userId: string) => boolean; now: Date },
+): boolean {
   if (!row.account_granted_by || !row.account_grant_until) return false
   if (Date.parse(row.account_grant_until) <= ctx.now.getTime()) return false
   if (row.account_granted_by !== ctx.hostOwnerId) return false
-  if (!ctx.isOperator(row.account_granted_by)) return false
-  return !!ctx.selfProjectId && ctx.selfProjectId.toLowerCase() === row.project_id.toLowerCase()
+  if (ctx.mode === 'off') return false
+  return ctx.mode === 'hook' || ctx.isOperator(row.account_granted_by)
 }
 
-/** What the worker gets for a fresh-eyes claim. `accounts` are present once, only in this answer. */
-export function freshEyesClaimTarget(row: QueuedFreshEyesRow, accounts: ReadonlyArray<{ email: string; password: string; name: string; userId: string }>) {
+/** A test account as the claim answer carries it, once. `userId`: Mushi's id for its own accounts; hook accounts carry none. */
+export interface ClaimAccount {
+  email: string
+  password: string
+  name: string
+  userId?: string
+}
+
+/**
+ * What the worker gets for a fresh-eyes claim. `accounts` are present once,
+ * only in this answer. `persona` goes only to a daemon that says it forwards
+ * one (`takes` has 'fresh_eyes_persona'); an older daemon would drop it, so
+ * it gets none and the run row says so.
+ */
+export function freshEyesClaimTarget(row: QueuedFreshEyesRow, accounts: ReadonlyArray<ClaimAccount>, persona: ClaimPersona | null = null) {
   return {
     runId: row.local_run_id,
     url: row.start_url ?? '',
@@ -255,8 +321,12 @@ export function freshEyesClaimTarget(row: QueuedFreshEyesRow, accounts: Readonly
     successText: row.success_text,
     dryRun: row.dry_run === true,
     accounts: [...accounts],
+    ...(persona ? { persona } : {}),
   }
 }
+
+/** The run row's note when the computer could not play the persona. */
+export const PERSONA_NOT_FORWARDED = 'It ran as a plain first-time visitor: the Mushi on this computer is too old to play a persona. Update it (npm i -g @mushi-mushi/cli@latest).'
 
 /**
  * The ux_runs patch when a fresh-eyes claim ends, or null when the run row

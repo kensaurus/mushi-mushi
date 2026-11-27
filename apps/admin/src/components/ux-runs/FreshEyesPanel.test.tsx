@@ -11,7 +11,10 @@
  *              `--mint-account`), and posts one request;
  *            - with no computer that can run it, it says so in plain words
  *              with one setup action, and Run now is off;
- *            - test accounts are offered only when the server says they work;
+ *            - test accounts are offered only when the server says they work, and
+ *              when they are not, the server's reason shows in plain words;
+ *            - a test can play one of the app's personas (ADR 0073): picking one
+ *              fills its goal and sends its id, and ?persona=<id> picks it;
  *            - a waiting test can be cancelled; a failed one says why;
  *            - a finished test leads with time to first value, then each step
  *              with its screenshot, the stall and the filed reports.
@@ -119,9 +122,9 @@ afterEach(() => {
   host.remove()
 })
 
-function render(list: unknown, detail: Record<string, unknown> = {}) {
+function render(list: unknown, detail: Record<string, unknown> = {}, entry = '/first-user-test') {
   mocks.usePageData.mockImplementation((path: string | null) => (path === LIST ? data(list) : path && detail[path] ? data(detail[path]) : data(null)))
-  act(() => root.render(createElement(MemoryRouter, null, createElement(FreshEyesPanel, { projectId: P }))))
+  act(() => root.render(createElement(MemoryRouter, { initialEntries: [entry] }, createElement(FreshEyesPanel, { projectId: P }))))
 }
 
 const button = (text: string) => [...host.querySelectorAll('button')].find((b) => b.textContent?.trim() === text)
@@ -224,11 +227,102 @@ describe('Run now', () => {
     expect(button('Run now')!.disabled).toBe(true)
   })
 
+  it('says why test accounts are not offered, with the way to turn them on', () => {
+    const unavailable = 'Test accounts are off for this app. An owner or admin can turn them on under Personas → Test accounts.'
+    render({ ...GLOT, testAccounts: { mode: 'off', unavailable } })
+    expect(button('Sign up with test accounts')).toBeUndefined()
+    const hint = host.querySelector('[data-testid="fresh-eyes-accounts-unavailable"]')!
+    expect(hint.textContent).toContain(unavailable)
+    expect(hint.querySelector('a[href="/personas"]')).not.toBeNull()
+    // Never the old copy that tied test accounts to Mushi Mushi's own app.
+    expect(host.textContent).not.toContain('Only for Mushi Mushi itself')
+  })
+
+  it('times the visit only with words to look for, whatever the start page', () => {
+    render({ ...GLOT, defaults: { ...GLOT.defaults, url: 'https://kensaur.us/mushi-mushi/' } })
+    expect(host.textContent).toContain('cannot time how long it took')
+  })
+
+  it('says how much AI budget a started test holds', async () => {
+    mocks.reply = { ok: true, data: { runId: '20261028-090000-ab12', runner: READY, personaId: null, reservedUsd: 0.6 } }
+    render(GLOT)
+    await act(async () => button('Run now')!.click())
+    expect(host.querySelector('[data-testid="fresh-eyes-reserved"]')!.textContent).toContain('Holding up to $0.60 of AI budget for this test')
+  })
+
   it("shows the server's refusal in plain words", async () => {
     mocks.reply = { ok: false, error: { code: 'NO_WORKER', message: 'Your computer alienware is not online, so nothing can run the test.' } }
     render(GLOT)
     await act(async () => button('Run now')!.click())
     expect(host.querySelector('[role="alert"]')!.textContent).toContain('alienware is not online')
+  })
+})
+
+describe('personas', () => {
+  const JA = {
+    id: '2000000f-0000-4000-8000-000000000001',
+    name: 'Japanese visitor',
+    preset: 'japanese_user',
+    goal: 'find a lesson and start it',
+    locale: 'ja-JP',
+    device: 'mobile',
+    expertise: 'casual',
+    accessibility: [],
+    patienceSteps: 30,
+    costCapUsd: 1,
+    notes: null,
+  }
+  const radio = (id: string) => host.querySelector(`[data-testid="persona-picker"] [role="radio"][data-persona="${id}"]`) as HTMLButtonElement
+
+  it('a plain first-time visitor by default, sending no persona', async () => {
+    render({ ...GLOT, personas: [JA] })
+    expect(radio('plain').getAttribute('aria-checked')).toBe('true')
+    expect(host.querySelector('[data-testid="persona-picker"] a[href="/personas"]')!.textContent).toBe('Manage personas')
+    await act(async () => button('Run now')!.click())
+    expect(mocks.calls[0]!.body).not.toHaveProperty('personaId')
+  })
+
+  it('picking one fills its goal, shows its brief and sends its id', async () => {
+    render({ ...GLOT, personas: [JA] })
+    act(() => radio(JA.id).click())
+    expect(radio(JA.id).getAttribute('aria-checked')).toBe('true')
+    expect(field('What a new visitor came to do').value).toBe('find a lesson and start it')
+    expect(host.querySelector('[data-testid="persona-picker-brief"]')!.textContent).toContain('You read Japanese (ja-JP) best')
+    await act(async () => button('Run now')!.click())
+    expect(mocks.calls[0]!.body).toMatchObject({ personaId: JA.id, goal: 'find a lesson and start it' })
+  })
+
+  it('keeps a goal the person typed', async () => {
+    render({ ...GLOT, personas: [JA] })
+    const goal = field('What a new visitor came to do')
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(goal, 'buy a plan')
+      goal.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    act(() => radio(JA.id).click())
+    expect(field('What a new visitor came to do').value).toBe('buy a plan')
+  })
+
+  it('?persona=<id> from the studio picks it', () => {
+    render({ ...GLOT, personas: [JA] }, {}, `/first-user-test?persona=${JA.id}`)
+    expect(radio(JA.id).getAttribute('aria-checked')).toBe('true')
+    expect(field('What a new visitor came to do').value).toBe('find a lesson and start it')
+  })
+
+  it('picks the asked-for persona when a fresher list brings it (the first paint can be cached)', () => {
+    const entry = `/first-user-test?persona=${JA.id}`
+    render({ ...GLOT, personas: [] }, {}, entry)
+    expect(radio('plain').getAttribute('aria-checked')).toBe('true')
+    render({ ...GLOT, personas: [JA] }, {}, entry)
+    expect(radio(JA.id).getAttribute('aria-checked')).toBe('true')
+    expect(field('What a new visitor came to do').value).toBe('find a lesson and start it')
+  })
+
+  it('shows who a test played in the list', () => {
+    const played = { ...RUN, persona_id: JA.id }
+    render({ ...GLOT, personas: [JA], runs: [played] }, { [`${LIST}/${played.local_run_id}`]: { ...DETAIL, run: { ...DETAIL.run, persona_id: JA.id } } })
+    expect(host.querySelector('[data-testid="fresh-eyes-history-persona"]')!.textContent).toContain('Japanese visitor')
+    expect(host.querySelector('[data-testid="fresh-eyes-run-persona"]')!.textContent).toContain('Played by Japanese visitor')
   })
 })
 

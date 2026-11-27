@@ -9,6 +9,8 @@
  *                                                        (find UX bugs on signed-in screens, file reports)
  *   mushi-ux scorecard --url https://app.example.com/admin/ --profile-dir ~/.playwright-cli-profiles/app --file
  *                                                        (score every page 1-10 on a written rubric, file the root causes)
+ *   mushi-ux upload ./captures --platform android --device "Pixel 8"
+ *                                                        (score screenshots a native driver made on the same rubric)
  *   mushi-ux fresh-eyes --url https://example.com --goal "get my first bug explained"
  *                                                        (a first-time visitor: time the path, file what stops them)
  *   mushi-ux run --dev "pnpm dev --port {port}" --agent claude-code
@@ -38,6 +40,7 @@ import { hasSuccessCheck, presetFor, runFreshEyes, type SuccessCheck } from './f
 import { fileFreshEyesFindings, mintTestAccount, syncFreshEyes, writeTimeline } from './fresh-eyes-report.js'
 import { literalPattern, parseStdinRequest, readStdin, stepsFor, syncsToConsole } from './fresh-eyes-request.js'
 import { runTerminalSetup } from './fresh-eyes-terminal.js'
+import { loadPresets } from './fresh-eyes-presets.js'
 import { DEFAULT_JUDGE_MODEL } from './judge.js'
 import {
   DEFAULT_SCORECARD_MODEL,
@@ -53,6 +56,7 @@ import {
   type ScoreVia,
 } from './scorecard.js'
 import { topCauses } from './scorecard-rubric.js'
+import { UPLOAD_PLATFORMS, UPLOAD_SOURCES, uploadCaptures, type UploadPlatform, type UploadSource } from './upload.js'
 import { cachedProfile, parseChannel } from './profile.js'
 import { agentAccount, studioOptions } from './launcher.js'
 import { listModels } from './models.js'
@@ -520,6 +524,59 @@ program
   )
 
 program
+  .command('upload <dir>')
+  .description('Score screenshots any driver made (Maestro, adb, the iOS simulator, an SDK debug build) on the UX scorecard: <dir>/pages/<screen>/settled.png, plus facts.json, window.xml or hierarchy.json (ADR 0073).')
+  .addOption(new Option('--platform <name>', 'What the screens are from').choices([...UPLOAD_PLATFORMS]).makeOptionMandatory())
+  .option('--device <name>', 'The device or simulator, e.g. "Pixel 8 (API 35)"')
+  .addOption(new Option('--source <driver>', 'The driver that captured them').choices([...UPLOAD_SOURCES]))
+  .option('--app <name>', 'What to call the app in the prompts and the run')
+  .option('--about <text>', 'One line on what the app is and who uses it')
+  .option('--scale <n>', 'Pixels per point of the device (e.g. 3 for most phones), so the viewport is in points; default 1 (pixels)')
+  .option('--viewport <WxH>', 'The run viewport (default: the first screen)')
+  .option('--max-cost <usd>', 'The most this run may spend on server scoring')
+  .option('--no-score', 'Only upload; score later')
+  .option('--file', 'File the top root causes as reports (one per cause, at most 5 a run)')
+  .option('--dry-run', 'With --file: show what would be filed, file nothing')
+  .action(
+    async (dir: string, o: { platform: UploadPlatform; device?: string; source?: UploadSource; app?: string; about?: string; scale?: string; viewport?: string; maxCost?: string; score: boolean; file?: boolean; dryRun?: boolean }) => {
+      const cfg = syncConfigFromEnv()
+      for (const k of ['MUSHI_API_KEY', 'MUSHI_PROJECT_ID', 'MUSHI_API_ENDPOINT']) delete process.env[k]
+      if (!cfg) throw new Error('upload needs MUSHI_API_KEY and MUSHI_PROJECT_ID (run mushi login, or `mushi ux upload`, which passes your login).')
+      const num = (raw: string | undefined, name: string) => {
+        if (raw === undefined) return undefined
+        const n = Number(raw)
+        if (!Number.isFinite(n) || n <= 0) throw new InvalidArgumentError(`${name} must be a positive number, not ${raw}`)
+        return n
+      }
+      const r = await uploadCaptures(cfg, {
+        dir,
+        platform: o.platform,
+        device: o.device,
+        source: o.source,
+        app: o.app,
+        about: o.about,
+        scale: num(o.scale, '--scale'),
+        viewport: o.viewport,
+        maxCostUsd: num(o.maxCost, '--max-cost'),
+        score: o.score,
+        file: o.file,
+        dryRun: o.dryRun,
+        onProgress: (m) => process.stderr.write(`  ${m}\n`),
+      })
+      console.log(
+        `\nRun ${r.runId}: ${r.uploaded} screenshot(s) of ${r.pages} screen(s)` +
+          (r.reservedUsd != null ? `, up to $${r.reservedUsd.toFixed(2)} of AI budget held for scoring` : '') +
+          (o.score ? `; ${r.scored} scored${r.mean != null ? `, average ${r.mean}/10` : ''}, ${r.causes.length} root cause(s).` : '. Not scored (--no-score).'),
+      )
+      for (const e of r.errors) console.warn(`  ${e}`)
+      for (const f of r.filed?.filed ?? []) console.log(`Filed ${f.reportId}: ${f.title}`)
+      for (const w of r.filed?.wouldFile ?? []) console.log(`Would file: ${w.title} (${w.pages} page(s), ${w.patternKey})`)
+      console.log(`On the console: ${r.consoleUrl}`)
+      if (r.errors.length && r.scored === 0 && o.score) process.exitCode = 1
+    },
+  )
+
+program
   .command('explore')
   .description('Let a model use the signed-in app like a careless user, read-only; file only the errors that happen again when its steps are replayed.')
   .requiredOption('--url <url>', 'The live app where your cached session is signed in; sessions start here')
@@ -635,7 +692,8 @@ program
       const goal = req?.goal ?? o.goal
       if (!url || !goal) throw new Error('--url and --goal are required (or --request-stdin).')
       const dryRun = req ? req.dryRun : !!o.dryRun
-      const preset = presetFor(url)
+      // The app's own preset from this machine's presets file (ADR 0073); no app is built in.
+      const preset = presetFor(url, loadPresets())
       const given: SuccessCheck = req
         ? { text: req.successText ? literalPattern(req.successText) : undefined }
         : { url: o.successUrl, text: o.successText, selector: o.successSelector, api: o.successApi }
@@ -659,13 +717,15 @@ program
         goal,
         success,
         sessions,
-        steps: stepsFor(o.steps, !dryRun && (givenAccounts.length > 0 || !!o.mintAccount || !!appAccount)),
+        steps: stepsFor(o.steps, !dryRun && (givenAccounts.length > 0 || !!o.mintAccount || !!appAccount), req?.persona?.steps),
         model: o.model,
         appHosts: [...(preset?.appHosts ?? []), ...o.appHost],
         allow: o.allow,
         dryRun,
         outDir: o.out,
         runId: req?.runId,
+        // The console's persona (ADR 0073): its brief, device, language and needs.
+        persona: req?.persona ?? undefined,
         identity: givenAccounts.length
           ? async (session) => givenAccounts[session - 1] ?? null
           : o.mintAccount && cfg
@@ -673,8 +733,8 @@ program
             : appAccount
               ? async () => appAccount
               : undefined,
-        // Mushi's own path has a CLI step; a queued run with test accounts takes it too.
-        terminal: o.terminal || (req && preset && givenAccounts.length) ? (v) => runTerminalSetup({ ...v, setupCommand: o.setupCommand }) : undefined,
+        // An app whose preset says its setup has a CLI step: a queued run with test accounts takes it too.
+        terminal: o.terminal || (req && preset?.terminal && givenAccounts.length) ? (v) => runTerminalSetup({ ...v, setupCommand: o.setupCommand }) : undefined,
         onProgress: (m) => process.stderr.write(`  ${m}\n`),
       })
       const timeline = writeTimeline(result)

@@ -437,6 +437,19 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     paletteGroup: 'Check',
   },
   {
+    // Project personas (ADR 0073): who a first-time user test plays, and whether it may sign up.
+    id: 'nav:personas',
+    path: '/personas',
+    label: 'Personas',
+    sectionId: 'check',
+    pdcaStage: 'check',
+    checkSubGroup: 'system-health',
+    iconKey: 'members',
+    paletteDescription: 'The kinds of people a first-time user test plays: their device, language, needs, patience and AI budget, and test accounts for your sign-up.',
+    paletteKeywords: ['personas', 'persona', 'user persona', 'visitor profile', 'test persona', 'accessibility persona', 'screen reader', 'test accounts', 'test account hook'],
+    paletteGroup: 'Check',
+  },
+  {
     id: 'nav:inventory',
     path: '/inventory',
     label: 'User stories',

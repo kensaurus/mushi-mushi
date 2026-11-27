@@ -6,7 +6,8 @@ import { requireConfig } from '../cli-shared.js'
 import { loadConfig } from '../config.js'
 
 /** `mushi ux …` runs the `mushi-ux` bin of @mushi-mushi/ux (kept out of this CLI: it ships Playwright). MUSHI_UX_BIN = local build. */
-const UX_PACKAGE = '@mushi-mushi/ux@^0.3.0'
+// The ux minor that has `upload` and plays personas (ADR 0073); a daemon that says it forwards a persona must run it.
+const UX_PACKAGE = '@mushi-mushi/ux@^0.5.0'
 
 interface UxSpawn {
   cmd: string

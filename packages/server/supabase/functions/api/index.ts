@@ -864,6 +864,14 @@ forwardToApiExt([
   '/v1/admin/projects/:pid/timeline/settings',
   '/v1/admin/projects/:pid/timeline/run-plan',
 ]);
+// UX captures from any driver (ux-captures.ts, ADR 0073) and project personas and test
+// accounts (personas.ts, ADR 0073).
+forwardToApiExt([
+  '/v1/ux/captures',
+  '/v1/admin/projects/:pid/personas',
+  '/v1/admin/projects/:pid/personas/:id',
+  '/v1/admin/projects/:pid/test-accounts',
+]);
 registerPullRequestRoutes(app);
 registerProjectGroupRoutes(app);
 registerBootstrapRoutes(app);

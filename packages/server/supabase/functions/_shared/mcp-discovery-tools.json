@@ -3990,6 +3990,26 @@
         ]
       }
     },
+    "list_personas": {
+      "title": "List the app’s personas",
+      "description": "Return the user profiles a first-time user test or a PDCA critic can play for one project (ADR 0073): each persona { id, name, goal, locale, device (desktop | mobile | tablet), expertise (new | casual | power), accessibility (screen_reader, low_vision, keyboard_only, reduced_motion, color_blind, motor, plain_language), patienceSteps (the step cap), costCapUsd (the most one test may spend on Mushi Mushi's AI calls), brief (the words the visitor model reads), runs (its last 12 tests: status, ttfv_seconds, reached, steps) }, plus presets, the test-account setting { mode: off | mushi | hook } and the AI budget { monthlyUsd, spentUsd, heldUsd }. Optional projectId. Read-only.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "List the app’s personas",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
+            "type": "string"
+          }
+        }
+      }
+    },
     "list_portfolio_findings": {
       "title": "Portfolio findings — fix once",
       "description": "Return what to fix across the apps of one organization: groups of the same finding rule open in two or more projects (rule, gate, highest severity, affected projectIds, a sample message and one paste-ready fix prompt), the Mushi SDK version per project and package (current | behind | unknown), and integrations most sibling projects have but one lacks. Open means the latest completed gate run per project and gate, not allowlisted; info findings are left out. Optional organizationId as for get_portfolio. Needs an account-level key. Returns { organizationId, groups, sdkSkew, holes, crossProject, readErrors }; a part named in readErrors is unknown, not empty. Read-only. Fix a group repo by repo with list_gate_findings in each project.",
@@ -5887,6 +5907,56 @@
         }
       }
     },
+    "start_fresh_eyes": {
+      "title": "Start a first-time user test",
+      "description": "Queue a first-time user test (fresh eyes, ADR 0053) for the user's own local worker: an AI that has never seen the app tries one goal from its start page while Mushi Mushi times every step and notes where it got stuck. Optional personaId (from list_personas: the visitor's device, language, needs and step cap), url (default: the app's known address), goal (default: the persona's goal, else the last one, else \"sign up and start using the app\"), sessions (1–5, default 3), successText (words on screen that mean the goal was reached), dryRun (true: look around only, file nothing; false, the default, files what stops the visitor as reports) and projectId. It never signs up with test accounts: only an owner or admin can grant those, from the console. Answers 409 NO_WORKER with the one thing to do when no computer of the user's can run it, 402 when the AI budget cannot cover the run, 404 PERSONA_NOT_FOUND. Returns { runId, status: \"queued\", runner, personaId, reservedUsd }. Write: it queues a run that may file reports. The result shows on the console's First-time user test page.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Start a first-time user test",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
+            "type": "string"
+          },
+          "personaId": {
+            "description": "A persona id from list_personas",
+            "type": "string"
+          },
+          "url": {
+            "description": "The start page (default: the app's known address)",
+            "type": "string",
+            "maxLength": 500
+          },
+          "goal": {
+            "description": "What the visitor came to do (default: the persona's goal, else the last one)",
+            "type": "string",
+            "maxLength": 300
+          },
+          "sessions": {
+            "description": "Visitors, 1-5 (default 3)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "successText": {
+            "description": "Words on screen that mean the goal was reached",
+            "type": "string",
+            "maxLength": 120
+          },
+          "dryRun": {
+            "description": "Look around only and file nothing",
+            "type": "boolean"
+          }
+        }
+      }
+    },
     "start_skill_pipeline": {
       "title": "Start a skill pipeline",
       "description": "Start a new skill pipeline run for a report. Pass rootSkillSlug and optionally reportId. Returns run_id, context_packet (full instructions + report context), and step list. Read the context_packet — it contains skill instructions plus full report context (repro steps, root cause, RAG files). After executing each step, call checkin_pipeline_step. The PM watching the console sees progress live.",
@@ -6772,6 +6842,116 @@
           "dispatched"
         ],
         "additionalProperties": false
+      }
+    },
+    "upload_ux_captures": {
+      "title": "Upload app screenshots to the UX scorecard",
+      "description": "Open a UX scorecard run for screens another driver captured (a Maestro flow, adb screencap, the iOS simulator, an SDK debug build or a browser), so each screen is scored on the same written rubric as a web page (ADR 0073). platform is ios | android | flutter | react_native | capacitor | web | other; optional device (\"Pixel 8 (API 35)\"), source (maestro | adb | simctl | sdk | playwright | other), app (a name), viewport (\"390x844\"), maxCostUsd (0.05–20, caps the scoring budget the run reserves) and projectId. pages is 1 to 60 of { facts, shots }: facts are the scorecard page facts { key, path (starts with /), label, title, headings, text, controls, settleMs (null), axe (null), overflowX, consoleErrors, cls, viewport { width, height } } and shots is [\"settled\"] or [\"early\", \"settled\"]. Returns { runId, reservedUsd, uploads: [{ page, name, signedUrl }], next }: PUT each PNG (Content-Type image/png, at most 8 MB) to its signedUrl, then score each page with POST next.score { facts, shots: [name] }, group with POST next.group, and close the run with PUT next.finish. On the stdio server, dir instead reads <dir>/pages/<screen>/settled.png (plus early.png, facts.json, an Android window.xml or a Maestro hierarchy.json) and does the uploads itself; score=true also scores, groups and closes the run. Refused with 402 when the AI budget cannot cover the run. Viewers cannot upload. Write: it stores screenshots and a run; nothing in the app or repo changes.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Upload app screenshots to the UX scorecard",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
+            "type": "string"
+          },
+          "platform": {
+            "type": "string",
+            "enum": [
+              "ios",
+              "android",
+              "flutter",
+              "react_native",
+              "capacitor",
+              "web",
+              "other"
+            ],
+            "description": "What the screens are from"
+          },
+          "device": {
+            "description": "The device or simulator, e.g. \"Pixel 8 (API 35)\"",
+            "type": "string",
+            "maxLength": 120
+          },
+          "source": {
+            "description": "The driver that captured them",
+            "type": "string",
+            "enum": [
+              "maestro",
+              "adb",
+              "simctl",
+              "sdk",
+              "playwright",
+              "other"
+            ]
+          },
+          "app": {
+            "description": "What to call the app",
+            "type": "string",
+            "maxLength": 120
+          },
+          "viewport": {
+            "description": "WIDTHxHEIGHT, e.g. 390x844 (default: the first screen)",
+            "type": "string"
+          },
+          "maxCostUsd": {
+            "description": "The most the run may spend on server scoring",
+            "type": "number",
+            "minimum": 0.05,
+            "maximum": 20
+          },
+          "pages": {
+            "description": "The screens: { facts, shots }. Omit when dir is given.",
+            "maxItems": 60,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "facts": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                },
+                "shots": {
+                  "minItems": 1,
+                  "maxItems": 2,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "early",
+                      "settled"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "facts",
+                "shots"
+              ]
+            }
+          },
+          "dir": {
+            "description": "stdio only: a folder with pages/<screen>/settled.png (+ early.png, facts.json); uploads the PNGs too",
+            "type": "string"
+          },
+          "score": {
+            "description": "With dir: score each screen, group the causes and close the run",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "platform"
+        ]
       }
     },
     "use_mushi": {

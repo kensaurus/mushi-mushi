@@ -246,6 +246,15 @@
       "content_hash": "1ca9fa773b9f3a2251152952172ebdddafcecbefa4604c5582e2d24f34242d8f"
     },
     {
+      "doc_path": "pages/personas.md",
+      "section": "main",
+      "title": "Personas",
+      "body": "# Personas\n\nThe kinds of people a first-time user test plays: their device, language, needs, patience and AI budget, and test accounts for your sign-up.\n\nRoute: /personas\nSection: Check\n\nKeywords: personas, persona, user persona, visitor profile, test persona, accessibility persona, screen reader, test accounts, test account hook\n\nUse this page when the user asks about: personas, persona, user persona, visitor profile, test persona, accessibility persona",
+      "route_path": "/personas",
+      "kind": "page",
+      "content_hash": "c1a60aef78375619884ce5914d23589bbda7f9ddef404c2927b8fa4cf721670f"
+    },
+    {
       "doc_path": "pages/inventory.md",
       "section": "main",
       "title": "User stories",

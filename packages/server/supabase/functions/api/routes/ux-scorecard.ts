@@ -73,6 +73,7 @@ import {
   UxScorecardFacts,
   UxScorecardSnapshot,
 } from '../../_shared/ux-scorecard-io.ts'
+import { chargeRunBudget, refundRunBudget, releaseRunBudget, RUN_BUDGET_SPENT_MESSAGE, UX_GROUP_CALL_RESERVE_USD, UX_SCORE_CALL_RESERVE_USD } from '../../_shared/llm-reservations.ts'
 import { callerCanAccessProject, dbError, jsonError } from '../shared.ts'
 
 const slog = log.child('ux-scorecard')
@@ -113,6 +114,18 @@ async function scorecardRun(c: Ctx, db: Db, projectId: string, localRunId: strin
   if (error) return dbError(c, error)
   if (!data || (data as { kind: string }).kind !== 'scorecard') return jsonError(c, 'NOT_FOUND', 'Sync the scorecard run (PUT) first.', 404)
   return data as { id: string; start_url: string | null; findings: unknown }
+}
+
+/**
+ * Charge one model call to the run's reservation (ADR 0073), or the refusal
+ * to send. A run with no reservation (a CLI scorecard scored on the server,
+ * or one started before reservations) goes on under the monthly budget alone.
+ */
+async function chargeOrRefuse(c: Ctx, db: Db, runRowId: string, usd: number): Promise<Response | null> {
+  const charged = await chargeRunBudget(db, runRowId, usd)
+  if (charged === 'spent') return jsonError(c, 'RUN_BUDGET_SPENT', RUN_BUDGET_SPENT_MESSAGE, 402)
+  if (charged === 'unavailable') return jsonError(c, 'RUN_BUDGET_UNAVAILABLE', 'The run’s AI budget could not be read, so the page was not scored. Retry in a minute.', 503)
+  return null
 }
 
 /** Pattern keys of the app's open scorecard reports. */
@@ -191,6 +204,11 @@ export function registerUxScorecardRoutes(app: Hono<{ Variables: Variables }>): 
         if (sErr) return dbError(c, sErr)
       }
     }
+    // A run that ended gives back the scoring budget it reserved and did not use (ADR 0073).
+    if (parsed.data.status !== 'running') {
+      const freed = await releaseRunBudget(db, runRowId)
+      if (freed === null) slog.warn('scorecard reservation not released', { projectId: a.projectId, run: a.localRunId })
+    }
     return c.json({ ok: true, data: { id: runRowId } })
   })
 
@@ -265,11 +283,17 @@ export function registerUxScorecardRoutes(app: Hono<{ Variables: Variables }>): 
         return c.json({ ok: true, data: { score: reused, model: null, cached: true, cost_usd: 0 } })
       }
     }
+    // A cached verdict costs nothing, so the run's reservation is charged only for a model call.
+    const budgetRefusal = await chargeOrRefuse(c, db, run.id, UX_SCORE_CALL_RESERVE_USD)
+    if (budgetRefusal) return budgetRefusal
     const paths = shotNames.map((n) => scorecardShotPath(a.projectId, run.id, n)).filter((p): p is string => !!p)
     const images: string[] = []
     if (paths.length) {
       const { data: signed, error: signErr } = await db.storage.from(UX_CAPTURES_BUCKET).createSignedUrls(paths, READ_URL_TTL_SEC)
-      if (signErr) return jsonError(c, 'UPSTREAM_ERROR', 'Could not read the page screenshots. Upload them, then retry.', 502)
+      if (signErr) {
+        await refundRunBudget(db, run.id, UX_SCORE_CALL_RESERVE_USD)
+        return jsonError(c, 'UPSTREAM_ERROR', 'Could not read the page screenshots. Upload them, then retry.', 502)
+      }
       for (const s of signed ?? []) if (s.signedUrl) images.push(toPublicSupabaseUrl(s.signedUrl))
     }
     const system = pageSystemPrompt()
@@ -305,10 +329,15 @@ export function registerUxScorecardRoutes(app: Hono<{ Variables: Variables }>): 
       usedModel = routed.model ?? (routed.usedProvider === 'openai' ? SCORECARD_FALLBACK : SCORECARD_MODEL)
     } catch (err) {
       slog.warn('page not scored', { projectId: a.projectId, run: a.localRunId, page: facts.key, err: String(err).slice(0, 300) })
+      // A failed call gives its charge back, so the retry does not eat the grouping's budget.
+      await refundRunBudget(db, run.id, UX_SCORE_CALL_RESERVE_USD)
       return jsonError(c, 'LLM_UNAVAILABLE', 'The page could not be scored right now. Retry in a minute.', 503)
     }
     const parsed = parsePageAnswer(text, facts)
-    if (!parsed.ok) return jsonError(c, 'LLM_BAD_ANSWER', parsed.error, 502)
+    if (!parsed.ok) {
+      await refundRunBudget(db, run.id, UX_SCORE_CALL_RESERVE_USD)
+      return jsonError(c, 'LLM_BAD_ANSWER', parsed.error, 502)
+    }
     const priced = await priceLlmCall({ model: usedModel, inputTokens: tokens.inputTokens, outputTokens: tokens.outputTokens })
     const { error } = await db
       .from('ux_surfaces')
@@ -333,6 +362,8 @@ export function registerUxScorecardRoutes(app: Hono<{ Variables: Variables }>): 
     let causes: UxCause[] = base
     let modelUsed: string | null = null
     if (read.pages.length >= 2) {
+      const budgetRefusal = await chargeOrRefuse(c, db, run.id, UX_GROUP_CALL_RESERVE_USD)
+      if (budgetRefusal) return budgetRefusal
       const prompt = groupingPrompt(read.pages, prior)
       const usage = (model: string, keySource: 'byok' | 'env') => ({ functionName: 'api', stage: `${FEATURE}-group`, projectId: a.projectId, model, keySource, promptVersion: UX_SCORECARD_PROMPT_VERSION })
       try {
@@ -356,6 +387,7 @@ export function registerUxScorecardRoutes(app: Hono<{ Variables: Variables }>): 
         modelUsed = routed.model ?? null
       } catch (err) {
         // The code's grouping still stands: shared causes and evidence matches need no model.
+        await refundRunBudget(db, run.id, UX_GROUP_CALL_RESERVE_USD)
         slog.warn('cross-page pass failed; keeping the code grouping', { projectId: a.projectId, run: a.localRunId, err: String(err).slice(0, 300) })
       }
     }
@@ -463,7 +495,7 @@ export function registerUxScorecardRoutes(app: Hono<{ Variables: Variables }>): 
     if (!access.allowed) return jsonError(c, 'FORBIDDEN', 'Not a member of this project', 403)
     const { data: runs, error } = await db
       .from('ux_runs')
-      .select('id, local_run_id, status, model, start_url, detail, counts, findings, started_at, finished_at, error')
+      .select('id, local_run_id, status, model, start_url, detail, counts, findings, started_at, finished_at, error, platform, device, capture_source')
       .eq('project_id', projectId)
       .eq('kind', 'scorecard')
       .order('started_at', { ascending: false })

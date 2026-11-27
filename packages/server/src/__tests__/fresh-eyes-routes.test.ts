@@ -86,13 +86,20 @@ class FakeApp {
   }
 }
 
-function setup(opts: { rpcError?: string | null; failInsert?: string } = {}): { db: FakeDb; app: FakeApp } {
+function setup(opts: { rpcError?: string | null; failInsert?: string; budgetFull?: boolean; capSpent?: boolean; mushiAccounts?: boolean } = {}): { db: FakeDb; app: FakeApp } {
   const db = makeFakeDb(
-    { ux_runs: [], reports: [], metric_series: [], synthetic_accounts: [], operator_users: [], usage_events: [] },
+    { ux_runs: [], reports: [], metric_series: [], synthetic_accounts: [], operator_users: [], usage_events: [], project_settings: opts.mushiAccounts ? [{ project_id: P, fresh_eyes_accounts: 'mushi' }] : [] },
     {
       autoId: true,
       uniques: { ux_runs: ['project_id', 'local_run_id'], synthetic_accounts: ['user_id'], operator_users: ['user_id'] },
       rpcError: (fn) => (fn === 'scoped_rate_limit_claim' && opts.rpcError ? { code: 'P0001', message: opts.rpcError } : null),
+      // The run's budget reservation (ADR 0073): held unless the test says the budget is full.
+      rpc: (fn, args) => {
+        if (fn === 'reserve_llm_run_budget') return opts.budgetFull ? [{ ok: false, reservation_id: null, held_elsewhere_usd: 4.5 }] : [{ ok: true, reservation_id: `res-${String(args.p_ux_run_id)}`, held_elsewhere_usd: 0 }]
+        if (fn === 'charge_llm_run_reservation') return opts.capSpent ? false : true
+        if (fn === 'release_llm_run_reservation') return 0.3
+        return null
+      },
     },
   )
   const anyDb = db as unknown as Record<string, unknown>
@@ -141,30 +148,30 @@ const operatorJwt: Caller = { userId: OPERATOR, authMethod: 'jwt' }
 
 describe('POST /v1/admin/fresh-eyes/test-account', () => {
   it('refuses anyone who is not an operator', async () => {
-    const { app } = setup()
-    const r = await app.call('POST', MINT, {}, {}, { userId: 'someone-else', authMethod: 'jwt' })
+    const { app } = setup({ mushiAccounts: true })
+    const r = await app.call('POST', MINT, {}, { projectId: P }, { userId: 'someone-else', authMethod: 'jwt' })
     expect(r.status).toBe(403)
     expect(state.created).toHaveLength(0)
   })
 
   it('refuses a key bound to one project, even an operator key', async () => {
-    const { app } = setup()
-    expect((await app.call('POST', MINT, {}, {}, { userId: OPERATOR, authMethod: 'apiKey', isOrgScopedKey: false })).status).toBe(403)
-    expect((await app.call('POST', MINT, {}, {}, { userId: OPERATOR, authMethod: 'apiKey', isOrgScopedKey: true, keyAllowedProjectIds: [P] })).status).toBe(403)
+    const { app } = setup({ mushiAccounts: true })
+    expect((await app.call('POST', MINT, {}, { projectId: P }, { userId: OPERATOR, authMethod: 'apiKey', isOrgScopedKey: false })).status).toBe(403)
+    expect((await app.call('POST', MINT, {}, { projectId: P }, { userId: OPERATOR, authMethod: 'apiKey', isOrgScopedKey: true, keyAllowedProjectIds: [P] })).status).toBe(403)
     expect(state.created).toHaveLength(0)
   })
 
   it('refuses a synthetic account', async () => {
-    const { db, app } = setup()
+    const { db, app } = setup({ mushiAccounts: true })
     db.tables.synthetic_accounts!.push({ user_id: OPERATOR, email: 'x', expires_at: new Date().toISOString() })
-    const r = await app.call('POST', MINT, {}, {}, operatorJwt)
+    const r = await app.call('POST', MINT, {}, { projectId: P }, operatorJwt)
     expect(r.status).toBe(403)
     expect(r.body.error?.message).toMatch(/cannot mint/)
   })
 
   it('makes a confirmed, flagged account, lists it for exclusion and returns the password once', async () => {
-    const { db, app } = setup()
-    const r = await app.call('POST', MINT, {}, {}, operatorJwt)
+    const { db, app } = setup({ mushiAccounts: true })
+    const r = await app.call('POST', MINT, {}, { projectId: P }, operatorJwt)
     expect(r.status).toBe(200)
     const created = state.created[0]!
     expect(created.email_confirm).toBe(true)
@@ -181,15 +188,26 @@ describe('POST /v1/admin/fresh-eyes/test-account', () => {
   })
 
   it('deletes the account again when it cannot be flagged', async () => {
-    const { app } = setup({ failInsert: 'synthetic_accounts' })
-    const r = await app.call('POST', MINT, {}, {}, operatorJwt)
+    const { app } = setup({ failInsert: 'synthetic_accounts', mushiAccounts: true })
+    const r = await app.call('POST', MINT, {}, { projectId: P }, operatorJwt)
     expect(r.status).toBe(500)
     expect(state.deleted).toEqual(['2a000000-0000-4000-8000-000000000001'])
   })
 
+  it('mints only for an app that opted in to accounts in this Mushi (ADR 0073), and names the app', async () => {
+    const off = setup()
+    expect((await off.app.call('POST', MINT, {}, { projectId: P }, operatorJwt)).body.error?.code).toBe('TEST_ACCOUNT_UNAVAILABLE')
+    off.db.tables.project_settings = [{ project_id: P, fresh_eyes_accounts: 'hook' }]
+    const hook = await off.app.call('POST', MINT, {}, { projectId: P }, operatorJwt)
+    expect(hook.body.error?.message).toContain('its hook')
+    expect((await off.app.call('POST', MINT, {}, {}, operatorJwt)).status).toBe(400)
+    expect((await off.app.call('POST', MINT, {}, { projectId: OTHER }, operatorJwt)).status).toBe(403)
+    expect(state.created).toHaveLength(0)
+  })
+
   it('answers 429 past the hourly cap and makes nothing', async () => {
-    const { app } = setup({ rpcError: 'rate_limit_exceeded' })
-    const r = await app.call('POST', MINT, {}, {}, operatorJwt)
+    const { app } = setup({ rpcError: 'rate_limit_exceeded', mushiAccounts: true })
+    const r = await app.call('POST', MINT, {}, { projectId: P }, operatorJwt)
     expect(r.status).toBe(429)
     expect(state.created).toHaveLength(0)
   })
@@ -379,14 +397,25 @@ describe('Run now', () => {
     expect(JSON.stringify(r.body.data)).not.toContain('kensaur.us/mushi-mushi')
   })
 
-  it("offers Mushi's own landing, goal and test accounts only to an operator on Mushi", async () => {
-    const { app } = setup()
+  it("offers Mushi's own landing and goal on Mushi; test accounts only where the app opted in (ADR 0073)", async () => {
+    const { db, app } = setup()
     state.members = new Set([P, SELF])
     const r = await app.call('GET', LIST, { pid: SELF }, undefined, { userId: OPERATOR, authMethod: 'jwt' })
     expect(r.body.data?.defaults).toMatchObject({ url: 'https://kensaur.us/mushi-mushi/', urlSource: 'mushi', goal: 'get my first bug explained' })
-    expect(r.body.data?.canUseTestAccount).toBe(true)
-    const other = await app.call('GET', LIST, { pid: SELF }, undefined, { userId: 'u1', authMethod: 'jwt' })
-    expect(other.body.data?.canUseTestAccount).toBe(false)
+    // Not opted in: no test accounts, even for an operator on Mushi, and the panel says why.
+    expect(r.body.data?.canUseTestAccount).toBe(false)
+    expect(r.body.data?.testAccounts).toMatchObject({ mode: 'off' })
+    expect(String((r.body.data?.testAccounts as { unavailable?: string }).unavailable)).toContain('off for this app')
+    // Any app with its own hook: its owner or admin may grant them.
+    db.tables.project_settings = [{ project_id: P, fresh_eyes_accounts: 'hook' }]
+    expect((await app.call('GET', LIST, { pid: P }, undefined, { userId: 'u1', authMethod: 'jwt' })).body.data?.canUseTestAccount).toBe(true)
+    state.role = 'member'
+    expect((await app.call('GET', LIST, { pid: P }, undefined, { userId: 'u1', authMethod: 'jwt' })).body.data?.canUseTestAccount).toBe(false)
+    state.role = 'admin'
+    // Mushi's own sign-in: operators only.
+    db.tables.project_settings.push({ project_id: SELF, fresh_eyes_accounts: 'mushi' })
+    expect((await app.call('GET', LIST, { pid: SELF }, undefined, { userId: OPERATOR, authMethod: 'jwt' })).body.data?.canUseTestAccount).toBe(true)
+    expect((await app.call('GET', LIST, { pid: SELF }, undefined, { userId: 'u1', authMethod: 'jwt' })).body.data?.canUseTestAccount).toBe(false)
   })
 
   it('says plainly when no computer can run it, and queues nothing', async () => {
@@ -427,23 +456,77 @@ describe('Run now', () => {
     expect(third.body.error?.code).toBe('ALREADY_RUNNING')
   })
 
-  it('grants a test account only to an operator session on Mushi, and stores no password', async () => {
+  it('grants test accounts only where the app opted in, from an owner or admin console session, and stores no password', async () => {
     const { db, app } = setup()
     state.members = new Set([P, SELF])
-    withWorker(db, SELF, { owner: OPERATOR })
-    const acct = { url: 'https://kensaur.us/mushi-mushi/', goal: 'get my first bug explained', withAccount: true }
+    withWorker(db, P, { owner: 'u1' })
+    const acct = { url: 'https://glot.it/', goal: 'sign up and pick a language', withAccount: true }
+    // Not opted in.
+    expect((await app.call('POST', LIST, { pid: P }, acct, { userId: 'u1', authMethod: 'jwt' })).body.error?.code).toBe('TEST_ACCOUNT_UNAVAILABLE')
+    db.tables.project_settings = [{ project_id: P, fresh_eyes_accounts: 'hook' }, { project_id: SELF, fresh_eyes_accounts: 'mushi' }]
+    // Never through an API key (no agent or MCP tool grants accounts), never by a member.
+    expect((await app.call('POST', LIST, { pid: P }, acct, { userId: 'u1', authMethod: 'apiKey', isOrgScopedKey: true })).body.error?.code).toBe('TEST_ACCOUNT_UNAVAILABLE')
+    state.role = 'member'
+    expect((await app.call('POST', LIST, { pid: P }, acct, { userId: 'u1', authMethod: 'jwt' })).body.error?.code).toBe('TEST_ACCOUNT_UNAVAILABLE')
+    state.role = 'admin'
+    // Mushi's own sign-in: an operator only.
+    withWorker(db, SELF, { owner: 'u1' })
     expect((await app.call('POST', LIST, { pid: SELF }, acct, { userId: 'u1', authMethod: 'jwt' })).body.error?.code).toBe('TEST_ACCOUNT_UNAVAILABLE')
-    expect((await app.call('POST', LIST, { pid: SELF }, acct, { userId: OPERATOR, authMethod: 'apiKey', isOrgScopedKey: true })).body.error?.code).toBe('TEST_ACCOUNT_UNAVAILABLE')
-    withWorker(db, P, { owner: OPERATOR })
-    expect((await app.call('POST', LIST, { pid: P }, acct, { userId: OPERATOR, authMethod: 'jwt' })).body.error?.code).toBe('TEST_ACCOUNT_UNAVAILABLE')
-    withWorker(db, SELF, { owner: OPERATOR })
-    const ok = await app.call('POST', LIST, { pid: SELF }, acct, { userId: OPERATOR, authMethod: 'jwt' })
+    withWorker(db, P, { owner: 'u1' })
+    const ok = await app.call('POST', LIST, { pid: P }, acct, { userId: 'u1', authMethod: 'jwt' })
     expect(ok.status).toBe(201)
-    const row = db.tables.ux_runs!.find((r) => r.project_id === SELF)!
-    expect(row).toMatchObject({ has_account: true, account_granted_by: OPERATOR })
+    const row = db.tables.ux_runs!.find((r) => r.project_id === P)!
+    expect(row).toMatchObject({ has_account: true, account_granted_by: 'u1' })
     expect(Date.parse(String(row.account_grant_until)) - Date.now()).toBeLessThanOrEqual(2 * 3_600_000)
     expect(state.created).toHaveLength(0)
     expect(Object.keys(row).some((k) => /password/i.test(k))).toBe(false)
+  })
+
+  it('plays a persona of the app only, and holds the run budget before it exists (ADR 0073)', async () => {
+    const { db, app } = setup()
+    withWorker(db, P)
+    const PERSONA = '5a000000-0000-4000-8000-000000000001'
+    const run = { url: 'https://glot.it/', goal: 'sign up', personaId: PERSONA }
+    // Unknown (or another app's) persona: nothing queued.
+    const missing = await app.call('POST', LIST, { pid: P }, run, { authMethod: 'jwt' })
+    expect(missing.status).toBe(404)
+    expect(missing.body.error?.code).toBe('PERSONA_NOT_FOUND')
+    db.tables.project_personas = [{ id: PERSONA, project_id: OTHER, name: 'Elsewhere', archived_at: null }]
+    expect((await app.call('POST', LIST, { pid: P }, run, { authMethod: 'jwt' })).status).toBe(404)
+    db.tables.project_personas = [
+      { id: PERSONA, project_id: P, name: 'Impatient phone user', preset: 'impatient_mobile', goal: null, locale: 'en-US', device: 'mobile', expertise: 'casual', accessibility: ['reduced_motion'], patience_steps: 12, cost_cap_usd: 0.1, notes: null, created_at: '', updated_at: '', archived_at: null },
+    ]
+    const ok = await app.call('POST', LIST, { pid: P }, run, { authMethod: 'jwt' })
+    expect(ok.status).toBe(201)
+    const row = db.tables.ux_runs![0]!
+    expect(row.persona_id).toBe(PERSONA)
+    // The persona's cost cap ($0.10) caps the reservation (filing estimate $0.30), and it is made for this row.
+    const reserve = db.rpcCalls.find((c) => c.fn === 'reserve_llm_run_budget')!
+    expect(reserve.args).toMatchObject({ p_project_id: P, p_ux_run_id: row.id, p_kind: 'fresh_eyes', p_usd: 0.1 })
+    expect(ok.body.data).toMatchObject({ personaId: PERSONA, reservedUsd: 0.1 })
+    // Cancelling gives it back.
+    await app.call('POST', CANCEL, { pid: P, runId: String(row.local_run_id) }, undefined, { authMethod: 'jwt' })
+    expect(db.rpcCalls.some((c) => c.fn === 'release_llm_run_reservation' && c.args.p_ux_run_id === row.id)).toBe(true)
+  })
+
+  it('queues nothing when the AI budget cannot cover the run; a look-around run holds none', async () => {
+    const { db, app } = setup({ budgetFull: true })
+    withWorker(db, P)
+    const full = await app.call('POST', LIST, { pid: P }, { url: 'https://glot.it/', goal: 'sign up' }, { authMethod: 'jwt' })
+    expect(full.status).toBe(402)
+    expect(full.body.error?.code).toBe('RUN_BUDGET_RESERVED')
+    expect(full.body.error?.message).toContain('Raise the monthly budget')
+    expect(db.tables.ux_runs).toHaveLength(0)
+    expect((await app.call('POST', LIST, { pid: P }, body, { authMethod: 'jwt' })).status).toBe(201)
+  })
+
+  it('fills the start page and goal an agent left out, as the console would', async () => {
+    const { db, app } = setup()
+    withWorker(db, P)
+    db.tables.site_watches = [{ project_id: P, base_url: 'https://glot.it' }]
+    const r = await app.call('POST', LIST, { pid: P }, { dryRun: true }, { authMethod: 'apiKey' })
+    expect(r.status).toBe(201)
+    expect(db.tables.ux_runs![0]).toMatchObject({ start_url: 'https://glot.it/', goal: 'sign up and start using the app' })
   })
 
   it('cancels a waiting run, never one a computer started', async () => {

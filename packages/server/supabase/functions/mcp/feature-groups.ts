@@ -185,6 +185,10 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   list_qa_story_runs: 'qa',
   get_qa_story_run: 'qa',
   test_notification_channel: 'qa',
+  // Native UX captures and personas (ADR 0073)
+  upload_ux_captures: 'qa',
+  list_personas: 'qa',
+  start_fresh_eyes: 'qa',
 
   // skills
   list_skills: 'skills',

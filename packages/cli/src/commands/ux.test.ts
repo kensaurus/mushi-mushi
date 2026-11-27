@@ -40,7 +40,7 @@ describe('mushi ux', () => {
     expect(call?.argv.slice(1)).toEqual([
       '--yes',
       '--package',
-      '@mushi-mushi/ux@^0.3.0',
+      '@mushi-mushi/ux@^0.5.0',
       'mushi-ux',
       'run',
       '--dev',

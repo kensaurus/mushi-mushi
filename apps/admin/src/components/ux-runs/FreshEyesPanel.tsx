@@ -11,8 +11,9 @@
  *
  *          The start page and goal come from the app itself (its last test,
  *          its live-site watch or site audit address); test accounts are
- *          offered only where they can work (Mushi's own project, for its
- *          operators). The server decides both.
+ *          offered only where the app turned them on and the caller may grant
+ *          them (ADR 0073). The server decides both. A test can play one of
+ *          the app's personas (/personas); ?persona=<id> picks it.
  *
  *          Layout (2026-11-19): a status block leads (the computer as a state
  *          mark, one sentence, the last test's numbers, and the fix command
@@ -26,12 +27,15 @@
  */
 
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Btn, Callout, Card, CodeValue, EmptyState, Input, Loading, SegmentedControl, Sparkline } from '../ui'
 import { formatRelative } from '../ui/metrics'
 import { PageLoadError } from '../PageLoadError'
 import { PageStatus, toMetrics, type PageStatusMetric } from '../ui/page-status'
 import { StatusMark, StatusPill, STATUS_WORD, type RunStatus } from '../signal/StatusMark'
+import { PersonaAvatar } from '../personas/PersonaAvatar'
+import { PersonaPicker } from '../personas/PersonaPicker'
+import { formatUsd } from '../../lib/personas'
 import { usePageData } from '../../lib/usePageData'
 import { useRealtimeReload } from '../../lib/realtime'
 import { apiFetch } from '../../lib/supabase'
@@ -49,6 +53,7 @@ import {
   stepNotes,
   ttfvTrend,
   type FreshEyesListData,
+  type FreshEyesPersona,
   type FreshEyesRunDetail,
   type FreshEyesRunListItem,
   type FreshEyesRunner,
@@ -73,6 +78,8 @@ export function FreshEyesPanel({ projectId }: { projectId: string }) {
   // The numbers come from the newest finished test that could sign up: a look-around test stops at sign-up by design (Home and the trend leave it out too).
   const latest = runs.find((r) => r.status === 'done' && !r.dry_run) ?? null
   const trend = ttfvTrend(list.data?.trend ?? [])
+  const personas = list.data?.personas ?? []
+  const personaOf = (id: string | null | undefined) => (id ? (personas.find((p) => p.id === id) ?? null) : null)
 
   return (
     <div className="flex flex-col gap-3" data-testid="fresh-eyes-panel">
@@ -108,13 +115,15 @@ export function FreshEyesPanel({ projectId }: { projectId: string }) {
             )}
             <ul className="flex flex-col divide-y divide-edge-subtle rounded-sm border border-edge-subtle bg-surface-raised" data-testid="fresh-eyes-history">
               {runs.map((r) => (
-                <RunHistoryRow key={r.local_run_id} run={r} current={r.local_run_id === runId} onPick={() => setChosen(r.local_run_id)} />
+                <RunHistoryRow key={r.local_run_id} run={r} persona={personaOf(r.persona_id)} current={r.local_run_id === runId} onPick={() => setChosen(r.local_run_id)} />
               ))}
             </ul>
           </nav>
           <div className="flex min-w-0 flex-1 flex-col gap-3">
             {detail.error && <PageLoadError error={detail.error} resource="this test" endpoint={`${listPath}/${runId}`} onRetry={detail.reload} />}
-            {detail.data && <FreshEyesRunView key={runId ?? ''} projectId={projectId} detail={detail.data} runner={list.data?.runner ?? null} onChanged={list.reload} />}
+            {detail.data && (
+              <FreshEyesRunView key={runId ?? ''} projectId={projectId} detail={detail.data} persona={personaOf(detail.data.run.persona_id)} runner={list.data?.runner ?? null} onChanged={list.reload} />
+            )}
           </div>
         </div>
       )}
@@ -199,7 +208,7 @@ function FreshEyesStatus({ data, latest, runCount }: { data: FreshEyesListData; 
 }
 
 /** One test in the history: a state mark, when, and the result in one line. */
-function RunHistoryRow({ run: r, current, onPick }: { run: FreshEyesRunListItem; current: boolean; onPick: () => void }) {
+function RunHistoryRow({ run: r, persona, current, onPick }: { run: FreshEyesRunListItem; persona: FreshEyesPersona | null; current: boolean; onPick: () => void }) {
   const mark: RunStatus = runMark(r)
   const headline = runHeadline(r)
   return (
@@ -217,6 +226,12 @@ function RunHistoryRow({ run: r, current, onPick }: { run: FreshEyesRunListItem;
             <span className="font-semibold text-fg">{formatRelative(r.started_at)}</span>
             {r.dry_run ? <span className="rounded-xs border border-edge-subtle px-1 text-3xs text-fg-secondary">Look around</span> : null}
           </span>
+          {persona && (
+            <span className="mt-0.5 flex min-w-0 items-center gap-1 text-2xs text-fg-secondary" data-testid="fresh-eyes-history-persona">
+              <PersonaAvatar persona={persona} size="sm" decorative />
+              <span className="truncate">{persona.name}</span>
+            </span>
+          )}
           <span className="block truncate text-2xs text-fg-secondary" title={headline}>
             {headline}
           </span>
@@ -229,14 +244,35 @@ function RunHistoryRow({ run: r, current, onPick }: { run: FreshEyesRunListItem;
 /** Start a test: where the visitor starts, what they came to do, and how. One button. */
 function RunNowCard({ projectId, data, onQueued }: { projectId: string; data: FreshEyesListData; onQueued: (runId: string) => void }) {
   const defaults = data.defaults
+  // Who the test plays: ?persona=<id> from the studio's "Test with this persona", else a plain visitor.
+  const personas = data.personas ?? []
+  const [params] = useSearchParams()
+  const [personaId, setPersonaId] = useState<string | null>(() => {
+    const asked = params.get('persona')
+    return asked && personas.some((p) => p.id === asked) ? asked : null
+  })
+  const persona = personas.find((p) => p.id === personaId) ?? null
   const [url, setUrl] = useState(defaults?.url ?? '')
-  const [goal, setGoal] = useState(defaults?.goal ?? '')
+  const [goal, setGoal] = useState(() => persona?.goal ?? defaults?.goal ?? '')
+  // A goal the person typed is theirs; until then, picking a persona fills in what it came to do.
+  const [goalTouched, setGoalTouched] = useState(false)
+  const [userPicked, setUserPicked] = useState(false)
+  // The first paint can be an older cached list without a persona just added in the studio:
+  // pick the asked-for one when the fresh list brings it, unless the person already chose.
+  const asked = params.get('persona')
+  const askedPersona = asked ? (data.personas?.find((p) => p.id === asked) ?? null) : null
+  useEffect(() => {
+    if (!askedPersona || userPicked || personaId === askedPersona.id) return
+    setPersonaId(askedPersona.id)
+    if (!goalTouched) setGoal(askedPersona.goal ?? defaults?.goal ?? '')
+  }, [askedPersona, userPicked, personaId, goalTouched, defaults?.goal])
   const [successText, setSuccessText] = useState('')
   const [sessions, setSessions] = useState(String(defaults?.sessions ?? 3))
   const [mode, setMode] = useState<Mode>('look')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [queued, setQueued] = useState<string | null>(null)
+  const [reservedUsd, setReservedUsd] = useState<number | null>(null)
   // The defaults arrive with the first read; a field the person already typed in keeps their words.
   useEffect(() => {
     if (defaults?.url) setUrl((u) => u || defaults.url!)
@@ -248,14 +284,32 @@ function RunNowCard({ projectId, data, onQueued }: { projectId: string; data: Fr
   const goalOk = goal.trim().length > 0 && goal.trim().length <= 300
   const canRun = status.canRun && urlOk && goalOk && !busy
   const blocker = runNowBlocker({ runnerCanRun: status.canRun, runnerSetup: status.setup, url, goal })
+  const accounts = data.testAccounts ?? null
+
+  function pickPersona(id: string | null) {
+    setUserPicked(true)
+    setPersonaId(id)
+    if (goalTouched) return
+    const next = personas.find((p) => p.id === id) ?? null
+    setGoal(next?.goal ?? defaults?.goal ?? '')
+  }
 
   async function runNow() {
     setBusy(true)
     setError(null)
     setQueued(null)
-    const res = await apiFetch<{ runId: string; runner: FreshEyesRunner }>(`/v1/admin/projects/${projectId}/fresh-eyes`, {
+    setReservedUsd(null)
+    const res = await apiFetch<{ runId: string; runner: FreshEyesRunner; personaId?: string | null; reservedUsd?: number | null }>(`/v1/admin/projects/${projectId}/fresh-eyes`, {
       method: 'POST',
-      body: JSON.stringify({ url: url.trim(), goal: goal.trim(), sessions: Number(sessions), successText: successText.trim() || null, dryRun: mode === 'look', withAccount: mode === 'account' }),
+      body: JSON.stringify({
+        url: url.trim(),
+        goal: goal.trim(),
+        sessions: Number(sessions),
+        successText: successText.trim() || null,
+        dryRun: mode === 'look',
+        withAccount: mode === 'account',
+        ...(persona ? { personaId: persona.id } : {}),
+      }),
     })
     setBusy(false)
     if (!res.ok) {
@@ -263,6 +317,7 @@ function RunNowCard({ projectId, data, onQueued }: { projectId: string; data: Fr
       return
     }
     setQueued(res.data?.runId ?? null)
+    setReservedUsd(typeof res.data?.reservedUsd === 'number' ? res.data.reservedUsd : null)
     if (res.data?.runId) onQueued(res.data.runId)
   }
 
@@ -278,6 +333,8 @@ function RunNowCard({ projectId, data, onQueued }: { projectId: string; data: Fr
           says who runs the test once it can run (2026-11-19, moved out of the card). */}
       <h2 className="text-sm font-semibold text-fg">Run a first-time user test</h2>
 
+      <PersonaPicker personas={personas} value={persona?.id ?? null} onChange={pickPersona} />
+
       <div className="grid gap-3 md:grid-cols-2">
         <Input
           label="Start page"
@@ -286,7 +343,16 @@ function RunNowCard({ projectId, data, onQueued }: { projectId: string; data: Fr
           placeholder="https://your-app.com"
           error={url && !urlOk ? 'Use a web address that starts with https://' : undefined}
         />
-        <Input label="What a new visitor came to do" value={goal} onChange={(e) => setGoal(e.target.value)} placeholder="sign up and start using the app" maxLength={300} />
+        <Input
+          label="What a new visitor came to do"
+          value={goal}
+          onChange={(e) => {
+            setGoalTouched(true)
+            setGoal(e.target.value)
+          }}
+          placeholder="sign up and start using the app"
+          maxLength={300}
+        />
         <Input
           label="Done when the page shows (optional)"
           value={successText}
@@ -309,7 +375,7 @@ function RunNowCard({ projectId, data, onQueued }: { projectId: string; data: Fr
           />
         </div>
       </div>
-      {!successText.trim() && !url.startsWith('https://kensaur.us/mushi-mushi') && (
+      {!successText.trim() && (
         <p className="text-2xs text-fg-muted">Without words to look for, the test shows where visitors got stuck but cannot time how long it took to get there.</p>
       )}
 
@@ -318,8 +384,22 @@ function RunNowCard({ projectId, data, onQueued }: { projectId: string; data: Fr
         <span className="text-2xs text-fg-muted">
           {mode === 'look' && 'The visitor reads and clicks but never sends a form, and nothing becomes a report. It stops at the sign-up page.'}
           {mode === 'file' && 'Same visit; what stops the visitor (errors, dead ends, a step that needs a terminal or an inbox) is filed as a bug report.'}
-          {mode === 'account' && 'Each visitor signs up with its own test account, made for this test and deleted after a day. Only for Mushi Mushi itself.'}
+          {mode === 'account' &&
+            `Each visitor signs up with its own test account, made for this test${accounts?.mode === 'hook' ? " by your app's test-account hook" : ''} and deleted after a day.`}
         </span>
+        {!data.canUseTestAccount && accounts?.unavailable && (
+          <span className="text-2xs text-fg-muted" data-testid="fresh-eyes-accounts-unavailable">
+            {accounts.unavailable}
+            {accounts.mode === 'off' && (
+              <>
+                {' '}
+                <Link className="text-brand underline underline-offset-2" to="/personas">
+                  Open Personas
+                </Link>
+              </>
+            )}
+          </span>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -333,6 +413,11 @@ function RunNowCard({ projectId, data, onQueued }: { projectId: string; data: Fr
           </span>
         )}
         {queued && <span className="text-2xs text-fg-secondary">Started. It shows below and updates by itself.</span>}
+        {queued && reservedUsd != null && (
+          <span className="text-2xs text-fg-muted" data-testid="fresh-eyes-reserved">
+            Holding up to {formatUsd(reservedUsd)} of AI budget for this test; what it does not use comes back when it ends.
+          </span>
+        )}
         {error && (
           <span role="alert" className="text-2xs text-danger">
             {error}
@@ -343,7 +428,19 @@ function RunNowCard({ projectId, data, onQueued }: { projectId: string; data: Fr
   )
 }
 
-function FreshEyesRunView({ projectId, detail, runner, onChanged }: { projectId: string; detail: FreshEyesRunDetail; runner: FreshEyesRunner | null; onChanged: () => void }) {
+function FreshEyesRunView({
+  projectId,
+  detail,
+  persona,
+  runner,
+  onChanged,
+}: {
+  projectId: string
+  detail: FreshEyesRunDetail
+  persona: FreshEyesPersona | null
+  runner: FreshEyesRunner | null
+  onChanged: () => void
+}) {
   const sessions = detail.run.timeline ?? []
   const [index, setIndex] = useState(String(sessions[0]?.index ?? 1))
   const [cancelling, setCancelling] = useState(false)
@@ -363,6 +460,14 @@ function FreshEyesRunView({ projectId, detail, runner, onChanged }: { projectId:
 
   return (
     <div className="flex flex-col gap-3" data-testid="fresh-eyes-run">
+      {persona && (
+        <p className="flex items-center gap-2 text-xs text-fg-secondary" data-testid="fresh-eyes-run-persona">
+          <PersonaAvatar persona={persona} size="sm" decorative />
+          <span>
+            Played by <span className="font-semibold text-fg">{persona.name}</span>
+          </span>
+        </p>
+      )}
       <p className="text-xs text-fg-secondary">
         Goal: <span className="text-fg">“{run.goal}”</span> from <span className="font-mono">{run.start_url}</span>
         {run.dry_run ? ', looking around only' : run.has_account ? ', with a test account' : ', with no account'}.

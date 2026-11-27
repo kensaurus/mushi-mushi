@@ -177,6 +177,8 @@ describe('MCP protocol handshake', () => {
       'scan_site_journeys',
       // Opens or stops the on-demand visit recording window.
       'record_journeys',
+      'upload_ux_captures',
+      'start_fresh_eyes',
       // Console parity: settings, the store review pull, and the operator records.
       'set_design_settings',
       'set_widget_settings',

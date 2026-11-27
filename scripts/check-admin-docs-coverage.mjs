@@ -45,6 +45,8 @@ const ROUTE_TO_MDX = {
   users: 'users',
   // The First-time user test is documented on the UX runs page (it was its Fresh eyes tab).
   'first-user-test': 'ux-runs',
+  // Personas set who the first-time user test plays; documented beside it.
+  personas: 'ux-runs',
 }
 
 function extractRoutes(appSrc) {

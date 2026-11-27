@@ -77,6 +77,8 @@ class FakeApp {
   }
 }
 
+const hookAccount = vi.fn(async (_db: unknown, input: { visitor: number }) => ({ ok: true as const, account: { email: `visitor-${input.visitor}@test.example.com`, password: 'Hook-pw-not-logged-1', id: `app-user-${input.visitor}` } }))
+
 function setup(seed: Record<string, Array<Record<string, unknown>>> = {}, mint = vi.fn(async (_db: unknown, by: string) => ({ ok: true as const, account: { userId: crypto.randomUUID(), email: `fresh-eyes-${Math.random().toString(16).slice(2, 8)}@synthetic.kensaur.us`, password: 'Pw-not-logged-123456', name: 'Fresh Eyes', expiresAt: '2026-10-29T09:00:00Z', by } }))) {
   const db: FakeDb = makeFakeDb(
     { projects: [{ id: GLOT, name: 'glot.it' }, { id: SELF, name: 'Mushi' }], ux_runs: [], ...seed },
@@ -96,7 +98,7 @@ function setup(seed: Record<string, Array<Record<string, unknown>>> = {}, mint =
     projectIds: async () => [GLOT],
     claimRateLimit: async () => ({ allowed: true }),
     logAudit: (async () => {}) as never,
-    freshEyes: () => ({ mint: mint as never, isOperator: (id: string) => id === OPERATOR, selfProjectId: SELF }),
+    freshEyes: () => ({ mint: mint as never, isOperator: (id: string) => id === OPERATOR, hookAccount: hookAccount as never }),
     now: () => NOW,
   })
   return { db, app, mint }
@@ -192,7 +194,7 @@ describe('claim', () => {
 
   it("mints one test account per visitor only on the operator's own computer, once, and never caches the answer", async () => {
     const grant = { project_id: SELF, dry_run: false, has_account: true, sessions_requested: 2, account_granted_by: OPERATOR, account_grant_until: '2026-10-28T10:00:00Z' }
-    const { db, app, mint } = setup({ ux_runs: [queued(grant)] })
+    const { db, app, mint } = setup({ ux_runs: [queued(grant)], project_settings: [{ project_id: SELF, fresh_eyes_accounts: 'mushi' }] })
     const { ids } = await register(app, [{ name: 'mushi', projectId: SELF }], ['fresh_eyes'])
     const res = await app.call('POST', '/v1/worker/claim', { body: { laneId: ids.mushi } })
     expect(mint).toHaveBeenCalledTimes(2)
@@ -206,13 +208,55 @@ describe('claim', () => {
 
   it("runs without an account on someone else's computer, and says why", async () => {
     const grant = { project_id: SELF, dry_run: false, has_account: true, account_granted_by: OPERATOR, account_grant_until: '2026-10-28T10:00:00Z' }
-    const { db, app, mint } = setup({ ux_runs: [queued(grant)] })
+    const { db, app, mint } = setup({ ux_runs: [queued(grant)], project_settings: [{ project_id: SELF, fresh_eyes_accounts: 'mushi' }] })
     const { ids } = await register(app, [{ name: 'mushi', projectId: SELF }], ['fresh_eyes'], { userId: 'someone-else', apiKeyId: KEY2 })
     const res = await app.call('POST', '/v1/worker/claim', { body: { laneId: ids.mushi }, vars: { userId: 'someone-else', apiKeyId: KEY2 } })
     expect(mint).not.toHaveBeenCalled()
     expect(res.body.data.claim.freshEyes.accounts).toEqual([])
     expect(db.tables.ux_runs![0]).toMatchObject({ has_account: false, account_granted_by: null })
     expect(String(db.tables.ux_runs![0]!.detail)).toContain('without a test account')
+  })
+
+  it("asks the app's own hook for one account per visitor, keeps only their ids, and never the password (ADR 0073)", async () => {
+    hookAccount.mockClear()
+    const grant = { dry_run: false, has_account: true, sessions_requested: 2, account_granted_by: OPERATOR, account_grant_until: '2026-10-28T10:00:00Z' }
+    const { db, app, mint } = setup({ ux_runs: [queued(grant)], project_settings: [{ project_id: GLOT, fresh_eyes_accounts: 'hook' }] })
+    const { ids } = await register(app, [{ name: 'glot' }], ['fresh_eyes'])
+    const res = await app.call('POST', '/v1/worker/claim', { body: { laneId: ids.glot } })
+    expect(mint).not.toHaveBeenCalled()
+    expect(hookAccount).toHaveBeenCalledTimes(2)
+    expect(hookAccount.mock.calls.map((c) => (c[1] as { visitor: number; projectId: string; runId: string }))).toMatchObject([{ visitor: 1, projectId: GLOT, runId: RUN }, { visitor: 2, projectId: GLOT, runId: RUN }])
+    expect(res.body.data.claim.freshEyes.accounts.map((a: { email: string }) => a.email)).toEqual(['visitor-1@test.example.com', 'visitor-2@test.example.com'])
+    expect(res.headers['Cache-Control']).toBe('no-store')
+    expect(db.tables.ux_runs![0]!.account_refs).toEqual(['app-user-1', 'app-user-2'])
+    expect(JSON.stringify(db.tables)).not.toContain('Hook-pw-not-logged-1')
+  })
+
+  it('makes no account when the app turned test accounts off after the grant, and says why', async () => {
+    hookAccount.mockClear()
+    const grant = { dry_run: false, has_account: true, account_granted_by: OPERATOR, account_grant_until: '2026-10-28T10:00:00Z' }
+    const { db, app, mint } = setup({ ux_runs: [queued(grant)], project_settings: [{ project_id: GLOT, fresh_eyes_accounts: 'off' }] })
+    const { ids } = await register(app, [{ name: 'glot' }], ['fresh_eyes'])
+    const res = await app.call('POST', '/v1/worker/claim', { body: { laneId: ids.glot } })
+    expect(mint).not.toHaveBeenCalled()
+    expect(hookAccount).not.toHaveBeenCalled()
+    expect(res.body.data.claim.freshEyes.accounts).toEqual([])
+    expect(String(db.tables.ux_runs![0]!.detail)).toContain('test accounts on')
+  })
+
+  it('sends the persona only to a daemon that forwards one; an older one runs a plain visitor and the run says so', async () => {
+    const PERSONA = '5a000000-0000-4000-8000-000000000001'
+    const persona = { id: PERSONA, project_id: GLOT, name: 'Japanese visitor', preset: 'japanese_user', goal: null, locale: 'ja-JP', device: 'mobile', expertise: 'casual', accessibility: [], patience_steps: 30, cost_cap_usd: 1, notes: null, created_at: '', updated_at: '' }
+    const newer = setup({ ux_runs: [queued({ persona_id: PERSONA })], project_personas: [persona] })
+    const a = await register(newer.app, [{ name: 'glot' }], ['fresh_eyes', 'fresh_eyes_persona'])
+    const got = await newer.app.call('POST', '/v1/worker/claim', { body: { laneId: a.ids.glot } })
+    expect(got.body.data.claim.freshEyes.persona).toMatchObject({ id: PERSONA, name: 'Japanese visitor', locale: 'ja-JP', device: 'mobile', steps: 30 })
+    expect(String(got.body.data.claim.freshEyes.persona.brief)).toContain('Japanese (ja-JP)')
+    const older = setup({ ux_runs: [queued({ persona_id: PERSONA })], project_personas: [persona] })
+    const b = await register(older.app, [{ name: 'glot' }], ['fresh_eyes'])
+    const plain = await older.app.call('POST', '/v1/worker/claim', { body: { laneId: b.ids.glot } })
+    expect(plain.body.data.claim.freshEyes.persona).toBeUndefined()
+    expect(String(older.db.tables.ux_runs![0]!.detail)).toContain('too old to play a persona')
   })
 })
 
