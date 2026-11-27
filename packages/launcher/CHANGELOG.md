@@ -1,5 +1,14 @@
 # mushi-mushi
 
+## 1.40.1
+
+### Patch Changes
+
+- Updated dependencies [ec62b78]
+- Updated dependencies [ec62b78]
+  - @mushi-mushi/cli@0.43.0
+  - @mushi-mushi/core@1.40.1
+
 ## 1.39.0
 
 ### Patch Changes

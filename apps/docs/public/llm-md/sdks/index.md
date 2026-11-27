@@ -39,12 +39,12 @@ Mushi Mushi's npm packages ship on independent semver tracks (see [npm](https://
 | @mushi-mushi/core, @mushi-mushi/web | 1.40.x |
 | @mushi-mushi/react | 1.35.x |
 | @mushi-mushi/react-native | 0.26.x |
-| @mushi-mushi/cli | 0.42.x |
-| @mushi-mushi/mcp | 0.32.x |
+| @mushi-mushi/cli | 0.43.x |
+| @mushi-mushi/mcp | 0.33.x |
 | @mushi-mushi/capacitor | 1.2.x |
 | @mushi-mushi/node | 1.3.x |
 | @mushi-mushi/angular, @mushi-mushi/vue, @mushi-mushi/svelte | 1.0.x |
-| mushi-mushi (launcher) | 1.39.x |
+| mushi-mushi (launcher) | 1.40.x |
 
 See [Project ID & API keys](/concepts/credentials) for credential formats (project UUID, and the one `mushi_…` key format every SDK and the MCP server share).
 
