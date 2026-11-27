@@ -15,6 +15,7 @@
  */
 
 import { scorecardSurfaceKey } from './ux-surface-key.ts'
+import { compareSemver } from './sdk-version-compare.ts'
 
 export const UX_BASELINE_DEFAULT_KEEP = 24
 /** Screenshots one pin request copies (120 screens × 2 viewports). */
@@ -304,6 +305,27 @@ export interface Timeline {
 
 const ms = (iso: string) => new Date(iso).getTime()
 
+const SEMVER_RE = /^v?\d+(?:\.\d+){0,2}(?:[-+][0-9A-Za-z.+-]*)?$/
+const bareVersion = (v: string) => v.trim().replace(/^v/, '')
+
+/**
+ * The rail reads in version order when every release is semver: glot.it
+ * published 1.3.0, then a 1.0.1 hotfix, then drafted 1.2.3, and the date
+ * order read 1.3.0 → 1.0.1 → 1.2.3. Runs and reports stay on the release
+ * whose date window they fell in; only the stops move. Any non-semver
+ * version keeps date order. Unreleased stays last. Equal versions keep date order.
+ */
+export function orderReleasePoints(points: TimelinePoint[]): TimelinePoint[] {
+  const releases = points.filter((p) => p.kind === 'release')
+  if (releases.length < 2 || !releases.every((p) => p.version != null && SEMVER_RE.test(p.version.trim()))) return points
+  const sorted = releases
+    .map((p, i) => ({ p, i }))
+    .sort((a, b) => compareSemver(bareVersion(a.p.version!), bareVersion(b.p.version!)) || a.i - b.i)
+    .map((x) => x.p)
+  let k = 0
+  return points.map((p) => (p.kind === 'release' ? sorted[k++] : p))
+}
+
 function addCost(a: number | null, b: number | null): number | null {
   if (b == null) return a
   return Math.round(((a ?? 0) + b) * 1e6) / 1e6
@@ -389,7 +411,7 @@ export function buildTimeline(input: {
       prev = at
     }
   }
-  const shown = points.slice(-TIMELINE_MAX_POINTS)
+  const shown = orderReleasePoints(points.slice(-TIMELINE_MAX_POINTS))
 
   // Baselines → the point they belong to: their release, the release of the same version, else their run.
   const relByVersion = new Map(releases.map((r) => [r.version, r.id]))

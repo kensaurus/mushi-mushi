@@ -80,10 +80,13 @@ describe('timeline helpers', () => {
     expect(defaultPair(frames, 'mobile')).toEqual({ before: null, after: frames[1] })
   })
 
-  it('suggests the newest release with no pinned screens, else today', () => {
+  it('suggests the newest release while it has no pinned screens, else nothing; today without releases', () => {
     const today = new Date('2026-11-27T10:00:00Z')
     expect(suggestVersion([point({ version: '1.0.0', baselines: 3 }), point({ version: '1.1.0' })], today)).toBe('1.1.0')
-    expect(suggestVersion([point({ version: '1.0.0', baselines: 3 })], today)).toBe('2026-11-27')
+    expect(suggestVersion([point({ version: '1.0.0', baselines: 3 })], today)).toBe('')
+    // An older release without shots is already out (glot.it: 1.2.3 under 1.3.0).
+    expect(suggestVersion([point({ version: '1.0.1' }), point({ version: '1.2.3' }), point({ version: '1.3.0', baselines: 2 }), point({ id: 'unreleased', kind: 'unreleased', version: null })], today)).toBe('')
+    expect(suggestVersion([point({ id: 'run:a', kind: 'run', version: null })], today)).toBe('2026-11-27')
   })
 
   it('steps the comparison handle within 0 to 100', () => {
