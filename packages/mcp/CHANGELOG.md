@@ -1,5 +1,32 @@
 # @mushi-mushi/mcp
 
+## 0.33.0
+
+### Minor Changes
+
+- ec62b78: Three tools for the release stage: `get_security_proof` (the scans your own CI ran for a release's commit), `export_release_kit` (a signed kit of screenshots and clips for a product-video tool) and `request_store_media_upload` (ask to put new screenshots, app previews or listing images on the App Store or Google Play; a person approves each upload in the console first).
+- ec62b78: Phone apps get the same UX scorecard as web pages, and first-time user tests can play a persona (ADR 0073).
+
+  - `mushi-ux upload <dir> --platform android|ios|…` sends the screenshots any driver made (a Maestro flow, `adb exec-out screencap`, `xcrun simctl io booted screenshot`, an SDK debug build) and scores each screen on the written rubric. It reads an Android `uiautomator` dump or a `maestro hierarchy` next to a screenshot for the screen's words and buttons. Templates are in `docs/templates/ux-native/`.
+  - `mushi-ux fresh-eyes` plays the persona a queued test carries: its device (viewport, touch), language, 150% zoom for low vision, reduced motion, and its patience as the step cap. The local worker forwards the persona (it now says it can, `fresh_eyes_persona`).
+  - `--mint-account` sends the app it is for; the server makes accounts in Mushi's own sign-in only for an app that opted in.
+  - New MCP tools: `upload_ux_captures`, `list_personas` and `start_fresh_eyes`.
+
+- ec62b78: The UX tools now spend fewer tokens and show what each run cost (Plan 025, ADR 0072).
+
+  `@mushi-mushi/ux`: `mushi-ux scorecard` sends a perceptual hash of each page's settled screenshot. When a page's text and look are unchanged from a run in the last 30 days, the server reuses that page's score instead of making a model call, with today's speed and accessibility measurements applied. The UX loop's final review makes no call when a kept version looks the same as the original, and reuses its verdict for an identical pair of screenshots (cached in `.mushi/ux/judge-cache/`). `mushi ux run --sync` now sends the review's token counts, so the console can show the run's cost. `MUSHI_UX_SKILLS_REPO` overrides the default skills repo.
+
+  `@mushi-mushi/mcp`: four new read-only tools. `get_timeline` returns the app release by release: bugs fixed, screens improved, scorecard average and AI cost per release. `get_surface_history` returns one screen's pinned screenshots, scores and kept changes. `get_ux_run` reads one UX run. `start_ux_run` returns the console link and the local command to start a run; it never starts a cloud run itself. Examples in the tool descriptions no longer name the maintainer's own apps, and `MUSHI_PUBLIC_ORIGIN` sets the public site origin (default unchanged).
+
+  `@mushi-mushi/core`: favicon lookup no longer carries a per-app table. It uses the app's icon, repo and SDK origin, skips an SDK origin served under a path of a shared host, and takes `shared_hosts` from the caller.
+
+  `@mushi-mushi/cli`: `MUSHI_PUBLIC_ORIGIN` sets the public site origin used for the hosted console and the MCP sign-in link (default unchanged).
+
+### Patch Changes
+
+- Updated dependencies [ec62b78]
+  - @mushi-mushi/core@1.40.1
+
 ## 0.32.2
 
 ### Patch Changes
