@@ -11,7 +11,7 @@
  *
  *   <dir>/pages/<screen>/settled.png   required (or early.png)
  *   <dir>/pages/<screen>/early.png     optional
- *   <dir>/pages/<screen>/facts.json    optional: any of the page facts
+ *   <dir>/pages/<screen>/facts.json    optional, with any of the page facts
  */
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
@@ -28,7 +28,7 @@ interface CapturePage {
 
 const PNG_SIG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
-/** Width and height from a PNG's header, or null when it is not a PNG. */
+/** Width and height from a PNG's header, or null when it is not a PNG. @internal Exported for tests. */
 export function pngDimensions(bytes: Uint8Array): { width: number; height: number } | null {
   if (bytes.length < 24 || PNG_SIG.some((b, i) => bytes[i] !== b)) return null;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);

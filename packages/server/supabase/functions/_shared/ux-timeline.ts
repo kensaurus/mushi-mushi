@@ -14,7 +14,7 @@
  * for them.
  */
 
-import { scorecardSurfaceKey } from './ux-scorecard-io.ts'
+import { scorecardSurfaceKey } from './ux-surface-key.ts'
 
 export const UX_BASELINE_DEFAULT_KEEP = 24
 /** Screenshots one pin request copies (120 screens × 2 viewports). */

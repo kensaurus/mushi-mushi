@@ -11,6 +11,7 @@
 
 import { z } from 'npm:zod@3'
 import { causeReportBody, scorecardPageKey, topCauses, UX_DIMENSIONS, UX_SCORECARD_PROMPT_VERSION, type UxCause, type UxPageFacts, type UxPageScore } from './ux-scorecard.ts'
+import { scorecardSurfaceKey } from './ux-surface-key.ts'
 
 export const UX_SCORECARD_RUN_ID_RE = /^[0-9]{8}-[0-9]{6}-[a-z0-9]{4}$/
 export const UX_SCORECARD_REPORTER = 'ux-scorecard'
@@ -32,14 +33,7 @@ export function parseViewport(v: unknown): { width: number; height: number } | n
   return width >= 320 && width <= 3840 && height >= 320 && height <= 2400 ? { width, height } : null
 }
 
-/** Pure: a ux_surfaces.surface_key for a page key: lower-case slug, at most 120 characters, unique enough per run. */
-export function scorecardSurfaceKey(pageKey: string): string {
-  const slug = pageKey.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean).join('-') || 'root'
-  if (slug.length <= 110) return slug
-  let h = 0
-  for (const ch of pageKey) h = (h * 31 + ch.charCodeAt(0)) >>> 0
-  return `${slug.slice(0, 100)}-${h.toString(36)}`
-}
+export { scorecardSurfaceKey }
 
 const SHOT_RE = /^[a-z0-9][a-z0-9-]{0,119}\/(?:early|settled)\.(?:png|jpg)$/
 

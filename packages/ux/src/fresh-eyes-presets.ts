@@ -28,7 +28,7 @@ import type { FreshEyesAppPreset } from './fresh-eyes.js'
 
 const HOST_RE = /^[a-z0-9.-]{1,253}$/i
 
-/** Where the presets file lives. */
+/** Where the presets file lives. @internal Exported for tests. */
 export function presetsFile(env: NodeJS.ProcessEnv = process.env): string {
   const given = env.MUSHI_FRESH_EYES_PRESETS_FILE?.trim()
   if (given) return given
@@ -36,7 +36,7 @@ export function presetsFile(env: NodeJS.ProcessEnv = process.env): string {
   return join(base, 'mushi', 'fresh-eyes-presets.json')
 }
 
-/** Pure: the presets in a file's text; throws with the entry and the reason on a malformed one. */
+/** Pure: the presets in a file's text; throws with the entry and the reason on a malformed one. @internal Exported for tests. */
 export function parsePresets(text: string): FreshEyesAppPreset[] {
   let raw: unknown
   try {
