@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/security-proof
 
 ---
 title: Security proof
-description: Each release in Mushi Mushi shows its Security proof, the scans your own CI ran for the commit it ships. Dependencies and secrets on every PR, an optional AI review, and a weekly scan of your staging site.
+description: Each release's Security proof: the scans your own CI ran for the commit it ships. Dependencies, secrets, an optional AI review, a live scan.
 ---
 
 # Security proof

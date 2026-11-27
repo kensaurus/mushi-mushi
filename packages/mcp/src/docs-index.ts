@@ -526,7 +526,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "admin/release-kits.md",
     keywords: ["admin", "release-kits", "release", "kits"],
     headings: ["Record clips (opt-in)", "Make the product video", "Put media on the stores (approval first)"],
-    excerpt: "A release kit gathers a release's before and after screenshots, clips of your top flows, the changelog lines and your brand colours, so a video tool can make the product video and…",
+    excerpt: "A release kit gathers a release's screenshots, flow clips, changelog and brand colours for a product video, and store media you approve.",
   },
   {
     title: "Releases",
@@ -598,7 +598,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "admin/security-proof.md",
     keywords: ["admin", "security-proof", "security", "proof"],
     headings: ["Add the workflow", "How a release is proven", "What becomes a bug", "From an agent"],
-    excerpt: "Each release in Mushi Mushi shows its Security proof, the scans your own CI ran for the commit it ships. Dependencies and secrets on every PR, an optional AI review, and a weekly…",
+    excerpt: "Each release's Security proof: the scans your own CI ran for the commit it ships. Dependencies, secrets, an optional AI review, a live scan.",
   },
   {
     title: "Settings",
@@ -670,7 +670,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "admin/timeline.md",
     keywords: ["admin", "timeline"],
     headings: ["Pin each release's screens", "From your editor"],
-    excerpt: "The Timeline page in Mushi Mushi shows how your app changed release by release, with the bugs each release fixed, the screens your agent improved, scores, AI cost and a…",
+    excerpt: "The Timeline shows your app release by release: bugs fixed, screens improved, scores, AI cost and a before/after of every screen.",
   },
   {
     title: "All users",

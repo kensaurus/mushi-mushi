@@ -27401,7 +27401,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/release-kits
 
 ---
 title: Release kits
-description: A release kit gathers a release's before and after screenshots, clips of your top flows, the changelog lines and your brand colours, so a video tool can make the product video and Mushi Mushi can put new media on the App Store and Google Play after you approve it.
+description: A release kit gathers a release's screenshots, flow clips, changelog and brand colours for a product video, and store media you approve.
 ---
 
 # Release kits
@@ -28508,7 +28508,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/security-proof
 
 ---
 title: Security proof
-description: Each release in Mushi Mushi shows its Security proof, the scans your own CI ran for the commit it ships. Dependencies and secrets on every PR, an optional AI review, and a weekly scan of your staging site.
+description: Each release's Security proof: the scans your own CI ran for the commit it ships. Dependencies, secrets, an optional AI review, a live scan.
 ---
 
 # Security proof
@@ -29201,7 +29201,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/timeline
 
 ---
 title: Timeline
-description: The Timeline page in Mushi Mushi shows how your app changed release by release, with the bugs each release fixed, the screens your agent improved, scores, AI cost and a before/after of every screen.
+description: The Timeline shows your app release by release: bugs fixed, screens improved, scores, AI cost and a before/after of every screen.
 robots:
   index: false
   follow: true
