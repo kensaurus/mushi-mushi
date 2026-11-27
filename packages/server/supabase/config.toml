@@ -69,6 +69,11 @@ verify_jwt = false
 [functions.api-ext]
 verify_jwt = false
 
+# The loop's route groups (api-loop/index.ts): api forwards them; CI security
+# results and the OpenAI fine-tuning webhook arrive without a Supabase JWT.
+[functions.api-loop]
+verify_jwt = false
+
 # Internal pipeline functions invoked server-to-server from `api` using the
 # service-role key. After Supabase rotated to the new sb_secret_* key format,
 # the platform gateway started rejecting these inter-function calls with

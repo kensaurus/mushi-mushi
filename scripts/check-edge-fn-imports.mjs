@@ -35,7 +35,8 @@
  *      Functions are deployed independently, so cross-function imports
  *      have the same missing-bundle-file risk.
  *
- *   Exception: `api-ext` may import from `api/` (CROSS_FUNCTION_ALLOW). It
+ *   Exception: `api-ext` and `api-loop` may import from `api/` (CROSS_FUNCTION_ALLOW). They are
+ *   the overflow halves of `api`. `api-ext`
  *   is the overflow half of `api` (deploy size limit, HTTP 413 on 2026-10-21)
  *   and runs route groups whose files stay under `api/routes/`. The deploy
  *   upload follows each function's import graph from its entrypoint wherever
@@ -47,7 +48,10 @@
  */
 
 /** fromFn -> function dirs it may import from. Keep this list short. */
-const CROSS_FUNCTION_ALLOW = new Map([['api-ext', new Set(['api'])]])
+const CROSS_FUNCTION_ALLOW = new Map([
+  ['api-ext', new Set(['api'])],
+  ['api-loop', new Set(['api'])],
+])
 
 import { readFileSync } from 'node:fs'
 import { readdir, stat } from 'node:fs/promises'

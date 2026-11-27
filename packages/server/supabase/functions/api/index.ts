@@ -97,9 +97,16 @@ app.onError(sentryHonoErrorHandler);
 // _shared/edge-proxy.ts). Registered where the groups used to be, so route
 // order is unchanged; the public paths stay on `api`.
 function forwardToApiExt(paths: string[]): void {
+  forwardTo('api-ext', paths);
+}
+/** The loop's route groups run in `api-loop` (api-ext reached the deployment size limit, 2026-11-27). */
+function forwardToApiLoop(paths: string[]): void {
+  forwardTo('api-loop', paths);
+}
+function forwardTo(fn: 'api-ext' | 'api-loop', paths: string[]): void {
   for (const path of paths) {
     app.all(path, (c) =>
-      proxyToFunction(c.req.raw, 'api-ext', c.req.path.replace(/^\/api(?=\/)/, ''), {
+      proxyToFunction(c.req.raw, fn, c.req.path.replace(/^\/api(?=\/)/, ''), {
         supabaseUrl: Deno.env.get('SUPABASE_URL') ?? '',
         // Signs the visitor's IP for per-IP limits in api-ext (production-check.ts).
         clientIpSecret: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || undefined,
@@ -825,8 +832,8 @@ forwardToApiExt(['/v1/admin/byok/anthropic/models']);
 // SDK upgrade PRs (sdk-upgrade.ts); api size budget, 2026-11-21 (hosted LLM order + Langfuse OTLP).
 forwardToApiExt(['/v1/admin/projects/:pid/sdk-upgrade', '/v1/admin/projects/:pid/sdk-upgrade/*']);
 registerUxCloudRoutes(app);
-forwardToApiExt([
-  // ux-runs.ts; deploy size limit, 2026-10-22.
+forwardToApiLoop([
+  // ux-runs.ts; deploy size limit, 2026-10-22 (api-ext); api-loop since 2026-11-27.
   '/v1/admin/projects/:pid/ux-runs',
   '/v1/admin/projects/:pid/ux-runs/:runId',
   '/v1/admin/projects/:pid/ux-runs/:runId/merge',
@@ -838,7 +845,7 @@ forwardToApiExt([
 // public-scoreboard.ts): the docs /check and /proof pages.
 forwardToApiExt(['/v1/public/production-check', '/v1/public/production-check/:id', '/v1/public/scoreboard']);
 // Fresh-eyes runs (fresh-eyes.ts, ADR 0053).
-forwardToApiExt([
+forwardToApiLoop([
   '/v1/admin/fresh-eyes/test-account',
   '/v1/admin/projects/:pid/fresh-eyes',
   '/v1/admin/projects/:pid/fresh-eyes/:runId',
@@ -847,7 +854,7 @@ forwardToApiExt([
   '/v1/admin/projects/:pid/fresh-eyes/:runId/cancel',
 ]);
 // The UX scorecard (ux-scorecard.ts, ADR 0067).
-forwardToApiExt([
+forwardToApiLoop([
   '/v1/admin/projects/:pid/ux-scorecard',
   '/v1/admin/projects/:pid/ux-scorecard/:runId',
   '/v1/admin/projects/:pid/ux-scorecard/:runId/uploads',
@@ -856,7 +863,7 @@ forwardToApiExt([
   '/v1/admin/projects/:pid/ux-scorecard/:runId/file',
 ]);
 // The iteration timeline (ux-timeline.ts, ADR 0072).
-forwardToApiExt([
+forwardToApiLoop([
   '/v1/admin/projects/:pid/timeline',
   '/v1/admin/projects/:pid/timeline/surfaces/:key',
   '/v1/admin/projects/:pid/timeline/baselines',
@@ -866,7 +873,7 @@ forwardToApiExt([
 ]);
 // UX captures from any driver (ux-captures.ts, ADR 0073) and project personas and test
 // accounts (personas.ts, ADR 0073).
-forwardToApiExt([
+forwardToApiLoop([
   '/v1/ux/captures',
   '/v1/admin/projects/:pid/personas',
   '/v1/admin/projects/:pid/personas/:id',
@@ -925,7 +932,7 @@ forwardToApiExt([
   '/v1/internal/ops/sentry',
 ]);
 // Security proof and release kits (Plan 025 P4-P6, ADR 0074); api size budget.
-forwardToApiExt([
+forwardToApiLoop([
   '/v1/security/results',
   '/v1/admin/projects/:id/security-proof',
   '/v1/admin/projects/:id/security-workflow',
@@ -933,7 +940,7 @@ forwardToApiExt([
   '/v1/admin/projects/:id/releases/:rid/*',
 ]);
 // Fine-tuning (fine-tuning.ts, its OpenAI webhook included); api size budget, 2026-11-27.
-forwardToApiExt(['/v1/admin/fine-tuning', '/v1/admin/fine-tuning/*', '/v1/webhooks/fine-tuning/openai']);
+forwardToApiLoop(['/v1/admin/fine-tuning', '/v1/admin/fine-tuning/*', '/v1/webhooks/fine-tuning/openai']);
 // Known holes in dependencies and the runtime (ADR 0038).
 forwardToApiExt(['/v1/admin/projects/:id/vulnerabilities', '/v1/admin/projects/:id/vulnerabilities/*']);
 // sdk-health.ts: SDK problems and their fix tasks; deploy size limit, 2026-10-26.
