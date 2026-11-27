@@ -924,6 +924,16 @@ forwardToApiExt([
   // Service role only; sentry-ingest posts straight to api-ext, this keeps the paths aligned.
   '/v1/internal/ops/sentry',
 ]);
+// Security proof and release kits (Plan 025 P4-P6, ADR 0074); api size budget.
+forwardToApiExt([
+  '/v1/security/results',
+  '/v1/admin/projects/:id/security-proof',
+  '/v1/admin/projects/:id/security-workflow',
+  '/v1/admin/projects/:id/security-workflow/pr',
+  '/v1/admin/projects/:id/releases/:rid/*',
+]);
+// Fine-tuning (fine-tuning.ts, its OpenAI webhook included); api size budget, 2026-11-27.
+forwardToApiExt(['/v1/admin/fine-tuning', '/v1/admin/fine-tuning/*', '/v1/webhooks/fine-tuning/openai']);
 // Known holes in dependencies and the runtime (ADR 0038).
 forwardToApiExt(['/v1/admin/projects/:id/vulnerabilities', '/v1/admin/projects/:id/vulnerabilities/*']);
 // sdk-health.ts: SDK problems and their fix tasks; deploy size limit, 2026-10-26.

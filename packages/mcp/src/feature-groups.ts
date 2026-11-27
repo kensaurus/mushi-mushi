@@ -96,6 +96,10 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   propose_recipe_change: 'inventory',
   propose_portfolio_change: 'inventory',
   request_connector_action: 'inventory',
+  // Plan 025 P4-P6 (ADR 0074): a release's Security proof, its kit, store media requests.
+  get_security_proof: 'inventory',
+  export_release_kit: 'inventory',
+  request_store_media_upload: 'inventory',
   get_store_status: 'inventory',
   get_design_deviance: 'inventory',
   // Run-now triggers + the by-id finding explanation

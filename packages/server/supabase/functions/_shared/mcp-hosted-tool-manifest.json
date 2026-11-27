@@ -587,5 +587,45 @@
     "requiresProject": true,
     "body": { "personaId": "{personaId}", "url": "{url}", "goal": "{goal}", "sessions": "{sessions}", "successText": "{successText}", "dryRun": "{dryRun}" },
     "hints": { "destructive": false, "idempotent": false }
+  },
+  "get_security_proof": {
+    "scope": "mcp:read",
+    "description": "Security proof of a release or commit: the scan lanes the app's own CI posted (dependencies, secrets, AI review, live site).",
+    "method": "GET",
+    "path": "/v1/admin/projects/{projectId}/security-proof?release={releaseId}&commit={commitSha}",
+    "requiresProject": true,
+    "hints": { "destructive": false, "idempotent": true }
+  },
+  "export_release_kit": {
+    "scope": "mcp:write",
+    "description": "Export a release kit (signed asset URLs and a manifest) for a product-video tool such as lazycow make_product_video.",
+    "method": "POST",
+    "path": "/v1/admin/projects/{projectId}/releases/{releaseId}/kit/export",
+    "required": ["releaseId"],
+    "requiresProject": true,
+    "body": {},
+    "hints": { "destructive": false, "idempotent": false }
+  },
+  "request_store_media_upload": {
+    "scope": "mcp:write",
+    "description": "Ask to upload release-kit media to the App Store or Google Play; nothing is uploaded until a person approves it in the console.",
+    "method": "POST",
+    "path": "/v1/admin/projects/{projectId}/releases/{releaseId}/kit/store-upload",
+    "required": ["releaseId", "connectorId", "action", "locale"],
+    "requiresProject": true,
+    "body": {
+      "connectorId": "{connectorId}",
+      "action": "{action}",
+      "locale": "{locale}",
+      "displayType": "{displayType}",
+      "previewType": "{previewType}",
+      "imageType": "{imageType}",
+      "replace": "{replace}",
+      "youtubeUrl": "{youtubeUrl}",
+      "previewFrameTimeCode": "{previewFrameTimeCode}",
+      "assetIds": "{assetIds}",
+      "reason": "{reason}"
+    },
+    "hints": { "destructive": false, "idempotent": false }
   }
 }

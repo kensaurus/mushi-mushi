@@ -520,6 +520,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "The App blueprint page in the Mushi Mushi console shows what this app is built from, the state of each part, and the draft pull request a change opens.",
   },
   {
+    title: "Release kits",
+    url: docUrl("/admin/release-kits"),
+    route: "/admin/release-kits",
+    markdown: "admin/release-kits.md",
+    keywords: ["admin", "release-kits", "release", "kits"],
+    headings: ["Record clips (opt-in)", "Make the product video", "Put media on the stores (approval first)"],
+    excerpt: "A release kit gathers a release's before and after screenshots, clips of your top flows, the changelog lines and your brand colours, so a video tool can make the product video and…",
+  },
+  {
     title: "Releases",
     url: docUrl("/admin/releases"),
     route: "/admin/releases",
@@ -581,6 +590,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["admin", "sdk-upgrade-lockfile", "sdk", "upgrade", "lockfile", "helper"],
     headings: ["How it works", "Add the workflow", "What the action does", "Private registries", "Pinning", "Why Mushi Mushi does not write the lockfile or the workflow…", "Limits"],
     excerpt: "Add one workflow to your repo so Mushi Mushi's SDK upgrade PRs arrive with a refreshed lockfile and pass npm ci or pnpm install --frozen-lockfile.",
+  },
+  {
+    title: "Security proof",
+    url: docUrl("/admin/security-proof"),
+    route: "/admin/security-proof",
+    markdown: "admin/security-proof.md",
+    keywords: ["admin", "security-proof", "security", "proof"],
+    headings: ["Add the workflow", "How a release is proven", "What becomes a bug", "From an agent"],
+    excerpt: "Each release in Mushi Mushi shows its Security proof, the scans your own CI ran for the commit it ships. Dependencies and secrets on every PR, an optional AI review, and a weekly…",
   },
   {
     title: "Settings",

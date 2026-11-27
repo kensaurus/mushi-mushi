@@ -60,6 +60,8 @@ export default {
   activity: 'User activity',
   intelligence: 'Weekly insights',
   releases: 'Releases',
+  'security-proof': 'Security proof',
+  'release-kits': 'Release kits',
   ops: 'Ops',
   providers: 'Providers & AI routes',
   notifications: 'Reporter updates',

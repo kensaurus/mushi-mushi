@@ -4,6 +4,11 @@
  * signed in here can approve, and then run, each one. The approval covers
  * the exact payload shown and expires after an hour; a run happens once.
  *
+ * Store media uploads (screenshots, app previews, listing images, the promo
+ * video; ADR 0074) are asked for and run from the release's kit, the only
+ * place their uploader runs: here they can be approved or rejected, and
+ * "Run it from the release" opens that release's Ship it section.
+ *
  * Data: GET  /v1/admin/orgs/:orgId/connector-actions
  *       POST /v1/admin/orgs/:orgId/connector-actions               (ask)
  *       POST /v1/admin/orgs/:orgId/connector-actions/:id/approve|reject|execute
@@ -32,6 +37,18 @@ interface ActionRow {
   error: string | null
 }
 
+/** Run only from the release's kit (ADR 0074); mirrors the server's STORE_MEDIA_ACTIONS. */
+const STORE_MEDIA_ACTIONS = new Set(['upload_screenshots', 'upload_app_preview', 'upload_listing_images', 'set_promo_video'])
+
+/**
+ * Where a store media action runs: its release's Ship it section (older rows without a release id: the Releases page).
+ * @internal Exported for tests.
+ */
+export function storeMediaRunPath(payload: Record<string, unknown>): string {
+  const rid = payload.releaseId
+  return typeof rid === 'string' && /^[0-9a-f-]{36}$/i.test(rid) ? `/releases?release=${rid}` : '/releases'
+}
+
 const STATUS: Record<ActionRow['status'], { label: string; tone: BadgeTone }> = {
   pending_approval: { label: 'Waiting for approval', tone: 'warn' },
   approved: { label: 'Approved, not run', tone: 'info' },
@@ -58,7 +75,10 @@ export function ActionsCard({ orgId, connectors }: { orgId: string; connectors: 
   const [connectorId, setConnectorId] = useState('')
   const [action, setAction] = useState('')
   const [payload, setPayload] = useState('{\n  "package": "",\n  "track": "production",\n  "userFraction": 0.1,\n  "versionCodes": [""]\n}')
-  const actable = connectors.filter((c) => c.actions.length > 0)
+  // Store media actions are asked for from a release's kit (it pins each file and checks the store's spec).
+  const actable = connectors
+    .map((c) => ({ ...c, actions: c.actions.filter((a) => !STORE_MEDIA_ACTIONS.has(a)) }))
+    .filter((c) => c.actions.length > 0)
   const chosen = actable.find((c) => c.id === connectorId)
   // Reject ends a request, and Run now changes the live store listing: both
   // ask first (QA 44).
@@ -108,12 +128,18 @@ export function ActionsCard({ orgId, connectors }: { orgId: string; connectors: 
                   <span className="text-sm font-medium text-fg">{a.action} <Badge tone={st.tone} className="ml-1">{st.label}</Badge></span>
                   <div className="flex gap-2">
                     {a.status === 'pending_approval' && <Btn size="sm" disabled={busy} onClick={() => run(`${path}/${a.id}/approve`, { payloadSha256: a.payload_sha256 }, 'Approved for one hour. Run it when ready.')}>Approve</Btn>}
-                    {a.status === 'approved' && <Btn size="sm" disabled={busy} onClick={() => setConfirm({ row: a, kind: 'execute' })}>Run now</Btn>}
+                    {a.status === 'approved' && !STORE_MEDIA_ACTIONS.has(a.action) && <Btn size="sm" disabled={busy} onClick={() => setConfirm({ row: a, kind: 'execute' })}>Run now</Btn>}
+                    {a.status === 'approved' && STORE_MEDIA_ACTIONS.has(a.action) && (
+                      <Btn size="sm" to={storeMediaRunPath(a.payload)} title="Store uploads run from the release's kit, where each file is checked again before it is sent">Run it from the release</Btn>
+                    )}
                     {(a.status === 'pending_approval' || a.status === 'approved') && <Btn size="sm" variant="ghost" disabled={busy} onClick={() => setConfirm({ row: a, kind: 'reject' })}>Reject</Btn>}
                   </div>
                 </div>
                 <p className="text-2xs text-fg-faint">Asked by {a.requested_by} · {new Date(a.requested_at).toLocaleString()}{a.expires_at ? ` · approval ends ${new Date(a.expires_at).toLocaleTimeString()}` : ''} · hash {a.payload_sha256.slice(0, 12)}</p>
                 {a.reason && <p className="text-xs text-fg-muted">{a.reason}</p>}
+                {STORE_MEDIA_ACTIONS.has(a.action) && (a.status === 'pending_approval' || a.status === 'approved') && (
+                  <p className="text-xs text-fg-muted">A store upload runs from its release (Releases → the release → Ship it → Store uploads): that is the only place Mushi Mushi checks each file again and sends it.</p>
+                )}
                 <pre className="overflow-x-auto rounded-sm bg-surface-raised p-2 font-mono text-2xs text-fg-secondary">{JSON.stringify(a.payload, null, 2)}</pre>
                 {a.error && <p className="text-xs text-danger">{a.error}</p>}
               </li>

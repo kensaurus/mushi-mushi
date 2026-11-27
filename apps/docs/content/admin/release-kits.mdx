@@ -1,0 +1,69 @@
+---
+title: Release kits
+description: A release kit gathers a release's before and after screenshots, clips of your top flows, the changelog lines and your brand colours, so a video tool can make the product video and Mushi Mushi can put new media on the App Store and Google Play after you approve it.
+---
+
+# Release kits
+
+**Where:** Releases → open a release → **Ship it** → Release kit
+
+A release kit holds what a product video and fresh store media need for one release:
+
+- **Before and after screenshots** of the screens that changed, copied from your UX runs
+  so they are kept with the release.
+- **Clips** of your top flows (web apps, recorded with `mushi-ux clips`), or **device
+  recordings** you upload (native apps).
+- **Changelog lines** from the release notes, and your **brand** (name, accent colour,
+  theme) from the widget settings. Both are editable.
+- A **preset**: App Store preview, Google Play promo, Social 9:16 or Social 1:1. Each
+  asset shows inline whether it fits the preset's spec. Image sizes are read from the
+  file; a video's length, frame rate and codec are shown as declared.
+
+Mushi Mushi never renders video.
+
+---
+
+## Record clips (opt-in)
+
+Turn on **Record clips for release kits** in the kit, then:
+
+```bash
+mushi-ux clips --url https://staging.example.com --release <release id> \
+  --flow "signup:/,/signup" --flow "pricing:/pricing"
+```
+
+Clips are capped per app (30 seconds and 25 MB by default). A clip is WebM source footage
+for the video tool, not something a store accepts as is.
+
+## Make the product video
+
+**Export for a product video** (or the MCP tool `export_release_kit`) returns a `kitUrl`
+valid for 24 hours, in lazycow's release-kit format (every file with its own signed link),
+and the lazycow preset to use (`appstore-iphone`, `play-promo`, `social-9x16` or
+`social-1x1`). App Store previews show only full-screen captures of the app, so the
+"after" screens and recordings matter there; "before" screens feed the social and Play
+cuts. Hand both to lazycow:
+
+```text
+make_product_video({ kitUrl, preset })
+```
+
+lazycow renders on your machine and sends the file back to the kit. The contract is in
+[`docs/integrations/lazycow-release-kit.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/integrations/lazycow-release-kit.md).
+
+---
+
+## Put media on the stores (approval first)
+
+With App Store Connect or Google Play connected and **Act** turned on for it (with a
+separate write key), the kit's **Store uploads** card asks for:
+
+- App Store: screenshots for one device size, or app previews (15–30 s, H.264 or ProRes
+  422 HQ, at most 30 fps).
+- Google Play: listing images (phone screenshots, feature graphic, icon), or the promo
+  video as a YouTube link.
+
+Asking does not upload anything. An owner or admin approves the exact request (every file
+is pinned by its hash), then runs it once within the hour. Agents can ask with
+`request_store_media_upload`; only a person in the console can approve. Listing text
+still goes through your repo and your CI.

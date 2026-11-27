@@ -31,7 +31,7 @@ import { canonicalJson } from './connectors/canonical.ts'
 import { sha256Hex } from './connectors/jwt.ts'
 import { getConnector } from './connectors/index.ts'
 import { resolveCredential } from './connectors/credentials.ts'
-import type { ApprovedConnectorAction, ConnectorActionResult } from './connectors/types.ts'
+import { isStoreMediaAction, USE_RELEASE_KIT_MESSAGE, type ApprovedConnectorAction, type ConnectorActionResult, type StoreMediaActs } from './connectors/types.ts'
 import { placementGithubToken } from './github.ts'
 import { PLACEMENT_ACTIONS } from './ci-placement.ts'
 import { isHousekeepingAction, USE_REPO_CLEANUP_MESSAGE } from './repo-housekeeping-acts.ts'
@@ -81,7 +81,12 @@ async function audit(db: Db, row: Pick<ActionRow, 'organization_id' | 'project_i
 export async function requestConnectorAction(
   db: Db,
   input: { organizationId: string; instanceId: string; action: string; payload: Record<string, unknown>; requestedBy: string; reason?: string | null; projectId?: string | null },
+  /** Only the release-kit route sets this: it built the payload from the kit, pinned and spec-checked (ADR 0074). */
+  opts: { storeMediaFromKit?: boolean } = {},
 ): Promise<ActionOutcome<{ id: string; payloadSha256: string }>> {
+  if (isStoreMediaAction(input.action) && !opts.storeMediaFromKit) {
+    return { ok: false, code: 'USE_RELEASE_KIT', message: 'Ask for store uploads from the release\'s kit (request_store_media_upload, or Releases → Ship it): it pins each file and checks the store\'s spec.', status: 400 }
+  }
   if (isHousekeepingAction(input.action)) {
     return { ok: false, code: 'USE_REPO_CLEANUP', message: USE_REPO_CLEANUP_MESSAGE, status: 400 }
   }
@@ -181,6 +186,8 @@ export interface ExecuteDeps {
   legacyGithubToken?: (db: Db, projectId: string, repo?: string | null) => Promise<string | null>
   /** The repo clean-up executor (ADR 0051); only api-ext passes it. Without it those actions are refused unclaimed. */
   housekeepingAct?: (input: { db: Db; organizationId: string; projectId: string; userId: string; action: ApprovedConnectorAction }) => Promise<ConnectorActionResult>
+  /** The store media uploaders (ADR 0074); only api-ext's release-kit execute route passes them. Without them those actions are refused unclaimed. */
+  storeMedia?: StoreMediaActs
 }
 
 const defaultLegacyGithubToken = (db: Db, projectId: string, repo?: string | null) => placementGithubToken(db, projectId, repo)
@@ -195,6 +202,10 @@ export async function executeConnectorAction(db: Db, id: string, organizationId:
   // Repo clean-up runs only where its executor is injected; refused here before the claim, so the approval stays usable.
   if (isHousekeepingAction(row.action) && (!deps.housekeepingAct || row.connector_instance_id || row.connector_kind !== 'github' || !row.project_id)) {
     return { ok: false, code: 'USE_REPO_CLEANUP', message: USE_REPO_CLEANUP_MESSAGE, status: 400 }
+  }
+  // Store media uploads run only where their uploader is injected (api-ext); refused here before the claim, so the approval stays usable.
+  if (isStoreMediaAction(row.action) && !deps.storeMedia) {
+    return { ok: false, code: 'USE_RELEASE_KIT', message: USE_RELEASE_KIT_MESSAGE, status: 400 }
   }
   // The stored hash must still describe the stored payload (tamper check).
   if (await payloadHash(row.payload) !== row.payload_sha256) {
@@ -262,6 +273,7 @@ export async function executeConnectorAction(db: Db, id: string, organizationId:
       readCredential: await resolve(db, instance.read_credential_ref),
       writeCredential: await resolve(db, instance.write_credential_ref),
       fetch: deps.fetch, now: deps.now,
+      ...(deps.storeMedia ? { storeMedia: deps.storeMedia } : {}),
     }, { id: row.id, action: row.action, payload: row.payload, payloadSha256: row.payload_sha256 })
   } catch (err) {
     result = { ok: false, detail: ((err as Error)?.message ?? String(err)).slice(0, 300) }

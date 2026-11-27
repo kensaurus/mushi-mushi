@@ -10746,6 +10746,7 @@ description: Every tool, resource and prompt the Mushi Mushi MCP server exposes 
 | `list_portfolio_findings` | Portfolio findings — fix once | Return what to fix across the apps of one organization: groups of the same finding rule open in two or more projects (rule, gate, highest severity, affected projectIds, a sample message and one paste-ready fix prompt), the Mushi SDK version per project and package (current \| behind \| unknown), and integrations most sibling projects have but one lacks. Open means the latest completed gate run per project and gate, not allowlisted; info findings are left out. Optional organizationId as for get_portfolio. Needs an account-level key. Returns \{ organizationId, groups, sdkSkew, holes, crossProject, readErrors }; a part named in readErrors is unknown, not empty. Read-only. Fix a group repo by repo with list_gate_findings in each project. |
 | `get_recipe_drift` | Recipe drift | Return what drifted from the app recipe, with a fix for each: CI workflows (no concurrency or timeout, macOS on every run, long artifact retention, crons more than daily, the default branch red), deploys (a merged fix not live yet, a failed version probe, web and mobile on different versions), env names declared but missing in CI, migrations in the repo but not applied, and off-token design values. For each gate it says when it last ran (never_run means not checked, never healthy). Returns \{ projectId, gates: \{ \: \{ status, checkedAt, commitSha } }, findings: [\{ gate, ruleId, severity, message, filePath, line, suggestedFix }] }. Read-only. Mushi never runs DDL or edits workflows: apply schema and CI fixes from your editor. |
 | `list_connectors` | Connectors | List the sources connected to an organization: each connector instance with its kind, status (connected \| not_connected \| blocked \| error; blocked means an outside party refuses, for example an App Store agreement not accepted), the scopes it was granted, enabled capabilities and the projects it is bound to, plus the kinds that can be added and those still planned. Never returns credentials. Optional organizationId; account-level key needed. Returns \{ organizationId, available, planned, instances, legacy }. Read-only. |
+| `get_security_proof` | Security proof of a release | Return the Security proof of one release (releaseId), one commit (commitSha) or, with neither, the newest commit the scans saw: per lane (dependencies = OSV-Scanner, secrets = Gitleaks, ai_review = claude-code-security-review, dast = ZAP baseline + Nuclei, weekly) its state passed \| findings \| error \| skipped \| off \| unknown \| stale, the counts by severity, the run it used and its findings (title, severity, location, report id, deduped_by). The scanners run in the app's own CI (mushi-security.yml) and post their results; Mushi never runs them. state is proven (dependencies and secrets green for the commit, nothing failing elsewhere), attention, incomplete (a required lane has no result for the commit; a lane that never ran is not a pass) or not_pinned (the release names no commit). Optional projectId. Returns \{ state, headline, commitSha, lanes, findings, release }. Read-only. |
 | `get_store_status` | Store review status | Return the latest store review of an app: listing text in the repo vs what is live on the App Store and Google Play (listing_drift, a language out of sync, store length limits), listing claims checked against the code (listing_claim_contradicts_code: for example "never leaves your phone" while the code uploads, or "open source" for a private repo), privacy labels vs data-collecting SDKs, iOS screenshots that look Android-shaped or older than recent releases, and a pre-submission checklist with a risk per item. Each result is ok \| finding \| unknown (not checked, never healthy). This is a check against the code, not legal advice. status never_run means it has not run yet; it runs from the console. Returns \{ projectId, checkedAt, status, results, checklist, findings }. Read-only. |
 | `get_radar` | Hole checks (radar) | Return the hole checks that catch a problem before a user hits it: store names that differ between the App Store and Google Play, a store listing missing a language, a domain or HTTPS certificate about to expire, missing security headers, a broken privacy link, storage rows deleted with SQL (files left behind and billed), and an Android target SDK or iOS build that the stores will refuse. scope "project" (default; projectId optional) returns every check with state ok \| finding \| unknown \| error, a plain-English reason, and each finding with its fix; unknown means not checked and never means healthy. scope "organization" (organizationId optional, account-level key) returns the open findings of every app. Read-only. To run the checks again, use the console Recipe page. |
 | `get_release_calendar` | Release calendar | Return the release calendar of one organization: per app, what is live, the fixes merged since (waiting to ship) and the store state, plus a suggested batch of apps to release now versus next that respects the estimated CI minutes of each build. Mushi only proposes the batch; your CI builds and submits. Optional organizationId (UUID); omitted, the only organization of the key owner is used, and a 400 ORG_REQUIRED lists the choices when there are several. Needs an account-level key; a project-bound key gets 403. Returns \{ rows, batchSuggestion, note }. Read-only. |
@@ -10822,6 +10823,8 @@ description: Every tool, resource and prompt the Mushi Mushi MCP server exposes 
 | `propose_recipe_change` | Propose a recipe change (draft PR) | Propose edits to files the app recipe allows (design tokens, budgets in mushi.recipe.json, .env.example declarations, store listing text under store.listingDir) as ONE draft pull request. Dry run by default: returns the diff of each file, with the baseSha it was taken against, and any path that is not writable (workflows, env files, lockfiles, generated exports and migrations never are) or whose new content would not parse (mushi.recipe.json, the inventory). Send each baseSha back on the confirm so a file that changed since is refused. confirm: true opens the draft PR; it stays a draft so the repo CI does not run until the owner marks it ready, and nothing is merged or published. Confirm with the user before confirm: true. Returns \{ dryRun, files, denied } or \{ jobId, status, prUrl }. Write. |
 | `propose_portfolio_change` | Fix once across apps (draft PRs) | Propose the same kind of recipe edit in up to 10 repos of one organization, one draft PR per repo with a shared batch id. Dry run by default (the diff and denied paths of each repo); confirm: true opens the drafts. One repo failing never rolls back the others; each result says what happened. Needs an account-level key. Confirm with the user before confirm: true. Returns \{ dryRun, plans } or \{ batchId, opened, results }. Write. |
 | `request_connector_action` | Request a store action (needs approval) | Ask for one connector action, for example set_rollout or promote_track on a Google Play connector. This only creates a request: nothing runs until a team owner or admin approves it in the console and then runs it there. An API key or this tool can never approve or run it. The approval binds the exact payload and expires after an hour. Confirm with the user first. Returns \{ id, status: "pending_approval", payloadSha256 }. Write. |
+| `export_release_kit` | Export a release kit | Export the release kit of one release (releaseId) for a product-video tool: signs every ready asset (before/after screenshots copied from the UX baselines, Playwright clips, device recordings) for 24 hours, writes manifest.json beside them in lazycow's release-kit format (schema lazycow.release-kit, version 1: app, release, brand, screens with before/after, recordings, changelog; every asset with its own signed URL, bytes and sha256) and returns \{ kitUrl, expiresAt, preset, manifest }, where preset is lazycow's name (appstore-iphone \| play-promo \| social-9x16 \| social-1x1). Pass both to lazycow's make_product_video(\{ kitUrl, preset }); the rendered file comes back as a product_video asset of the kit. Mushi never renders video. Mushi's own fields (per-asset store checks, the preset's output spec, the release's Security proof headline) are under manifest.mushi. An empty kit is 422 KIT_EMPTY. Optional projectId. Write: it writes the manifest and mints signed URLs. |
+| `request_store_media_upload` | Ask to upload store media (needs approval) | Ask to put release-kit media on a store: action upload_screenshots (App Store, displayType such as APP_IPHONE_67), upload_app_preview (App Store, previewType such as IPHONE_67; 15–30 s, H.264 or ProRes 422 HQ, at most 30 fps), upload_listing_images (Google Play, imageType such as phoneScreenshots or featureGraphic) or set_promo_video (Google Play, a YouTube URL). Give releaseId, connectorId (an App Store Connect or Google Play connector bound to the app), locale and assetIds from the kit. Mushi checks each asset against the store's spec first (422 SPEC_CHECK_FAILED with the reason) and stores the exact payload, every asset pinned by its SHA-256. This only creates a request: nothing is uploaded until a team owner or admin approves it in the console and runs it there. Confirm with the user first. Returns \{ actionId, payloadSha256, payload, status: "pending_approval" }. Write. |
 | `run_radar` | Run the hole checks now | Start the hole checks (radar) for one project now instead of waiting for the daily run: store names, listing languages, domain and certificate expiry, security headers, the privacy link, and the connector-backed checks. The checks run in the background; poll get_radar until checkedAt changes. At most one run per project every 10 minutes (429 RATE_LIMITED with Retry-After otherwise). Optional projectId (defaults to the server-configured project). Returns \{ started, projectId, startedAt }. Write: it records a new gate run; nothing in your app or repo changes. |
 | `refresh_recipe` | Refresh the app recipe | Read mushi.recipe.json and the design-token files from the connected repo again and store a new recipe snapshot, instead of waiting for the daily refresh. At most once per project every 5 minutes (429 RATE_LIMITED otherwise). Optional projectId. Returns \{ ok, state, reason, snapshotId, tokensHash, manifestPresent, tokenCount, issues } where state is ok \| drift \| unknown \| not_connected \| error and issues lists manifest problems with their path. Write: it stores a snapshot; nothing in the repo changes. Use after editing mushi.recipe.json or the tokens; then read get_app_recipe or get_design_tokens. |
 | `run_design_deviance` | Run the design deviance scan | Refresh the design tokens and start a new deviance scan of the repo (off-token colours, fonts, spacing, radius, contrast below AA, raw interactive elements). The scan reads up to 1,500 files in the background: the result is \{ refresh, run } with run.status "running" (poll get_design_deviance until running clears), or run null when the repo has no tokens to compare against (refresh says why). At most one scan per project every 5 minutes (429 RATE_LIMITED otherwise). Optional projectId. Write: it records a scan; nothing in the repo changes. |
@@ -27392,6 +27395,82 @@ Checks that never ran are under **not checked yet (not a pass)**. Passing checks
 
 ---
 
+## Release kits
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/release-kits
+
+---
+title: Release kits
+description: A release kit gathers a release's before and after screenshots, clips of your top flows, the changelog lines and your brand colours, so a video tool can make the product video and Mushi Mushi can put new media on the App Store and Google Play after you approve it.
+---
+
+# Release kits
+
+**Where:** Releases → open a release → **Ship it** → Release kit
+
+A release kit holds what a product video and fresh store media need for one release:
+
+- **Before and after screenshots** of the screens that changed, copied from your UX runs
+  so they are kept with the release.
+- **Clips** of your top flows (web apps, recorded with `mushi-ux clips`), or **device
+  recordings** you upload (native apps).
+- **Changelog lines** from the release notes, and your **brand** (name, accent colour,
+  theme) from the widget settings. Both are editable.
+- A **preset**: App Store preview, Google Play promo, Social 9:16 or Social 1:1. Each
+  asset shows inline whether it fits the preset's spec. Image sizes are read from the
+  file; a video's length, frame rate and codec are shown as declared.
+
+Mushi Mushi never renders video.
+
+---
+
+## Record clips (opt-in)
+
+Turn on **Record clips for release kits** in the kit, then:
+
+```bash
+mushi-ux clips --url https://staging.example.com --release <release id> \
+  --flow "signup:/,/signup" --flow "pricing:/pricing"
+```
+
+Clips are capped per app (30 seconds and 25 MB by default). A clip is WebM source footage
+for the video tool, not something a store accepts as is.
+
+## Make the product video
+
+**Export for a product video** (or the MCP tool `export_release_kit`) returns a `kitUrl`
+valid for 24 hours, in lazycow's release-kit format (every file with its own signed link),
+and the lazycow preset to use (`appstore-iphone`, `play-promo`, `social-9x16` or
+`social-1x1`). App Store previews show only full-screen captures of the app, so the
+"after" screens and recordings matter there; "before" screens feed the social and Play
+cuts. Hand both to lazycow:
+
+```text
+make_product_video({ kitUrl, preset })
+```
+
+lazycow renders on your machine and sends the file back to the kit. The contract is in
+[`docs/integrations/lazycow-release-kit.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/integrations/lazycow-release-kit.md).
+
+---
+
+## Put media on the stores (approval first)
+
+With App Store Connect or Google Play connected and **Act** turned on for it (with a
+separate write key), the kit's **Store uploads** card asks for:
+
+- App Store: screenshots for one device size, or app previews (15–30 s, H.264 or ProRes
+  422 HQ, at most 30 fps).
+- Google Play: listing images (phone screenshots, feature graphic, icon), or the promo
+  video as a YouTube link.
+
+Asking does not upload anything. An owner or admin approves the exact request (every file
+is pinned by its hash), then runs it once within the hour. Agents can ask with
+`request_store_media_upload`; only a person in the console can approve. Listing text
+still goes through your repo and your CI.
+
+---
+
 ## Releases
 
 Source: https://kensaur.us/mushi-mushi/docs/admin/releases
@@ -28420,6 +28499,84 @@ SHA from this repository; the action has no release tags of its own.
   the lockfile commit lands.
 - The PR opens on the next 5-minute check after the lockfile commit, so expect
   a short wait.
+
+---
+
+## Security proof
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/security-proof
+
+---
+title: Security proof
+description: Each release in Mushi Mushi shows its Security proof, the scans your own CI ran for the commit it ships. Dependencies and secrets on every PR, an optional AI review, and a weekly scan of your staging site.
+---
+
+# Security proof
+
+**Where:** Releases → open a release → **Ship it** → Security proof
+
+A release's Security proof answers one question: did the scans come back clean
+for the commit this release ships? Your own GitHub Actions run the scanners, with
+your minutes and your keys. Mushi Mushi only reads the results and files what they
+find as bugs.
+
+| Lane | Tool | When |
+|---|---|---|
+| Dependencies | OSV-Scanner | every PR |
+| Secrets | Gitleaks (redacted, never stores the secret) | every PR |
+| AI review | `claude-code-security-review`, with your own Anthropic key | opt-in, trusted authors' PRs only |
+| Live site | ZAP baseline (passive) and Nuclei (non-intrusive templates) | weekly, against your staging URL |
+
+---
+
+## Add the workflow
+
+1. Open a release, then **Ship it**. With no scan yet the panel offers **Open a pull
+   request** (Mushi adds `.github/workflows/mushi-security.yml`) or **Copy the workflow**.
+2. Add the `MUSHI_API_KEY` secret: a key bound to this app with `mcp:write`
+   (**Projects → API keys**). Without it the scans still run on your PRs; nothing is sent.
+3. Optional repo variables:
+   - `MUSHI_SECURITY_AI_REVIEW` = `true`, and the `ANTHROPIC_API_KEY` secret, turns on the
+     AI review.
+   - `MUSHI_SECURITY_TRUSTED_AUTHORS`: comma-separated GitHub logins whose PRs the AI
+     review may read. The default is the repo owner, plus Mushi's own fix-agent bot when
+     your Mushi has a GitHub App.
+   - `MUSHI_STAGING_URL`: the site the weekly scan visits. Never your production URL.
+
+The template is in the repo at
+[`docs/templates/mushi-security.yml`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/templates/mushi-security.yml).
+
+---
+
+## How a release is proven
+
+- **Pin the commit.** Automatic releases take it from the deploy or release webhook.
+  Otherwise paste it in the panel, or run the workflow on it from the Actions tab with
+  `sha` set (the panel shows the `gh workflow run` command).
+- **Proven** means the dependency and secret scans passed for that commit, and no lane
+  you turned on has findings, errors or a stale run.
+- **Not proven yet** means a required scan has no result for that commit. A scan that
+  never ran is never shown as a pass.
+- The live-site scan runs weekly, so it counts when it ran within 8 days before the
+  release.
+
+---
+
+## What becomes a bug
+
+Findings of medium severity and above are filed as bugs with a plain fix, one bug per
+root cause, at most 10 a day (most severe first). A dependency hole that **Known holes**
+already tracks is linked to that bug, not filed twice. Low findings stay on the
+release's proof.
+
+Mushi never runs the scanners itself and never uses Semgrep registry or opengrep rules.
+The AI review is not hardened against prompt injection, so it never reads a fork or a
+stranger's PR.
+
+## From an agent
+
+`get_security_proof` (MCP) returns the same lanes for a release, a commit, or the newest
+commit the scans saw.
 
 ---
 

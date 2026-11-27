@@ -45,6 +45,48 @@ const OPEN_REPORT_STATUSES = ['new', 'pending', 'submitted', 'queued', 'classifi
 /** Fixtures and examples carry lockfiles nobody ships. */
 const SKIP_DIR_RE = /(?:^|\/)(?:node_modules|vendor|\.git|fixtures|__fixtures__|testdata|__mocks__|examples?)\//
 
+/** An open security_scan report the host's CI filed for a dependency, with what it names. */
+export interface CiDependencyReport {
+  reportId: string
+  packageName: string
+  advisoryIds: string[]
+}
+
+/**
+ * Open security_scan reports from the dependency lane (OSV-Scanner in the
+ * host's CI, ADR 0074). Best effort: before the migration, or on any read
+ * error, there are none and vuln-watch files as before.
+ */
+export async function openCiDependencyReports(db: Db, projectId: string): Promise<CiDependencyReport[]> {
+  try {
+    const { data, error } = await db
+      .from('security_scan_findings')
+      .select('package_name, advisory_ids, report_id')
+      .eq('project_id', projectId)
+      .eq('lane', 'dependencies')
+      .not('report_id', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(1000)
+    if (error || !data?.length) return []
+    const rows = data as Array<{ package_name: string | null; advisory_ids: string[] | null; report_id: string }>
+    const ids = [...new Set(rows.map((r) => r.report_id))]
+    const { data: reps, error: repErr } = await db.from('reports').select('id, status').in('id', ids.slice(0, 500))
+    if (repErr) return []
+    const open = new Set(((reps ?? []) as Array<{ id: string; status: string }>).filter((r) => OPEN_REPORT_STATUSES.includes(r.status)).map((r) => r.id))
+    return rows.filter((r) => r.package_name && open.has(r.report_id)).map((r) => ({ reportId: r.report_id, packageName: r.package_name!, advisoryIds: r.advisory_ids ?? [] }))
+  } catch {
+    return []
+  }
+}
+
+/** The open CI report that already names this group's package and one of its advisories, if any. */
+export function ciReportFor(g: Pick<VulnGroup, 'kind' | 'name' | 'matches'>, ci: readonly CiDependencyReport[]): string | null {
+  if (g.kind !== 'package' || ci.length === 0) return null
+  const ids = new Set(g.matches.flatMap((m) => [m.advisoryId, ...m.cveIds]).map((x) => x.toUpperCase()))
+  const hit = ci.find((r) => r.packageName.toLowerCase() === g.name.toLowerCase() && r.advisoryIds.some((a) => ids.has(a.toUpperCase())))
+  return hit?.reportId ?? null
+}
+
 export interface VulnWatchDeps {
   resolveRepo: (db: Db, projectId: string) => Promise<RecipeRepoResolution>
   getDefaultHead: (repo: RecipeRepo) => Promise<{ branch: string; sha: string }>
@@ -677,7 +719,16 @@ async function checkProject(db: Db, projectId: string, deps: VulnWatchDeps, trig
       const { data: reps } = await db.from('reports').select('id, status').in('id', reportIds)
       for (const r of (reps ?? []) as Array<{ id: string; status: string }>) if (OPEN_REPORT_STATUSES.includes(r.status)) openReports.add(r.id)
     }
+    // ADR 0074 decision 4, the other direction: the host's own CI
+    // (OSV-Scanner in mushi-security.yml) may have filed this upgrade first
+    // as an open security_scan report. Link to it instead of filing twice.
+    const ciReports = await openCiDependencyReports(db, projectId)
     for (const g of fileable) {
+      const ci = ciReportFor(g, ciReports)
+      if (ci) {
+        await db.from('dependency_vulns').update({ report_id: ci }).eq('repo_id', repoId).eq('group_key', g.key).eq('status', 'open').is('report_id', null)
+        continue
+      }
       // A runtime group spans OSV (Bitnami, Go) and curated rows, so it matches on the runtime alone.
       const samePackage = linked.filter((r) => r.kind === g.kind && r.package_name === g.name && (g.kind === 'runtime' || r.ecosystem === g.ecosystem))
       const openFor = samePackage.find((r) => openReports.has(r.report_id!))

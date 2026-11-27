@@ -663,8 +663,9 @@ export async function apiKeyAuth(c: Context, next: Next) {
   // "SDK heartbeat" step self-satisfy from the second poll onward. The runner
   // ingest (Plan 022) is not the SDK either: a runner key pushing heartbeats
   // must not make the project read "SDK installed".
-  // An ops key (POST /v1/ops/events) is a server's key, not the SDK either.
-  if (!c.req.path.endsWith('/ingest-setup') && !c.req.path.endsWith('/ingest/runner') && !c.req.path.endsWith('/ops/events')) {
+  // An ops key (POST /v1/ops/events) is a server's key, not the SDK either,
+  // and neither is CI posting scanner results (POST /v1/security/results, ADR 0074).
+  if (!c.req.path.endsWith('/ingest-setup') && !c.req.path.endsWith('/ingest/runner') && !c.req.path.endsWith('/ops/events') && !c.req.path.endsWith('/security/results')) {
     const sdkPackage = c.req.header(MUSHI_SDK_PACKAGE_HEADER) ?? null
     const sdkVersion = c.req.header(MUSHI_SDK_VERSION_HEADER) ?? null
     const origin = c.req.header('Origin') ?? c.req.header('Referer') ?? null

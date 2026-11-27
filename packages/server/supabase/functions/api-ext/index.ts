@@ -96,6 +96,9 @@ import { registerSpendLedgerRoutes } from '../api/routes/spend-ledger.ts'
 import { registerAccountsRegisterRoutes } from '../api/routes/accounts-register.ts'
 import { registerOpsRoutes } from '../api/routes/ops.ts'
 import { registerKensaurusOpsRoutes } from '../api/routes/kensaurus-ops.ts'
+import { registerSecurityProofRoutes } from '../api/routes/security-proof.ts'
+import { registerReleaseKitRoutes } from '../api/routes/release-kits.ts'
+import { registerFineTuningRoutes } from '../api/routes/fine-tuning.ts'
 
 ensureSentry('api-ext')
 
@@ -166,6 +169,12 @@ registerAccountsRegisterRoutes(app)
 registerOpsRoutes(app)
 // Providers & AI routes (operator only): proxy to the kensaurus-ops API on kenji.
 registerKensaurusOpsRoutes(app)
+// Security proof and release kits (Plan 025 P4-P6, ADR 0074): CI scan results, a release's proof,
+// its kit for a product video, and store media uploads as approval requests.
+registerSecurityProofRoutes(app)
+registerReleaseKitRoutes(app)
+// Fine-tuning jobs and the OpenAI fine-tuning webhook (moved from api for its size budget, 2026-11-27).
+registerFineTuningRoutes(app)
 
 app.notFound((c) => c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'No such route.' } }, 404))
 

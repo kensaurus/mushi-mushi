@@ -83,7 +83,24 @@ export interface ConnectorContext {
   /** Network access, injectable for tests. Must not send credentials to a host other than the vendor's. */
   fetch: (url: string, init?: RequestInit) => Promise<Response>
   now: () => Date
+  /**
+   * The store media uploaders (Plan 025 P6, ADR 0074), injected only where
+   * they run (api-ext's release-kit execute route), so their code stays out
+   * of the size-capped `api` bundle. Absent = media actions are refused.
+   */
+  storeMedia?: StoreMediaActs
 }
+
+/** Uploads release-kit media to a store; implemented in store-media-act.ts. */
+export interface StoreMediaActs {
+  appStore(ctx: ConnectorContext, action: ApprovedConnectorAction): Promise<ConnectorActionResult>
+  play(ctx: ConnectorContext, action: ApprovedConnectorAction): Promise<ConnectorActionResult>
+}
+
+/** Store media actions: never run through the generic execute route (connector-actions.ts). */
+export const STORE_MEDIA_ACTIONS = ['upload_screenshots', 'upload_app_preview', 'upload_listing_images', 'set_promo_video'] as const
+export const isStoreMediaAction = (action: string): boolean => (STORE_MEDIA_ACTIONS as readonly string[]).includes(action)
+export const USE_RELEASE_KIT_MESSAGE = 'Run store uploads from the release\'s kit (Releases → open the release → Ship it → Store uploads).'
 
 export interface ConnectorBinding {
   projectId: string

@@ -1580,6 +1580,80 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   );
 
+  // --- Plan 025 P4-P6 (ADR 0074): Security proof, release kit, store media -----
+
+  server.registerTool(
+    'get_security_proof',
+    {
+      title: titleOf('get_security_proof'),
+      description: descOf('get_security_proof'),
+      annotations: annotationsFor('get_security_proof'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+        releaseId: z.string().uuid().optional().describe('Release UUID; its pinned commit is the one proven'),
+        commitSha: z.string().regex(/^[0-9a-fA-F]{7,40}$/).optional().describe('A commit to prove instead of a release'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      const q = new URLSearchParams();
+      if (args.releaseId) q.set('release', args.releaseId);
+      if (args.commitSha) q.set('commit', args.commitSha);
+      const qs = q.toString();
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/security-proof${qs ? `?${qs}` : ''}`));
+    },
+  );
+
+  server.registerTool(
+    'export_release_kit',
+    {
+      title: titleOf('export_release_kit'),
+      description: descOf('export_release_kit'),
+      annotations: annotationsFor('export_release_kit'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+        releaseId: z.string().uuid().describe('Release UUID (list releases in the console or with get_release_calendar)'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/releases/${encodeURIComponent(args.releaseId)}/kit/export`, { method: 'POST', body: '{}' }));
+    },
+  );
+
+  server.registerTool(
+    'request_store_media_upload',
+    {
+      title: titleOf('request_store_media_upload'),
+      description: descOf('request_store_media_upload'),
+      annotations: annotationsFor('request_store_media_upload'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+        releaseId: z.string().uuid().describe('Release UUID whose kit holds the assets'),
+        connectorId: z.string().uuid().describe('App Store Connect or Google Play connector bound to the app (list_connectors)'),
+        action: z.enum(['upload_screenshots', 'upload_app_preview', 'upload_listing_images', 'set_promo_video']),
+        locale: z.string().min(2).max(20).describe('Store language, e.g. en-US'),
+        displayType: z.string().max(40).optional().describe('upload_screenshots: e.g. APP_IPHONE_67, APP_IPAD_PRO_3GEN_129'),
+        previewType: z.string().max(40).optional().describe('upload_app_preview: e.g. IPHONE_67'),
+        imageType: z.string().max(40).optional().describe('upload_listing_images: phoneScreenshots, featureGraphic, icon, …'),
+        replace: z.boolean().optional().describe('upload_listing_images: clear that image type for the language first'),
+        youtubeUrl: z.string().url().max(200).optional().describe('set_promo_video: the published YouTube video'),
+        previewFrameTimeCode: z.string().regex(/^\d{2}:\d{2}:\d{2}:\d{2}$/).optional().describe('upload_app_preview: poster frame, e.g. 00:00:05:00'),
+        assetIds: z.array(z.string().uuid()).max(10).optional().describe('Kit asset ids to upload'),
+        reason: z.string().max(500).optional().describe('Why, shown to the approver'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      const body = {
+        connectorId: args.connectorId, action: args.action, locale: args.locale, displayType: args.displayType,
+        previewType: args.previewType, imageType: args.imageType, replace: args.replace, youtubeUrl: args.youtubeUrl,
+        previewFrameTimeCode: args.previewFrameTimeCode, assetIds: args.assetIds ?? [], reason: args.reason,
+      };
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/releases/${encodeURIComponent(args.releaseId)}/kit/store-upload`, { method: 'POST', body: JSON.stringify(body) }));
+    },
+  );
+
   server.registerTool(
     'get_store_status',
     {

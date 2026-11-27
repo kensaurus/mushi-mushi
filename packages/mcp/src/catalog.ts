@@ -305,6 +305,34 @@ export const TOOL_CATALOG: ToolSpec[] = [
     useCase: 'Ask to raise the Play rollout to 20%, for a person to approve.',
   },
   {
+    name: 'get_security_proof',
+    title: 'Security proof of a release',
+    description:
+      'Return the Security proof of one release (releaseId), one commit (commitSha) or, with neither, the newest commit the scans saw: per lane (dependencies = OSV-Scanner, secrets = Gitleaks, ai_review = claude-code-security-review, dast = ZAP baseline + Nuclei, weekly) its state passed | findings | error | skipped | off | unknown | stale, the counts by severity, the run it used and its findings (title, severity, location, report id, deduped_by). The scanners run in the app\'s own CI (mushi-security.yml) and post their results; Mushi never runs them. state is proven (dependencies and secrets green for the commit, nothing failing elsewhere), attention, incomplete (a required lane has no result for the commit; a lane that never ran is not a pass) or not_pinned (the release names no commit). Optional projectId. Returns { state, headline, commitSha, lanes, findings, release }. Read-only.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Did the scans come back green for the commit this release ships?',
+  },
+  {
+    name: 'export_release_kit',
+    title: 'Export a release kit',
+    description:
+      'Export the release kit of one release (releaseId) for a product-video tool: signs every ready asset (before/after screenshots copied from the UX baselines, Playwright clips, device recordings) for 24 hours, writes manifest.json beside them in lazycow\'s release-kit format (schema lazycow.release-kit, version 1: app, release, brand, screens with before/after, recordings, changelog; every asset with its own signed URL, bytes and sha256) and returns { kitUrl, expiresAt, preset, manifest }, where preset is lazycow\'s name (appstore-iphone | play-promo | social-9x16 | social-1x1). Pass both to lazycow\'s make_product_video({ kitUrl, preset }); the rendered file comes back as a product_video asset of the kit. Mushi never renders video. Mushi\'s own fields (per-asset store checks, the preset\'s output spec, the release\'s Security proof headline) are under manifest.mushi. An empty kit is 422 KIT_EMPTY. Optional projectId. Write: it writes the manifest and mints signed URLs.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    useCase: 'Hand this release\'s screenshots and clips to lazycow for a product video.',
+  },
+  {
+    name: 'request_store_media_upload',
+    title: 'Ask to upload store media (needs approval)',
+    description:
+      'Ask to put release-kit media on a store: action upload_screenshots (App Store, displayType such as APP_IPHONE_67), upload_app_preview (App Store, previewType such as IPHONE_67; 15–30 s, H.264 or ProRes 422 HQ, at most 30 fps), upload_listing_images (Google Play, imageType such as phoneScreenshots or featureGraphic) or set_promo_video (Google Play, a YouTube URL). Give releaseId, connectorId (an App Store Connect or Google Play connector bound to the app), locale and assetIds from the kit. Mushi checks each asset against the store\'s spec first (422 SPEC_CHECK_FAILED with the reason) and stores the exact payload, every asset pinned by its SHA-256. This only creates a request: nothing is uploaded until a team owner or admin approves it in the console and runs it there. Confirm with the user first. Returns { actionId, payloadSha256, payload, status: "pending_approval" }. Write.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    useCase: 'Ask to put the new screenshots on the App Store, for a person to approve.',
+  },
+  {
     name: 'get_store_status',
     title: 'Store review status',
     description:

@@ -13,6 +13,8 @@
  *                                                        (score screenshots a native driver made on the same rubric)
  *   mushi-ux fresh-eyes --url https://example.com --goal "get my first bug explained"
  *                                                        (a first-time visitor: time the path, file what stops them)
+ *   mushi-ux clips --url https://example.com --release <id> --flow "signup:/,/signup"
+ *                                                        (record short flow clips into a release kit; opt-in, capped)
  *   mushi-ux run --dev "pnpm dev --port {port}" --agent claude-code
  *   mushi-ux ui                                          (studio: pick agent, model, skill; watch runs)
  *   mushi-ux open <runId>                                (dashboard for a past run)
@@ -31,6 +33,7 @@ import { chromium } from 'playwright'
 import { AGENTS, type AgentName } from './agents.js'
 import { AUDIT_FILE_CAP, auditHome, fileFindings, runAudit, writePending, type ReviewVia } from './audit.js'
 import { openSession } from './capture.js'
+import { CLIP_LIMITS, DEFAULT_CLIP_VIEWPORT, effectiveClipCaps, fetchClipCaps, parseFlow, recordClips, uploadClips, type ClipFlow } from './clips.js'
 import { startDashboard, startStudio, type LaunchInput } from './dashboard.js'
 import { discover } from './discover.js'
 import { isSafeSelector } from './ignore.js'
@@ -520,6 +523,77 @@ program
       for (const u of outcome.updated) console.log(`Refreshed the pages of open report ${u.reportId} (${u.patternKey})`)
       for (const w of outcome.wouldFile ?? []) console.log(`Would file: ${w.title} (${w.pages} page(s), ${w.patternKey})`)
       for (const s of outcome.skipped) console.log(`Not filed ${s.patternKey}: ${s.reason}`)
+    },
+  )
+
+const collectFlow = (v: string, prev: ClipFlow[]) => {
+  try {
+    return [...prev, parseFlow(v)]
+  } catch (err) {
+    throw new InvalidArgumentError((err as Error).message)
+  }
+}
+
+program
+  .command('clips')
+  .description(`Record short clips of your top flows (Playwright video, read-only) and upload them into a release kit for a product video. Opt-in per app, at most ${CLIP_LIMITS.maxFlows} flows, capped in length and size.`)
+  .requiredOption('--url <url>', 'The app to record, e.g. https://staging.example.com')
+  .option('--release <id>', 'The release whose kit gets the clips (needs MUSHI_API_KEY / MUSHI_PROJECT_ID)')
+  .option('--flow <name:/a,/b>', 'A flow: a name and the screens it visits in order (repeatable)', collectFlow, [])
+  .option('--viewport <WxH>', `Recording size (default ${DEFAULT_CLIP_VIEWPORT.width}x${DEFAULT_CLIP_VIEWPORT.height}, a phone)`)
+  .option('--max-seconds <n>', `Longest clip per flow (${CLIP_LIMITS.minSeconds}-${CLIP_LIMITS.maxSeconds})`, String(CLIP_LIMITS.defaultSeconds))
+  .option('--max-mb <n>', "Largest clip kept, in MB (at most 100; the app's kit may cap it lower)", '25')
+  .option('--profile-dir <dir>', 'A cached, signed-in browser profile to record signed in')
+  .option('--channel <name>', 'Browser build for --profile-dir: chrome (default) or chromium', parseChannel)
+  .option('--allow <rule>', 'Allow a non-GET request that only reads (repeatable)', collect, [])
+  .option('--out <dir>', 'Where the clips are written', join(process.cwd(), '.mushi-ux', 'clips'))
+  .option('--no-upload', 'Record only; do not upload')
+  .action(
+    async (o: { url: string; release?: string; flow: ClipFlow[]; viewport?: string; maxSeconds: string; maxMb: string; profileDir?: string; channel?: string; allow: string[]; out: string; upload: boolean }) => {
+      if (!o.flow.length) throw new InvalidArgumentError('Name at least one flow, e.g. --flow "signup:/,/signup"')
+      let viewport: { width: number; height: number } = DEFAULT_CLIP_VIEWPORT
+      if (o.viewport) {
+        const m = /^([0-9]{3,4})x([0-9]{3,4})$/.exec(o.viewport)
+        if (!m) throw new InvalidArgumentError(`--viewport must look like 390x844, not ${o.viewport}`)
+        viewport = { width: Number(m[1]), height: Number(m[2]) }
+      }
+      const cfg = o.upload ? syncConfigFromEnv() : null
+      for (const k of ['MUSHI_API_KEY', 'MUSHI_PROJECT_ID', 'MUSHI_API_ENDPOINT']) delete process.env[k]
+      if (o.upload && (!cfg || !o.release)) {
+        console.warn(!cfg ? 'No MUSHI_API_KEY / MUSHI_PROJECT_ID: recording only. Set them (mushi login) and pass --release <id> to upload.' : "No --release: recording only. Pass --release <id> to upload into that release's kit.")
+      }
+      // Read the app's caps first, so nothing is recorded that the server would refuse on upload.
+      let caps = { maxSeconds: Number(o.maxSeconds), maxBytes: Number(o.maxMb) * 1024 * 1024 }
+      if (cfg && o.release) {
+        const eff = effectiveClipCaps(caps, await fetchClipCaps(cfg, o.release))
+        for (const n of eff.notes) console.log(n)
+        if (eff.blocked) {
+          console.warn(eff.blocked)
+          process.exitCode = 1
+          return
+        }
+        caps = { maxSeconds: eff.maxSeconds, maxBytes: eff.maxBytes }
+      }
+      const cached = cachedProfile(o)
+      const result = await recordClips({
+        baseUrl: o.url,
+        flows: o.flow,
+        outDir: o.out,
+        viewport,
+        maxSeconds: caps.maxSeconds,
+        maxBytes: caps.maxBytes,
+        allow: o.allow,
+        ...(cached ? { profileDir: cached.profileDir, channel: cached.channel } : {}),
+        log: (m) => console.log(m),
+      })
+      for (const n of result.notes) console.log(n)
+      for (const s of result.skipped) console.warn(`Dropped "${s.name}": ${s.reason}`)
+      if (result.guard.blocked.length) console.log(`${result.guard.blocked.length} write request(s) were blocked while recording (read-only).`)
+      console.log(`\n${result.clips.length} clip(s) in ${o.out}`)
+      if (!cfg || !o.release || !result.clips.length) return
+      const up = await uploadClips(cfg, o.release, result.clips)
+      for (const f of up.failed) console.warn(`Not uploaded "${f.name}": ${f.reason}`)
+      console.log(`${up.uploaded.length} clip(s) in the release kit: ${consoleBaseUrl()}/releases`)
     },
   )
 
