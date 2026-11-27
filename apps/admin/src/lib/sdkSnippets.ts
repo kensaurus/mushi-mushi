@@ -14,7 +14,7 @@
  */
 
 import type { ProjectMushiEnvVars } from './projectMushiEnv'
-import { mushiEnvVarsForProjectSlug } from './projectMushiEnv'
+import { mushiEnvVarsForProject } from './projectMushiEnv'
 import { parseAccentColour } from './widgetAccent'
 
 /** Escape text for a double-quoted HTML attribute in a pasted snippet. */
@@ -359,7 +359,8 @@ export function renderSnippet(
   projectId: string,
   apiKey?: string | null,
   cfg: SdkPreviewConfig = DEFAULT_SDK_CONFIG,
-  projectSlug?: string | null,
+  /** Unused since ADR 0072: the snippet follows the framework, never the app's name. */
+  _projectSlug?: string | null,
   /**
    * The app's bundler: read from its repository, or picked by the user under
    * the React tab. React apps on Vite or Next then read the id and key from
@@ -370,7 +371,8 @@ export function renderSnippet(
   options: RenderSnippetOptions = {},
 ): string {
   const key = apiKey || API_KEY_PLACEHOLDER
-  const env = mushiEnvVarsForProjectSlug(projectSlug)
+  // An Expo app reads EXPO_PUBLIC_* at build time (ADR 0072: by framework, for every Expo app).
+  const env = mushiEnvVarsForProject({ framework: fw === 'expo' ? 'expo' : null })
   const lock = options.lockInCode === true
   /** Web config lines: the chosen settings when locked, else the console note. */
   const webExtras = (indent: string) =>

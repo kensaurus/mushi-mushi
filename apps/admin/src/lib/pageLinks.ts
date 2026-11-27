@@ -93,9 +93,14 @@ export const PAGE_FLOW_LINKS: Record<string, PageFlowLink[]> = {
     { to: '/integrations/config', label: 'Integrations', blurb: 'GitHub connection' },
   ],
   'ux-runs': [
+    { to: '/timeline', label: 'Timeline', blurb: 'Every screen, release by release' },
     { to: '/repo', label: 'Pull requests', blurb: 'Merge a run’s PR' },
     { to: '/design', label: 'Design system', blurb: 'Tokens a run touched' },
     { to: '/reports', label: 'Bugs', blurb: 'Screens filed as bugs' },
+  ],
+  timeline: [
+    { to: '/releases', label: 'Releases', blurb: 'Publish the next release' },
+    { to: '/reports', label: 'Bugs', blurb: 'The bugs each release fixed' },
   ],
   iterate: [
     { to: '/ux-runs', label: 'UX runs', blurb: 'Screen-by-screen agent runs' },
@@ -151,6 +156,7 @@ export const PAGE_FLOW_LINKS: Record<string, PageFlowLink[]> = {
     { to: '/fullstack-audit', label: 'Full-stack audit', blurb: 'Every check, with findings' },
   ],
   releases: [
+    { to: '/timeline', label: 'Timeline', blurb: 'Screens before and after each release' },
     { to: '/fixes', label: 'Fixes', blurb: 'Fixes in each release' },
     { to: '/repo', label: 'Pull requests', blurb: 'Merge what ships next' },
     { to: '/notifications', label: 'Reporter updates', blurb: 'What reporters were told' },

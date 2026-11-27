@@ -11,7 +11,7 @@ import { Badge } from '../ui'
 import { SignalChip } from '../report-detail/ReportSurface'
 import { trendLabel } from './project-models'
 import { ProjectFavicon } from '../ProjectFavicon'
-import { sdkOriginFromApiKeys } from '../../lib/resolveProjectDomain'
+import { FAVICON_SHARED_HOSTS, sdkOriginFromApiKeys } from '../../lib/resolveProjectDomain'
 import {
   bottleneckHumanHeadline,
 } from '../../lib/pdcaBottleneck'
@@ -116,6 +116,7 @@ function faviconSource(project: ProjectFolderTabItem) {
     project_slug: project.slug,
     sdk_origin: sdkOriginFromApiKeys(project.api_keys),
     repo_url: project.primary_repo?.repo_url ?? null,
+    shared_hosts: FAVICON_SHARED_HOSTS,
   }
 }
 

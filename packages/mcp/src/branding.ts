@@ -8,8 +8,30 @@
  * server icons are absent. Always emit `icons` + recommend stdio or our icon URL.
  */
 
+/** Default MUSHI_PUBLIC_ORIGIN: the public Mushi site's origin (scheme + host, no path). */
+export const DEFAULT_PUBLIC_ORIGIN = 'https://kensaur.us'
+
+/**
+ * MUSHI_PUBLIC_ORIGIN reduced to an http(s) origin; unset or invalid → the
+ * default. This module also runs in the browser (the console imports it), so
+ * `process` is only read where it exists.
+ */
+function publicOrigin(): string {
+  const raw = typeof process !== 'undefined' ? process.env.MUSHI_PUBLIC_ORIGIN : undefined
+  const v = raw?.trim()
+  if (v) {
+    try {
+      const u = new URL(v)
+      if (u.protocol === 'https:' || u.protocol === 'http:') return u.origin
+    } catch {
+      // not a URL — fall back to the default
+    }
+  }
+  return DEFAULT_PUBLIC_ORIGIN
+}
+
 /** Public marketing site — also hosts favicon.svg for the docs app. */
-export const MUSHI_WEBSITE_URL = 'https://kensaur.us/mushi-mushi'
+export const MUSHI_WEBSITE_URL = `${publicOrigin()}/mushi-mushi`
 
 /**
  * 512×512 stamp mark — safe PNG on CDN (Cursor requires png/jpeg reliably).

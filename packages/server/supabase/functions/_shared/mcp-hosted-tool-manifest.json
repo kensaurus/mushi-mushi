@@ -469,6 +469,40 @@
     "method": "GET",
     "path": "/v1/admin/code-health?project_id={projectId}&days={days|30}"
   },
+  "get_timeline": {
+    "scope": "mcp:read",
+    "description": "The app release by release: what each release (or UX run) fixed, improved, scored and cost, the pinned screens and the last 30 days. No model call.",
+    "method": "GET",
+    "path": "/v1/admin/projects/{projectId}/timeline?compact=1",
+    "requiresProject": true,
+    "hints": { "destructive": false, "idempotent": true }
+  },
+  "get_surface_history": {
+    "scope": "mcp:read",
+    "description": "One screen's pinned shots per release (signed URLs), its scores across scorecard runs and the changes the UX loop kept on it.",
+    "method": "GET",
+    "path": "/v1/admin/projects/{projectId}/timeline/surfaces/{surfaceKey}",
+    "required": ["surfaceKey"],
+    "requiresProject": true,
+    "hints": { "destructive": false, "idempotent": true }
+  },
+  "get_ux_run": {
+    "scope": "mcp:read",
+    "description": "One UX run by its local run id: status, cost, screens with scores and screenshots, attempts.",
+    "method": "GET",
+    "path": "/v1/admin/projects/{projectId}/ux-runs/{runId}",
+    "required": ["runId"],
+    "requiresProject": true,
+    "hints": { "destructive": false, "idempotent": true }
+  },
+  "start_ux_run": {
+    "scope": "mcp:read",
+    "description": "How to start a UX run (the console link and the local command); starts nothing (ADR 0017/0020).",
+    "method": "GET",
+    "path": "/v1/admin/projects/{projectId}/timeline/run-plan?kind={kind|scorecard}",
+    "requiresProject": true,
+    "hints": { "destructive": false, "idempotent": true }
+  },
   "get_ci_overview": {
     "scope": "mcp:read",
     "description": "Where tests run and why fixes wait: machines, runners, jobs with infra vs code verdicts, queue and run times, and advice.",

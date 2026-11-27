@@ -28,7 +28,7 @@
  *
  * USAGE:
  *   Mounted below AssistantConfigCard in ProjectsPage per-project accordion.
- *   <IdentitySecretCard projectId={project.id} projectSlug={project.slug} />
+ *   <IdentitySecretCard projectId={project.id} />
  */
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
@@ -51,38 +51,17 @@ function formatDate(iso: string | null): string {
   })
 }
 
-const HOST_IDENTITY_HINTS: Record<
-  string,
-  { edgeFn: string; note: string }
-> = {
-  'yen-yen': {
-    edgeFn: 'mushi-identity-token',
-    note: 'Supabase → Edge Functions → mushi-identity-token → Secrets. Env MUSHI_IDENTITY_SECRET overrides private.mushi_identity_config.',
-  },
-  'glot-it': {
-    edgeFn: 'glot-mushi-identity-token',
-    note: 'Host: glot.it supabase/functions/glot-mushi-identity-token. Set MUSHI_IDENTITY_SECRET + MUSHI_PROJECT_ID edge secrets.',
-  },
-  'glot.it': {
-    edgeFn: 'glot-mushi-identity-token',
-    note: 'Host: glot.it supabase/functions/glot-mushi-identity-token. Set MUSHI_IDENTITY_SECRET + MUSHI_PROJECT_ID edge secrets.',
-  },
-  'the-wanting-mind': {
-    edgeFn: 'mushi-identity-token',
-    note: 'Verify edge function name under host supabase/functions/. Deploy with --no-verify-jwt.',
-  },
-  'help-her-take-photo': {
-    edgeFn: 'mushi-identity-token',
-    note: 'Verify edge function name under host supabase/functions/. Deploy with --no-verify-jwt.',
-  },
-}
+/**
+ * The conventional name of the host app's token-minting edge function. The
+ * console has no record of what each app actually deployed, so the hint is
+ * the same for every project (per-app names, if any, are the operator's).
+ */
+const IDENTITY_EDGE_FN = 'mushi-identity-token'
 
 export function IdentitySecretCard({
   projectId,
-  projectSlug,
 }: {
   projectId: string
-  projectSlug?: string | null
 }) {
   const toast = useToast()
   const [status, setStatus] = useState<SecretStatus | null>(null)
@@ -172,10 +151,6 @@ export function IdentitySecretCard({
     : null
 
   const isConfigured = status?.configured ?? false
-  const hostHint =
-    (projectSlug && HOST_IDENTITY_HINTS[projectSlug]) ||
-    HOST_IDENTITY_HINTS[projectSlug?.replace(/\./g, '-') ?? ''] ||
-    null
 
   return (
     <div className="space-y-3">
@@ -268,15 +243,8 @@ export function IdentitySecretCard({
       {!revealedSecret && isConfigured && (
         <Callout tone="info" label="Next step">
           Set <code>MUSHI_IDENTITY_SECRET</code> and <code>MUSHI_PROJECT_ID</code> on your host
-          edge function
-          {hostHint ? (
-            <>
-              {' '}
-              <strong>{hostHint.edgeFn}</strong>. {hostHint.note}
-            </>
-          ) : (
-            <> (see host repo supabase/functions).</>
-          )}{' '}
+          edge function (by convention <strong>{IDENTITY_EDGE_FN}</strong>, under your repo&apos;s
+          supabase/functions; deploy it with --no-verify-jwt).{' '}
           Then call <code>identifyWithToken()</code> after sign-in. Operator script:{' '}
           <code>scripts/sync-host-identity-secret.mjs --project {projectId}</code>
         </Callout>

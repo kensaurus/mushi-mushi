@@ -35,6 +35,7 @@ import {
 } from '../../_shared/content-quality-filter.ts';
 import { dbError, resolveOwnedProject, callerCanAccessProject } from '../shared.ts';
 import { denyViewerWrite } from '../viewer-gate.ts';
+import { callbackSignature } from '../../_shared/callback-signature.ts';
 
 const cqlog = log.child('content-quality');
 
@@ -361,10 +362,14 @@ export function registerContentQualityRoutes(app: Hono<{ Variables: Variables }>
   });
 
   // ── POST /v1/content-quality/callback — regen status callback ─────────────
-  // Called by glot-content-quality-webhook after regeneration completes.
+  // Called by the app's regeneration webhook after regeneration completes.
+  // Signature header: X-Mushi-Signature (HMAC-SHA256 of the raw body with the
+  // project's regen_webhook_secret). X-Glotit-Signature is the legacy name,
+  // still accepted for webhooks deployed before 2026-11-27 and deprecated
+  // (ADR 0072): new receivers send X-Mushi-Signature.
   app.post('/v1/content-quality/callback', async (c) => {
     const rawBody = await c.req.text();
-    const sigHeader = c.req.header('X-Glotit-Signature') ?? '';
+    const sigHeader = callbackSignature((name) => c.req.header(name));
 
     let body: { issue_id: string; status: 'completed' | 'failed'; result: unknown };
     try {

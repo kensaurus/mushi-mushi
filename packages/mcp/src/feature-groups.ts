@@ -203,6 +203,10 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   run_fullstack_audit: 'audit',
   get_backend_health: 'audit',
   get_code_health: 'audit',
+  get_timeline: 'audit',
+  get_surface_history: 'audit',
+  get_ux_run: 'audit',
+  start_ux_run: 'audit',
 
   // codebase understand
   ask_codebase: 'codebase',

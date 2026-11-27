@@ -45,10 +45,10 @@ describe('required CI vars per stack', () => {
     })
   })
 
-  it('infers the stack from known slugs and defaults to Next.js', () => {
-    expect(inferStack('yen-yen')).toBe('expo')
-    expect(inferStack('Mushi-Mushi')).toBe('vite')
-    expect(inferStack('glot-it')).toBe('nextjs')
+  it('defaults to Next.js for every project name', () => {
+    // ADR 0072: no stack is guessed from a project's name.
+    expect(inferStack('yen-yen')).toBe('nextjs')
+    expect(inferStack('Mushi-Mushi')).toBe('nextjs')
     expect(inferStack(null)).toBe('nextjs')
   })
 })

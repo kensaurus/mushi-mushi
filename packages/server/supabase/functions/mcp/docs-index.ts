@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 247 pages, generated from llms.txt. @internal Exported for tests. */
+/** 248 pages, generated from llms.txt. @internal Exported for tests. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — one place to improve your AI-built app",
@@ -644,6 +644,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["admin", "teams", "members"],
     headings: ["Plans", "Roles", "Invitation Flow"],
     excerpt: "How teams work in Mushi Mushi. Organizations own projects, billing, invitations and the member roster, and project access comes from membership.",
+  },
+  {
+    title: "Timeline",
+    url: docUrl("/admin/timeline"),
+    route: "/admin/timeline",
+    markdown: "admin/timeline.md",
+    keywords: ["admin", "timeline"],
+    headings: ["Pin each release's screens", "From your editor"],
+    excerpt: "The Timeline page in Mushi Mushi shows how your app changed release by release, with the bugs each release fixed, the screens your agent improved, scores, AI cost and a…",
   },
   {
     title: "All users",

@@ -1703,7 +1703,7 @@ export function usePageCopy(path: string): PageCopy | null {
 /**
  * One-sentence narrative used by <DogfoodNarrativeBanner> to tie the
  * Reports inbox to the user's actual project. Lives here so future
- * projects (not just the glot-it dogfood) inherit the same voice — change
+ * projects (not just the first dogfood project) inherit the same voice — change
  * the wording in one place and every project gets it. §2.3.
  *
  * `draftedFixes` and `mergedFixes` are for `component` only: open or draft

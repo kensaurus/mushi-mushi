@@ -4,6 +4,7 @@
  *          Domain resolution lives in @mushi-mushi/core/favicon.
  */
 
+import { RESOLVED_PUBLIC_ORIGIN } from './env'
 import type { SetupProject, SetupStepDiagnostic } from './useSetupStatus'
 import type { ProjectSnapshot } from './projectSnapshotTypes'
 import { sdkFreshness } from './heartbeat'
@@ -32,6 +33,18 @@ export function projectInitialsChipClass(projectId: string): string {
   return INITIALS_CHIP_THEMES[projectInitialsThemeIndex(projectId)]!
 }
 
+/**
+ * The console's own hosting origin serves many apps under paths, so its root
+ * favicon is never an app's icon (MUSHI_PUBLIC_ORIGIN; config, not a tenant list).
+ */
+export const FAVICON_SHARED_HOSTS: readonly string[] = (() => {
+  try {
+    return [new URL(RESOLVED_PUBLIC_ORIGIN).hostname.toLowerCase()]
+  } catch {
+    return []
+  }
+})()
+
 /** Merge setup checklist + projects snapshot into a favicon source. */
 export function faviconSourceFromProject(
   setup: Pick<SetupProject, 'project_id' | 'project_name' | 'project_slug' | 'steps'>,
@@ -46,6 +59,7 @@ export function faviconSourceFromProject(
     sdk_origin: sdkFromSetup ?? sdkFromKeys,
     repo_url: snapshot?.primary_repo?.repo_url ?? null,
     icon_url: snapshot?.icon_url ?? null,
+    shared_hosts: FAVICON_SHARED_HOSTS,
   }
 }
 

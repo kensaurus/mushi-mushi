@@ -312,7 +312,7 @@ function RepoCard({ projectId, repo, data, onChanged, machines = [] }: { project
               </label>
               {choice?.kind === 'label' && choice.label === '__other__' && (
                 <div className="max-w-xs pl-5">
-                  <Input label="Runner label" value={other} onChange={(e) => setOther(e.target.value)} placeholder="kensaurus-local" />
+                  <Input label="Runner label" value={other} onChange={(e) => setOther(e.target.value)} placeholder="my-runner" />
                 </div>
               )}
               {choice?.kind === 'hosted' && (

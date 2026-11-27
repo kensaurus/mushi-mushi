@@ -18,7 +18,7 @@ import { Link } from 'react-router-dom'
 import { Btn, Badge } from './ui'
 import { useToast } from '../lib/toast'
 import { RESOLVED_EXTERNAL_API_URL } from '../lib/env'
-import { mushiEnvVarsForProjectSlug, isExpoReporterProject, expoReporterGithubRepo, type ProjectMushiEnvVars } from '../lib/projectMushiEnv'
+import { isExpoEnv, isMushiSelfProject, mushiEnvVarsForProject, type ProjectMushiEnvVars } from '../lib/projectMushiEnv'
 import { CHIP_TONE } from '../lib/chipTone'
 import { MCP_PIN_SPEC } from '@mushi-mushi/mcp/clients'
 
@@ -38,15 +38,16 @@ export function isMcpCapableKey(scopes: readonly string[]): boolean {
  * (QA bug 138); it now defaults to the app's SDK env block.
  * @internal exported for tests
  */
-export function defaultModeFor(slug: string | null | undefined, scopes: readonly string[]): Mode {
-  if (isExpoReporterProject(slug)) return 'expo'
-  if (mushiEnvVarsForProjectSlug(slug).apiKeyVar.startsWith('VITE_MUSHI_SELF_')) return 'admin'
+export function defaultModeFor(projectId: string | null | undefined, scopes: readonly string[], env: ProjectMushiEnvVars = mushiEnvVarsForProject()): Mode {
+  if (isExpoEnv(env)) return 'expo'
+  if (isMushiSelfProject(projectId)) return 'admin'
   return isMcpCapableKey(scopes) ? 'env' : 'sdk'
 }
 
 interface Props {
   projectId: string
   projectName: string
+  /** Unused since ADR 0072: env names come from the framework, never the app's name. */
   projectSlug?: string | null
   apiKey: string
   scopes: string[]
@@ -104,8 +105,8 @@ function buildSdkEnv(projectId: string, apiKey: string, env: ProjectMushiEnvVars
   return lines.join('\n')
 }
 
-function buildAdminDogfoodEnv(projectId: string, apiKey: string, slug: string | null | undefined): string {
-  const env = mushiEnvVarsForProjectSlug(slug)
+function buildAdminDogfoodEnv(projectId: string, apiKey: string): string {
+  const env = mushiEnvVarsForProject({ isSelf: true })
   const file = env.envFileHint ?? 'apps/admin/.env.local'
   const lines = [
     `# Mushi Mushi admin dogfood — paste into ${file} and restart the Vite dev server.`,
@@ -134,15 +135,15 @@ function buildExpoEnvLocal(projectId: string, apiKey: string, env: ProjectMushiE
   return lines.join('\n')
 }
 
-function buildGithubCiEnv(projectId: string, apiKey: string, env: ProjectMushiEnvVars, projectSlug?: string | null): string {
+function buildGithubCiEnv(projectId: string, apiKey: string, env: ProjectMushiEnvVars): string {
   const ci = env.ciVars
-  const repo = expoReporterGithubRepo(projectSlug) ?? 'your-org/your-repo'
+  const repo = 'your-org/your-repo'
   if (!ci) {
     return buildEnvLocal(projectId, apiKey)
   }
   const lines = [
     '# GitHub Actions — reporter SDK for store builds (Android + iOS).',
-    '# Run from mushi-mushi: node scripts/setup-yen-yen-reporter-secrets.mjs',
+    '# Run in a shell signed in to gh with access to the app repo.',
     '# Use stdin/body-file when running gh — never paste secrets into shell history.',
     '#',
     '# Reporter (in-app feedback band):',
@@ -177,25 +178,24 @@ function scopeBadgeTone(scope: string): string {
 export function RevealedKeyCard({
   projectId,
   projectName,
-  projectSlug,
   apiKey,
   scopes,
   onDismiss,
   testIdPrefix,
 }: Props) {
-  const env = mushiEnvVarsForProjectSlug(projectSlug)
-  const [mode, setMode] = useState<Mode>(() => defaultModeFor(projectSlug, scopes))
+  const env = mushiEnvVarsForProject({ isSelf: isMushiSelfProject(projectId) })
+  const [mode, setMode] = useState<Mode>(() => defaultModeFor(projectId, scopes, env))
   const mcpCapable = isMcpCapableKey(scopes)
   const toast = useToast()
 
   const envSnippet = buildEnvLocal(projectId, apiKey)
   const cursorSnippet = buildCursorJson(projectId, projectName, apiKey)
-  const adminSnippet = buildAdminDogfoodEnv(projectId, apiKey, projectSlug)
+  const adminSnippet = buildAdminDogfoodEnv(projectId, apiKey)
   const expoSnippet = buildExpoEnvLocal(projectId, apiKey, env)
-  const githubSnippet = buildGithubCiEnv(projectId, apiKey, env, projectSlug)
+  const githubSnippet = buildGithubCiEnv(projectId, apiKey, env)
   const sdkSnippet = buildSdkEnv(projectId, apiKey, env)
   const showAdminTab = env.apiKeyVar.startsWith('VITE_MUSHI_SELF_')
-  const showExpoTab = isExpoReporterProject(projectSlug)
+  const showExpoTab = isExpoEnv(env)
   const showGithubTab = Boolean(env.ciVars)
   const payload =
     mode === 'raw'

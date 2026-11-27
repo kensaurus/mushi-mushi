@@ -374,6 +374,19 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     paletteGroup: 'Do',
   },
   {
+    // Plan 025 P1 / ADR 0072: how the app got better, release by release. For every builder (not
+    // operator-only like UX runs): releases, fixed bugs and pinned screens are the founder's own.
+    id: 'nav:timeline',
+    path: '/timeline',
+    label: 'Timeline',
+    sectionId: 'do',
+    pdcaStage: 'do',
+    iconKey: 'releases',
+    paletteDescription: 'Release by release: bugs fixed, screens improved, scores, AI cost, and a before/after of every screen.',
+    paletteKeywords: ['timeline', 'history', 'before after', 'filmstrip', 'releases', 'screenshots', 'baseline', 'compare', 'progress', 'cost'],
+    paletteGroup: 'Do',
+  },
+  {
     id: 'nav:iterate',
     path: '/iterate',
     operatorOnly: true,

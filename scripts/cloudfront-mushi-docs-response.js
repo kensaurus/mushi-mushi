@@ -70,6 +70,7 @@ var NOINDEX_TWINS = {
   'admin/queue': 1,
   'admin/research': 1,
   'admin/skill-pipelines': 1,
+  'admin/timeline': 1,
   'admin/ux-runs': 1
 };
 

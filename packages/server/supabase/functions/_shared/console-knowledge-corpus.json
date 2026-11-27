@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-24T14:59:49.143Z",
+  "generatedAt": "2026-11-27T02:45:16.630Z",
   "docs": [
     {
       "doc_path": "recipes/connect-github-and-sdk.md",
@@ -199,6 +199,15 @@
       "route_path": "/ux-runs",
       "kind": "page",
       "content_hash": "dd55f95acb2491084e08dbfe80d0bd727d99807de450998fad6c1aac41c50668"
+    },
+    {
+      "doc_path": "pages/timeline.md",
+      "section": "main",
+      "title": "Timeline",
+      "body": "# Timeline\n\nRelease by release: bugs fixed, screens improved, scores, AI cost, and a before/after of every screen.\n\nRoute: /timeline\nSection: Do\n\nKeywords: timeline, history, before after, filmstrip, releases, screenshots, baseline, compare, progress, cost\n\nUse this page when the user asks about: timeline, history, before after, filmstrip, releases, screenshots",
+      "route_path": "/timeline",
+      "kind": "page",
+      "content_hash": "61c1d899a15149202ceec8f8fea031d5d05e274a747fe4ec7f517da89bb395ad"
     },
     {
       "doc_path": "pages/iterate.md",

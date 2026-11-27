@@ -104,6 +104,8 @@ A Supabase function secret: `supabase secrets set NAME=value` (or Project Settin
 | `DEFAULT_BASE_URL` | Optional | — | — |
 | `MCP_PUBLIC_BASE_URL` | Optional | — | — |
 | `TELEGRAM_WEBHOOK_BASE_URL` | Optional | — | — |
+| `MUSHI_PUBLIC_ORIGIN` | Optional | — | Origin (scheme + host, no path) of the public Mushi site: the MCP server's website and icon URLs, and the console sign-in page when no allowlist is set, live under /mushi-mushi/ on it. Not MUSHI_PUBLIC_URL (a self-host's own address). Unset or invalid: the hosted origin, https://kensaur.us |
+| `MUSHI_SDK_TEMPLATE_REPO` | Optional | — | Public repo (owner/name) that SDK health fix prompts point at as a working Mushi setup to copy (src/lib/mushi.ts, mushi-env.ts, mushi-launcher.ts). Unset or malformed: the hosted template repo, kensaurus/the-wanting-mind |
 
 ### Runtime name (optional; unset is treated as production)
 
@@ -395,6 +397,7 @@ Build-time values for the admin console. Vite bakes them into the bundle, so cha
 | `VITE_DOCS_ORIGIN_ALLOWLIST` | Optional | — | — |
 | `VITE_MCP_HTTP_URL` | Optional | — | — |
 | `VITE_LANGFUSE_HOST` | Optional | — | — |
+| `VITE_MUSHI_PUBLIC_ORIGIN` | Optional | — | Origin (scheme + host, no path) of the public Mushi site (MUSHI_PUBLIC_ORIGIN). The console tries app icons on its subdomains; they load only where the console's CSP img-src allows that host. A `publicOrigin` key in runtime-config.js overrides it. Unset or invalid: the hosted origin, https://kensaur.us |
 
 ### Feature flags (optional)
 

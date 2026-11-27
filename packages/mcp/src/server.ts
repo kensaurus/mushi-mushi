@@ -1716,6 +1716,81 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   );
 
+  // The iteration timeline and UX runs (Plan 025 P1/P7, ADR 0072). No model call in any of these.
+  server.registerTool(
+    'get_timeline',
+    {
+      title: titleOf('get_timeline'),
+      description: descOf('get_timeline'),
+      annotations: annotationsFor('get_timeline'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/timeline?compact=1`));
+    },
+  );
+
+  server.registerTool(
+    'get_surface_history',
+    {
+      title: titleOf('get_surface_history'),
+      description: descOf('get_surface_history'),
+      annotations: annotationsFor('get_surface_history'),
+      inputSchema: z.object({
+        surfaceKey: z
+          .string()
+          .regex(/^[a-z0-9][a-z0-9-]{0,119}$/)
+          .describe("A screen key from get_timeline's surfaces[].key"),
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/timeline/surfaces/${encodeURIComponent(args.surfaceKey)}`));
+    },
+  );
+
+  server.registerTool(
+    'get_ux_run',
+    {
+      title: titleOf('get_ux_run'),
+      description: descOf('get_ux_run'),
+      annotations: annotationsFor('get_ux_run'),
+      inputSchema: z.object({
+        runId: z
+          .string()
+          .regex(/^[0-9]{8}-[0-9]{6}-[a-z0-9]{4}$/)
+          .describe('Local run id, e.g. 20261127-091500-ab3d (get_timeline points[].runs)'),
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/ux-runs/${encodeURIComponent(args.runId)}`));
+    },
+  );
+
+  server.registerTool(
+    'start_ux_run',
+    {
+      title: titleOf('start_ux_run'),
+      description: descOf('start_ux_run'),
+      annotations: annotationsFor('start_ux_run'),
+      inputSchema: z.object({
+        kind: z.enum(['scorecard', 'loop']).optional().describe('scorecard (score every page, default) or loop (a coding agent improves screens)'),
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      const qs = new URLSearchParams({ kind: args.kind ?? 'scorecard' });
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/timeline/run-plan?${qs}`));
+    },
+  );
+
   // CI runners (Plan 022, ADR 0033). Loose objects: the rows mirror database
   // columns and grow; only the top-level shape is the contract.
   const CI_ADVICE_OUTPUT = z.looseObject({

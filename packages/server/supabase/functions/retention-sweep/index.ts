@@ -48,6 +48,7 @@
 // migration via mushi_internal_auth_header().
 // ============================================================
 import { UX_CAPTURES_BUCKET } from '../_shared/ux-runs.ts'
+import { baselinesToSweep, UX_BASELINE_DEFAULT_KEEP, type BaselineSweepRow } from '../_shared/ux-timeline.ts'
 import { getServiceClient } from '../_shared/db.ts'
 import { log } from '../_shared/logger.ts'
 import { startCronRun } from '../_shared/telemetry.ts'
@@ -104,6 +105,8 @@ const handler = async (req: Request): Promise<Response> => {
     const voice = await sweepVoiceIntake(db)
     const traces = await sweepLlmTraces(db)
     const uxCaptures = await sweepUxCaptures(db)
+    // Timeline baselines past each screen's newest N releases, pinned ones kept (ADR 0072).
+    const uxBaselines = await sweepUxBaselines(db)
     // Fresh-eyes test accounts past their 24 h (ADR 0053).
     const freshEyesShots = await sweepFreshEyesShots(db)
     const synthetic = await sweepSyntheticAccounts(db as unknown as CleanupDb, new Date(), (msg, ctx) => rlog.warn(msg, ctx))
@@ -111,7 +114,7 @@ const handler = async (req: Request): Promise<Response> => {
     const productionChecks = await sweepProductionChecks(db, new Date())
 
     await cron.finish({
-      rowsAffected: totalDeleted + voice.audio_deleted + voice.sessions_expired + traces.deleted + uxCaptures.deleted + freshEyesShots.deleted + synthetic.accounts_deleted + productionChecks.deleted,
+      rowsAffected: totalDeleted + voice.audio_deleted + voice.sessions_expired + traces.deleted + uxCaptures.deleted + uxBaselines.deleted + freshEyesShots.deleted + synthetic.accounts_deleted + productionChecks.deleted,
       metadata: {
         llm_traces_deleted: traces.deleted,
         projects_swept: stats.length,
@@ -120,6 +123,7 @@ const handler = async (req: Request): Promise<Response> => {
         voice_audio_deleted: voice.audio_deleted,
         voice_sessions_expired: voice.sessions_expired,
         ux_captures_deleted: uxCaptures.deleted,
+        ux_baselines_deleted: uxBaselines.deleted,
         fresh_eyes_shots_deleted: freshEyesShots.deleted,
         synthetic_accounts_deleted: synthetic.accounts_deleted,
         synthetic_cleanup_failed: synthetic.failed,
@@ -137,6 +141,7 @@ const handler = async (req: Request): Promise<Response> => {
         voice,
         llm_traces: traces,
         ux_captures: uxCaptures,
+        ux_baselines: uxBaselines,
         fresh_eyes_shots: freshEyesShots,
         synthetic_accounts: synthetic,
         production_checks: productionChecks,
@@ -631,6 +636,59 @@ export async function sweepUxCaptures(db: ReturnType<typeof getServiceClient>): 
       if (clearErr) rlog.warn('ux_capture_clear_failed', { project_id: row.project_id, table, err: clearErr.message })
       stats.deleted += paths.length
     }
+  }
+  return stats
+}
+
+// ── Timeline baselines (ADR 0072) ──────────────────────────────────────────
+//
+// A baseline is a copy under <project>/baselines/, so sweepUxCaptures never
+// touches it. Per screen and viewport the newest
+// project_settings.ux_baseline_keep_releases (default 24) stay; older ones go,
+// file first, unless pinned. A failed file delete keeps the row, so the next
+// sweep tries again instead of leaving an orphan file.
+
+const UX_BASELINE_READ = 5000
+
+interface BaselineKeepRow {
+  project_id: string
+  ux_baseline_keep_releases: number | null
+}
+
+export async function sweepUxBaselines(db: ReturnType<typeof getServiceClient>): Promise<{ deleted: number }> {
+  const stats = { deleted: 0 }
+  const { data: settings, error: settingsErr } = await db
+    .from('project_settings')
+    .select('project_id, ux_baseline_keep_releases')
+    .returns<BaselineKeepRow[]>()
+  if (settingsErr) {
+    // Migration window (column not yet created) or transient: log, keep going.
+    rlog.warn('ux_baseline_settings_failed', { err: settingsErr.message })
+    return stats
+  }
+  for (const row of settings ?? []) {
+    const keep = Math.max(1, Number(row.ux_baseline_keep_releases ?? UX_BASELINE_DEFAULT_KEEP))
+    const { data: rows, error } = await db
+      .from('ux_baselines')
+      .select('id, surface_key, viewport, created_at, pinned, capture_path')
+      .eq('project_id', row.project_id)
+      .order('created_at', { ascending: false })
+      .limit(UX_BASELINE_READ)
+      .returns<BaselineSweepRow[]>()
+    if (error) {
+      rlog.warn('ux_baseline_select_failed', { project_id: row.project_id, err: error.message })
+      continue
+    }
+    const drop = baselinesToSweep(rows ?? [], keep).slice(0, UX_CAPTURE_BATCH)
+    if (!drop.length) continue
+    const { error: rmErr } = await db.storage.from(UX_CAPTURES_BUCKET).remove(drop.map((d) => d.capture_path))
+    if (rmErr) {
+      rlog.warn('ux_baseline_remove_failed', { project_id: row.project_id, count: drop.length, err: rmErr.message })
+      continue
+    }
+    const { error: delErr } = await db.from('ux_baselines').delete().eq('project_id', row.project_id).in('id', drop.map((d) => d.id))
+    if (delErr) rlog.warn('ux_baseline_delete_failed', { project_id: row.project_id, err: delErr.message })
+    else stats.deleted += drop.length
   }
   return stats
 }

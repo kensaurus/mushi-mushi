@@ -35,10 +35,20 @@ const state: RunState = {
   ],
 }
 
+describe('toSnapshot judge usage (ADR 0072)', () => {
+  it('sends the review spend when the run has one', () => {
+    const judgeUsage = { model: 'claude-opus-5-5', judged: 2, reused: 1, input_tokens: 4000, output_tokens: 900, cache_read_input_tokens: 2000, cache_creation_input_tokens: 0 }
+    const snap = toSnapshot({ ...state, judgeUsage }, true, new Map())
+    expect(snap.judge_usage).toEqual(judgeUsage)
+  })
+})
+
 describe('toSnapshot', () => {
   it('sends scores, probe counts and attempts, but not console text or agent output', () => {
     const snap = toSnapshot(state, true, new Map([['root-42099b/before-desktop.png', 'shots/b.png']]))
     expect(snap).toMatchObject({ status: 'done', agent: 'claude-code', judge_model: 'claude-opus-5-5', base_sha: '57cd809c' })
+    // No review spend recorded: older servers never see the optional field.
+    expect(snap).not.toHaveProperty('judge_usage')
     const s = snap.surfaces[0]
     expect(s).toMatchObject({ surface_key: 'root-42099b', status: 'accepted', penalty_before: 13, penalty_after: 1 })
     expect(s.probe_before).toEqual({ axe: [{ id: 'color-contrast', impact: 'serious', help: 'Contrast', count: 3 }], overflowX: false, smallTargets: 1, consoleErrors: 1, cls: 0 })

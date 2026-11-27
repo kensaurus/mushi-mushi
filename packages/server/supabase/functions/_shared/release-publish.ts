@@ -6,12 +6,15 @@
  *
  * Shared by POST /v1/admin/releases/:id/publish (a person) and the opt-in
  * auto-release (`auto-release.ts`, actor `system`), so both paths reach
- * reporters the same way.
+ * reporters the same way. Both also pin the app's current screens to the
+ * release when it opted in (ADR 0072, `ux_baseline_auto_pin`, default off;
+ * best effort, never fails the publish).
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { notifyReleaseReporters, stampDeliveredReleaseCredits, type ReleaseDelivery } from './release-reporters.ts'
 import type { TransitionActor } from './report-transition.ts'
+import { autoPinOnPublish } from './ux-baseline-pin.ts'
 
 export interface PublishedRelease {
   id: string
@@ -86,6 +89,7 @@ export async function publishRelease(
   if (!linked.ok) return { ok: false, status: 500, error: `release published, but ${linked.error}`, published: true }
   const credits = await stampDeliveredReleaseCredits(db, rel.id)
   if (!credits.ok) return { ok: false, status: 500, error: `release published, but ${credits.error}`, published: true }
+  await autoPinOnPublish(db, rel)
 
   return {
     ok: true,

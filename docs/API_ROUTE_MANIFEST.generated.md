@@ -2,13 +2,13 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-11-25 · **842** routes.
+> Generated: 2026-11-27 · **848** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 238 |
+| `adminOrApiKey` | 244 |
 | `apiKeyAuth` | 60 |
 | `jwtAuth` | 421 |
 | `jwtOrApiKey` | 1 |
@@ -506,6 +506,12 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/projects/:pid/sdk-upgrade/:id/stream` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/sdk-upgrade.ts` |
 | POST | `/v1/admin/projects/:pid/sdk-upgrade/:id/sync` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/sdk-upgrade.ts` |
 | GET | `/v1/admin/projects/:pid/sdk-upgrade/in-flight` | `jwtAuth` | `packages/server/supabase/functions/api/routes/sdk-upgrade.ts` |
+| GET | `/v1/admin/projects/:pid/timeline` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-timeline.ts` |
+| POST | `/v1/admin/projects/:pid/timeline/baselines` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-timeline.ts` |
+| PATCH | `/v1/admin/projects/:pid/timeline/baselines/:id` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-timeline.ts` |
+| GET | `/v1/admin/projects/:pid/timeline/run-plan` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-timeline.ts` |
+| PATCH | `/v1/admin/projects/:pid/timeline/settings` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-timeline.ts` |
+| GET | `/v1/admin/projects/:pid/timeline/surfaces/:key` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-timeline.ts` |
 | GET | `/v1/admin/projects/:pid/ux-runs` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-runs.ts` |
 | GET | `/v1/admin/projects/:pid/ux-runs/:runId` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-runs.ts` |
 | PUT | `/v1/admin/projects/:pid/ux-runs/:runId` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-runs.ts` |

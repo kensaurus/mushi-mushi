@@ -3222,6 +3222,56 @@
       },
       "returnsUntrusted": true
     },
+    "get_surface_history": {
+      "title": "One screen's history",
+      "description": "Return one screen's history across releases (ADR 0072): surface { key, label, path }, frames oldest first [{ id, viewport (desktop | mobile), version, release_id, run_id, score, penalty, cost_usd, pinned (kept forever), created_at, url (signed for one hour) }], scores across scorecard runs [{ at, run, score, cached (reused, no model call), cost_usd }] and the changes the UX loop kept on it [{ at, run, shipped (its PR merged), what, commit_sha }]. Required surfaceKey (a key from get_timeline's surfaces); optional projectId. Read-only, no model call. Use to show a before and after of a screen, or to check whether a fix changed what users see.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "One screen's history",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "surfaceKey": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,119}$",
+            "description": "A screen key from get_timeline's surfaces[].key"
+          },
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "surfaceKey"
+        ]
+      },
+      "returnsUntrusted": true
+    },
+    "get_timeline": {
+      "title": "The app release by release",
+      "description": "Return how one app got better, release by release (Plan 025, ADR 0072), without screenshots: rail ('releases' when the app has release rows, else 'runs': each UX or scorecard run is a stop), points oldest first [{ id, kind (release | unreleased | run), at, label, title, status, version, runs (run ids), cost_usd (what the runs' AI calls cost; null = not recorded), judged (verdicts that were a model call), cached (verdicts reused because the page had not changed), score (the newest scorecard mean, 1-10), improved_screens, reports_closed, reports [{ id, title }], baselines (screens pinned to it) }], surfaces [{ key, label, path, latest_score, first_score, frames (pinned shots) }], month (the last 30 days: releases, reports_closed, top_reports, screens_improved, runs, cost_usd, judged, cached, movers [{ key, label, from, to }]) and settings { keep_releases }. Optional projectId (defaults to the configured project). Read-only, no model call. Use get_surface_history with a surface key for that screen's screenshots, scores and kept changes; get_ux_run with a run id for one run.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "The app release by release",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
+            "type": "string"
+          }
+        }
+      },
+      "returnsUntrusted": true
+    },
     "get_two_way_comms_health": {
       "title": "Two-way communication health",
       "description": "Summarize SDK ↔ admin two-way reporter health for a host app: last SDK heartbeat, app version/platform last seen, unread reporter messages, recent reporter replies, and pending QA/TDD follow-ups. Use after wiring @mushi-mushi/web in a Vite/Capacitor app to confirm reports land in the console and admin/MCP replies reach the in-app widget.",
@@ -3352,6 +3402,35 @@
         },
         "required": [
           "fromEvent"
+        ]
+      },
+      "returnsUntrusted": true
+    },
+    "get_ux_run": {
+      "title": "One UX run",
+      "description": "Return one UX run (ADR 0020/0067) by its local run id (from get_timeline's points[].runs, or the CLI): run { status, phase, agent, model, judge_model, branch, pr_url, counts, cost_usd, cost { judged, cached, unpriced }, started_at, finished_at, error }, surfaces (each screen with status, problem scores before and after, the review's verdict, and signed screenshot URLs valid for one hour) and iterations (each attempt with outcome, reason, commit and files). Required runId; optional projectId. Read-only. Use to see what a run changed and what it cost; get_timeline for the history across runs.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "One UX run",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "pattern": "^[0-9]{8}-[0-9]{6}-[a-z0-9]{4}$",
+            "description": "Local run id, e.g. 20261127-091500-ab3d (get_timeline points[].runs) (`run_id` is accepted too.)"
+          },
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runId"
         ]
       },
       "returnsUntrusted": true
@@ -5846,6 +5925,34 @@
         "required": [
           "rootSkillSlug"
         ]
+      }
+    },
+    "start_ux_run": {
+      "title": "How to start a UX run",
+      "description": "Return how to start a UX run for one app, without starting one (ADR 0017/0020/0072): a cloud run spends the repo's Actions minutes and Cursor credits, so only a person in the console starts it. Returns { started: false, why, console_path (the UX runs page, where Run in the cloud is one click), commands { scorecard, loop } (run on your own machine with your own keys; --sync mirrors the run to the console), next }. Optional kind (scorecard | loop, default scorecard) and projectId. No change is made and no model is called. After the run, read it with get_ux_run or get_timeline.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "How to start a UX run",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "description": "scorecard (score every page, default) or loop (a coding agent improves screens)",
+            "type": "string",
+            "enum": [
+              "scorecard",
+              "loop"
+            ]
+          },
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
+            "type": "string"
+          }
+        }
       }
     },
     "submit_fix_result": {

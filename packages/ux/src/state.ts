@@ -132,6 +132,39 @@ export interface SavedRunOptions {
   keepInvisible?: boolean
 }
 
+/** ADR 0072: the final review's spend, synced so the console can show what a run cost. */
+export interface JudgeUsageTotals {
+  model: string
+  /** Verdicts that were a model call. */
+  judged: number
+  /** Verdicts reused: the same pair reviewed before, or a kept version that looks unchanged. */
+  reused: number
+  input_tokens: number
+  output_tokens: number
+  cache_read_input_tokens: number
+  cache_creation_input_tokens: number
+}
+
+/** Add one verdict's spend to the run's totals. */
+export function addJudgeUsage(
+  state: { judgeUsage?: JudgeUsageTotals | null },
+  model: string,
+  v: { reused?: string; error?: string; usage?: Omit<JudgeUsageTotals, 'model' | 'judged' | 'reused'> },
+): void {
+  const t = (state.judgeUsage ??= { model, judged: 0, reused: 0, input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 })
+  t.model = model
+  if (v.reused) {
+    t.reused++
+    return
+  }
+  t.judged++
+  if (!v.usage) return
+  t.input_tokens += v.usage.input_tokens
+  t.output_tokens += v.usage.output_tokens
+  t.cache_read_input_tokens += v.usage.cache_read_input_tokens
+  t.cache_creation_input_tokens += v.usage.cache_creation_input_tokens
+}
+
 export interface RunState {
   version: 1
   runId: string
@@ -156,6 +189,8 @@ export interface RunState {
   stopped?: boolean
   /** Model of the final review; null when the review is off. */
   judgeModel?: string | null
+  /** What the final review spent (ADR 0072): model calls, reused verdicts and tokens. */
+  judgeUsage?: JudgeUsageTotals | null
   /** Settings to resume with; absent on runs from before 2026-10-06. */
   options?: SavedRunOptions
   /** The worktree's install finished; a run killed mid-install installs again. */

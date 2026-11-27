@@ -198,7 +198,7 @@ export const opsSettingsSchema = z
     signingSecret: z.string().trim().max(100).optional(),
     webhooks: z.object({ payments: z.string().trim().max(500), releases: z.string().trim().max(500), alerts: z.string().trim().max(500) }).partial().strict().optional(),
     channels: z.object({ payments: channelId.nullable(), releases: channelId.nullable(), alerts: channelId.nullable() }).partial().strict().optional(),
-    command: z.string().regex(/^\/[a-z0-9][a-z0-9_-]{0,31}$/, 'a slash command such as /kensaurus').optional(),
+    command: z.string().regex(/^\/[a-z0-9][a-z0-9_-]{0,31}$/, 'a slash command such as /myteam').optional(),
     iconBaseUrl: z.string().max(500).url().refine((u) => /^https:\/\//i.test(u), 'must be an https URL').nullable().optional(),
   })
   .strict()

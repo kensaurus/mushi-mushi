@@ -384,6 +384,45 @@ export const TOOL_CATALOG: ToolSpec[] = [
     useCase: 'Which files are too big to change safely, and is the bundle growing?',
   },
   {
+    name: 'get_timeline',
+    title: 'The app release by release',
+    description:
+      "Return how one app got better, release by release (Plan 025, ADR 0072), without screenshots: rail ('releases' when the app has release rows, else 'runs': each UX or scorecard run is a stop), points oldest first [{ id, kind (release | unreleased | run), at, label, title, status, version, runs (run ids), cost_usd (what the runs' AI calls cost; null = not recorded), judged (verdicts that were a model call), cached (verdicts reused because the page had not changed), score (the newest scorecard mean, 1-10), improved_screens, reports_closed, reports [{ id, title }], baselines (screens pinned to it) }], surfaces [{ key, label, path, latest_score, first_score, frames (pinned shots) }], month (the last 30 days: releases, reports_closed, top_reports, screens_improved, runs, cost_usd, judged, cached, movers [{ key, label, from, to }]) and settings { keep_releases }. Optional projectId (defaults to the configured project). Read-only, no model call. Use get_surface_history with a surface key for that screen's screenshots, scores and kept changes; get_ux_run with a run id for one run.",
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Is my app getting better, and what did each release fix and cost?',
+  },
+  {
+    name: 'get_surface_history',
+    title: "One screen's history",
+    description:
+      "Return one screen's history across releases (ADR 0072): surface { key, label, path }, frames oldest first [{ id, viewport (desktop | mobile), version, release_id, run_id, score, penalty, cost_usd, pinned (kept forever), created_at, url (signed for one hour) }], scores across scorecard runs [{ at, run, score, cached (reused, no model call), cost_usd }] and the changes the UX loop kept on it [{ at, run, shipped (its PR merged), what, commit_sha }]. Required surfaceKey (a key from get_timeline's surfaces); optional projectId. Read-only, no model call. Use to show a before and after of a screen, or to check whether a fix changed what users see.",
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Show me how the checkout screen changed over the last releases.',
+  },
+  {
+    name: 'get_ux_run',
+    title: 'One UX run',
+    description:
+      "Return one UX run (ADR 0020/0067) by its local run id (from get_timeline's points[].runs, or the CLI): run { status, phase, agent, model, judge_model, branch, pr_url, counts, cost_usd, cost { judged, cached, unpriced }, started_at, finished_at, error }, surfaces (each screen with status, problem scores before and after, the review's verdict, and signed screenshot URLs valid for one hour) and iterations (each attempt with outcome, reason, commit and files). Required runId; optional projectId. Read-only. Use to see what a run changed and what it cost; get_timeline for the history across runs.",
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'What did the last UX run change, and what did it cost?',
+  },
+  {
+    name: 'start_ux_run',
+    title: 'How to start a UX run',
+    description:
+      "Return how to start a UX run for one app, without starting one (ADR 0017/0020/0072): a cloud run spends the repo's Actions minutes and Cursor credits, so only a person in the console starts it. Returns { started: false, why, console_path (the UX runs page, where Run in the cloud is one click), commands { scorecard, loop } (run on your own machine with your own keys; --sync mirrors the run to the console), next }. Optional kind (scorecard | loop, default scorecard) and projectId. No change is made and no model is called. After the run, read it with get_ux_run or get_timeline.",
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: false },
+    useCase: 'Run a UX check on my app.',
+  },
+  {
     name: 'get_ci_overview',
     title: 'CI runners and why fixes wait',
     description:
@@ -431,7 +470,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
     returnsUntrusted: true,
-    useCase: 'Ask to run yen-yen\'s PR jobs on the Alienware runner instead of paid GitHub minutes, for a person to approve.',
+    useCase: 'Ask to run my-app\'s PR jobs on my self-hosted runner instead of paid GitHub minutes, for a person to approve.',
   },
   {
     name: 'open_ci_cost_fix',
@@ -441,7 +480,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
     returnsUntrusted: true,
-    useCase: 'Stop glot.it\'s CI from running on draft agent PRs: open the skip-drafts fix for ci.yml as a draft PR to review.',
+    useCase: 'Stop my-app\'s CI from running on draft agent PRs: open the skip-drafts fix for ci.yml as a draft PR to review.',
   },
   {
     name: 'preview_ci_cost_fix_rollout',
@@ -471,7 +510,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     returnsUntrusted: true,
-    useCase: 'Did the CI fix PR for glot.it open, which fixes were refused, and what did it save after the merge?',
+    useCase: 'Did the CI fix PR for my-app open, which fixes were refused, and what did it save after the merge?',
   },
   {
     name: 'explain_finding',
@@ -593,7 +632,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
       'Declare whether one domain renews automatically at its registrar: autoRenew true, false, or null for not known. The domain id comes from get_accounts_register; only a domain one of the caller\'s apps uses can be changed (404 otherwise). It records what you declare and checks nothing at the registrar; false opens the registrar_autorenew_off rule. Team owners and admins only; needs an account-level key. Returns { id }. Write.',
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
-    useCase: 'Mark glot.it as renewing automatically.',
+    useCase: 'Mark example.com as renewing automatically.',
   },
   {
     name: 'get_spend_ledger',

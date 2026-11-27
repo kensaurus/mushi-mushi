@@ -4,7 +4,7 @@
     "kensaurus"
   ],
   "name": "mushi-mushi",
-  "description": "MCP server for Cursor, Claude Code and Copilot. One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code. 12 tools by default (features=vibe): triage user-reported bugs, read the plain-English diagnosis and pull a fix prompt for your editor. features=all lists 135 tools, including dispatching fixes to cloud agents. Run it with npx @mushi-mushi/mcp. SDKs MIT · server AGPLv3 · enterprise edition commercial.",
+  "description": "MCP server for Cursor, Claude Code and Copilot. One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code. 12 tools by default (features=vibe): triage user-reported bugs, read the plain-English diagnosis and pull a fix prompt for your editor. features=all lists 139 tools, including dispatching fixes to cloud agents. Run it with npx @mushi-mushi/mcp. SDKs MIT · server AGPLv3 · enterprise edition commercial.",
   "license": "MIT",
   "tools": [
     {

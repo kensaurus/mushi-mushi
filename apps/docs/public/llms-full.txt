@@ -3,7 +3,7 @@
 > One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code.
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
-Pages: 247
+Pages: 248
 
 This file contains the full prose of every documentation page, stripped of
 JSX syntax, suitable for offline LLM ingestion. Getting-started pages come
@@ -6815,7 +6815,7 @@ at `/v1/agent-card` for proxies that strip dotfiles.
 ```mermaid
 flowchart TB
   subgraph Inbound["Inbound to Mushi Mushi"]
-    MCP["MCP — both stdio AND Streamable HTTP<br/>135 tools / 8 resources / 4 prompts"]
+    MCP["MCP — both stdio AND Streamable HTTP<br/>139 tools / 8 resources / 4 prompts"]
     REST["REST /v1/admin/*<br/>OpenAPI 3.1 at /openapi.json<br/>adminOrApiKey({ scope: 'mcp:read|write' })"]
     A2A["A2A v1.0.0 /v1/a2a/tasks<br/>create / get / cancel / SSE subscribe"]
     AGUI["AG-UI v0.4 SSE<br/>fix dispatch stream<br/>API key OR JWT"]
@@ -6863,7 +6863,7 @@ your client:
 }
 ```
 
-The full tool catalog (135 tools, 8 resources, 4 prompts) lives in
+The full tool catalog (139 tools, 8 resources, 4 prompts) lives in
 [`@mushi-mushi/mcp`](/sdks/mcp) — see also the generated catalog at
 [`MCP tools reference`](/sdks/mcp-tools). Tools that move money
 (`dispatch_fix`, `transition_status`, `submit_fix_result`, `trigger_judge`,
@@ -7039,7 +7039,7 @@ helpful message for unregistered ids.
 
 | Orchestrator                                        | Recommended path                 | Why                                                                                                                                                                                                              |
 | --------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 135 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
+| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 139 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
 | **Claude Agent SDK / Claude Desktop / Claude Code** | stdio MCP                        | Same path, same surface                                                                                                                                                                                          |
 | **OpenAI Agents SDK** (TS / Python)                 | Streamable HTTP MCP              | Per OpenAI's MCP guide, Streamable HTTP and stdio are preferred over deprecated SSE. Mushi Mushi's hosted MCP at `/functions/v1/mcp` fits                                                                              |
 | **ChatGPT Agent**                                   | Streamable HTTP MCP              | Same — no subprocess in the hosted runtime                                                                                                                                                                       |
@@ -10566,7 +10566,7 @@ read the contract before drafting a fix.
 ```
 
 See [`@mushi-mushi/mcp`](https://www.npmjs.com/package/@mushi-mushi/mcp)
-on npm for the full **135-tool** catalog and
+on npm for the full **139-tool** catalog and
 [Connecting your orchestrator](/concepts/orchestrator-interop) for the
 non-MCP surfaces (REST, A2A, AG-UI SSE).
 
@@ -10719,7 +10719,7 @@ description: Every tool, resource and prompt the Mushi Mushi MCP server exposes 
 
   Auto-generated from `packages/mcp/src/catalog.ts`. Do not edit by hand — run `pnpm gen:mcp-tools-doc`.
 
-**135 tools** · **8 resources** · **4 prompts**
+**139 tools** · **8 resources** · **4 prompts**
 
 ## Read tools (`mcp:read`)
 
@@ -10750,6 +10750,10 @@ description: Every tool, resource and prompt the Mushi Mushi MCP server exposes 
 | `get_radar` | Hole checks (radar) | Return the hole checks that catch a problem before a user hits it: store names that differ between the App Store and Google Play, a store listing missing a language, a domain or HTTPS certificate about to expire, missing security headers, a broken privacy link, storage rows deleted with SQL (files left behind and billed), and an Android target SDK or iOS build that the stores will refuse. scope "project" (default; projectId optional) returns every check with state ok \| finding \| unknown \| error, a plain-English reason, and each finding with its fix; unknown means not checked and never means healthy. scope "organization" (organizationId optional, account-level key) returns the open findings of every app. Read-only. To run the checks again, use the console Recipe page. |
 | `get_release_calendar` | Release calendar | Return the release calendar of one organization: per app, what is live, the fixes merged since (waiting to ship) and the store state, plus a suggested batch of apps to release now versus next that respects the estimated CI minutes of each build. Mushi only proposes the batch; your CI builds and submits. Optional organizationId (UUID); omitted, the only organization of the key owner is used, and a 400 ORG_REQUIRED lists the choices when there are several. Needs an account-level key; a project-bound key gets 403. Returns \{ rows, batchSuggestion, note }. Read-only. |
 | `get_code_health` | Code health | Return the code health your CI pushed for one project: files over the size budget (god files) from the latest code_health run, each with severity, file, line, message and suggested fix, the bundle-size and largest-file trends, and a summary \{ error_count, warn_count, max_loc, latest_bundle_kb }. latestRunAt null means CI has never pushed (add MUSHI_INGEST_KEY to CI). Optional projectId and days (trend window, 1–365, default 30); a project-bound key reads its own project, an account-level key must pass projectId (400 PROJECT_REQUIRED otherwise). Returns \{ trends, godFiles, latestRunAt, latestRunStatus, summary }. Read-only. Use explain_finding with a god-file id for its fix; split the file before adding to it. |
+| `get_timeline` | The app release by release | Return how one app got better, release by release (Plan 025, ADR 0072), without screenshots: rail ('releases' when the app has release rows, else 'runs': each UX or scorecard run is a stop), points oldest first [\{ id, kind (release \| unreleased \| run), at, label, title, status, version, runs (run ids), cost_usd (what the runs' AI calls cost; null = not recorded), judged (verdicts that were a model call), cached (verdicts reused because the page had not changed), score (the newest scorecard mean, 1-10), improved_screens, reports_closed, reports [\{ id, title }], baselines (screens pinned to it) }], surfaces [\{ key, label, path, latest_score, first_score, frames (pinned shots) }], month (the last 30 days: releases, reports_closed, top_reports, screens_improved, runs, cost_usd, judged, cached, movers [\{ key, label, from, to }]) and settings \{ keep_releases }. Optional projectId (defaults to the configured project). Read-only, no model call. Use get_surface_history with a surface key for that screen's screenshots, scores and kept changes; get_ux_run with a run id for one run. |
+| `get_surface_history` | One screen's history | Return one screen's history across releases (ADR 0072): surface \{ key, label, path }, frames oldest first [\{ id, viewport (desktop \| mobile), version, release_id, run_id, score, penalty, cost_usd, pinned (kept forever), created_at, url (signed for one hour) }], scores across scorecard runs [\{ at, run, score, cached (reused, no model call), cost_usd }] and the changes the UX loop kept on it [\{ at, run, shipped (its PR merged), what, commit_sha }]. Required surfaceKey (a key from get_timeline's surfaces); optional projectId. Read-only, no model call. Use to show a before and after of a screen, or to check whether a fix changed what users see. |
+| `get_ux_run` | One UX run | Return one UX run (ADR 0020/0067) by its local run id (from get_timeline's points[].runs, or the CLI): run \{ status, phase, agent, model, judge_model, branch, pr_url, counts, cost_usd, cost \{ judged, cached, unpriced }, started_at, finished_at, error }, surfaces (each screen with status, problem scores before and after, the review's verdict, and signed screenshot URLs valid for one hour) and iterations (each attempt with outcome, reason, commit and files). Required runId; optional projectId. Read-only. Use to see what a run changed and what it cost; get_timeline for the history across runs. |
+| `start_ux_run` | How to start a UX run | Return how to start a UX run for one app, without starting one (ADR 0017/0020/0072): a cloud run spends the repo's Actions minutes and Cursor credits, so only a person in the console starts it. Returns \{ started: false, why, console_path (the UX runs page, where Run in the cloud is one click), commands \{ scorecard, loop } (run on your own machine with your own keys; --sync mirrors the run to the console), next }. Optional kind (scorecard \| loop, default scorecard) and projectId. No change is made and no model is called. After the run, read it with get_ux_run or get_timeline. |
 | `get_ci_overview` | CI runners and why fixes wait | Return where this project's tests run and why a fix is slow to land (ADR 0033): the machines that send a runner heartbeat (hostname, platform, memory, swap, load, free disk, and per runner service its memory use, memory limit and out-of-memory kills), the GitHub runners seen (online \| offline, busy, labels), repos, the latest jobs with their verdict (passed, running, queued, waiting_for_runner, runner_lost, queue_expired, cancelled, code_failure; waiting_for_runner, runner_lost and queue_expired are infra: the test machine stopped and the fix was not tested, which is not a code failure), and stats \{ queueP50s, queueP95s, durationP50s, durationP95s, passRate, infraFailures, codeFailures, byRunner, byWorkflow, slowSteps }, plus advice [\{ id, severity (high \| medium \| low), title, detail, evidence, fix }] with the evidence for each rule. Optional projectId (default: the configured project; with an account-level key and no project, every project you can read), days (1-30, default 7) and refresh (true reads GitHub first instead of the last 10-minute sync, at most once a minute per project). permissions \{ jobs, runners } is ok \| missing \| unknown: jobs need Actions: read on GitHub, the runner list needs Administration: read (without it runners come from jobs only). Repo, workflow, job, step and runner names come from the repos. Returns \{ generatedAt, refreshedAt, window, permissions, hosts, runners, repos, jobs, stats, advice }. Read-only. When a fix's CI failed with an infra verdict, re-run the tests instead of changing code. |
 | `get_ci_costs` | CI cost and speed | Return what this project's CI costs and how fast it runs on GitHub-hosted runners versus your own machines (Plan 022, ADR 0037). Rows per repo × runner class [\{ repo, runnerClass (github_hosted \| self_hosted \| unknown = never picked up), os, labels, runner, machine, jobs, expired, queueP50s, queueP95s, runP50s, runP95s, prPassRate (pull-request jobs only), infraRate, rawMinutes, billedMinutes (each job rounded up to a whole minute), rerunJobs, tinyJobs, monthCost, costBasis (github_list \| github_public_free \| github_larger_unpriced \| self_hosted \| unknown), currency }]; repos with visibility (public repos run GitHub-hosted minutes free); accounts per GitHub owner (plan, includedMinutes, monthMinutes, monthListCost, monthCost after included minutes); machines (busyHours as the union of job intervals, busyShare, monthEnergyCost and monthWearCost from the organization's own figures); speed factors (only passed jobs that ran on both classes, at least 5 each, with sample sizes); whatIfs for moving a workflow (minutes moved, jobs that stay and why, speed, cost delta, target wait and busy share, warnings); explain (re-runs, tiny jobs, expired jobs, pinned-to-GitHub jobs with their YAML reason, main and Dependabot runs that always use GitHub); advice with evidence; fields says which numbers are measured and which estimated; rates gives GitHub's list prices and the date they were read. Optional projectId (default: the configured project; an account-level key with none reads every project) and days (1-30, default 30). lowConfidence is true under 7 days of data. Returns \{ window, dataDays, lowConfidence, source, sourceNote, rates, fields, settings, repos, rows, accounts, machines, speed, whatIfs, explain, advice }. Read-only: it changes nothing on GitHub. Every money figure is an estimate. |
 | `get_ci_bill` | Real GitHub Actions bill | Return what GitHub actually charged for Actions, read from GitHub's billing usage API by the CI collector once a day (or pushed with `mushi runner bill --push`). Unlike get_ci_costs, these money figures are measured, not estimated. Returns \{ window, previousWindow, provenance: "measured", currency: "USD", available, repoScoped (true when you are not a member of the organization: only your projects' repos are shown), unavailableReason (why there is no bill and how to connect one), owners [\{ owner, ownerType, lastOkAt, lastAttemptAt, lastError, lastSource (api \| cli), coveredFrom }], month \{ label, grossUsd, discountUsd, netUsd } (this calendar month so far), totals \{ grossUsd, discountUsd, netUsd, minutes }, previousTotals and change \{ netUsd, netPct } (null unless Mushi holds the whole previous period), windowComplete, byRepo [\{ repo, netUsd, grossUsd, discountUsd, minutes }], bySku, byDay (every day of the window), dataThrough, agentShare \{ share, billedMinutes, agentBilledMinutes, branches, provenance: "estimated" } (paid GitHub-hosted minutes on Mushi agent branches, from the jobs Mushi recorded) }. Net is what was charged; public repos and included minutes show as discount. Optional projectId (default: the configured project; an account-level key with none reads every project) and days (1-90, default 30). Read-only. |
@@ -17585,6 +17589,8 @@ A Supabase function secret: `supabase secrets set NAME=value` (or Project Settin
 | `DEFAULT_BASE_URL` | Optional | — | — |
 | `MCP_PUBLIC_BASE_URL` | Optional | — | — |
 | `TELEGRAM_WEBHOOK_BASE_URL` | Optional | — | — |
+| `MUSHI_PUBLIC_ORIGIN` | Optional | — | Origin (scheme + host, no path) of the public Mushi site: the MCP server's website and icon URLs, and the console sign-in page when no allowlist is set, live under /mushi-mushi/ on it. Not MUSHI_PUBLIC_URL (a self-host's own address). Unset or invalid: the hosted origin, https://kensaur.us |
+| `MUSHI_SDK_TEMPLATE_REPO` | Optional | — | Public repo (owner/name) that SDK health fix prompts point at as a working Mushi setup to copy (src/lib/mushi.ts, mushi-env.ts, mushi-launcher.ts). Unset or malformed: the hosted template repo, kensaurus/the-wanting-mind |
 
 ### Runtime name (optional; unset is treated as production)
 
@@ -17876,6 +17882,7 @@ Build-time values for the admin console. Vite bakes them into the bundle, so cha
 | `VITE_DOCS_ORIGIN_ALLOWLIST` | Optional | — | — |
 | `VITE_MCP_HTTP_URL` | Optional | — | — |
 | `VITE_LANGFUSE_HOST` | Optional | — | — |
+| `VITE_MUSHI_PUBLIC_ORIGIN` | Optional | — | Origin (scheme + host, no path) of the public Mushi site (MUSHI_PUBLIC_ORIGIN). The console tries app icons on its subdomains; they load only where the console's CSP img-src allows that host. A `publicOrigin` key in runtime-config.js overrides it. Unset or invalid: the hosted origin, https://kensaur.us |
 
 ### Feature flags (optional)
 
@@ -25513,7 +25520,7 @@ your agent can read reports, pull fix context, and optionally dispatch fixes —
 without leaving the editor.
 
 The page has four tabs: **Summary**, **Setup**, **Catalog** and **Examples**. The
-**Catalog** tab mirrors the server registry (**135 tools**, 8 resources, 4 prompts).
+**Catalog** tab mirrors the server registry (**139 tools**, 8 resources, 4 prompts).
 
 ---
 
@@ -29025,6 +29032,70 @@ The product enforces this in three places:
 5. The `accept_invitation(token)` RPC verifies the email, locks the invite row, inserts the membership, and marks the invite accepted.
 
 The accept step is atomic so double-clicks, expired tokens, and email mismatches fail cleanly.
+
+---
+
+## Timeline
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/timeline
+
+---
+title: Timeline
+description: The Timeline page in Mushi Mushi shows how your app changed release by release, with the bugs each release fixed, the screens your agent improved, scores, AI cost and a before/after of every screen.
+robots:
+  index: false
+  follow: true
+---
+
+# Timeline
+
+**Route:** `/timeline` (sidebar: More pages → Fix → Timeline. It is a Lab: switch it on under **Settings → Display & sidebar → Labs** to keep it in the sidebar)
+
+> **Scenario:** You have shipped a few releases and want to see, and show, how the
+> app actually got better: what each release fixed, which screens changed, and what
+> the AI checks cost along the way.
+
+The rail across the top has one stop per release, oldest on the left. Work after
+your newest release sits on **Unreleased**. No releases yet? Then each UX run or
+scorecard run is a stop. Pick a stop by clicking it, dragging the slider under the
+rail, or the arrow keys. Each stop lists:
+
+- the bugs it fixed (the release's own list, else the bugs fixed since the release before);
+- the screens the UX loop improved;
+- the scorecard's average for its newest scorecard run;
+- what its runs spent on AI calls.
+
+## Pin each release's screens
+
+**Pin current screens** copies the newest screenshot of every screen from your last
+runs and keeps it for that release. A UX run's kept version counts only once its pull
+request merged, because until then your users still see the original. Pinning makes no
+AI call. Then pick a screen to see its filmstrip, one shot per release, and drag the
+handle on the comparison to see the before and the after.
+
+```bash
+mushi-ux scorecard --url https://your-app.example --profile-dir <signed-in profile> --sync
+# then press Pin current screens on the release, or let your agent call the API:
+curl -X POST "$MUSHI_API/v1/admin/projects/$PROJECT/timeline/baselines" \
+  -H "X-Mushi-Api-Key: $MUSHI_API_KEY" -d '{"version":"1.4.0"}'
+```
+
+Pinned shots of the last 24 releases of each screen are kept (change it next to
+**Screens**). Mark a shot **Keep forever** to keep it beyond that. Switch on
+**Pin on publish** to pin the screens automatically each time you publish a
+release (off by default). Viewers see these controls but cannot change them.
+
+  The scorecard scores a page with an AI call only when the page changed: the same
+  text and the same look as a run in the last 30 days reuses that score, with
+  today's speed and accessibility measurements applied. The cost card shows how much
+  was reused.
+
+## From your editor
+
+Your agent can read the same data through MCP: `get_timeline` (the rail, the screens
+and the last 30 days) and `get_surface_history` (one screen's shots, scores and kept
+changes). `get_ux_run` reads one run. `start_ux_run` gives the console link and the
+command to start a run; it never starts a cloud run by itself.
 
 ---
 

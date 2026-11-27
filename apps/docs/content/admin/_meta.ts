@@ -33,6 +33,7 @@ export default {
   repo: 'Pull requests',
   explore: 'Code map',
   'ux-runs': 'UX runs',
+  timeline: 'Timeline',
   iterate: 'Improvement runs',
 
   '-- Verify': { type: 'separator', title: '4 · Verify' },

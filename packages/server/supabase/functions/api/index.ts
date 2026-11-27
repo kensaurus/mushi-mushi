@@ -855,6 +855,15 @@ forwardToApiExt([
   '/v1/admin/projects/:pid/ux-scorecard/:runId/group',
   '/v1/admin/projects/:pid/ux-scorecard/:runId/file',
 ]);
+// The iteration timeline (ux-timeline.ts, ADR 0072).
+forwardToApiExt([
+  '/v1/admin/projects/:pid/timeline',
+  '/v1/admin/projects/:pid/timeline/surfaces/:key',
+  '/v1/admin/projects/:pid/timeline/baselines',
+  '/v1/admin/projects/:pid/timeline/baselines/:id',
+  '/v1/admin/projects/:pid/timeline/settings',
+  '/v1/admin/projects/:pid/timeline/run-plan',
+]);
 registerPullRequestRoutes(app);
 registerProjectGroupRoutes(app);
 registerBootstrapRoutes(app);

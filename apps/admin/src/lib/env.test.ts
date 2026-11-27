@@ -22,7 +22,7 @@ describe('readRuntimeConfig', () => {
 
   it('treats a missing or odd global as empty (the hosted build)', () => {
     for (const v of [undefined, null, 'x', 42]) {
-      expect(readRuntimeConfig(v)).toEqual({ supabaseUrl: '', supabaseAnonKey: '', apiUrl: '', mcpHttpUrl: '', instanceType: '' })
+      expect(readRuntimeConfig(v)).toEqual({ supabaseUrl: '', supabaseAnonKey: '', apiUrl: '', mcpHttpUrl: '', instanceType: '', publicOrigin: '' })
     }
     expect(readRuntimeConfig({ supabaseAnonKey: 7 }).supabaseAnonKey).toBe('')
   })

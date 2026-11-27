@@ -39,6 +39,7 @@ export const LAB_FEATURES: readonly LabFeature[] = [
   { id: 'ci-runners', label: 'CI runners', description: 'Where your tests run, how long they wait for a machine, and what slows your fixes down.', paths: ['/ci'], group: 'fixing' },
   { id: 'code-map', label: 'Code map', description: 'A map of your indexed repository you can ask questions about.', paths: ['/explore'], group: 'fixing' },
   { id: 'ux-runs', label: 'UX runs', description: 'A coding agent works through your screens; you see what improved.', paths: ['/ux-runs'], group: 'fixing' },
+  { id: 'timeline', label: 'Timeline', description: 'Your app release by release: bugs fixed, screens improved, and a before/after of every screen.', paths: ['/timeline'], group: 'fixing' },
   { id: 'improvement-runs', label: 'Improvement runs', description: 'One AI drafts a change and a second AI critiques it until it passes.', paths: ['/iterate'], group: 'fixing' },
   { id: 'editor-agents', label: 'Editor agents', description: 'Status and catalog of the MCP connection your editor uses.', paths: ['/mcp'], group: 'automation' },
   { id: 'agent-skills', label: 'Agent skills', description: 'Browse agent skills and run skill pipelines on a report.', paths: ['/skills'], group: 'automation' },

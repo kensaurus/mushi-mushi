@@ -5,7 +5,6 @@
  */
 
 import { detectFromPackageJson } from './frameworkDetect'
-import { isExpoReporterProject } from './projectMushiEnv'
 import type { Framework } from './sdkSnippets'
 
 const MOBILE_FRAMEWORKS = new Set<Framework>(['react-native', 'expo', 'capacitor'])
@@ -45,10 +44,10 @@ export function detectWebBundler(packageJsonText: string | null | undefined): 'v
 }
 
 export function resolveDefaultSdkFramework(
-  slug: string | null | undefined,
+  /** Unused since ADR 0072: the default follows the app's package.json, never its name. */
+  _slug: string | null | undefined,
   packageJsonText?: string | null,
 ): Framework {
-  if (isExpoReporterProject(slug)) return 'expo'
 
   if (packageJsonText?.trim()) {
     const detected = detectFromPackageJson(packageJsonText)

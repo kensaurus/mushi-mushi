@@ -598,7 +598,7 @@ program
   .option('--success-text <regex>', 'The goal is reached when this text is visible')
   .option('--success-selector <css>', 'The goal is reached when this element is visible')
   .option('--success-api <url>', 'The goal is reached when a GET here (with the session cookies) answers with data')
-  .option('--mint-account', 'Mushi only: mint a synthetic account per session through the console (operator key; deleted after 24 h)')
+  .option('--mint-account', 'Testing this Mushi instance itself: mint a synthetic console account per session (operator key only, checked by the server; deleted after 24 h)')
   .option('--terminal', 'Run the CLI setup step itself when a screen asks for a terminal (scaffold a sample, run the setup, send a report)')
   .option('--setup-command <cmd>', 'With --terminal: the setup command; {projectId} and {apiKey} are filled in')
   .option('--allow <rule>', 'Allow a non-GET request that only reads (repeatable)', collect, [])

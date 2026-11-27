@@ -30,7 +30,7 @@ import { RESOLVED_EXTERNAL_API_URL } from '../lib/env'
 import { docsUrl } from '../lib/docsUrl'
 import { describeActionError } from '../lib/actionError'
 import { sdkCiStatusMeta, type SdkDiagnosticsResult, type SdkDiagnosticStatus } from '../lib/sdkCiSecrets'
-import { bundlerKindForFramework, mushiEnvVarsForBundler, mushiEnvVarsForProjectSlug } from '../lib/projectMushiEnv'
+import { bundlerKindForFramework, mushiEnvVarsForBundler, mushiEnvVarsForProject } from '../lib/projectMushiEnv'
 import { CHIP_TONE, runStatusChipTone } from '../lib/chipTone'
 
 // ---------------------------------------------------------------------------
@@ -120,10 +120,10 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
   // The server read the repo's package.json: its stack beats the slug guess
   // (an Expo, Vite, or Nuxt app used to be told to add NEXT_PUBLIC_* names,
   // and a Next app used to be told to add bare MUSHI_* names). An unknown
-  // stack id stays on the slug table, whose default is NEXT_PUBLIC_.
+  // stack gets the NEXT_PUBLIC_ names (ADR 0072: never a guess from the app's name).
   const detectedKind = diag?.stackSource === 'repo' ? bundlerKindForFramework(diag.stack) : 'none'
   const envVars = detectedKind === 'none'
-    ? mushiEnvVarsForProjectSlug(projectSlug)
+    ? mushiEnvVarsForProject()
     : mushiEnvVarsForBundler(detectedKind)
   const status: SdkDiagnosticStatus = diag?.status ?? 'unknown'
   const meta = sdkCiStatusMeta(status, diag?.hasGithubToken ?? false, projectSlug, {

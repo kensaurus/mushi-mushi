@@ -45,12 +45,16 @@ describe('judgeSurface', () => {
     if (dir) rmSync(dir, { recursive: true, force: true })
   })
 
-  function surfaceWithShots(): SurfaceState {
+  function surfaceWithShots(opts: { same?: boolean } = {}): SurfaceState {
     dir = mkdtempSync(join(tmpdir(), 'mushi-ux-judge-'))
     mkdirSync(join(dir, 'shots'))
     const png = new PNG({ width: 100, height: 400 })
     png.data.fill(255)
     writeFileSync(join(dir, 'shots', 'b.png'), encodePng(png))
+    if (!opts.same) {
+      // The kept version: a dark block where the original was blank.
+      for (let y = 10; y < 40; y++) for (let x = 10; x < 60; x++) png.data.fill(0, (y * 100 + x) * 4, (y * 100 + x) * 4 + 3)
+    }
     writeFileSync(join(dir, 'shots', 'a.png'), encodePng(png))
     return {
       surface: { key: 'k', kind: 'page', path: '/', steps: [], label: 'Home', domHash: 'h' },
@@ -103,6 +107,50 @@ describe('judgeSurface', () => {
     } as unknown as Anthropic
     const v = await judgeSurface(s, 'desktop', { dir, repoRoot: dir, designFiles: [], client })
     expect(v?.error).toMatch(/declined \(cyber\)/)
+  })
+
+  it('records the tokens the review used', async () => {
+    const s = surfaceWithShots()
+    const parse = vi.fn(async () => ({
+      stop_reason: 'end_turn',
+      model: 'claude-opus-5-5',
+      usage: { input_tokens: 1200, output_tokens: 300, cache_read_input_tokens: 800 },
+      parsed_output: { preferred: 'tie', confidence: 'low', summary: 'same', better: [], worse: [], design_system_breaks: [] },
+    }))
+    const client = { beta: { messages: { parse } } } as unknown as Anthropic
+    const v = await judgeSurface(s, 'desktop', { dir, repoRoot: dir, designFiles: [], client })
+    expect(v?.usage).toEqual({ input_tokens: 1200, output_tokens: 300, cache_read_input_tokens: 800, cache_creation_input_tokens: 0 })
+    expect(v?.reused).toBeUndefined()
+  })
+
+  it('makes no model call when the kept version looks the same as the original (ADR 0072)', async () => {
+    const s = surfaceWithShots({ same: true })
+    const parse = vi.fn()
+    const client = { beta: { messages: { parse } } } as unknown as Anthropic
+    const v = await judgeSurface(s, 'desktop', { dir, repoRoot: dir, designFiles: [], client })
+    expect(parse).not.toHaveBeenCalled()
+    expect(v?.reused).toBe('unchanged')
+    expect(v?.preferred).toBe('tie')
+  })
+
+  it('reuses the review of a pair it has seen, and reviews again when an image changes (ADR 0072)', async () => {
+    const s = surfaceWithShots()
+    const parse = vi.fn(async () => ({
+      stop_reason: 'end_turn',
+      model: 'claude-opus-5-5',
+      parsed_output: { preferred: 'B', confidence: 'high', summary: 'clearer', better: [], worse: [], design_system_breaks: [] },
+    }))
+    const client = { beta: { messages: { parse } } } as unknown as Anthropic
+    const cacheDir = join(dir, 'judge-cache')
+    const first = await judgeSurface(s, 'desktop', { dir, repoRoot: dir, designFiles: [], client, cacheDir, random: () => 0.9 })
+    const second = await judgeSurface(s, 'desktop', { dir, repoRoot: dir, designFiles: [], client, cacheDir, random: () => 0.1 })
+    expect(parse).toHaveBeenCalledTimes(1)
+    expect(second?.reused).toBe('cache')
+    expect(second?.preferred).toBe(first?.preferred)
+    expect(second?.usage).toBeUndefined()
+    // Another model is another review.
+    await judgeSurface(s, 'desktop', { dir, repoRoot: dir, designFiles: [], client, cacheDir, model: 'claude-sonnet-5' })
+    expect(parse).toHaveBeenCalledTimes(2)
   })
 
   it('returns null when the screen has no kept change at that viewport', async () => {

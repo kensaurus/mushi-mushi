@@ -164,6 +164,7 @@ export function toSnapshot(state: RunState, finished: boolean, uploaded: Readonl
     agent: state.agent,
     model: state.model,
     judge_model: state.judgeModel ?? null,
+    ...(state.judgeUsage ? { judge_usage: state.judgeUsage } : {}),
     skill: state.skill?.name?.slice(0, 120) ?? null,
     base_ref: state.baseRef?.slice(0, 200) ?? null,
     phase: state.phase ?? null,

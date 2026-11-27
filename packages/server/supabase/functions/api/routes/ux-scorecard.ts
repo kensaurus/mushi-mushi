@@ -33,7 +33,9 @@ import { FILE_REPORT_RATE_SCOPE, FILED_REPORTS_PER_HOUR } from '../../_shared/re
 import { UX_CAPTURES_BUCKET } from '../../_shared/ux-runs.ts'
 import { toPublicSupabaseUrl } from '../../_shared/public-url.ts'
 import { withAnthropicOrOpenAi } from '../../_shared/llm-failover.ts'
-import { withLlmUsage } from '../../_shared/llm-usage.ts'
+import { extractLlmUsage, withLlmUsage, type LlmTokenUsage } from '../../_shared/llm-usage.ts'
+import { priceLlmCall } from '../../_shared/llm-cost.ts'
+import { reuseScore, runCostFromSurfaces, scoreCacheCutoff, scoreCacheKey, type RunCostRow } from '../../_shared/ux-score-cache.ts'
 import { claudeGenerateText } from '../../_shared/claude-messages.ts'
 import { ANTHROPIC_SONNET_LATEST, OPENAI_TERRA } from '../../_shared/models.ts'
 import {
@@ -83,6 +85,8 @@ const LLM_TIMEOUT_MS = 120_000
 const MAX_OUTPUT_TOKENS = 4000
 /** Scored runs whose page scores make the trend. */
 const TREND_RUNS = 12
+/** Pages read when totalling a run's cost (a run holds at most 120). */
+const RUN_COST_PAGES_READ = 200
 
 type Db = ReturnType<typeof getServiceClient>
 type Ctx = Context<{ Variables: Variables }>
@@ -132,6 +136,22 @@ async function scoredPages(db: Db, runRowId: string): Promise<{ pages: ScoredPag
   if (error) return { error }
   const pages = ((data ?? []) as Array<{ path: string; label: string; scorecard: unknown; facts: unknown }>).map(scoredPageFromRow).filter((p): p is ScoredPage => !!p)
   return { pages }
+}
+
+/**
+ * ADR 0072: the run's cost is the sum of its pages', recomputed after each
+ * page so parallel scoring settles on the full total. Best effort: a failed
+ * write keeps the previous total and is logged.
+ */
+async function refreshRunCost(db: Db, runRowId: string): Promise<void> {
+  const { data, error } = await db.from('ux_surfaces').select('cost_usd, judge_cached, score').eq('run_id', runRowId).limit(RUN_COST_PAGES_READ)
+  if (error) {
+    slog.warn('run cost unreadable', { runRowId, err: error.message })
+    return
+  }
+  const { cost_usd, cost } = runCostFromSurfaces((data ?? []) as RunCostRow[])
+  const { error: upErr } = await db.from('ux_runs').update({ cost_usd, cost }).eq('id', runRowId)
+  if (upErr) slog.warn('run cost not saved', { runRowId, err: upErr.message })
 }
 
 export function registerUxScorecardRoutes(app: Hono<{ Variables: Variables }>): void {
@@ -200,13 +220,51 @@ export function registerUxScorecardRoutes(app: Hono<{ Variables: Variables }>): 
     const db = getServiceClient()
     const a = await writeAccess(c, db)
     if (a instanceof Response) return a
-    const body = (await c.req.json().catch(() => null)) as { facts?: unknown; shots?: unknown; app?: unknown; about?: unknown; other_pages?: unknown } | null
+    const body = (await c.req.json().catch(() => null)) as { facts?: unknown; shots?: unknown; app?: unknown; about?: unknown; other_pages?: unknown; shot_hash?: unknown; rescore?: unknown } | null
     const parsedFacts = UxScorecardFacts.safeParse(body?.facts)
     if (!parsedFacts.success) return jsonError(c, 'VALIDATION_ERROR', parsedFacts.error.issues.slice(0, 3).map((i) => `facts.${i.path.join('.')}: ${i.message}`).join('; '))
     const facts = parsedFacts.data as UxPageFacts
     const run = await scorecardRun(c, db, a.projectId, a.localRunId)
     if (run instanceof Response) return run
     const shotNames = (Array.isArray(body?.shots) ? body!.shots : []).filter((n): n is string => typeof n === 'string').slice(0, 2)
+    const pageKey = scorecardPageKey(facts.key)
+    const pageRow = (fields: Record<string, unknown>) => ({
+      run_id: run.id,
+      project_id: a.projectId,
+      surface_key: scorecardSurfaceKey(pageKey),
+      kind: 'page',
+      path: pageKey.slice(0, 500),
+      label: (facts.label || pageKey).slice(0, 300),
+      status: 'baseline',
+      facts,
+      thumbs: shotNames.length ? { scorecard: shotNames } : null,
+      updated_at: new Date().toISOString(),
+      ...fields,
+    })
+    // ADR 0072 (P8): this app scored the same capture in the last 30 days: reuse it, no model call.
+    const captureHash = await scoreCacheKey(facts, body?.shot_hash)
+    if (captureHash && body?.rescore !== true) {
+      const { data: hit, error: hitErr } = await db
+        .from('ux_surfaces')
+        .select('scorecard')
+        .eq('project_id', a.projectId)
+        .eq('capture_hash', captureHash)
+        .not('score', 'is', null)
+        .gte('updated_at', scoreCacheCutoff(new Date()))
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (hitErr) slog.warn('score cache unreadable; scoring with the model', { projectId: a.projectId, err: hitErr.message })
+      const reused = hit ? reuseScore((hit as { scorecard: unknown }).scorecard, facts) : null
+      if (reused) {
+        const { error } = await db
+          .from('ux_surfaces')
+          .upsert(pageRow({ score: reused.overall, scorecard: reused, capture_hash: captureHash, judge_cached: true, cost_usd: 0 }), { onConflict: 'run_id,surface_key' })
+        if (error) return dbError(c, error)
+        await refreshRunCost(db, run.id)
+        return c.json({ ok: true, data: { score: reused, model: null, cached: true, cost_usd: 0 } })
+      }
+    }
     const paths = shotNames.map((n) => scorecardShotPath(a.projectId, run.id, n)).filter((p): p is string => !!p)
     const images: string[] = []
     if (paths.length) {
@@ -224,6 +282,7 @@ export function registerUxScorecardRoutes(app: Hono<{ Variables: Variables }>): 
     const usage = (model: string, keySource: 'byok' | 'env') => ({ functionName: 'api', stage: FEATURE, projectId: a.projectId, model, keySource, promptVersion: UX_SCORECARD_PROMPT_VERSION })
     let text: string
     let usedModel: string
+    let tokens: LlmTokenUsage = { inputTokens: null, outputTokens: null }
     try {
       const routed = await withAnthropicOrOpenAi(
         db,
@@ -231,17 +290,18 @@ export function registerUxScorecardRoutes(app: Hono<{ Variables: Variables }>): 
         (key) =>
           withLlmUsage(db, usage(key.model ?? SCORECARD_MODEL, key.source), () =>
             claudeGenerateText({ apiKey: key.key, model: key.model ?? SCORECARD_MODEL, system, messages: [{ role: 'user', content } as never], maxTokens: MAX_OUTPUT_TOKENS, timeoutMs: LLM_TIMEOUT_MS }),
-          ).then((r) => r.text),
+          ).then((r) => ({ text: r.text, usage: extractLlmUsage(r) })),
         async (key) => {
           const [{ openAiProvider }, { generateText }] = await Promise.all([import('../../_shared/openai-compat.ts'), import('../../_shared/ai-sdk.ts')])
           const openai = openAiProvider({ apiKey: key.key, ...(key.baseUrl ? { baseURL: key.baseUrl } : {}) })
           return withLlmUsage(db, usage(key.model ?? SCORECARD_FALLBACK, key.source), () =>
             generateText({ model: openai(key.model ?? SCORECARD_FALLBACK), system, messages: [{ role: 'user', content }] as never, maxTokens: MAX_OUTPUT_TOKENS }),
-          ).then((r) => r.text)
+          ).then((r) => ({ text: r.text, usage: extractLlmUsage(r) }))
         },
         { feature: FEATURE, tier: 'standard' },
       )
-      text = routed.result
+      text = routed.result.text
+      tokens = routed.result.usage
       usedModel = routed.model ?? (routed.usedProvider === 'openai' ? SCORECARD_FALLBACK : SCORECARD_MODEL)
     } catch (err) {
       slog.warn('page not scored', { projectId: a.projectId, run: a.localRunId, page: facts.key, err: String(err).slice(0, 300) })
@@ -249,27 +309,13 @@ export function registerUxScorecardRoutes(app: Hono<{ Variables: Variables }>): 
     }
     const parsed = parsePageAnswer(text, facts)
     if (!parsed.ok) return jsonError(c, 'LLM_BAD_ANSWER', parsed.error, 502)
-    const key = scorecardPageKey(facts.key)
-    const now = new Date().toISOString()
-    const { error } = await db.from('ux_surfaces').upsert(
-      {
-        run_id: run.id,
-        project_id: a.projectId,
-        surface_key: scorecardSurfaceKey(key),
-        kind: 'page',
-        path: key.slice(0, 500),
-        label: (facts.label || key).slice(0, 300),
-        status: 'baseline',
-        facts,
-        score: parsed.value.overall,
-        scorecard: parsed.value,
-        thumbs: shotNames.length ? { scorecard: shotNames } : null,
-        updated_at: now,
-      },
-      { onConflict: 'run_id,surface_key' },
-    )
+    const priced = await priceLlmCall({ model: usedModel, inputTokens: tokens.inputTokens, outputTokens: tokens.outputTokens })
+    const { error } = await db
+      .from('ux_surfaces')
+      .upsert(pageRow({ score: parsed.value.overall, scorecard: parsed.value, capture_hash: captureHash, judge_cached: false, cost_usd: priced.costUsd }), { onConflict: 'run_id,surface_key' })
     if (error) return dbError(c, error)
-    return c.json({ ok: true, data: { score: parsed.value, model: usedModel } })
+    await refreshRunCost(db, run.id)
+    return c.json({ ok: true, data: { score: parsed.value, model: usedModel, cached: false, cost_usd: priced.costUsd } })
   })
 
   // ── CLI: group the run's issues into root causes ──────────────────────────

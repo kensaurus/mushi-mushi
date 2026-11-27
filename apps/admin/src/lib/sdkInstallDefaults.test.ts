@@ -3,9 +3,8 @@ import { detectWebBundler, resolveDefaultSdkFramework, snippetBundler } from './
 import { renderSnippet } from './sdkSnippets'
 
 describe('resolveDefaultSdkFramework', () => {
-  it('prefers expo for yen-yen slug', () => {
-    expect(resolveDefaultSdkFramework('yen-yen')).toBe('expo')
-    expect(resolveDefaultSdkFramework('YenYen')).toBe('expo')
+  it('never picks a framework from the app name (ADR 0072)', () => {
+    expect(resolveDefaultSdkFramework('yen-yen')).toBe(resolveDefaultSdkFramework('my-app'))
   })
 
   it('detects expo from package.json when confidence is high', () => {

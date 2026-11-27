@@ -63,12 +63,12 @@ export function ciVarTemplateNames(stack: SdkStack): Array<{ name: string; ghKin
   return buildCiVars({ stack, projectId: '', endpoint: '', mintedKey: '' }).map(({ name, ghKind }) => ({ name, ghKind }))
 }
 
-/** Stack from the project slug (a heuristic until the recipe names the stack). */
-export function inferStack(slug: string | null): SdkStack {
-  if (!slug) return 'nextjs'
-  const s = slug.toLowerCase()
-  if (s === 'yen-yen') return 'expo'
-  if (s === 'mushi-mushi' || s === 'solo-boss-cloud') return 'vite'
+/**
+ * The stack when nothing was read from the repo: the Next.js names, for every
+ * app. ADR 0072: never guessed from a project's name (this used to name three
+ * of the maintainer's own apps). The slug argument is kept for call sites.
+ */
+export function inferStack(_slug: string | null): SdkStack {
   return 'nextjs'
 }
 

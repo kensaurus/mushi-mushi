@@ -29,6 +29,7 @@ import { Modal } from './Modal'
 import { apiFetch } from '../lib/supabase'
 import { useActiveProjectId } from './ProjectSwitcher'
 import { CHIP_TONE } from '../lib/chipTone'
+import { SUPPORT_EMAIL } from '../lib/supportContact'
 
 type FeedbackType = 'bug' | 'feature'
 
@@ -40,7 +41,7 @@ interface FeedbackModalProps {
   onSubmitted?: (ticketId: string) => void
 }
 
-const FALLBACK_EMAIL = 'kensaurus@gmail.com'
+const FALLBACK_EMAIL = SUPPORT_EMAIL
 const MAX_SUBJECT = 200
 
 /** Page path + query for support triage. Excludes fragment (#…) which may carry sensitive tokens. */

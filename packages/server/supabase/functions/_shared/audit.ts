@@ -28,6 +28,8 @@ export type AuditAction = 'report.created' | 'report.classified' | 'report.triag
   | 'fresh_eyes.account_created'
   | 'fresh_eyes.queued'
   | 'ux_scorecard.viewport_set'
+  | 'ux_timeline.pinned'
+  | 'ux_timeline.retention'
   | 'worker.cursor_account_switch'
   | 'pull_request.merged'
   | 'mcp.tool_called'

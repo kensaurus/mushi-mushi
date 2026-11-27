@@ -5,8 +5,10 @@
  *          so every billing surface says "Contact us" the same way.
  */
 
+import { SUPPORT_EMAIL } from './supportContact'
+
 /** docs/adr/0015 — the product inbox. */
-export const SALES_EMAIL = 'kensaurus@gmail.com'
+export const SALES_EMAIL = SUPPORT_EMAIL
 
 export const ENTERPRISE_MAILTO = `mailto:${SALES_EMAIL}?subject=${encodeURIComponent('Mushi Enterprise inquiry')}`
 

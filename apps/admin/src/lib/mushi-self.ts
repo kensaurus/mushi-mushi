@@ -31,6 +31,7 @@
 import type { MushiConfig, MushiSDKInstance } from '@mushi-mushi/core'
 import { RESOLVED_API_URL } from './env'
 import { Sentry } from './sentry'
+import { SUPPORT_EMAIL } from './supportContact'
 
 let _sdk: MushiSDKInstance | null = null;
 let _initPromise: Promise<MushiSDKInstance | null> | null = null;
@@ -86,7 +87,7 @@ export async function initMushiSelf(options?: {
         apiKey: import.meta.env.VITE_MUSHI_SELF_API_KEY!,
         apiEndpoint: endpoint,
         // Pin launcher locally — remote runtime config can overwrite trigger to
-        // `auto` and resurrect the FAB (glot.it hit this in Capacitor WebView).
+        // `auto` and resurrect the FAB (a host app hit this in a Capacitor WebView).
         runtimeConfig: false,
 
         // Console events carry `$surface: 'console'` (the SDK default is
@@ -107,7 +108,7 @@ export async function initMushiSelf(options?: {
             enabled: true,
             appName: 'Mushi Admin',
             message: 'This is the Mushi Mushi admin console. Found a bug? Report it here and it goes straight to the team.',
-            contactEmail: 'kensaurus@gmail.com',
+            contactEmail: SUPPORT_EMAIL,
           },
           minDescriptionLength: 12,
           // Console feature requests have ONE home: the Feature board, which

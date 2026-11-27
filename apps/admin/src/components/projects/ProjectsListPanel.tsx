@@ -588,7 +588,7 @@ export function ProjectsListPanel({
                 <AssistantConfigCard projectId={project.id} />
               </div>
               <div className="mt-4 border-t border-edge-subtle pt-4">
-                <IdentitySecretCard projectId={project.id} projectSlug={project.slug} />
+                <IdentitySecretCard projectId={project.id} />
               </div>
             </div>
             )}

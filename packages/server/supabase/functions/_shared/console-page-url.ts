@@ -13,15 +13,17 @@
  */
 
 import { instanceMode, type InstanceMode } from './instance-mode.ts'
+import { publicOriginFrom } from './public-origin.ts'
 
 export function consolePageUrlFrom(
-  input: { mode: InstanceMode; adminBaseUrl?: string | null; originAllowlist?: string | null },
+  input: { mode: InstanceMode; adminBaseUrl?: string | null; originAllowlist?: string | null; publicOrigin?: string | null },
   page: string,
 ): string {
   const path = page.replace(/^\/+/, '')
   const base = (input.adminBaseUrl ?? '').trim().replace(/\/+$/, '')
   if (input.mode === 'self-hosted' && /^https?:\/\//.test(base)) return `${base}/${path}`
-  const origin = (input.originAllowlist ?? '').split(',')[0]?.trim() || 'https://kensaur.us'
+  // No allowlist: MUSHI_PUBLIC_ORIGIN (default https://kensaur.us).
+  const origin = (input.originAllowlist ?? '').split(',')[0]?.trim() || publicOriginFrom(input.publicOrigin)
   return `${origin}/mushi-mushi/admin/${path}`
 }
 
@@ -31,6 +33,7 @@ export function consolePageUrl(page: string): string {
       mode: instanceMode(),
       adminBaseUrl: Deno.env.get('ADMIN_BASE_URL'),
       originAllowlist: Deno.env.get('MUSHI_ADMIN_ORIGIN_ALLOWLIST'),
+      publicOrigin: Deno.env.get('MUSHI_PUBLIC_ORIGIN'),
     },
     page,
   )
