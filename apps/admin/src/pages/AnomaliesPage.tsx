@@ -52,7 +52,7 @@ import {
 } from '../components/anomalies/AnomaliesStatsTypes'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { BarSparkline } from '../components/charts'
-import { CHIP_TONE, HEADER_BADGE_TONE } from '../lib/chipTone'
+import { CHIP_TONE } from '../lib/chipTone'
 
 interface AnomalyDetection {
   id: string
@@ -80,9 +80,9 @@ interface MetricPoint {
 }
 
 const METHOD_CLS: Record<string, string> = {
-  'page-hinkley': CHIP_TONE.warnSubtle,
-  'z-score': CHIP_TONE.dangerSubtle,
-  'release-regression': CHIP_TONE.dangerSubtle,
+  'page-hinkley': CHIP_TONE.warn,
+  'z-score': CHIP_TONE.danger,
+  'release-regression': CHIP_TONE.danger,
 }
 
 function methodBadge(m: string) {
@@ -289,14 +289,14 @@ export function AnomaliesPage() {
         <Badge
           className={
             bannerSeverity === 'ok'
-              ? CHIP_TONE.okSubtle
+              ? CHIP_TONE.ok
               : bannerSeverity === 'danger'
-                ? CHIP_TONE.dangerSubtle
+                ? CHIP_TONE.danger
                 : bannerSeverity === 'warn'
-                  ? CHIP_TONE.warnSubtle
+                  ? CHIP_TONE.warn
                   : bannerSeverity === 'brand'
-                    ? HEADER_BADGE_TONE.brand
-                    : HEADER_BADGE_TONE.neutral
+                    ? CHIP_TONE.neutral
+                    : CHIP_TONE.neutral
           }
         >
           {!stats.hasAnyProject

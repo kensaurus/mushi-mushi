@@ -164,6 +164,10 @@ describe('MCP protocol handshake', () => {
       'propose_recipe_change',
       'propose_portfolio_change',
       'request_connector_action',
+      // Plan 025 P5/P6: the kit export writes a manifest and signs URLs; a store
+      // media upload is a request a person approves (ADR 0074).
+      'export_release_kit',
+      'request_store_media_upload',
       // Changing where CI runs: a request a person approves (ADR 0037).
       'request_ci_placement_change',
       'open_ci_cost_fix',
@@ -177,6 +181,8 @@ describe('MCP protocol handshake', () => {
       'scan_site_journeys',
       // Opens or stops the on-demand visit recording window.
       'record_journeys',
+      'upload_ux_captures',
+      'start_fresh_eyes',
       // Console parity: settings, the store review pull, and the operator records.
       'set_design_settings',
       'set_widget_settings',

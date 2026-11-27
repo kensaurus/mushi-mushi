@@ -34,11 +34,11 @@ interface FilterChipProps {
 
 const CHIP_ACTIVE: Record<FilterChipTone, string> = {
   default: 'bg-surface-overlay text-fg border-fg-faint/40',
-  brand:   CHIP_TONE.brandSubtle,
-  ok:      CHIP_TONE.okSubtle,
-  warn:    CHIP_TONE.warnSubtle,
-  danger:  CHIP_TONE.dangerSubtle,
-  info:    CHIP_TONE.infoSubtle,
+  brand:   CHIP_TONE.brand,
+  ok:      CHIP_TONE.ok,
+  warn:    CHIP_TONE.warn,
+  danger:  CHIP_TONE.danger,
+  info:    CHIP_TONE.info,
 }
 
 const CHIP_IDLE: Record<FilterChipTone, string> = {
@@ -209,12 +209,13 @@ interface ResultChipProps {
   className?: string
 }
 
+// The one tone scale (lib/chipTone.ts), not a second set of hand-mixed alphas.
 const RESULT_CHIP_CLS: Record<ResultChipTone, string> = {
-  idle: 'border-edge-subtle bg-surface-overlay/60 text-fg-muted',
-  running: 'border-info/35 bg-info-muted/50 text-info-foreground border border-info/25 font-medium',
-  success: 'border-ok/35 bg-ok-muted/50 text-ok-foreground border border-ok/25 font-medium',
-  error: `${CHIP_TONE.dangerSubtle} font-medium`,
-  info: 'border-brand/35 bg-brand-subtle text-brand font-medium',
+  idle: CHIP_TONE.neutral,
+  running: `${CHIP_TONE.info} font-medium`,
+  success: `${CHIP_TONE.ok} font-medium`,
+  error: `${CHIP_TONE.danger} font-medium`,
+  info: `${CHIP_TONE.brand} font-medium`,
 }
 
 const RESULT_CHIP_GLYPH: Record<ResultChipTone, string> = {
@@ -559,7 +560,7 @@ export function CodeChip({
   return (
     <code
       title={title}
-      className={`inline-block truncate rounded-sm bg-surface-overlay/70 px-1.5 py-px font-mono text-2xs leading-snug text-fg-secondary ${maxWidthClass} ${className}`}
+      className={`inline-block truncate rounded-sm ${CHIP_TONE.neutral} px-1.5 py-px font-mono text-2xs leading-snug ${maxWidthClass} ${className}`}
     >
       {children}
     </code>
@@ -609,9 +610,11 @@ export function DataTableCell({
 
 /* ── Kbd (keyboard shortcut badge) ─────────────────────────────────────── */
 
+// A key cap: raised surface, a 3:1 edge and a 2px bottom edge, so "Ctrl K"
+// reads as keys and not as grey-highlighted text (2026-11-27).
 export function Kbd({ children }: { children: ReactNode }) {
   return (
-    <kbd className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 text-2xs font-mono font-medium text-fg-secondary bg-surface-overlay border border-edge rounded-sm">
+    <kbd className="inline-flex items-center justify-center min-w-5 h-5 px-1 text-2xs font-mono font-semibold text-fg-secondary bg-surface-raised border border-b-2 border-neutral-edge rounded-sm">
       {children}
     </kbd>
   )
@@ -679,7 +682,7 @@ export function ErrorAlert({
       <div className="flex items-start gap-3">
         <div
           aria-hidden="true"
-          className={`mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${CHIP_TONE.dangerSubtle} text-xs font-bold`}
+          className={`mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${CHIP_TONE.danger} text-xs font-bold`}
         >
           !
         </div>

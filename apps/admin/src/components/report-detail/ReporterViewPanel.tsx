@@ -118,12 +118,12 @@ export function ReporterViewPanel({
         <div className="flex flex-wrap items-center gap-1.5">
           {data.reporter_replied_unseen && <Badge tone="warn">Reporter replied</Badge>}
           {data.unread_by_reporter > 0 && (
-            <Badge tone="infoSubtle">
+            <Badge tone="info">
               {data.unread_by_reporter} unread by reporter
             </Badge>
           )}
           {data.followers > 0 && (
-            <Badge tone="infoSubtle">
+            <Badge tone="info">
               {data.followers} follower{data.followers === 1 ? '' : 's'}
             </Badge>
           )}
@@ -131,7 +131,7 @@ export function ReporterViewPanel({
       </div>
 
       <div className="space-y-1">
-        <Badge tone={view.tone === 'attention' ? 'warn' : view.tone === 'success' ? 'ok' : 'infoSubtle'}>{view.label}</Badge>
+        <Badge tone={view.tone === 'attention' ? 'warn' : view.tone === 'success' ? 'ok' : 'info'}>{view.label}</Badge>
         <p className="text-xs text-fg-muted">{view.detail}</p>
         {view.othersNote && <p className="text-xs text-fg-muted">{view.othersNote}</p>}
         {view.hidden && <p className="text-xs text-fg-muted">Closed as spam — hidden from the reporter.</p>}

@@ -121,6 +121,36 @@ describe('#100 critic personas', () => {
   })
 })
 
+describe('a user persona for the critic (ADR 0073)', () => {
+  const PERSONA = '4000000d-0000-4000-8000-000000000000'
+  const OTHER = '5000000d-0000-4000-8000-000000000000'
+  const base = { project_id: P, target_url: 'https://a.test', goal: 'g', persona: 'nng-heuristic' }
+
+  it("stores the app's own persona next to the rubric persona", async () => {
+    db.tables.project_personas = [{ id: PERSONA, project_id: P, name: 'Older visitor', archived_at: null }]
+    const res = await call('POST', '/v1/admin/pdca', { ...base, user_persona_id: PERSONA })
+    expect(res.status).toBe(201)
+    expect(res.json.data).toMatchObject({ persona: 'nng-heuristic', project_persona_id: PERSONA })
+  })
+
+  it("refuses a malformed id, another app's persona and an archived one", async () => {
+    expect((await call('POST', '/v1/admin/pdca', { ...base, user_persona_id: 'older' })).status).toBe(400)
+    db.tables.project_personas = [
+      { id: PERSONA, project_id: OTHER, name: 'Elsewhere', archived_at: null },
+      { id: OTHER, project_id: P, name: 'Gone', archived_at: '2026-11-01T00:00:00Z' },
+    ]
+    expect((await call('POST', '/v1/admin/pdca', { ...base, user_persona_id: PERSONA })).json.error.code).toBe('PERSONA_NOT_FOUND')
+    expect((await call('POST', '/v1/admin/pdca', { ...base, user_persona_id: OTHER })).status).toBe(404)
+    expect(db.tables.pdca_runs).toHaveLength(1)
+  })
+
+  it('without one, queues a plain rubric run as before', async () => {
+    const res = await call('POST', '/v1/admin/pdca', base)
+    expect(res.status).toBe(201)
+    expect(res.json.data.project_persona_id).toBeUndefined()
+  })
+})
+
 describe('#101 trigger failures keep the runner reason', () => {
   it('passes a string error through as the message', async () => {
     fetchMock.mockResolvedValue(

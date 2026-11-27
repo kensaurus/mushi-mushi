@@ -35,14 +35,14 @@ function Heading({ children }: { children: ReactNode }) {
 function Verdict({ pass }: { pass: boolean | null }) {
   if (pass === true)
     return (
-      <Badge tone="okSubtle" className="gap-1">
+      <Badge tone="ok" className="gap-1">
         <RecipeStateGlyph glyph="check" />
         <span data-verdict="pass">Pass</span>
       </Badge>
     )
   if (pass === false)
     return (
-      <Badge tone="dangerSubtle" className="gap-1">
+      <Badge tone="danger" className="gap-1">
         <RecipeStateGlyph glyph="cross" />
         <span data-verdict="fail">Fail</span>
       </Badge>
@@ -128,7 +128,7 @@ export function DirectionCard({
           </h2>
           {direction.nativeName && <span className="text-base text-fg-secondary">{direction.nativeName}</span>}
           {direction.active && (
-            <Badge tone="okSubtle" className="gap-1" title="mushi.recipe.json points at this direction">
+            <Badge tone="ok" className="gap-1" title="mushi.recipe.json points at this direction">
               <RecipeStateGlyph glyph="check" />
               <span data-testid="active-badge">Active</span>
             </Badge>

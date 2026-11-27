@@ -15,7 +15,7 @@ import { weekDelta, type HomeSection, type WeekRow } from '../../lib/projectHome
 import { splitWeekRows } from '../../lib/homeView'
 import { HomeSectionBody } from './HomeSectionBody'
 
-const DELTA_TONE = { ok: 'okSubtle', warn: 'warnSubtle', neutral: 'neutral' } as const
+const DELTA_TONE = { ok: 'ok', warn: 'warn', neutral: 'neutral' } as const
 
 const BAR_W = 3
 const BAR_GAP = 1

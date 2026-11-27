@@ -20,7 +20,7 @@ describe('Overview card states', () => {
     const stopped = card({ last_seen_at: '2026-01-01T00:00:00Z', sessions_7d: 0 })
     expect(healthToneFor(stopped)).toBe('silent')
     expect(healthBadgeLabel(stopped, 'silent')).toBe('SDK stopped')
-    expect(HEALTH_BADGE_TONE.silent).toBe('warnSubtle')
+    expect(HEALTH_BADGE_TONE.silent).toBe('warn')
 
     const quiet = card({ sessions_7d: 0 })
     expect(healthToneFor(quiet)).toBe('quiet')
@@ -33,7 +33,7 @@ describe('Overview card states', () => {
     expect(healthToneFor(busy)).toBe('warn')
     expect(healthBadgeLabel(busy, 'warn')).toBe('49 open')
     expect(HEALTH_BADGE_TONE.warn).toBe('neutral')
-    expect(HEALTH_BADGE_TONE.critical).toBe('dangerSubtle')
+    expect(HEALTH_BADGE_TONE.critical).toBe('danger')
   })
 })
 

@@ -61,7 +61,7 @@ export function GitHubAppInstallButton({ projectId, hasInstallation = false, cla
         {hasInstallation ? 'Change repository' : 'Connect GitHub'}
       </Btn>
       {hasInstallation && (
-        <Badge tone="okSubtle">App connected</Badge>
+        <Badge tone="ok">App connected</Badge>
       )}
       {!hasInstallation && (
         <p className="text-2xs text-fg-muted">

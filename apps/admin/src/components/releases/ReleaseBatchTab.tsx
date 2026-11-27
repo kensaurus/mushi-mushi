@@ -32,10 +32,10 @@ import { Badge, Card, ErrorAlert, HelpPopover, Loading, PageFirstStep, PageStatu
 type Tone = 'ok' | 'warn' | 'danger' | 'info' | 'neutral'
 
 const TONE_CHIP: Record<Tone, string> = {
-  ok: CHIP_TONE.okSubtle,
-  warn: CHIP_TONE.warnSubtle,
-  danger: CHIP_TONE.dangerSubtle,
-  info: CHIP_TONE.infoSubtle,
+  ok: CHIP_TONE.ok,
+  warn: CHIP_TONE.warn,
+  danger: CHIP_TONE.danger,
+  info: CHIP_TONE.info,
   neutral: CHIP_TONE.neutral,
 }
 
@@ -141,7 +141,7 @@ function Migrations({ b }: { b: RepoBatch }) {
     <div data-testid="batch-migrations">
       <h4 className="text-2xs font-semibold text-fg-secondary">Database migrations</h4>
       {m.files.length > 0 ? (
-        <div className={`mt-1 rounded-sm px-2.5 py-2 ${CHIP_TONE.warnSubtle}`}>
+        <div className={`mt-1 rounded-sm px-2.5 py-2 ${CHIP_TONE.warn}`}>
           <p className="text-xs">
             This batch changes the database: {m.files.length} migration file{m.files.length === 1 ? '' : 's'}. Mushi Mushi does not run them; apply them when you deploy.
           </p>
@@ -193,7 +193,7 @@ function Deploy({ b }: { b: RepoBatch }) {
 /** The card's real problem, first: no deploy seen in 14 days. */
 function DeployGap({ href }: { href: string }) {
   return (
-    <p className={`mt-1.5 rounded-sm px-2.5 py-1.5 text-xs ${CHIP_TONE.warnSubtle}`} data-testid="batch-deploy-gap">
+    <p className={`mt-1.5 rounded-sm px-2.5 py-1.5 text-xs ${CHIP_TONE.warn}`} data-testid="batch-deploy-gap">
       <span aria-hidden="true">◆ </span>No deploy of this app seen in 14 days, so reporters are not told when their fix is live.{' '}
       <Link to={href} className={`font-semibold ${LINK_ACCENT}`}>
         See the setup gap

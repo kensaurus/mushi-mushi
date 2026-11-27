@@ -282,7 +282,7 @@ export function LoginPage() {
         {success === 'signup-confirm' && (
           <div className="bg-surface border border-edge rounded-md p-5 space-y-3">
             <div className="flex items-center justify-center">
-              <span className={`inline-flex items-center justify-center w-10 h-10 rounded-full ${CHIP_TONE.okSubtle}`}>
+              <span className={`inline-flex items-center justify-center w-10 h-10 rounded-full ${CHIP_TONE.ok}`}>
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                 </svg>
@@ -321,7 +321,7 @@ export function LoginPage() {
         {success === 'reset-sent' && (
           <div className="bg-surface border border-edge rounded-md p-5 space-y-3">
             <div className="flex items-center justify-center">
-              <span className={`inline-flex items-center justify-center w-10 h-10 rounded-full ${CHIP_TONE.okSubtle}`}>
+              <span className={`inline-flex items-center justify-center w-10 h-10 rounded-full ${CHIP_TONE.ok}`}>
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
@@ -348,7 +348,7 @@ export function LoginPage() {
           <div className="overflow-hidden bg-surface border border-brand/30 rounded-md p-5 space-y-4 shadow-raised">
             <div className="relative flex items-center justify-center">
               <span className="absolute h-16 w-16 rounded-full bg-brand/15 blur-xl" aria-hidden="true" />
-              <span className={`relative inline-flex h-11 w-11 items-center justify-center rounded-full ${CHIP_TONE.brandSubtle}`}>
+              <span className={`relative inline-flex h-11 w-11 items-center justify-center rounded-full ${CHIP_TONE.brand}`}>
                 @
               </span>
             </div>
@@ -490,6 +490,7 @@ export function LoginPage() {
                 size="sm"
                 onClick={handlePasskeySignIn}
                 disabled={loading || !passkeyAvailable}
+                // mushi-mushi-allowlist: Btn ghost supplies the border width
                 className="group w-full justify-between rounded-md border-brand/30 bg-brand/10 px-3 py-2.5 text-left text-xs text-fg hover:border-brand/60 hover:bg-brand/15"
               >
                 <span>

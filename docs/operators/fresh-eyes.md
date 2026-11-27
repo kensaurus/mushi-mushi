@@ -47,9 +47,13 @@ mushi ux fresh-eyes --url https://kensaur.us/mushi-mushi/ --goal "get my first b
   `app_metadata.synthetic = true`, recorded in `synthetic_accounts` and in
   `operator_users`. The password is returned once, typed by code, and never printed,
   synced or logged.
-- The URL preset for `kensaur.us/mushi-mushi` adds the Supabase project as the app's own
-  host and sets the goal check: a report page (`/mushi-mushi/admin/reports/*`) showing
-  "Why it broke".
+- No app is built in (ADR 0073). An app's own hosts, goal check and terminal step come
+  from this machine's presets file, `<config>/mushi/fresh-eyes-presets.json`
+  (`%LOCALAPPDATA%` on Windows, else `$XDG_CONFIG_HOME` or `~/.config`; or
+  `MUSHI_FRESH_EYES_PRESETS_FILE`), a JSON array of `{ "match": "<origin + path prefix>",
+  "appHosts": [...], "successUrl", "successText", "terminal" }`. For Mushi itself that is
+  its Supabase project as an app host and a report page (`/mushi-mushi/admin/reports/*`)
+  showing "Why it broke".
 - `--dry-run` creates no account, writes nothing to the app, files nothing and stops at
   the sign-up page; with `--sync` it still shows in the console, marked "look around only".
 
@@ -95,10 +99,31 @@ not paused or draining); the worker's CLI must be new enough to say it runs thes
 
 A waiting test can be cancelled. One nobody took within a day stops with that reason.
 
-**Test accounts from the console.** Only an operator's console session on Mushi's own
-project sees "Sign up with test accounts". Queueing stores a single-use grant for two
-hours, never a password. When a worker claims the run, the server mints one account per
-visitor, through the same code and hourly limit as the route above, and only when the
-claiming machine is that same operator's worker; otherwise the test runs without an
-account and the run says why. The passwords go once, in the claim answer, to that worker
-and from it to `mushi-ux` on stdin; they are never stored, logged or shown.
+**Test accounts from the console (ADR 0073).** Test accounts are off until an app opts
+in, on Personas → Test accounts (`project_settings.fresh_eyes_accounts`):
+
+- **The app's own hook** (`hook`, any app): an https endpoint on the app's backend.
+  Mushi POSTs `mushi.test_account.create` with `X-Mushi-Signature:
+  t=<unix>,v1=<hex HMAC-SHA256(secret, "<t>.<body>")>` and the body `{ event,
+  project_id, run_id, visitor, expires_at, persona }`; the hook answers `200 { email,
+  password, name?, id? }`. When the run ends Mushi POSTs `mushi.test_account.expire`
+  with `{ accounts: [id or email] }`; the hook deletes them by `expires_at` itself too.
+  The secret is shown once; redirects are refused; at most 12 accounts an hour per app.
+- **This Mushi's own sign-in** (`mushi`, operators only): the mint above, for an app that
+  signs in on this Mushi.
+
+Only an owner's or admin's console session sees "Sign up with test accounts" (never an
+API key or MCP tool). Queueing stores a single-use grant for two hours, never a password.
+When a worker claims the run, the server makes one account per visitor only when the
+claiming machine belongs to the person who granted it and the app still has test
+accounts on; otherwise the test runs without an account and the run says why. The
+passwords go once, in the claim answer, to that worker and from it to `mushi-ux` on
+stdin; they are never stored, logged or shown.
+
+**Personas (ADR 0073).** Run now can play one of the app's personas (Personas page):
+the visitor's device, language, accessibility needs and patience change the browser
+(viewport, touch, locale, 150% zoom, reduced motion) and the step cap, and the visitor
+model reads a short brief. A worker forwards the persona only when it is new enough
+(`takes: fresh_eyes_persona`); an older one runs a plain visitor and the run says so.
+Each run reserves the AI budget its filed reports may cost, capped by the persona's
+cost cap, and gives back what it did not use when it ends.

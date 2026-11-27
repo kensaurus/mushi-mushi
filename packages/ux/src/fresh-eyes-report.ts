@@ -3,7 +3,8 @@
  * What a fresh-eyes run leaves behind (ADR 0053): a timeline a person can
  * read (timeline.md next to the screenshots), the run mirrored to the console
  * (`--sync`), its findings filed as `fresh_eyes` reports (`--file`), and a
- * synthetic account minted for Mushi itself (`--mint-account`).
+ * synthetic account in this Mushi's own sign-in (`--mint-account`: operators,
+ * for an app that opted in to it, ADR 0073).
  *
  * Everything that leaves the machine was redacted by runFreshEyes: identity
  * values are placeholders by now. The model's prompts and answers stay in the
@@ -236,9 +237,10 @@ export async function fileFreshEyesFindings(cfg: SyncConfig | null, r: FreshEyes
   return out
 }
 
-/** A synthetic account for Mushi itself (operator only). The password is returned once and never printed. */
+/** A synthetic account in this Mushi's own sign-in (operators, for an app that opted in; ADR 0073). The password is returned once and never printed. */
 export async function mintTestAccount(cfg: SyncConfig): Promise<Identity> {
-  const data = (await call(cfg, 'POST', '/v1/admin/fresh-eyes/test-account', { purpose: 'fresh_eyes' })) as { email: string; password: string; name?: string; user_id?: string }
+  // The app the account is for: the server mints only where it opted in (ADR 0073).
+  const data = (await call(cfg, 'POST', '/v1/admin/fresh-eyes/test-account', { purpose: 'fresh_eyes', projectId: cfg.projectId })) as { email: string; password: string; name?: string; user_id?: string }
   if (!data?.email || !data?.password) throw new Error('The console did not return an account.')
   return { email: data.email, password: data.password, name: data.name, ...(typeof data.user_id === 'string' ? { userId: data.user_id } : {}) }
 }

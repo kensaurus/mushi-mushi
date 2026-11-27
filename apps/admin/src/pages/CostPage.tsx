@@ -292,9 +292,9 @@ export function CostPage() {
         {!ux.hideOverviewChrome && (
           <>
             {stats.totalCalls > 0 ? (
-              <Badge tone="okSubtle">Telemetry on</Badge>
+              <Badge tone="ok">Telemetry on</Badge>
             ) : (
-              <Badge tone="warnSubtle">No calls yet</Badge>
+              <Badge tone="warn">No calls yet</Badge>
             )}
           </>
         )}

@@ -56,8 +56,8 @@ function PageNodeInner({ data }: NodeProps) {
         {/* Share of all views as a thin bar along the top. */}
         <span aria-hidden className="absolute inset-x-0 top-0 h-0.5 bg-brand/70" style={{ width: `${Math.max(2, Math.round(share * 100))}%` }} />
         <span className="flex min-w-0 items-center gap-1">
-          {isRoot && <span className={`shrink-0 rounded-sm border px-1 text-3xs font-semibold ${CHIP_TONE.brandSubtle}`}>START</span>}
-          {node.broken && <span className={`shrink-0 rounded-sm border px-1 text-3xs font-semibold ${CHIP_TONE.dangerSubtle}`}>BROKEN</span>}
+          {isRoot && <span className={`shrink-0 rounded-sm px-1 text-3xs font-semibold ${CHIP_TONE.brand}`}>START</span>}
+          {node.broken && <span className={`shrink-0 rounded-sm px-1 text-3xs font-semibold ${CHIP_TONE.danger}`}>BROKEN</span>}
           <span className="min-w-0 truncate font-mono text-2xs text-fg">{node.path}</span>
         </span>
         <span className="flex items-center gap-2 text-3xs text-fg-muted">

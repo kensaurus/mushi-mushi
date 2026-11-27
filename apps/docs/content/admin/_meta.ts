@@ -33,6 +33,7 @@ export default {
   repo: 'Pull requests',
   explore: 'Code map',
   'ux-runs': 'UX runs',
+  timeline: 'Timeline',
   iterate: 'Improvement runs',
 
   '-- Verify': { type: 'separator', title: '4 · Verify' },
@@ -59,6 +60,8 @@ export default {
   activity: 'User activity',
   intelligence: 'Weekly insights',
   releases: 'Releases',
+  'security-proof': 'Security proof',
+  'release-kits': 'Release kits',
   ops: 'Ops',
   providers: 'Providers & AI routes',
   notifications: 'Reporter updates',

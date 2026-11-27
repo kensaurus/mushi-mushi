@@ -3,9 +3,8 @@
  * scannable color scales instead of plain text (NN/g #6 Recognition).
  */
 
-import { Tooltip } from '../ui'
-import { SEVERITY_TRAFFIC, SEVERITY_TRAFFIC_BADGE, type SeverityTrafficKey } from '../../lib/severityTraffic'
-import { severityLabelShort } from './types'
+import { SeverityPill, Tooltip } from '../ui'
+import { SEVERITY_TRAFFIC } from '../../lib/severityTraffic'
 import { CHIP_TONE } from '../../lib/chipTone'
 import {
   blastRadiusBlockTone,
@@ -16,8 +15,6 @@ import {
   recencyBarTone,
   recencyFreshness,
   recencyHours,
-  severityActiveIndex,
-  SEVERITY_LEVEL_KEYS,
 } from './reportMetricViz'
 
 interface LowConfidenceChipProps {
@@ -31,6 +28,7 @@ interface LowConfidenceChipProps {
  * "Conf." column, which read 95–100% on nearly every row (console UX pass
  * 2026-11-22). The word carries the meaning, so it reads on touch and to a
  * screen reader without the tooltip; amber is the warning colour, never red.
+ * 2026-11-27: a labelled meter in a warn Badge (fill + edge), not tinted text.
  */
 export function LowConfidenceChip({ confidence, className = '' }: LowConfidenceChipProps) {
   if (!isLowConfidence(confidence)) return null
@@ -41,9 +39,19 @@ export function LowConfidenceChip({ confidence, className = '' }: LowConfidenceC
       content={`Mushi Mushi is ${pct}% sure of the severity and category. Read the evidence before you send a fix.`}
     >
       <span
-        className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-sm px-1.5 py-px text-2xs font-medium cursor-help ${CHIP_TONE.warnSubtle} ${className}`}
+        className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-sm px-1.5 py-px text-2xs leading-tight font-semibold cursor-help ${CHIP_TONE.warn} ${className}`}
         data-testid="low-confidence-chip"
       >
+        <span
+          role="meter"
+          aria-label="Confidence"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={pct}
+          className="relative inline-block h-1.5 w-6 shrink-0 overflow-hidden rounded-full bg-warn-edge/30"
+        >
+          <span className="absolute inset-y-0 left-0 rounded-full bg-warn-edge" style={{ width: `${pct}%` }} />
+        </span>
         Low confidence · {pct}%
       </span>
     </Tooltip>
@@ -54,47 +62,19 @@ interface SeverityCellProps {
   severity: string | null | undefined
 }
 
-/** Traffic-light segment strip — active severity column lit, rest muted. */
+/** Severity as a SeverityPill: glyph + word in the severity tone (Crit red =
+ *  the Fix button, High amber = Triage). It replaced a 4-segment strip plus a
+ *  tinted "Crit" word that read as highlighted text (2026-11-27). */
 export function TableSeverityCell({ severity }: SeverityCellProps) {
   if (!severity) {
-    return <span className="text-2xs text-fg-faint">—</span>
+    return <span className="text-2xs text-fg-muted">—</span>
   }
-
-  const activeIdx = severityActiveIndex(severity)
-  const label = severityLabelShort(severity)
   const traffic = SEVERITY_TRAFFIC[severity as keyof typeof SEVERITY_TRAFFIC]
-  const badgeCls = SEVERITY_TRAFFIC_BADGE[severity] ?? 'bg-surface-overlay text-fg-muted border border-edge-subtle'
-
   return (
     <Tooltip portal content={`Severity: ${traffic?.label ?? severity}`}>
-      <div className="flex min-w-0 w-full items-center gap-1">
-        <div
-          className="flex min-w-0 flex-1 gap-px h-1.5"
-          role="img"
-          aria-label={`Severity ${traffic?.label ?? severity}`}
-        >
-          {SEVERITY_LEVEL_KEYS.map((level: SeverityTrafficKey, i: number) => {
-            const active = i === activeIdx
-            const tone = SEVERITY_TRAFFIC[level]?.bg ?? 'bg-surface-overlay/80'
-            return (
-              <span
-                key={level}
-                className={[
-                  'flex-1 rounded-hairline motion-safe:transition-opacity',
-                  active ? tone : 'bg-fg-faint/15',
-                  active ? 'ring-1 ring-inset ring-fg/15' : 'opacity-40',
-                ].join(' ')}
-                aria-hidden="true"
-              />
-            )
-          })}
-        </div>
-        <span
-          className={`inline-flex shrink-0 max-w-full min-w-0 truncate rounded-sm px-0.5 py-px text-2xs font-medium leading-none ${badgeCls}`}
-        >
-          {label}
-        </span>
-      </div>
+      <span className="inline-flex min-w-0 max-w-full">
+        <SeverityPill severity={severity} short />
+      </span>
     </Tooltip>
   )
 }

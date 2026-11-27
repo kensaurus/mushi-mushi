@@ -26,7 +26,7 @@ import { usePageData } from '../../lib/usePageData'
 import { uxRequiredChecks, type UxPullRequest } from '../../lib/uxRuns'
 import { fixDeepLinkPath } from '../../lib/fixDeepLink'
 import { reviewTone, type FixReviewState } from '../../lib/fixReview'
-import { META_CHIP_TONE } from '../../lib/chipTone'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 type MergeMethod = 'squash' | 'merge' | 'rebase'
 
@@ -235,12 +235,12 @@ function OpenPullRequestRow({
         <span className="flex flex-wrap items-center gap-1.5">
           {pr.draft && <Badge tone="neutral">Draft</Badge>}
           {pr.review && (
-            <span className={`inline-flex items-center rounded-sm px-1.5 py-0.5 text-2xs font-medium ${META_CHIP_TONE[reviewTone({ state: pr.review.state, verdict: pr.review.verdict ?? null })]}`}>
+            <span className={`inline-flex items-center rounded-sm px-1.5 py-0.5 text-2xs font-medium ${CHIP_TONE[reviewTone({ state: pr.review.state, verdict: pr.review.verdict ?? null })]}`}>
               {pr.review.fixId ? <Link to={fixDeepLinkPath(pr.review.fixId)} className="hover:underline">{pr.review.label}</Link> : pr.review.label}
             </span>
           )}
           {merged ? (
-            <Badge tone="okSubtle">Merged</Badge>
+            <Badge tone="ok">Merged</Badge>
           ) : (
             <Btn size="sm" variant={primary ? 'primary' : 'ghost'} className="whitespace-nowrap" disabled={blocker != null || merging} aria-expanded={confirming} onClick={() => { setConfirming(true); setError(null) }}>
               Merge

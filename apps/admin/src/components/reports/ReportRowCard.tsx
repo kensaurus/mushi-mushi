@@ -17,12 +17,14 @@
 
 import { memo } from 'react'
 import { Link } from 'react-router-dom'
+import { Btn } from '../ui'
 import { StatusStepper } from './StatusStepper'
 import { ReportRowMeta } from './ReportRowSummaryMeta'
 import { ReportSourceTag } from './ReportSourceTag'
 import { DispatchFixPreflight } from './DispatchFixPreflight'
 import { LowConfidenceChip, TableSeverityCell } from './ReportMetricCells'
 import { closedRowAction } from './reportRowAction'
+import { reportRowIntent } from '../../lib/actionIntent'
 import { variantChip } from './reportDisplayRows'
 import { DISPATCH_ELIGIBLE_STATUSES, formatRelative, severityStripeClass, type ReportRow } from './types'
 import { reportSourceKind, showsSeverity } from '../../lib/reportSourceKind'
@@ -116,15 +118,14 @@ function ReportRowCardInner({ row, isSelected, dispatchBusy = false, variantCoun
                   repoUrl={dispatchScopeNote ? null : (preflight?.repoUrl ?? null)}
                 />
               ) : (
-                <Link
+                <Btn
                   to={detailPath}
+                  intent={reportRowIntent(row.status)}
                   onClick={(e) => e.stopPropagation()}
-                  className={`inline-flex min-h-11 items-center whitespace-nowrap rounded-sm px-3 text-xs font-medium leading-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 ${
-                    closedAction ? closedAction.className : 'bg-brand text-brand-fg hover:bg-brand-hover'
-                  }`}
+                  className="min-h-11 whitespace-nowrap"
                 >
                   {closedAction ? closedAction.label : 'Triage →'}
-                </Link>
+                </Btn>
               )}
             </span>
           </div>

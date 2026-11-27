@@ -1,0 +1,38 @@
+# Maestro flow for the UX scorecard (ADR 0073): walk the first screens a new
+# user sees and take one screenshot per screen in the scorecard's layout.
+#
+#   mkdir -p captures/pages/{welcome,get-started,sign-up}
+#   maestro test docs/templates/ux-native/maestro-flow.yaml -e APP_ID=com.example.app -e OUT=captures
+#   # the screen's words and buttons, for each screen you stop on:
+#   maestro hierarchy > captures/pages/welcome/hierarchy.json
+#   npx @mushi-mushi/ux upload ./captures --platform android --source maestro --device "Pixel 8 (API 35)" --scale 2.625
+#
+# Edit the steps between the screenshots to match your app. Keep one
+# `takeScreenshot` per screen, named `${OUT}/pages/<screen>/settled` (Maestro
+# adds .png). The flow signs nothing up and pays for nothing: stop at the
+# sign-up form, or use a test account your own backend made.
+appId: ${APP_ID}
+env:
+  OUT: captures
+---
+- launchApp:
+    clearState: true
+- waitForAnimationToEnd:
+    timeout: 5000
+- takeScreenshot: ${OUT}/pages/welcome/settled
+
+# Example: the first call to action. Replace the text with your app's.
+- tapOn:
+    text: "Get started"
+    optional: true
+- waitForAnimationToEnd:
+    timeout: 5000
+- takeScreenshot: ${OUT}/pages/get-started/settled
+
+# Example: the sign-up screen, captured but never submitted.
+- tapOn:
+    text: "Sign up"
+    optional: true
+- waitForAnimationToEnd:
+    timeout: 5000
+- takeScreenshot: ${OUT}/pages/sign-up/settled

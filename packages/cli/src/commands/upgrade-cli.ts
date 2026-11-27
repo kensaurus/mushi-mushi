@@ -18,7 +18,7 @@ Examples:
   mushi upgrade --check         # CI freshness (no install)
   mushi upgrade --self          # upgrade the CLI binary itself
   mushi upgrade --self --dry-run
-  mushi upgrade --cwd ../glot.it`)
+  mushi upgrade --cwd ../my-app`)
     .action(async (opts: { cwd?: string; self?: boolean; dryRun?: boolean; json?: boolean; check?: boolean }) => {
       // ─── Self-upgrade path: bump the CLI binary, not the project's SDK deps ───
       if (opts.self) {

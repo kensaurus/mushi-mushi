@@ -298,7 +298,7 @@ function GodFileList({ findings }: { findings: GodFileFinding[] }) {
 
   if (findings.length === 0) {
     return (
-      <div className={`rounded-md px-4 py-3 ${CHIP_TONE.okSubtle}`}>
+      <div className={`rounded-md px-4 py-3 ${CHIP_TONE.ok}`}>
         <p className="text-sm font-medium">All clear</p>
         <p className="mt-0.5 text-xs text-fg-secondary">
           No files exceed the LOC budget in the latest CI push.

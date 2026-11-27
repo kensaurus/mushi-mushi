@@ -568,7 +568,7 @@ export function ByokPanel() {
             <span className="font-mono text-fg-secondary">{hint}</span>
             {poolKey && (() => {
               const chipClass = `rounded-full px-2 py-0.5 text-2xs font-medium ${
-                keyScope === 'universal' ? CHIP_TONE.accentSubtle : keyScope === 'organization' ? CHIP_TONE.infoSubtle : CHIP_TONE.neutral
+                keyScope === 'universal' ? CHIP_TONE.accent : keyScope === 'organization' ? CHIP_TONE.info : CHIP_TONE.neutral
               }`;
               if (rowScopes.length <= 1) return <span className={chipClass}>{scopeChipLabel(poolKey, sharing)}</span>;
               const open = scopeOpen === poolKey.id;

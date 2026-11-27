@@ -518,7 +518,7 @@ function PeopleTab() {
                             <span className="truncate font-mono text-fg" title={label}>
                               {label}
                             </span>
-                            {p.external_user_id ? <Badge tone="okSubtle">identified</Badge> : <Badge tone="neutral">anon</Badge>}
+                            {p.external_user_id ? <Badge tone="ok">identified</Badge> : <Badge tone="neutral">anon</Badge>}
                           </span>
                         </DataTableCell>
                         <DataTableCell>

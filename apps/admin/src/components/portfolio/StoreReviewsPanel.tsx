@@ -128,7 +128,7 @@ export function StoreReviewsPanel({ projectId }: { projectId: string }) {
           <ul className="flex flex-wrap gap-1.5">
             {data.sources.map((src) => (
               <li key={`${src.store}:${src.appId}`}>
-                <Badge tone={src.connected ? 'okSubtle' : 'warnSubtle'} title={src.connected ? 'Key stored' : 'The key could not be read'}>
+                <Badge tone={src.connected ? 'ok' : 'warn'} title={src.connected ? 'Key stored' : 'The key could not be read'}>
                   {storeLabel(src.store)} {src.appId}
                 </Badge>
               </li>

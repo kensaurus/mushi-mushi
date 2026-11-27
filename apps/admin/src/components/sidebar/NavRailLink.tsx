@@ -25,9 +25,9 @@ import { NavRailFlyout } from './NavRailFlyout'
 /** Count pill tones — CHIP_TONE so the strict chip-contrast guard covers them. */
 const RAIL_BADGE_TONE: Record<HealthTone, string> = {
   idle: CHIP_TONE.neutral,
-  ok: CHIP_TONE.okSubtle,
-  warn: CHIP_TONE.warnSubtle,
-  danger: CHIP_TONE.dangerSubtle,
+  ok: CHIP_TONE.ok,
+  warn: CHIP_TONE.warn,
+  danger: CHIP_TONE.danger,
 }
 
 /** Solid fill for the number-less status dot variant. */
@@ -86,7 +86,7 @@ export function NavRailLink({
           title={label}
           description={description}
           status={status}
-          kicker={gated ? { label: 'Upgrade', className: CHIP_TONE.brandSubtle } : null}
+          kicker={gated ? { label: 'Upgrade', className: CHIP_TONE.brand } : null}
         />
       }
     >

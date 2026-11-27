@@ -216,6 +216,16 @@ The admin console `/code-health` page reads the data back via `GET /v1/admin/cod
 
 ---
 
+## Security proof, release kits, store media (Plan 025 P4–P6)
+
+ADR [0074](./docs/adr/0074-security-proof-release-kits-and-store-media.md). All routes are in `api-ext` (`api` forwards them).
+
+- **Security proof.** The host's CI runs `docs/templates/mushi-security.yml` (copy kept byte-identical in `_shared/security-workflow.ts`): OSV-Scanner + Gitleaks every PR, `claude-code-security-review` opt-in on trusted authors only, ZAP + Nuclei weekly. Results go to `POST /v1/security/results` (project key, `mcp:write`; `isNonSdkKeyPath` keeps it off the SDK heartbeat) → `security_scan_runs` / `security_scan_findings`, reports with source `security_scan`. Mushi never runs a scanner or hosts Semgrep/opengrep rules. A release's proof reads `releases.commit_sha` (`computeProof` in `_shared/security-proof.ts`); a lane that never ran is never green.
+- **Release kit.** `release_kits` / `release_kit_assets`, bucket `release-kits`. Screenshots are copied from `ux_baselines` (Plan 025 P1; falls back to `ux_surfaces` thumbnails until it lands). `mushi-ux clips` uploads opt-in, capped WebM clips. `export_release_kit` returns a signed `manifest.json` in lazycow's `lazycow.release-kit` v1 format (type copied in `_shared/lazycow-release-kit.ts`, schema copy validated in `release-kit.test.ts`) for lazycow `make_product_video({ kitUrl, preset })` (`docs/integrations/lazycow-release-kit.md`). Mushi never renders video.
+- **Store media.** ASC `upload_screenshots` / `upload_app_preview`, Play `upload_listing_images` / `set_promo_video`, only through `connector_actions` approval (`request_store_media_upload` asks; a person approves and runs in the console). Every asset is pinned by SHA-256 and re-hashed in `act()`. The uploaders live in `_shared/connectors/store-media-act.ts` and run only from `POST …/kit/store-upload/:actionId/execute` (api-ext), which injects them as `ctx.storeMedia`; the generic org execute route refuses those actions unclaimed (`USE_RELEASE_KIT`), keeping the code out of the size-capped `api` bundle. Tests use fixtures only; no live store call.
+
+---
+
 ## BYOK (Bring Your Own Key) Providers
 
 Project-level API keys are stored encrypted in the `byok_keys` table via
@@ -385,7 +395,7 @@ mushi billing cap 0                    # clear spend cap
 
 ### MCP Tools
 
-Full catalog: **135 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/catalog.ts) — generated docs at [`apps/docs/content/sdks/mcp-tools.mdx`](apps/docs/content/sdks/mcp-tools.mdx). Vibe-coder incident loop: [`apps/docs/content/quickstart/incident-loop.mdx`](apps/docs/content/quickstart/incident-loop.mdx) (`get_fix_context` → prompt `summarize_report_for_fix`).
+Full catalog: **145 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/catalog.ts) — generated docs at [`apps/docs/content/sdks/mcp-tools.mdx`](apps/docs/content/sdks/mcp-tools.mdx). Vibe-coder incident loop: [`apps/docs/content/quickstart/incident-loop.mdx`](apps/docs/content/quickstart/incident-loop.mdx) (`get_fix_context` → prompt `summarize_report_for_fix`).
 
 Core MCP tools (`mcp:read` scope): `get_recent_reports`, `get_report_detail`, `get_fix_context`, `query_lessons`, `list_lessons`, `list_qa_story_runs`, `get_qa_story_run`
 

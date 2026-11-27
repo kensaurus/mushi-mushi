@@ -1,3 +1,4 @@
+import { mushiEnvVarsForProject } from './projectMushiEnv'
 import { describe, it, expect } from 'vitest'
 import {
   sdkCiStatusMeta,
@@ -28,9 +29,10 @@ describe('sdkCiStatusMeta', () => {
     expect(meta.chipLabel).toBe('Connected')
   })
 
-  it('ci-secret-missing uses stack-aware env pair', () => {
-    const meta = sdkCiStatusMeta('ci-secret-missing', false, 'yen-yen')
+  it('ci-secret-missing uses the stack-aware env pair it is given, never one guessed from the app name', () => {
+    const meta = sdkCiStatusMeta('ci-secret-missing', false, 'yen-yen', { env: mushiEnvVarsForProject({ framework: 'expo' }) })
     expect(meta.subtitle).toContain('EXPO_PUBLIC_MUSHI_PROJECT_ID')
+    expect(sdkCiStatusMeta('ci-secret-missing', false, 'yen-yen').subtitle).toContain('NEXT_PUBLIC_MUSHI_PROJECT_ID')
     expect(meta.headline).toMatch(/not connected/i)
   })
 

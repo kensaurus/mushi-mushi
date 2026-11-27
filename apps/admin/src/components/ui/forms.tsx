@@ -3,6 +3,7 @@ import type { ReactNode, SelectHTMLAttributes, ButtonHTMLAttributes, TextareaHTM
 import { Link } from 'react-router-dom';
 import { LabelHelp } from './layout';
 import { CHIP_TONE } from '../../lib/chipTone'
+import { ACTION_INTENT_VARIANT, type ActionIntent } from '../../lib/actionIntent'
 
 
 /* ── FilterSelect ───────────────────────────────────────────────────────── */
@@ -92,7 +93,7 @@ export function SegmentedControl<T extends string>({
       // w-max: the scroll strip's track sizes to its segments, so the border
       // and background wrap every tab instead of being clipped to the
       // viewport while the tabs overflow it.
-      className={`${wrap ? 'flex flex-wrap' : scrollable ? 'inline-flex w-max flex-nowrap' : 'inline-flex'} items-center gap-0.5 rounded-md border border-edge-subtle bg-surface-raised p-0.5 ${disabled ? 'opacity-40 ' : ''}${className}`}
+      className={`${wrap ? 'flex flex-wrap' : scrollable ? 'inline-flex w-max flex-nowrap' : 'inline-flex'} items-center gap-0.5 rounded-md border border-edge-subtle bg-segment-track p-0.5 ${disabled ? 'opacity-40 ' : ''}${className}`}
     >
       {options.map((opt) => {
         const active = opt.id === value
@@ -107,18 +108,19 @@ export function SegmentedControl<T extends string>({
               if (disabled) return
               onChange(opt.id)
             }}
-            // Selected = the soft SELECTED_TONE wash, not the filled brand
-            // action colour. A filled tab competed with the page's one
-            // primary button (a selected tab beside "Add to Cursor").
-            // Inset ring instead of a border so the segment doesn't grow.
+            // Selected = a raised tile (segment-active surface, accent inset
+            // edge, card shadow) on the sunken track, not the filled brand
+            // action colour (it competed with the page's one primary button
+            // (a selected tab beside "Add to Cursor")) and not a tinted word (owner 2026-11-27: the old accent wash
+            // read as highlighted text). Inset ring so the segment doesn't grow.
             // whitespace-nowrap keeps a two-word label (and its count) on one
             // line; shrink-0 stops the scroll strip's flex items from being
             // squeezed to the viewport width instead of scrolling (Settings
             // tabs at 390px, 2026-10-25).
             className={`${SEGMENT_SIZE[size]} ${scrollable ? 'shrink-0 ' : ''}whitespace-nowrap rounded-sm motion-safe:transition-[transform,opacity] motion-safe:duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 motion-safe:active:scale-[0.97] ${
               active
-                ? 'bg-accent-muted text-accent-foreground font-medium ring-1 ring-inset ring-accent/40'
-                : 'text-fg-secondary hover:text-fg hover:bg-surface-overlay/50 hover:-translate-y-px'
+                ? 'bg-segment-active text-fg font-semibold inset-ring inset-ring-accent-edge shadow-card'
+                : 'text-fg-secondary hover:text-fg hover:bg-segment-active/60'
             }`}
           >
             {opt.label}
@@ -164,13 +166,20 @@ interface BtnProps extends ButtonHTMLAttributes<HTMLButtonElement> {
    *  - `cancel`:  dismiss / cancel / close — red affordance (not destructive-primary).
    *  - `danger`:  destructive / irreversible (Delete, Reject, Revoke,
    *               Disconnect, Uninstall, Flag, Dismiss report).
-   *  - `success`: forward / un-blocking action (Start triage, Complete,
-   *               Approve, Retry — anything that progresses the user
-   *               through their workflow). Mirrors the `ok` semantic
-   *               token so tone is consistent with PageHero severity
-   *               and SidebarHealthDot.
+   *  - `success`: forward / un-blocking action (Complete, Approve, Retry —
+   *               anything that progresses the user through their
+   *               workflow). Mirrors the `ok` semantic token. Triage is
+   *               not success: use `intent="triage"` (amber).
+   *  - `fix` / `triage`: the intent fills; prefer the `intent` prop.
    */
-  variant?: 'primary' | 'accent' | 'ghost' | 'cancel' | 'danger' | 'destructive' | 'success'
+  variant?: 'primary' | 'accent' | 'ghost' | 'cancel' | 'danger' | 'destructive' | 'success' | 'fix' | 'triage'
+  /**
+   * What the action does, mapped to one colour console-wide
+   * (lib/actionIntent.ts): `fix` red, `triage` amber, `primary` brand,
+   * `neutral` ghost, `destructive` red confirm. Wins over `variant`.
+   * Row and inline actions use this, never per-page classes.
+   */
+  intent?: ActionIntent
   size?: 'sm' | 'md'
   children: ReactNode
   /** When true, swaps the leading area for a spinner and disables the
@@ -227,22 +236,43 @@ const BTN_VARIANTS = {
     'bg-accent bg-(image:--gradient-accent) text-fg-on-accent shadow-card hover:shadow-accent-glow hover:-translate-y-px',
   ghost:
     'border border-edge text-fg-secondary hover:bg-surface-overlay hover:text-fg hover:border-brand/40 hover:shadow-brand-glow-sm hover:-translate-y-px',
-  cancel:
-    // mushi-mushi-allowlist: hover border is the hover state; CHIP_TONE already owns the resting border
-    `${CHIP_TONE.danger} hover:bg-danger-muted hover:border-danger/50 hover:-translate-y-px`,
-  danger:
-    // mushi-mushi-allowlist: hover border is the hover state; CHIP_TONE already owns the resting border
-    `${CHIP_TONE.dangerSubtle} hover:bg-danger-muted/80 hover:border-danger/40 hover:shadow-glow-danger hover:-translate-y-px`,
-  success:
-    // mushi-mushi-allowlist: hover border is the hover state; CHIP_TONE already owns the resting border
-    `${CHIP_TONE.okSubtle} hover:bg-ok-muted/80 hover:border-ok/40 hover:shadow-glow-ok hover:-translate-y-px`,
+  // Tinted buttons take the chip recipe (fill + ink + inset edge) and lift on hover.
+  cancel: `${CHIP_TONE.danger} hover:brightness-110 hover:-translate-y-px`,
+  danger: `${CHIP_TONE.danger} hover:shadow-glow-danger hover:-translate-y-px`,
+  success: `${CHIP_TONE.ok} hover:shadow-glow-ok hover:-translate-y-px`,
+  // Intent fills (lib/actionIntent.ts): the severity hues as solid buttons.
+  fix:
+    'bg-danger text-danger-fg font-semibold inset-ring inset-ring-danger-edge shadow-card hover:shadow-glow-danger hover:-translate-y-px',
+  triage:
+    'bg-warn-fill text-warn-fill-fg font-semibold inset-ring inset-ring-warn-edge shadow-card hover:brightness-105 hover:-translate-y-px',
   // The confirm of a dialog that cannot be undone: a solid danger fill, so it never looks like Cancel.
   destructive:
     'bg-danger text-danger-fg border border-danger/55 font-semibold shadow-card hover:shadow-glow-danger hover:-translate-y-px',
 }
 
-export function Btn({
+/**
+ * Btn's classes for an element that cannot be a `Btn` (a popover trigger that
+ * owns its ref, a table-cell link). Same recipe, so an intent looks the same
+ * everywhere.
+ */
+export function btnClassName({
+  intent,
   variant = 'primary',
+  size = 'sm',
+  className = '',
+}: {
+  intent?: ActionIntent
+  variant?: keyof typeof BTN_VARIANTS
+  size?: keyof typeof BTN_SIZES
+  className?: string
+}): string {
+  const v = intent ? ACTION_INTENT_VARIANT[intent] : variant
+  return `${BTN_BASE} ${BTN_SIZES[size]} ${BTN_VARIANTS[v]} ${className}`.trim()
+}
+
+export function Btn({
+  variant: variantProp = 'primary',
+  intent,
   size = 'md',
   children,
   className = '',
@@ -253,6 +283,7 @@ export function Btn({
   href,
   ...rest
 }: BtnProps) {
+  const variant = intent ? ACTION_INTENT_VARIANT[intent] : variantProp
   const isDisabled = disabled || loading
   if (href && !isDisabled) {
     const { type: _type, form: _form, formAction: _formAction, ...anchorRest } = rest

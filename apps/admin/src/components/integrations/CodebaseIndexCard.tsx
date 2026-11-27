@@ -310,8 +310,8 @@ export function CodebaseIndexCard({ projectId, canManage = true, githubAccess = 
         <div className="flex items-center gap-2">
           <h4 className="text-xs font-semibold text-fg">Codebase indexing</h4>
           {enabled
-            ? <Badge tone="okSubtle">On</Badge>
-            : <Badge tone="warnSubtle">Off</Badge>}
+            ? <Badge tone="ok">On</Badge>
+            : <Badge tone="warn">Off</Badge>}
           {enabled && !hasFiles && (
             <ResultChip tone="running">{`Indexing${ELLIPSIS}`}</ResultChip>
           )}
@@ -416,7 +416,7 @@ export function CodebaseIndexCard({ projectId, canManage = true, githubAccess = 
 
       {enabled && hasFiles && coverageCallout && (
         <div
-          className={`flex items-start gap-2 rounded ${coverageCallout.tone === 'warn' ? CHIP_TONE.warnSubtle : CHIP_TONE.infoSubtle} px-2 py-1.5 text-2xs`}
+          className={`flex items-start gap-2 rounded ${coverageCallout.tone === 'warn' ? CHIP_TONE.warn : CHIP_TONE.info} px-2 py-1.5 text-2xs`}
           data-testid="codebase-coverage-callout"
         >
           {coverageCallout.tone === 'warn' && <span aria-hidden="true">{WARNING_SIGN}</span>}
@@ -577,7 +577,7 @@ function AutofixToggleRow({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold text-fg">Automatic fixes</span>
-          <Badge className={isOn ? CHIP_TONE.okSubtle : CHIP_TONE.warnSubtle}>
+          <Badge className={isOn ? CHIP_TONE.ok : CHIP_TONE.warn}>
             {enabled == null ? '\u2014' : isOn ? 'On' : 'Off'}
           </Badge>
         </div>

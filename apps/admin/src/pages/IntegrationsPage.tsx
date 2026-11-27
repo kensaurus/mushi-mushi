@@ -713,7 +713,7 @@ export function IntegrationsPage() {
         helpHowToUse={
           copy?.help?.howToUse ?? [
             'Step 1 — GitHub: press the GitHub tile, paste your repo URL (e.g. https://github.com/org/repo) and install the Mushi Mushi GitHub App so fix-worker can push draft PRs. No App = fix generated but never pushed.',
-            'Step 2 — Second repo: if your project has a frontend + backend (e.g. solo-boss-cloud), go to Repo → + Add repo and set role=backend with path_globs so fixes target the right codebase.',
+            'Step 2 — Second repo: if your project has a frontend + backend in separate repos, go to Repo → + Add repo and set role=backend with path_globs so fixes target the right codebase.',
             'Step 3 — Verified identity: in your app call Mushi.identify({ userId, name, email }) and pass a signed JWT if you want the ✓ verified badge on reports.',
             'Step 4 — Sentry: press the Sentry tile, paste your DSN and auth token. Mushi Mushi links Sentry issues to reports and surfaces them on the fix PR.',
             'Step 5 — Test each tool with the "Test" button in its settings — the health sparkline should turn green within a few seconds.',

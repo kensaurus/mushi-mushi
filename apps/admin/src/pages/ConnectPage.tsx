@@ -42,7 +42,6 @@ import { useDispatchPreflight } from '../lib/useDispatchPreflight'
 import { usePublishPageContext } from '../lib/pageContext'
 import { IconAlertTriangle, IconLink } from '../components/icons'
 import type { SdkStatus } from '../components/SdkVersionBadge'
-import { isExpoReporterProject } from '../lib/projectMushiEnv'
 import { isSdkKeyScopes, latestHeartbeatAt } from '../lib/heartbeat'
 import { mintMcpKeyHref } from '../components/mcp/McpStatusBanner'
 import { useScrollToHash } from '../lib/useScrollToHash'
@@ -71,8 +70,9 @@ interface ProjectRow {
   }>
 }
 
-function isExpoReporterNeverConnected(project: ProjectRow): boolean {
-  if (!isExpoReporterProject(project.slug)) return false
+/** A React Native / Expo app (by its SDK package, never its name: ADR 0072) whose keys have never checked in. */
+export function isExpoReporterNeverConnected(project: Pick<ProjectRow, 'sdk_package' | 'api_keys'>): boolean {
+  if (!/react-native/.test(project.sdk_package ?? '')) return false
   const active = (project.api_keys ?? []).filter((k) => k.is_active)
   if (active.length === 0) return false
   return active.every((k) => !k.last_seen_at)

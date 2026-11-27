@@ -9,6 +9,26 @@
 export { AGENTS, getAgent, quoteArg, type AgentAdapter, type AgentName, type AgentRunOptions } from './agents.js'
 export { cursorCloudAdapter, cursorModel, httpsRepoUrl, type CursorCloudDeps } from './cursor-cloud.js'
 export { openSession, captureSurface, settle, type BrowserSession, type Capture } from './capture.js'
+export {
+  CLIP_LIMITS,
+  DEFAULT_CLIP_VIEWPORT,
+  capFlows,
+  clampCaps,
+  clipSlug,
+  clipUploadBody,
+  hasTimeForScreen,
+  parseFlow,
+  recordClips,
+  uploadClips,
+  effectiveClipCaps,
+  fetchClipCaps,
+  type ServerClipCaps,
+  type ClipFlow,
+  type ClipResult,
+  type ClipSkip,
+  type ClipUploadOutcome,
+  type RecordClipsOptions,
+} from './clips.js'
 export { startDashboard, safeShotPath, type Dashboard } from './dashboard.js'
 export { discover, normalizeLink, surfaceKey, type DiscoverOptions } from './discover.js'
 export {
@@ -18,6 +38,7 @@ export {
   type FreshAsk,
   type FreshEyesFinding,
   type FreshEyesOptions,
+  type FreshEyesPersona,
   type FreshEyesResult,
   type FreshEyesSession,
   type FreshEyesStep,
@@ -70,6 +91,8 @@ export {
   type ScorecardResult,
 } from './scorecard.js'
 export * from './scorecard-rubric.js'
+export { nativeFacts, nodesToContent, parseMaestroHierarchy, parseUiautomator, pngSize, screenPath, type NativeNode } from './native-facts.js'
+export { readScreens, uploadCaptures, UPLOAD_MAX_PAGES, UPLOAD_MAX_PNG_BYTES, UPLOAD_PLATFORMS, UPLOAD_SOURCES, type CapturedScreen, type UploadOptions, type UploadPlatform, type UploadResult, type UploadSource } from './upload.js'
 export {
   loadState,
   saveState,

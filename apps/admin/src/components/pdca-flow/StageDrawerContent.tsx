@@ -551,10 +551,10 @@ function CheckDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: ()
                 <span
                   className={`inline-flex items-center justify-center w-10 rounded-sm py-0.5 font-mono font-semibold text-2xs ${
                     e.classification_agreed === true
-                      ? CHIP_TONE.okSubtle
+                      ? CHIP_TONE.ok
                       : e.classification_agreed === false
-                        ? CHIP_TONE.dangerSubtle
-                        : CHIP_TONE.warnSubtle
+                        ? CHIP_TONE.danger
+                        : CHIP_TONE.warn
                   }`}
                   title={
                     e.classification_agreed === true

@@ -374,6 +374,19 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     paletteGroup: 'Do',
   },
   {
+    // Plan 025 P1 / ADR 0072: how the app got better, release by release. For every builder (not
+    // operator-only like UX runs): releases, fixed bugs and pinned screens are the founder's own.
+    id: 'nav:timeline',
+    path: '/timeline',
+    label: 'Timeline',
+    sectionId: 'do',
+    pdcaStage: 'do',
+    iconKey: 'releases',
+    paletteDescription: 'Release by release: bugs fixed, screens improved, scores, AI cost, and a before/after of every screen.',
+    paletteKeywords: ['timeline', 'history', 'before after', 'filmstrip', 'releases', 'screenshots', 'baseline', 'compare', 'progress', 'cost'],
+    paletteGroup: 'Do',
+  },
+  {
     id: 'nav:iterate',
     path: '/iterate',
     operatorOnly: true,
@@ -421,6 +434,19 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     iconKey: 'user',
     paletteDescription: 'An AI that has never seen your app tries to sign up and use it; see where a new user gets stuck and how long it takes.',
     paletteKeywords: ['fresh eyes', 'first-time user', 'first time user', 'first-time user test', 'onboarding test', 'new user test', 'new user', 'first run', 'sign up test', 'signup test', 'time to first value', 'ttfv', 'first impression'],
+    paletteGroup: 'Check',
+  },
+  {
+    // Project personas (ADR 0073): who a first-time user test plays, and whether it may sign up.
+    id: 'nav:personas',
+    path: '/personas',
+    label: 'Personas',
+    sectionId: 'check',
+    pdcaStage: 'check',
+    checkSubGroup: 'system-health',
+    iconKey: 'members',
+    paletteDescription: 'The kinds of people a first-time user test plays: their device, language, needs, patience and AI budget, and test accounts for your sign-up.',
+    paletteKeywords: ['personas', 'persona', 'user persona', 'visitor profile', 'test persona', 'accessibility persona', 'screen reader', 'test accounts', 'test account hook'],
     paletteGroup: 'Check',
   },
   {

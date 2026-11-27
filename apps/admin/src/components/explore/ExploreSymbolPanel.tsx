@@ -9,6 +9,7 @@ import { readVizToken } from '../../lib/vizTokens'
 import { LAYER_COLORS, LAYER_LABELS } from './exploreLayers'
 import type { CodebaseUnderstandError } from './exploreUnderstandTypes'
 import type { ExploreLayer, ExploreNode } from './exploreTypes'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 interface Props {
   node: ExploreNode | null
@@ -185,7 +186,7 @@ export function ExploreSymbolPanel({
                 </span>
               )}
               {fileExt && (
-                <span className="text-2xs px-1 py-px rounded-sm bg-surface-overlay text-fg-faint font-mono">
+                <span className={`text-2xs px-1 py-px rounded-sm ${CHIP_TONE.neutral} font-mono`}>
                   .{fileExt}
                 </span>
               )}
@@ -267,7 +268,7 @@ export function ExploreSymbolPanel({
               {node.metadata.language_notes.map((note) => (
                 <span
                   key={note}
-                  className="text-2xs px-1.5 py-px rounded bg-info-muted/50 text-info-foreground"
+                  className={`text-2xs px-1.5 py-px rounded ${CHIP_TONE.info}`}
                 >
                   {note}
                 </span>

@@ -41,6 +41,7 @@ import {
   type WorkerLane,
   type WriteResult,
 } from '../../lib/workers'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 /** Settings every lane shares, said once above the lanes; undefined where they differ. */
 export interface CommonLaneSettings {
@@ -170,7 +171,7 @@ function RunDetail({ run, testId, stale = false }: { run: RunTelemetry | undefin
         </span>
       </p>
       {run.log.length > 0 && (
-        <ol className="rounded-sm bg-surface-overlay px-2 py-px font-mono text-2xs text-fg-secondary" aria-label="Last log lines">
+        <ol className={`rounded-sm ${CHIP_TONE.neutral} px-2 py-px font-mono text-2xs`} aria-label="Last log lines">
           {run.log.map((line, i) => (
             <li key={i} className="wrap-anywhere">
               {line}

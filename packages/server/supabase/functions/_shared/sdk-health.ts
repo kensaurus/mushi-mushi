@@ -599,7 +599,17 @@ export interface InstallTaskInput {
   commitSha: string
 }
 
-const TEMPLATE_REPO = 'kensaurus/the-wanting-mind'
+/**
+ * The public repo SDK-health fix prompts point at as a working setup
+ * (src/lib/mushi.ts, mushi-env.ts, mushi-launcher.ts). MUSHI_SDK_TEMPLATE_REPO
+ * (owner/name) overrides it; unset or malformed keeps today's template.
+ */
+const TEMPLATE_REPO = templateRepoFrom(typeof Deno !== 'undefined' ? Deno.env.get('MUSHI_SDK_TEMPLATE_REPO') : undefined)
+
+function templateRepoFrom(raw: string | undefined): string {
+  const v = (raw ?? '').trim()
+  return /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/.test(v) ? v : 'kensaurus/the-wanting-mind'
+}
 
 const STACK_LABEL: Record<SdkStack, string> = { nextjs: 'Next.js', nuxt: 'Nuxt', vite: 'Vite', expo: 'Expo / React Native' }
 

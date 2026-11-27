@@ -65,10 +65,10 @@ describe('stackFromPackageJsons', () => {
     expect(stackFromPackageJsons(['{ not json', pkg({ express: '5' })])).toBeNull()
   })
 
-  it('resolveStack falls back to the slug only when nothing was detected', () => {
-    expect(resolveStack('glot-it', 'expo')).toBe('expo')
-    expect(resolveStack('yen-yen', null)).toBe('expo')
-    expect(resolveStack('help-her-take-photo', undefined)).toBe('nextjs')
+  it('resolveStack uses the detected stack, else the Next.js default for every app (ADR 0072)', () => {
+    expect(resolveStack('any-app', 'expo')).toBe('expo')
+    expect(resolveStack('yen-yen', null)).toBe('nextjs')
+    expect(resolveStack('another-app', undefined)).toBe('nextjs')
   })
 })
 
@@ -76,6 +76,7 @@ const NOW = new Date('2026-10-14T12:00:00Z')
 const repo = { ref: { owner: 'kensaurus', repo: 'app' }, token: 't', repoUrl: 'https://github.com/kensaurus/app', defaultBranchHint: 'main' }
 const EXPO_NAMES = requiredCiVarNames('expo').map((v) => v.name)
 const VITE_NAMES = requiredCiVarNames('vite').map((v) => v.name)
+const NEXT_NAMES = requiredCiVarNames('nextjs').map((v) => v.name)
 
 function deps(names: string[], detectStack: () => Promise<'expo' | 'vite' | 'nextjs' | null>) {
   return {
@@ -114,9 +115,9 @@ describe('composeRecipe: env names follow the detected stack', () => {
     expect(response.elements.env.reason).toBe('Missing from GitHub: VITE_MUSHI_API_KEY. Add them as GitHub Actions secrets or variables.')
   })
 
-  it('a failed package.json read falls back to the slug and does not fail the recipe', async () => {
+  it('a failed package.json read falls back to the Next.js names (never a slug guess, ADR 0072) and does not fail the recipe', async () => {
     const pid = '30000001-0000-4000-8000-000000000003'
-    const d = deps(EXPO_NAMES, async () => {
+    const d = deps(NEXT_NAMES, async () => {
       throw new Error('GitHub answered 502')
     })
     const { response } = await compose.composeRecipe(seed(pid, 'yen-yen') as never, d as never, pid)

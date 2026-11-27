@@ -36,13 +36,13 @@ interface Props {
 function frameworkChip(framework: string | undefined): string {
   switch (framework) {
     case 'playwright':
-      return CHIP_TONE.okSubtle
+      return CHIP_TONE.ok
     case 'vitest':
-      return CHIP_TONE.warnSubtle
+      return CHIP_TONE.warn
     case 'cypress':
-      return CHIP_TONE.infoSubtle
+      return CHIP_TONE.info
     case 'jest':
-      return CHIP_TONE.dangerSubtle
+      return CHIP_TONE.danger
     default:
       return 'bg-surface-overlay text-fg-muted border border-edge-subtle'
   }
@@ -103,7 +103,7 @@ export function InventoryTree({ rows, onRowClick }: Props) {
           if (!list.length) {
             return (
               <Badge
-                className={`${CHIP_TONE.dangerSubtle} font-mono`}
+                tone="danger" className="font-mono"
                 title="No verified_by entry — this action has no automated coverage declared in inventory.yaml"
               >
                 untested

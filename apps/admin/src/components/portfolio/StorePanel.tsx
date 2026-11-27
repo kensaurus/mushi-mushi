@@ -36,9 +36,9 @@ const TITLES: Record<string, string> = {
 }
 
 const RISK: Record<string, { label: string; tone: BadgeTone }> = {
-  high: { label: 'High risk', tone: 'dangerSubtle' },
-  medium: { label: 'Medium risk', tone: 'warnSubtle' },
-  low: { label: 'Low risk', tone: 'okSubtle' },
+  high: { label: 'High risk', tone: 'danger' },
+  medium: { label: 'Medium risk', tone: 'warn' },
+  low: { label: 'Low risk', tone: 'ok' },
   unknown: { label: 'Not checked', tone: 'neutral' },
 }
 

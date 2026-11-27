@@ -32,6 +32,7 @@ import {
   keepsFirstReport,
   MIN_TRACE_RETENTION_DAYS,
   sweepLlmTraces,
+  sweepUxBaselines,
   sweepUxCaptures,
   traceRetentionDays,
 } from '../../supabase/functions/retention-sweep/index.ts'
@@ -347,5 +348,61 @@ describe('UX capture retention', () => {
     }
     expect((await sweepUxCaptures(db as never)).deleted).toBe(0)
     expect(cleared).toHaveLength(0)
+  })
+})
+
+describe('Timeline baseline retention (ADR 0072)', () => {
+  const row = (id: string, day: number, pinned = false, viewport = 'desktop') => ({
+    id,
+    surface_key: 'home',
+    viewport,
+    created_at: `2026-11-${String(day).padStart(2, '0')}T00:00:00Z`,
+    pinned,
+    capture_path: `p1/baselines/home/${viewport}/${id}.png`,
+  })
+
+  function dbWith(rows: ReturnType<typeof row>[], keep: number | null, removeError: { message: string } | null = null) {
+    const removed: string[][] = []
+    const deleted: string[][] = []
+    const db = {
+      from: (table: string) => {
+        if (table === 'project_settings') {
+          return { select: () => ({ returns: async () => ({ data: [{ project_id: 'p1', ux_baseline_keep_releases: keep }], error: null }) }) }
+        }
+        const chain = {
+          select: () => chain,
+          eq: () => chain,
+          order: () => chain,
+          limit: () => chain,
+          returns: async () => ({ data: rows, error: null }),
+          delete: () => ({ eq: () => ({ in: async (_c: string, ids: string[]) => (deleted.push(ids), { error: null }) }) }),
+        }
+        return chain
+      },
+      storage: { from: () => ({ remove: async (paths: string[]) => (removed.push(paths), { error: removeError }) }) },
+    }
+    return { db, removed, deleted }
+  }
+
+  it('keeps the newest N per screen and viewport, never a pinned one, and deletes the file before the row', async () => {
+    const rows = [row('d5', 5), row('d4', 4), row('d3', 3, true), row('d2', 2), row('d1', 1), row('m1', 1, false, 'mobile')]
+    const { db, removed, deleted } = dbWith(rows, 2)
+    const res = await sweepUxBaselines(db as never)
+    expect(res.deleted).toBe(2)
+    expect(removed).toEqual([['p1/baselines/home/desktop/d2.png', 'p1/baselines/home/desktop/d1.png']])
+    expect(deleted).toEqual([['d2', 'd1']])
+  })
+
+  it('keeps the rows when the file delete fails, so the next sweep retries', async () => {
+    const { db, deleted } = dbWith([row('d2', 2), row('d1', 1)], 1, { message: 'down' })
+    expect((await sweepUxBaselines(db as never)).deleted).toBe(0)
+    expect(deleted).toHaveLength(0)
+  })
+
+  it('falls back to 24 releases when the setting is missing', async () => {
+    const rows = Array.from({ length: 25 }, (_, i) => row(`d${i + 1}`, i + 1)).reverse()
+    const { db, deleted } = dbWith(rows, null)
+    expect((await sweepUxBaselines(db as never)).deleted).toBe(1)
+    expect(deleted).toEqual([['d1']])
   })
 })

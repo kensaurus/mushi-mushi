@@ -154,7 +154,7 @@ function PendingRedemptionCard({ r }: { r: PendingRedemption }) {
           {r.pointsSpent.toLocaleString()} pts · requested {new Date(r.requestedAt).toLocaleDateString()}
         </p>
       </div>
-      <Badge className={`text-2xs ${r.status === 'processing' ? CHIP_TONE.infoSubtle : 'bg-surface-overlay/40 border border-edge/30 text-fg-muted'}`}>
+      <Badge className={`text-2xs ${r.status === 'processing' ? CHIP_TONE.info : CHIP_TONE.neutral}`}>
         {r.status === 'processing' ? 'Processing' : 'Pending'}
       </Badge>
     </div>
@@ -297,7 +297,7 @@ export function TesterWalletPage() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-sm font-medium">{item.name}</p>
                         {item.category === 'pro' && (
-                          <Badge className={`${CHIP_TONE.accentSubtle} text-xs`}>1.3× premium</Badge>
+                          <Badge tone="accent" className="text-xs">1.3× premium</Badge>
                         )}
                       </div>
                       <p className="text-xs text-fg-muted mt-0.5">{item.description}</p>

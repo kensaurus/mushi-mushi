@@ -190,7 +190,7 @@ export function ProjectReposCard({ projectId }: Props) {
             <div className="flex items-center gap-2 flex-wrap justify-between">
               <div className="flex items-center gap-2 min-w-0 flex-1">
                 {repo.is_primary && (
-                  <Badge tone="brandSubtle" className="text-3xs">primary</Badge>
+                  <Badge tone="brand" className="text-3xs">primary</Badge>
                 )}
                 <RepoRoleBadge role={repo.role} />
                 <div className="min-w-0 flex-1">

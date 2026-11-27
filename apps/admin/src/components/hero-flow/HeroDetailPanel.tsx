@@ -67,10 +67,10 @@ const TILE_COLORS = {
 // ─── Tone chip ─────────────────────────────────────────────────────────────
 
 const TONE_CLASS: Record<string, string> = {
-  ok:      CHIP_TONE.okSubtle,
-  warn:    CHIP_TONE.warnSubtle,
-  crit:    CHIP_TONE.dangerSubtle,
-  info:    CHIP_TONE.infoSubtle,
+  ok:      CHIP_TONE.ok,
+  warn:    CHIP_TONE.warn,
+  crit:    CHIP_TONE.danger,
+  info:    CHIP_TONE.info,
   neutral: 'bg-surface-overlay text-fg-muted border border-edge-subtle',
 }
 

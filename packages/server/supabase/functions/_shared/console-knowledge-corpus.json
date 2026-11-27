@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-24T14:59:49.143Z",
+  "generatedAt": "2026-11-27T02:45:16.630Z",
   "docs": [
     {
       "doc_path": "recipes/connect-github-and-sdk.md",
@@ -201,6 +201,15 @@
       "content_hash": "dd55f95acb2491084e08dbfe80d0bd727d99807de450998fad6c1aac41c50668"
     },
     {
+      "doc_path": "pages/timeline.md",
+      "section": "main",
+      "title": "Timeline",
+      "body": "# Timeline\n\nRelease by release: bugs fixed, screens improved, scores, AI cost, and a before/after of every screen.\n\nRoute: /timeline\nSection: Do\n\nKeywords: timeline, history, before after, filmstrip, releases, screenshots, baseline, compare, progress, cost\n\nUse this page when the user asks about: timeline, history, before after, filmstrip, releases, screenshots",
+      "route_path": "/timeline",
+      "kind": "page",
+      "content_hash": "61c1d899a15149202ceec8f8fea031d5d05e274a747fe4ec7f517da89bb395ad"
+    },
+    {
       "doc_path": "pages/iterate.md",
       "section": "main",
       "title": "Improvement runs",
@@ -235,6 +244,15 @@
       "route_path": "/first-user-test",
       "kind": "page",
       "content_hash": "1ca9fa773b9f3a2251152952172ebdddafcecbefa4604c5582e2d24f34242d8f"
+    },
+    {
+      "doc_path": "pages/personas.md",
+      "section": "main",
+      "title": "Personas",
+      "body": "# Personas\n\nThe kinds of people a first-time user test plays: their device, language, needs, patience and AI budget, and test accounts for your sign-up.\n\nRoute: /personas\nSection: Check\n\nKeywords: personas, persona, user persona, visitor profile, test persona, accessibility persona, screen reader, test accounts, test account hook\n\nUse this page when the user asks about: personas, persona, user persona, visitor profile, test persona, accessibility persona",
+      "route_path": "/personas",
+      "kind": "page",
+      "content_hash": "c1a60aef78375619884ce5914d23589bbda7f9ddef404c2927b8fa4cf721670f"
     },
     {
       "doc_path": "pages/inventory.md",

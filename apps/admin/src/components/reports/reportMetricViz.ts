@@ -3,8 +3,6 @@
  * Keeps color thresholds aligned with `confidenceBadgeClass` + severity traffic.
  */
 
-import { SEVERITY_TRAFFIC_ORDER, type SeverityTrafficKey } from '../../lib/severityTraffic'
-
 const CONFIDENCE_SEGMENTS = 5
 
 export function confidencePercent(confidence: number | null | undefined): number | null {
@@ -52,18 +50,6 @@ export function confidenceSegmentFilled(pct: number, index: number): boolean {
 }
 
 export const CONFIDENCE_SEGMENT_COUNT = CONFIDENCE_SEGMENTS
-
-const SEVERITY_LEVELS: SeverityTrafficKey[] = SEVERITY_TRAFFIC_ORDER.filter(
-  (k) => k !== 'unscored',
-) as SeverityTrafficKey[]
-
-export function severityActiveIndex(severity: string | null | undefined): number | null {
-  if (!severity) return null
-  const idx = SEVERITY_LEVELS.indexOf(severity as SeverityTrafficKey)
-  return idx >= 0 ? idx : null
-}
-
-export const SEVERITY_LEVEL_KEYS = SEVERITY_LEVELS
 
 export type BlastIntensity = 'idle' | 'low' | 'medium' | 'high' | 'critical'
 

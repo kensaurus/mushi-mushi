@@ -32,7 +32,7 @@ interface FunnelResponse {
 const ROW_STATE: Record<string, { label: string; tone: BadgeTone }> = {
   off: { label: 'Events off', tone: 'neutral' },
   no_events: { label: 'No events yet', tone: 'neutral' },
-  error: { label: 'Could not read', tone: 'warnSubtle' },
+  error: { label: 'Could not read', tone: 'warn' },
 }
 
 export function FunnelCard({ orgId }: { orgId: string }) {
@@ -109,7 +109,7 @@ export function FunnelCard({ orgId }: { orgId: string }) {
                 {r.state === 'ok' ? (
                   <span className="flex flex-wrap items-center gap-2 text-xs text-fg-muted">
                     {r.steps.map((s) => <span key={s.name}>{s.name}: {s.converted}</span>)}
-                    <Badge tone="infoSubtle">{r.overallPct}% end to end</Badge>
+                    <Badge tone="info">{r.overallPct}% end to end</Badge>
                   </span>
                 ) : (
                   <Badge tone={(ROW_STATE[r.state] ?? ROW_STATE.error).tone}>{(ROW_STATE[r.state] ?? ROW_STATE.error).label}</Badge>

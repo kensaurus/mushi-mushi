@@ -29,6 +29,6 @@ export interface SearchResponse {
 }
 
 export const MODE_TONE: Record<SessionRow['mode'], string> = {
-  search: CHIP_TONE.infoSubtle,
+  search: CHIP_TONE.info,
   scrape: 'bg-brand/12 text-brand border border-brand/28',
 }

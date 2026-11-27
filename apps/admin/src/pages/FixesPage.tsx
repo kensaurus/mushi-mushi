@@ -79,6 +79,7 @@ import {
   isReadyToMerge,
   pipelineApprovedGreen,
 } from '../lib/countDefinitions'
+import { CHIP_TONE } from '../lib/chipTone'
 interface InventoryActionNode {
   actionNodeId?: string
   id?: string
@@ -947,7 +948,7 @@ export function FixesPage() {
         <FreshnessPill at={lastFetchedAt ?? statsFetchedAt} isValidating={isValidating || statsValidating} channel={channelState} />
         {/* "0 attempts" beside "No fixes in the last 30 days" was noise (round-2 review). */}
         {fixes.length > 0 && (
-          <span className="inline-flex items-center whitespace-nowrap rounded-sm bg-surface-overlay/40 px-2 py-px text-2xs tabular-nums text-fg-muted">
+          <span className={`inline-flex items-center whitespace-nowrap rounded-sm ${CHIP_TONE.neutral} px-2 py-px text-2xs tabular-nums`}>
             {fixesTotal != null && fixesTotal > fixes.length
               ? `${fixes.length} of ${pluralizeWithCount(fixesTotal, 'attempt')}`
               : pluralizeWithCount(fixes.length, 'attempt')}

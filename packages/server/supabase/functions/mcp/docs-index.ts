@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 247 pages, generated from llms.txt. @internal Exported for tests. */
+/** 250 pages, generated from llms.txt. @internal Exported for tests. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — one place to improve your AI-built app",
@@ -520,6 +520,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "The App blueprint page in the Mushi Mushi console shows what this app is built from, the state of each part, and the draft pull request a change opens.",
   },
   {
+    title: "Release kits",
+    url: docUrl("/admin/release-kits"),
+    route: "/admin/release-kits",
+    markdown: "admin/release-kits.md",
+    keywords: ["admin", "release-kits", "release", "kits"],
+    headings: ["Record clips (opt-in)", "Make the product video", "Put media on the stores (approval first)"],
+    excerpt: "A release kit gathers a release's screenshots, flow clips, changelog and brand colours for a product video, and store media you approve.",
+  },
+  {
     title: "Releases",
     url: docUrl("/admin/releases"),
     route: "/admin/releases",
@@ -583,6 +592,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "Add one workflow to your repo so Mushi Mushi's SDK upgrade PRs arrive with a refreshed lockfile and pass npm ci or pnpm install --frozen-lockfile.",
   },
   {
+    title: "Security proof",
+    url: docUrl("/admin/security-proof"),
+    route: "/admin/security-proof",
+    markdown: "admin/security-proof.md",
+    keywords: ["admin", "security-proof", "security", "proof"],
+    headings: ["Add the workflow", "How a release is proven", "What becomes a bug", "From an agent"],
+    excerpt: "Each release's Security proof: the scans your own CI ran for the commit it ships. Dependencies, secrets, an optional AI review, a live scan.",
+  },
+  {
     title: "Settings",
     url: docUrl("/admin/settings"),
     route: "/admin/settings",
@@ -644,6 +662,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["admin", "teams", "members"],
     headings: ["Plans", "Roles", "Invitation Flow"],
     excerpt: "How teams work in Mushi Mushi. Organizations own projects, billing, invitations and the member roster, and project access comes from membership.",
+  },
+  {
+    title: "Timeline",
+    url: docUrl("/admin/timeline"),
+    route: "/admin/timeline",
+    markdown: "admin/timeline.md",
+    keywords: ["admin", "timeline"],
+    headings: ["Pin each release's screens", "From your editor"],
+    excerpt: "The Timeline shows your app release by release: bugs fixed, screens improved, scores, AI cost and a before/after of every screen.",
   },
   {
     title: "All users",

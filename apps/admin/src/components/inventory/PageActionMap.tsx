@@ -116,7 +116,7 @@ export function PageActionMap({
                   {page.path}
                 </span>
                 {page.broken > 0 ? (
-                  <Badge tone="dangerSubtle" className="ml-auto shrink-0">
+                  <Badge tone="danger" className="ml-auto shrink-0">
                     {page.broken} broken
                   </Badge>
                 ) : null}

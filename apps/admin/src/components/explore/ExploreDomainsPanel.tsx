@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { apiErrorMessage } from '../../lib/humanizeApiError'
-import { CHIP_TONE } from '../../lib/chipTone'
 import { Btn, Card, Badge } from '../ui'
 import { ExploreUnderstandEmpty } from './ExploreUnderstandEmpty'
 import type { CodebaseUnderstandError, DomainExtractionSource, DomainView } from './exploreUnderstandTypes'
@@ -82,7 +81,7 @@ export function ExploreDomainsPanel({ projectId, onFileClick }: Props) {
         </p>
         <div className="flex items-center gap-2 shrink-0">
           {source === 'fallback' && (
-            <Badge className={CHIP_TONE.warnSubtle}>
+            <Badge tone="warn">
               Layer fallback
             </Badge>
           )}

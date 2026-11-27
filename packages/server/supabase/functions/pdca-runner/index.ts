@@ -28,6 +28,7 @@ import { priceLlmCall } from '../_shared/llm-cost.ts'
 import { withLlmUsage } from '../_shared/llm-usage.ts'
 import { OPENAI_PRIMARY } from '../_shared/models.ts'
 import { PDCA_DEFAULT_MODEL, resolvePdcaModel } from '../_shared/pdca-models.ts'
+import { criticPersonaBrief, personaFromRow, type PersonaRow } from '../_shared/personas.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -300,7 +301,18 @@ Deno.serve(
       .select('prompt')
       .eq('slug', run.persona as string)
       .maybeSingle()
-    const personaPrompt = personaData?.prompt as string ?? 'You are a UX expert. Evaluate the UI for usability, clarity, and visual hierarchy.'
+    const rubricPrompt = personaData?.prompt as string ?? 'You are a UX expert. Evaluate the UI for usability, clarity, and visual hierarchy.'
+    // The user the critic judges for (a project persona, ADR 0073): one short paragraph on top of the rubric.
+    let personaPrompt = rubricPrompt
+    if (run.project_persona_id) {
+      const { data: up } = await db
+        .from('project_personas')
+        .select('id, project_id, name, preset, goal, locale, device, expertise, accessibility, patience_steps, cost_cap_usd, notes, created_at, updated_at')
+        .eq('id', run.project_persona_id as string)
+        .eq('project_id', run.project_id as string)
+        .maybeSingle()
+      if (up) personaPrompt = `${rubricPrompt}\n\n${criticPersonaBrief(personaFromRow(up as PersonaRow))}`
+    }
 
     // Fetch initial page content
     let currentInput = ''

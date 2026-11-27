@@ -61,15 +61,29 @@ import {
   parseFreshEyesRequest,
   QUEUED_EXPIRED_DETAIL,
   runnerRefusal,
+  testAccountMode,
+  testAccountUnavailable,
   type Runner,
   type RunnerHost,
   type RunnerLane,
+  type TestAccountMode,
 } from '../../_shared/fresh-eyes-queue.ts'
+import { personaFromRow, type PersonaRow } from '../../_shared/personas.ts'
+import { chargeRunBudget, FRESH_EYES_FILE_RESERVE_USD, freshEyesReserveUsd, releaseRunBudget, reserveRunBudget, RUN_BUDGET_SPENT_MESSAGE } from '../../_shared/llm-reservations.ts'
+import { settleFreshEyesRun } from '../../_shared/test-account-hook-io.ts'
 import { callerCanAccessProject, dbError, jsonError } from '../shared.ts'
 
 const flog = log.child('fresh-eyes')
 const READ_URL_TTL_SEC = 3600
 const TREND_DAYS = 90
+const PERSONA_COLUMNS = 'id, project_id, name, preset, goal, locale, device, expertise, accessibility, patience_steps, cost_cap_usd, notes, created_at, updated_at, archived_at'
+
+/** The app's test-account setting (off when unreadable: a setting that cannot be read grants nothing). */
+async function readAccountMode(db: ReturnType<typeof getServiceClient>, projectId: string): Promise<TestAccountMode> {
+  const { data, error } = await db.from('project_settings').select('fresh_eyes_accounts').eq('project_id', projectId).maybeSingle()
+  if (error) return 'off'
+  return testAccountMode((data as { fresh_eyes_accounts?: unknown } | null)?.fresh_eyes_accounts)
+}
 
 type Db = ReturnType<typeof getServiceClient>
 
@@ -147,7 +161,9 @@ async function workerRunDenial(c: Context, db: Db, projectId: string, localRunId
 }
 
 export function registerFreshEyesRoutes(app: Hono<{ Variables: Variables }>): void {
-  // ── Mint a synthetic account (operator only, Mushi itself) ────────────────
+  // ── Mint an account in this Mushi's own sign-in (`mushi-ux fresh-eyes --mint-account`) ──
+  // Operators only, and only for an app that opted in to it (ADR 0073: per project, no longer
+  // "Mushi only"). An app with its own hook gets its accounts through Run now instead.
   app.post('/v1/admin/fresh-eyes/test-account', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
     // An account is company-level: never through a key bound to one project.
     if (c.get('authMethod') === 'apiKey' && (!c.get('isOrgScopedKey') || c.get('keyAllowedProjectIds') || c.req.header('X-Mushi-Project-Id'))) {
@@ -157,14 +173,27 @@ export function registerFreshEyesRoutes(app: Hono<{ Variables: Variables }>): vo
     if (denied) return denied
     const userId = c.get('userId') as string
     const db = getServiceClient()
+    const body = (await c.req.json().catch(() => null)) as { projectId?: unknown } | null
+    const projectId = typeof body?.projectId === 'string' && /^[0-9a-f-]{36}$/i.test(body.projectId) ? body.projectId.toLowerCase() : null
+    if (!projectId) return jsonError(c, 'VALIDATION_ERROR', 'Name the app the account is for ({ projectId }); update mushi-ux if it did not send one.')
+    const access = await callerCanAccessProject(c, db, userId, projectId)
+    if (!access.allowed) return jsonError(c, 'FORBIDDEN', 'Not a member of this project', 403)
+    const mode = await readAccountMode(db, projectId)
+    if (mode !== 'mushi') {
+      return jsonError(
+        c,
+        'TEST_ACCOUNT_UNAVAILABLE',
+        mode === 'hook'
+          ? "This app makes its own test accounts through its hook: start the test with Run now on the console, or give the app's own test account in MUSHI_FRESH_EYES_EMAIL and MUSHI_FRESH_EYES_PASSWORD."
+          : "Accounts in this Mushi's sign-in are off for this app. An owner or admin turns them on under Personas → Test accounts, only for an app that signs in on this Mushi.",
+        403,
+      )
+    }
 
     const minted = await mintSyntheticAccount(db, userId, new Date(), Deno.env.get('MUSHI_FRESH_EYES_EMAIL_DOMAIN'))
     if (!minted.ok) return jsonError(c, minted.code, minted.message, minted.status)
     const id = minted.account
-    const selfProject = Deno.env.get('MUSHI_SELF_PROJECT_ID')
-    if (selfProject) {
-      await logAudit(db, selfProject, userId, 'fresh_eyes.account_created', 'auth_user', id.userId, { expires_at: id.expiresAt }, { actorType: c.get('authMethod') === 'apiKey' ? 'api_key' : 'user' })
-    }
+    await logAudit(db, projectId, userId, 'fresh_eyes.account_created', 'auth_user', id.userId, { expires_at: id.expiresAt }, { actorType: c.get('authMethod') === 'apiKey' ? 'api_key' : 'user' })
     c.header('Cache-Control', 'no-store')
     return c.json({ ok: true, data: { user_id: id.userId, email: id.email, password: id.password, name: id.name, expires_at: id.expiresAt } })
   })
@@ -177,12 +206,44 @@ export function registerFreshEyesRoutes(app: Hono<{ Variables: Variables }>): vo
     const access = await callerCanAccessProject(c, db, userId, projectId)
     if (!access.allowed) return jsonError(c, 'FORBIDDEN', 'Not a member of this project', 403)
     if (access.role === 'viewer') return jsonError(c, 'FORBIDDEN', 'Viewers cannot start tests.', 403)
-    const parsed = parseFreshEyesRequest(await c.req.json().catch(() => null))
+    const raw = await c.req.json().catch(() => null)
+    // An agent (start_fresh_eyes) may leave out the start page and the goal: the server fills
+    // them as the console would (the app's known address; the persona's goal, the last one, or
+    // the plain default). A start page the app has no address for is still the caller's to give.
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      const b = raw as Record<string, unknown>
+      if (b.url == null || b.goal == null) {
+        const [known, last, personaGoal] = await Promise.all([
+          knownAddresses(db, projectId),
+          db.from('ux_runs').select('start_url, goal').eq('project_id', projectId).eq('kind', 'fresh_eyes').order('started_at', { ascending: false }).limit(1).maybeSingle(),
+          typeof b.personaId === 'string'
+            ? db.from('project_personas').select('goal').eq('id', b.personaId).eq('project_id', projectId).maybeSingle()
+            : Promise.resolve({ data: null }),
+        ])
+        const lastRow = (last.data ?? null) as { start_url: string | null; goal: string | null } | null
+        if (b.url == null) {
+          const selfId = Deno.env.get('MUSHI_SELF_PROJECT_ID')
+          const start = defaultStartUrl({ ...known, lastRun: lastRow?.start_url ?? null, isMushi: !!selfId && selfId.toLowerCase() === projectId.toLowerCase() })
+          if (start) b.url = start.url
+        }
+        if (b.goal == null) b.goal = (personaGoal.data as { goal?: string | null } | null)?.goal ?? lastRow?.goal ?? DEFAULT_FRESH_EYES_GOAL
+      }
+    }
+    const parsed = parseFreshEyesRequest(raw)
     if (!parsed.ok) return jsonError(c, 'VALIDATION_ERROR', parsed.message)
     const req = parsed.value
-    const selfProjectId = Deno.env.get('MUSHI_SELF_PROJECT_ID')
-    if (req.withAccount && !canUseTestAccount({ isOperator: isOperatorUser(userId), authMethod: c.get('authMethod') as string | undefined, projectId, selfProjectId })) {
-      return jsonError(c, 'TEST_ACCOUNT_UNAVAILABLE', 'Test accounts can only be made for Mushi itself, by its operators, from the console.', 403)
+    if (req.withAccount) {
+      // Opt-in per app (ADR 0073): an owner or admin, in the console, where the app turned test accounts on.
+      const asker = { mode: await readAccountMode(db, projectId), role: access.role, isOperator: isOperatorUser(userId), authMethod: c.get('authMethod') as string | undefined }
+      const why = testAccountUnavailable(asker)
+      if (why) return jsonError(c, 'TEST_ACCOUNT_UNAVAILABLE', why, 403)
+    }
+    let persona: ReturnType<typeof personaFromRow> | null = null
+    if (req.personaId) {
+      const { data: p, error: pErr } = await db.from('project_personas').select(PERSONA_COLUMNS).eq('id', req.personaId).eq('project_id', projectId).is('archived_at', null).maybeSingle()
+      if (pErr) return dbError(c, pErr)
+      if (!p) return jsonError(c, 'PERSONA_NOT_FOUND', 'That persona is not one of this app’s (it may have been deleted). Pick another.', 404)
+      persona = personaFromRow(p as PersonaRow)
     }
     const now = new Date()
 
@@ -212,7 +273,17 @@ export function registerFreshEyesRoutes(app: Hono<{ Variables: Variables }>): vo
     }
 
     const localRunId = newLocalRunId(now, crypto.getRandomValues(new Uint8Array(4)))
+    // The run holds its LLM budget before it exists (ADR 0073): classifying what it files,
+    // capped by the persona's cost cap. A look-around run files nothing, so it holds none.
+    const runRowId = crypto.randomUUID()
+    let reservedUsd: number | null = null
+    if (!req.dryRun) {
+      const held = await reserveRunBudget(db, { projectId, uxRunId: runRowId, kind: 'fresh_eyes', usd: freshEyesReserveUsd(persona?.costCapUsd), createdBy: userId, now })
+      if (!held.ok) return jsonError(c, held.code, held.message, held.status)
+      reservedUsd = held.reservedUsd
+    }
     const { error } = await db.from('ux_runs').insert({
+      id: runRowId,
       project_id: projectId,
       local_run_id: localRunId,
       created_by: userId,
@@ -228,13 +299,26 @@ export function registerFreshEyesRoutes(app: Hono<{ Variables: Variables }>): vo
       dry_run: req.dryRun,
       has_account: req.withAccount,
       ...(req.withAccount ? { account_granted_by: userId, account_grant_until: new Date(now.getTime() + ACCOUNT_GRANT_MS).toISOString() } : {}),
-      counts: { sessions: req.sessions },
+      ...(persona ? { persona_id: persona.id } : {}),
+      counts: { sessions: req.sessions, ...(reservedUsd != null ? { reserved_usd: reservedUsd } : {}) },
       started_at: now.toISOString(),
       updated_at: now.toISOString(),
     })
-    if (error) return dbError(c, error)
-    await logAudit(db, projectId, userId, 'fresh_eyes.queued', 'ux_run', localRunId, { url: req.url, sessions: req.sessions, dry_run: req.dryRun, with_account: req.withAccount }, { actorType: c.get('authMethod') === 'apiKey' ? 'api_key' : 'user' })
-    return c.json({ ok: true, data: { runId: localRunId, status: 'queued', runner: runner.runner } }, 201)
+    if (error) {
+      if (reservedUsd != null) await releaseRunBudget(db, runRowId)
+      return dbError(c, error)
+    }
+    await logAudit(
+      db,
+      projectId,
+      userId,
+      'fresh_eyes.queued',
+      'ux_run',
+      localRunId,
+      { url: req.url, sessions: req.sessions, dry_run: req.dryRun, with_account: req.withAccount, persona_id: persona?.id ?? null, reserved_usd: reservedUsd },
+      { actorType: c.get('authMethod') === 'apiKey' ? 'api_key' : 'user' },
+    )
+    return c.json({ ok: true, data: { runId: localRunId, status: 'queued', runner: runner.runner, personaId: persona?.id ?? null, reservedUsd } }, 201)
   })
 
   // ── Console: cancel a run no computer took yet ────────────────────────────
@@ -258,6 +342,7 @@ export function registerFreshEyesRoutes(app: Hono<{ Variables: Variables }>): vo
       .select('id')
     if (error) return dbError(c, error)
     if (!data || (data as unknown[]).length === 0) return jsonError(c, 'NOT_QUEUED', 'That test is not waiting any more: a computer already started it, or it ended.', 409)
+    await settleFreshEyesRun(db, { id: (data as Array<{ id: string }>)[0]!.id, project_id: projectId, local_run_id: localRunId })
     return c.json({ ok: true, data: { runId: localRunId, status: 'stopped' } })
   })
 
@@ -287,6 +372,9 @@ export function registerFreshEyesRoutes(app: Hono<{ Variables: Variables }>): vo
       .select('id')
       .single()
     if (error) return dbError(c, error)
+
+    // The run's reservation is not released here: the CLI files its findings after this final
+    // sync, and they charge it. The claim's end (work-fresh-eyes.ts endFreshEyesRun) settles it.
 
     // The trend: one row per metric per finished run, written once.
     const metrics = freshEyesMetricRows(parsed.data, { projectId, localRunId, wasDone })
@@ -384,6 +472,12 @@ export function registerFreshEyesRoutes(app: Hono<{ Variables: Variables }>): vo
     const quota = await checkIngestQuota(db, projectId)
     if (!quota.allowed) return jsonError(c, 'QUOTA_EXCEEDED', `${quota.plan.display_name} plan quota of reports this month is used up.`, 402)
 
+    // Classifying the report is what Mushi pays for in this run: it charges the run's reservation
+    // (ADR 0073). A run started before reservations, or from the CLI alone, has none.
+    const charged = await chargeRunBudget(db, (run as { id: string }).id, FRESH_EYES_FILE_RESERVE_USD)
+    if (charged === 'spent') return jsonError(c, 'RUN_BUDGET_SPENT', RUN_BUDGET_SPENT_MESSAGE, 402)
+    if (charged === 'unavailable') return jsonError(c, 'RUN_BUDGET_UNAVAILABLE', 'The run’s AI budget could not be read, so nothing was filed. Retry in a minute.', 503)
+
     const reportId = crypto.randomUUID()
     const { error: insErr } = await db.from('reports').insert(freshEyesReportRow(f, { reportId, projectId, actorId: userId, localRunId, now: new Date() }))
     if (insErr) return dbError(c, insErr)
@@ -412,13 +506,16 @@ export function registerFreshEyesRoutes(app: Hono<{ Variables: Variables }>): vo
       .eq('kind', 'fresh_eyes')
       .eq('status', 'queued')
       .lt('started_at', new Date(now.getTime() - FRESH_EYES_QUEUED_TTL_MS).toISOString())
-      .then(({ error }) => {
-        if (error) flog.warn('stale queued runs not stopped', { projectId, err: error.message })
+      .select('id, local_run_id')
+      .then(async ({ data, error }) => {
+        if (error) return flog.warn('stale queued runs not stopped', { projectId, err: error.message })
+        // Each gives its reservation back.
+        for (const r of (data ?? []) as Array<{ id: string; local_run_id: string }>) await settleFreshEyesRun(db, { id: r.id, project_id: projectId, local_run_id: r.local_run_id })
       })
-    const [runs, trend, runner, known] = await Promise.all([
+    const [runs, trend, runner, known, personas, mode] = await Promise.all([
       db
         .from('ux_runs')
-        .select('local_run_id, status, model, goal, start_url, ttfv_seconds, steps, reached, stalled_at, findings, dry_run, has_account, counts, started_at, finished_at, detail, sessions_requested, success_text')
+        .select('local_run_id, status, model, goal, start_url, ttfv_seconds, steps, reached, stalled_at, findings, dry_run, has_account, counts, started_at, finished_at, detail, sessions_requested, success_text, persona_id')
         .eq('project_id', projectId)
         .eq('kind', 'fresh_eyes')
         .order('started_at', { ascending: false })
@@ -426,12 +523,16 @@ export function registerFreshEyesRoutes(app: Hono<{ Variables: Variables }>): vo
       db.from('metric_series').select('metric_name, dimension, value, ts').eq('project_id', projectId).in('metric_name', ['fresh_eyes.ttfv_seconds', 'fresh_eyes.steps']).gte('ts', since).order('ts', { ascending: true }).limit(400),
       readRunner(db, projectId, now),
       knownAddresses(db, projectId),
+      // The personas Run now can play; a missing table (not applied yet) reads as none.
+      db.from('project_personas').select(PERSONA_COLUMNS).eq('project_id', projectId).is('archived_at', null).order('created_at', { ascending: true }).limit(50),
+      readAccountMode(db, projectId),
     ])
     if (runs.error) return dbError(c, runs.error)
     if (trend.error) return dbError(c, trend.error)
     const rows = (runs.data ?? []) as Array<{ start_url: string | null; goal: string | null }>
     const selfProjectId = Deno.env.get('MUSHI_SELF_PROJECT_ID')
     const isMushi = !!selfProjectId && selfProjectId.toLowerCase() === projectId.toLowerCase()
+    const asker = { mode, role: access.role, isOperator: isOperatorUser(userId), authMethod: c.get('authMethod') as string | undefined }
     const start = defaultStartUrl({ ...known, lastRun: rows.find((r) => r.start_url)?.start_url ?? null, isMushi })
     return c.json({
       ok: true,
@@ -444,7 +545,9 @@ export function registerFreshEyesRoutes(app: Hono<{ Variables: Variables }>): vo
           goal: rows.find((r) => r.goal)?.goal ?? (isMushi ? MUSHI_FRESH_EYES_GOAL : DEFAULT_FRESH_EYES_GOAL),
           sessions: FRESH_EYES_SESSIONS_DEFAULT,
         },
-        canUseTestAccount: canUseTestAccount({ isOperator: isOperatorUser(userId), authMethod: c.get('authMethod') as string | undefined, projectId, selfProjectId }),
+        canUseTestAccount: canUseTestAccount(asker),
+        testAccounts: { mode, unavailable: testAccountUnavailable(asker) },
+        personas: personas.error ? [] : ((personas.data ?? []) as PersonaRow[]).map(personaFromRow),
         // A failed worker read shows as "unknown", never as "no computer".
         runner: 'error' in runner ? null : runner.runner,
       },
@@ -462,7 +565,7 @@ export function registerFreshEyesRoutes(app: Hono<{ Variables: Variables }>): vo
     if (!access.allowed) return jsonError(c, 'FORBIDDEN', 'Not a member of this project', 403)
     const { data: run, error } = await db
       .from('ux_runs')
-      .select('id, local_run_id, status, model, goal, start_url, timeline, ttfv_seconds, steps, reached, stalled_at, findings, dry_run, has_account, counts, started_at, finished_at, detail, sessions_requested, success_text')
+      .select('id, local_run_id, status, model, goal, start_url, timeline, ttfv_seconds, steps, reached, stalled_at, findings, dry_run, has_account, counts, started_at, finished_at, detail, sessions_requested, success_text, persona_id')
       .eq('project_id', projectId)
       .eq('local_run_id', localRunId)
       .eq('kind', 'fresh_eyes')

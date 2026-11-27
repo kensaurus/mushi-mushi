@@ -21,7 +21,7 @@ export const SOURCE_VALUES_BY_KIND: Readonly<Record<'sentry' | 'alarm' | 'task' 
   sentry: ['sentry'],
   alarm: ['cloudwatch'],
   task: ['sdk_health'],
-  check: ['site_watch', 'site_audit', 'code_audit', 'security_advisory', 'library_modernizer', 'skill_run', 'fresh_eyes', 'ux_loop', 'ux_scorecard'],
+  check: ['site_watch', 'site_audit', 'code_audit', 'security_advisory', 'security_scan', 'library_modernizer', 'skill_run', 'fresh_eyes', 'ux_loop', 'ux_scorecard'],
 }
 
 /** custom_metadata.source of a "Send a test report" sample. */

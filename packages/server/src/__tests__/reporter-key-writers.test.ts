@@ -72,6 +72,7 @@ const REVIEWED = new Map<string, 'keyed' | 'stored' | 'sentinel'>([
   ['_shared/ux-scorecard-io.ts reporter_token_hash', 'sentinel'], // 'ux-scorecard' (ADR 0067): a root cause the UX scorecard found, no person reported it
   ['library-modernizer/index.ts reporter_token_hash', 'sentinel'], // 'cron:library-modernizer'
   ['_shared/vuln-watch-db.ts reporter_token_hash', 'sentinel'], // 'cron:vuln-watch' (ADR 0038)
+  ['_shared/security-proof-db.ts reporter_token_hash', 'sentinel'], // 'ci:mushi-security' (ADR 0074): the host's own CI scan found it, no person reported it
   ['skill-runs/index.ts reporter_token_hash', 'sentinel'], // 'cron:skill-runs' (ADR 0042: a skill-run round has no reporter)
   ['api/routes/work-audit.ts reporter_token_hash', 'sentinel'], // 'code-audit' (ADR 0050: a reproduced code-audit finding has no reporter)
   ['status-reconciler/index.ts reporter_token_hash', 'sentinel'], // 'cron:status-reconciler'

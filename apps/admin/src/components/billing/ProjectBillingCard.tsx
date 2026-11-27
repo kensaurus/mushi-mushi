@@ -139,7 +139,7 @@ export function ProjectBillingCard({
               </>
             )}
             {project.subscription?.cancel_at_period_end && (
-              <Badge tone="warnSubtle">
+              <Badge tone="warn">
                 Cancels at period end
               </Badge>
             )}

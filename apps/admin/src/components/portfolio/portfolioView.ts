@@ -19,7 +19,7 @@ const COULD_NOT_READ = 'Could not read'
 /** @internal Exported for unit tests only; cards render it through cardStatusChips. */
 export function radarLabel(r: PortfolioRadarColumn, unreadable: readonly PortfolioReadPart[] = []): { text: string; tone: BadgeTone; hint: string } {
   if (unreadable.includes('gate_runs') || unreadable.includes('findings')) {
-    return { text: 'Risk checks: not fully read', tone: 'warnSubtle', hint: 'Not every risk check result could be read for this app, so its risks are unknown. This is not a pass. Refresh in a minute.' }
+    return { text: 'Risk checks: not fully read', tone: 'warn', hint: 'Not every risk check result could be read for this app, so its risks are unknown. This is not a pass. Refresh in a minute.' }
   }
   if (r.status === 'never_run' || !r.checkedAt) {
     return { text: 'Risk checks: not run yet', tone: 'neutral', hint: 'The daily risk checks (expiring domain, store rules, privacy link, unused keys) have not run for this app yet. This is not a pass. Run them from its App blueprint page.' }
@@ -32,26 +32,26 @@ export function radarLabel(r: PortfolioRadarColumn, unreadable: readonly Portfol
     return { text: 'Risk checks failed', tone: 'danger', hint: `The last risk check could not finish.${n} This is not a pass. Run it again from the App blueprint page.` }
   }
   const total = r.open.error + r.open.warn
-  if (r.open.error > 0) return { text: `${total} risk${total === 1 ? '' : 's'} to fix`, tone: 'dangerSubtle', hint: `${r.open.error} serious, ${r.open.warn} to look at. Open the App blueprint page for each fix.` }
-  if (r.open.warn > 0) return { text: `${total} risk${total === 1 ? '' : 's'} to look at`, tone: 'warnSubtle', hint: `${r.open.warn} to look at. Open the App blueprint page for each fix.` }
+  if (r.open.error > 0) return { text: `${total} risk${total === 1 ? '' : 's'} to fix`, tone: 'danger', hint: `${r.open.error} serious, ${r.open.warn} to look at. Open the App blueprint page for each fix.` }
+  if (r.open.warn > 0) return { text: `${total} risk${total === 1 ? '' : 's'} to look at`, tone: 'warn', hint: `${r.open.warn} to look at. Open the App blueprint page for each fix.` }
   const extra = r.unchecked > 0 ? ` ${r.unchecked} check${r.unchecked === 1 ? '' : 's'} could not decide and ${r.unchecked === 1 ? 'is' : 'are'} not counted as passing.` : ''
-  return { text: 'No risks found', tone: 'okSubtle', hint: `The last risk check found nothing to fix.${extra}` }
+  return { text: 'No risks found', tone: 'ok', hint: `The last risk check found nothing to fix.${extra}` }
 }
 
 /** @internal Exported for unit tests only; cards render it through cardStatusChips. */
 export function sdkLabel(entries: readonly SdkSkewEntry[], unreadable: readonly PortfolioReadPart[] = []): { text: string; tone: BadgeTone; hint: string } {
   if (unreadable.includes('sdk')) {
-    return { text: 'SDK: could not read', tone: 'dangerSubtle', hint: 'The Mushi Mushi SDK versions could not be read. Refresh in a minute.' }
+    return { text: 'SDK: could not read', tone: 'danger', hint: 'The Mushi Mushi SDK versions could not be read. Refresh in a minute.' }
   }
   if (entries.length === 0 || entries.every((e) => e.status === 'unknown')) {
     return { text: 'SDK unknown', tone: 'neutral', hint: entries[0]?.reason ?? 'No Mushi Mushi SDK has reported from this project yet.' }
   }
   const behind = entries.filter((e) => e.status === 'behind')
   if (behind.length > 0) {
-    return { text: `SDK ${behind[0].version} → ${behind[0].latest}`, tone: 'warnSubtle', hint: behind.map((e) => `${e.package}: ${e.reason}`).join(' ') }
+    return { text: `SDK ${behind[0].version} → ${behind[0].latest}`, tone: 'warn', hint: behind.map((e) => `${e.package}: ${e.reason}`).join(' ') }
   }
   const cur = entries.find((e) => e.status === 'current')!
-  return { text: `SDK ${cur.version}`, tone: 'okSubtle', hint: entries.map((e) => `${e.package}: ${e.reason}`).join(' ') }
+  return { text: `SDK ${cur.version}`, tone: 'ok', hint: entries.map((e) => `${e.package}: ${e.reason}`).join(' ') }
 }
 
 /** First sentence of a finding message, as a fallback title. */
@@ -112,10 +112,10 @@ export function budgetText(card: CardCells): string {
 }
 
 const STATE_META: Record<DetectorState, { label: string; tone: BadgeTone }> = {
-  ok: { label: 'Nothing found', tone: 'okSubtle' },
-  finding: { label: 'Found', tone: 'warnSubtle' },
+  ok: { label: 'Nothing found', tone: 'ok' },
+  finding: { label: 'Found', tone: 'warn' },
   unknown: { label: 'Not checked', tone: 'neutral' },
-  error: { label: 'Check failed', tone: 'dangerSubtle' },
+  error: { label: 'Check failed', tone: 'danger' },
 }
 
 export function radarStateMeta(state: string): { label: string; tone: BadgeTone } {
@@ -132,8 +132,8 @@ const SERIOUS_SEVERITY = new Set(['critical', 'error', 'high'])
 export function radarBadge(d: { state: string; findings: ReadonlyArray<{ severity: string }> }): { label: string; tone: BadgeTone } {
   if (d.state !== 'finding') return radarStateMeta(d.state)
   return d.findings.some((f) => SERIOUS_SEVERITY.has(f.severity.toLowerCase()))
-    ? { label: 'Error', tone: 'dangerSubtle' }
-    : { label: 'Warning', tone: 'warnSubtle' }
+    ? { label: 'Error', tone: 'danger' }
+    : { label: 'Warning', tone: 'warn' }
 }
 
 /**
@@ -144,7 +144,7 @@ export function radarBadge(d: { state: string; findings: ReadonlyArray<{ severit
 export function radarOverall(detectors: ReadonlyArray<{ state: string; findings: ReadonlyArray<{ severity: string }> }>): { tone: 'danger' | 'warn'; label: string } | null {
   const found = detectors.filter((d) => d.state === 'finding')
   if (found.length === 0) return null
-  return found.some((d) => radarBadge(d).tone === 'dangerSubtle') ? { tone: 'danger', label: 'Error' } : { tone: 'warn', label: 'Warning' }
+  return found.some((d) => radarBadge(d).tone === 'danger') ? { tone: 'danger', label: 'Error' } : { tone: 'warn', label: 'Warning' }
 }
 
 const RADAR_STATE_ORDER: Record<string, number> = { finding: 0, error: 1 }
@@ -197,7 +197,7 @@ export function cardStatusChips(card: PortfolioCard): CardStatusChip[] {
     {
       key: 'bugs',
       text: `${bugs} ${card.openReports === 1 ? 'bug' : 'bugs'}`,
-      tone: card.openReports > 0 ? 'warnSubtle' : 'okSubtle',
+      tone: card.openReports > 0 ? 'warn' : 'ok',
       hint: card.openReports > 0 ? `${bugs} open bug ${card.openReports === 1 ? 'report' : 'reports'}. Open Bugs to triage them.` : 'No open bug reports.',
       to: '/reports',
     },
@@ -300,13 +300,13 @@ export function appUrgency(card: PortfolioCard): AppUrgency {
   }
   // An older server sends no problem list: fall back to the headline state.
   if (card.needsLook === undefined && (card.worst === 'drift' || card.worst === 'error')) {
-    return { level: 'fix', chip: { text: 'Needs a look', tone: 'warnSubtle' }, short: 'a part to fix', next: { text: 'Open the App blueprint to see what to fix', to: '/recipe', more: 0 } }
+    return { level: 'fix', chip: { text: 'Needs a look', tone: 'warn' }, short: 'a part to fix', next: { text: 'Open the App blueprint to see what to fix', to: '/recipe', more: 0 } }
   }
   const drift = appProblems.find((p) => p.state === 'drift')
   if (drift) {
     return {
       level: 'fix',
-      chip: { text: `${drift.label} to fix`, tone: 'warnSubtle' },
+      chip: { text: `${drift.label} to fix`, tone: 'warn' },
       short: `${inSentence(drift.label)} to fix`,
       next: { text: `${drift.label}: ${drift.reason}`, to: pageFor(drift), more: others(1) },
     }
@@ -315,7 +315,7 @@ export function appUrgency(card: PortfolioCard): AppUrgency {
   if (behind) {
     return {
       level: 'behind',
-      chip: { text: 'SDK update', tone: 'infoSubtle' },
+      chip: { text: 'SDK update', tone: 'info' },
       short: `SDK ${behind.version} → ${behind.latest}`,
       next: { text: `Update the Mushi Mushi SDK from ${behind.version} to ${behind.latest}`, to: '/connect', more: others(0) },
     }
@@ -333,7 +333,7 @@ export function appUrgency(card: PortfolioCard): AppUrgency {
   if (!card.radar.checkedAt) {
     return { level: 'chores', chip: { text: 'Not checked yet', tone: 'neutral' }, short: 'not checked yet', next: null }
   }
-  return { level: 'clear', chip: { text: 'All clear', tone: 'okSubtle' }, short: 'all clear', next: null }
+  return { level: 'clear', chip: { text: 'All clear', tone: 'ok' }, short: 'all clear', next: null }
 }
 
 /** The app's own problems: its needsLook list without Mushi Mushi's setup chores. */

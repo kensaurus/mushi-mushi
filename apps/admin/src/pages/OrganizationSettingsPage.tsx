@@ -684,7 +684,7 @@ export function OrganizationSettingsPage() {
       >
         {/* The plan name is not a status: neutral unless teams are locked. Labelled, so a bare
             "Studio" chip doesn't sit unexplained beside the help button (2026-11-19). */}
-        <Badge className={teamsEnabled ? CHIP_TONE.neutral : CHIP_TONE.warnSubtle}>
+        <Badge className={teamsEnabled ? CHIP_TONE.neutral : CHIP_TONE.warn}>
           Plan: {stats.planDisplayName ?? data?.organization?.plan_id ?? 'hobby'}
         </Badge>
       </PageHeaderBar>
@@ -1208,7 +1208,7 @@ export function OrganizationSettingsPage() {
                       <span className="min-w-0 truncate whitespace-nowrap font-medium text-fg" title={member.email ?? undefined}>
                         {member.email ?? 'Unknown email'}
                       </span>
-                      {isSelf && <Badge className="shrink-0 whitespace-nowrap bg-surface-overlay text-fg-muted text-2xs">you</Badge>}
+                      {isSelf && <Badge className={`shrink-0 whitespace-nowrap ${CHIP_TONE.neutral} text-2xs`}>you</Badge>}
                       {joinedMeta && (
                         <Tooltip content={joinedMeta.tooltip}>
                           <Badge className={`${joinedMeta.tone} shrink-0 whitespace-nowrap text-2xs`}>{joinedMeta.label}</Badge>

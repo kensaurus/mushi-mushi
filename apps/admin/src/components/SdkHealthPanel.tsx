@@ -38,6 +38,7 @@ import {
   type SdkHealthPayload,
   type SdkHealthProblem,
 } from '../lib/sdkHealth'
+import { CHIP_TONE } from '../lib/chipTone'
 
 // JSX text does not decode \u escapes, so the glyph is a constant.
 const WARNING_SIGN = '⚠'
@@ -322,7 +323,7 @@ function MintedKey({ rawKey, prefix }: { rawKey: string; prefix?: string }) {
   return (
     <div className="space-y-1" data-testid="sdk-health-minted-key">
       <div className="flex items-center gap-2">
-        <code className="min-w-0 flex-1 truncate rounded bg-surface-overlay px-2 py-1 font-mono text-2xs text-fg">
+        <code className={`min-w-0 flex-1 truncate rounded ${CHIP_TONE.neutral} px-2 py-1 font-mono text-2xs`}>
           {shown ? rawKey : `${prefix ?? rawKey.slice(0, 12)}…`}
         </code>
         {shown ? (
@@ -472,7 +473,7 @@ function FixResult({ kind, fixes, readiness, autofix, ciCheck }: { kind: SdkHeal
     <>
       {step.commands.map((cmd) => (
         <div key={cmd} className="flex items-center gap-2">
-          <code className="min-w-0 flex-1 truncate rounded bg-surface-overlay px-2 py-1 font-mono text-2xs text-fg">{cmd}</code>
+          <code className={`min-w-0 flex-1 truncate rounded ${CHIP_TONE.neutral} px-2 py-1 font-mono text-2xs`}>{cmd}</code>
           <CopyButton value={cmd} label="Copy command" copiedLabel="Copied" size="sm" />
         </div>
       ))}
@@ -506,7 +507,7 @@ function FixResult({ kind, fixes, readiness, autofix, ciCheck }: { kind: SdkHeal
         <details className="text-2xs text-fg-muted">
           <summary className="cursor-pointer">Builds on a host too (Vercel, Netlify, EAS)? Copy the key alone</summary>
           <div className="mt-1 flex items-center gap-2">
-            <code className="min-w-0 flex-1 truncate rounded bg-surface-overlay px-2 py-1 font-mono text-2xs text-fg">{s.rawKey}</code>
+            <code className={`min-w-0 flex-1 truncate rounded ${CHIP_TONE.neutral} px-2 py-1 font-mono text-2xs`}>{s.rawKey}</code>
             <CopyButton value={s.rawKey} label="Copy API key" copiedLabel="Copied" size="sm" />
           </div>
         </details>

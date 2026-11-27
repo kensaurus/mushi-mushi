@@ -1046,8 +1046,8 @@ function describeTriageUpdate(updates: Record<string, string>): string | null {
 
 /** Platform chip colour map — mirrors the same sentiment used by InboxPage. */
 const PLATFORM_BADGE: Record<string, string> = {
-  ios:     CHIP_TONE.infoSubtle,
-  android: CHIP_TONE.okSubtle,
+  ios:     CHIP_TONE.info,
+  android: CHIP_TONE.ok,
   web:     'bg-brand/12 text-brand border border-brand/28',
   macos:   'bg-surface-overlay text-fg-secondary border-edge-subtle',
   windows: 'bg-surface-overlay text-fg-secondary border-edge-subtle',
@@ -1091,7 +1091,7 @@ function DeviceAndBuildPanel({
                 {row.value}
               </span>
             ) : (
-              <code className="text-2xs font-mono text-fg bg-surface-overlay/60 px-1.5 py-0.5 rounded-sm">
+              <code className={`text-2xs font-mono ${CHIP_TONE.neutral} px-1.5 py-0.5 rounded-sm`}>
                 {row.value}
               </code>
             )}

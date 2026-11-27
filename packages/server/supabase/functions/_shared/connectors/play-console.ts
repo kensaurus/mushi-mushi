@@ -7,8 +7,11 @@
  *          deleted, never committed; subscription base plans and one-time
  *          products with their state.
  *
- * Act (Plan 020 Phase 4, ADR 0017): `set_rollout` and `promote_track` are
- * implemented but run ONLY through executeConnectorAction
+ * Act (Plan 020 Phase 4, ADR 0017): `set_rollout` and `promote_track`; and
+ * (Plan 025 P6, ADR 0074) `upload_listing_images` (release-kit images to
+ * edits.images, through the /upload/ base, each re-hashed against the
+ * approved payload first) and `set_promo_video` (the listing's YouTube URL:
+ * Play takes no video file). All are implemented but run ONLY through executeConnectorAction
  * (_shared/connector-actions.ts), which consumes a human-approved,
  * hash-matched, single-use, unexpired connector_actions row. This file also
  * re-checks the payload hash itself. Nothing here runs on a schedule. Per
@@ -20,17 +23,17 @@
 import { sha256Hex, signJwt } from './jwt.ts'
 import { failureOfStatus, fetchJson, statusReason, vendorError, type JsonResponse } from './http-util.ts'
 import { canonicalJson } from './canonical.ts'
-import { ConnectorError, notConnected, type ApprovedConnectorAction, type ConnectorActionResult, type ConnectorContext, type RecipeConnector } from './types.ts'
+import { ConnectorError, notConnected, USE_RELEASE_KIT_MESSAGE, type ApprovedConnectorAction, type ConnectorActionResult, type ConnectorContext, type RecipeConnector } from './types.ts'
 import type { StoreProduct, StoreRead } from '../monetization/rules.ts'
 
 const API = 'https://androidpublisher.googleapis.com/androidpublisher/v3/applications'
 const TOKEN_URL = 'https://oauth2.googleapis.com/token'
-const PKG = /^[a-zA-Z][\w]*(\.[a-zA-Z][\w]*)+$/
+export const PKG = /^[a-zA-Z][\w]*(\.[a-zA-Z][\w]*)+$/
 const TRACKS = new Set(['internal', 'alpha', 'beta', 'production'])
 
-interface ServiceAccount { client_email: string; private_key: string }
+export interface ServiceAccount { client_email: string; private_key: string }
 
-function parseSa(raw: string | null): ServiceAccount | null {
+export function parseSa(raw: string | null): ServiceAccount | null {
   if (!raw) return null
   try {
     const sa = JSON.parse(raw) as Partial<ServiceAccount>
@@ -41,7 +44,7 @@ function parseSa(raw: string | null): ServiceAccount | null {
   return null
 }
 
-async function accessToken(ctx: ConnectorContext, sa: ServiceAccount): Promise<string> {
+export async function accessToken(ctx: ConnectorContext, sa: ServiceAccount): Promise<string> {
   const iat = Math.floor(ctx.now().getTime() / 1000)
   const assertion = await signJwt('RS256', sa.private_key, {}, {
     iss: sa.client_email, scope: 'https://www.googleapis.com/auth/androidpublisher', aud: TOKEN_URL, iat, exp: iat + 3600,
@@ -56,7 +59,7 @@ async function accessToken(ctx: ConnectorContext, sa: ServiceAccount): Promise<s
   return res.body.access_token
 }
 
-function api(ctx: ConnectorContext, tokenValue: string, method: string, path: string, body?: unknown) {
+export function api(ctx: ConnectorContext, tokenValue: string, method: string, path: string, body?: unknown) {
   return fetchJson<any>(ctx, `${API}${path}`, {
     method,
     headers: { Authorization: `Bearer ${tokenValue}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
@@ -133,10 +136,10 @@ export const playConsoleConnector: RecipeConnector = {
   capabilities: ['snapshot', 'drift', 'act'],
   requiredScopes: {
     snapshot: ['View app information (read-only)'],
-    act: ['Release to production, exclude devices, and use Play App Signing', 'Release apps to testing tracks'],
+    act: ['Release to production, exclude devices, and use Play App Signing', 'Release apps to testing tracks', 'Edit store listing, pricing and distribution (for listing images and the promo video)'],
   },
-  credentialNote: 'Invite a service account with app-level "View app information" for reading. Releasing (rollout %, promote a track) needs release permissions and a separate write key, and every release is approved by a person first.',
-  actions: ['set_rollout', 'promote_track'],
+  credentialNote: 'Invite a service account with app-level "View app information" for reading. Releasing (rollout %, promote a track) needs release permissions, and uploading listing images or setting the promo video needs "Edit store listing"; both use a separate write key, and every action is approved by a person first. Listing text is published by your own CI, never by Mushi.',
+  actions: ['set_rollout', 'promote_track', 'upload_listing_images', 'set_promo_video'],
   async probe(ctx) {
     const sa = parseSa(ctx.readCredential)
     if (!sa) return notConnected('Add a Google Play service account key (JSON).')
@@ -186,6 +189,11 @@ export const playConsoleConnector: RecipeConnector = {
     if (!sa) return { ok: false, detail: 'No write key is stored for Google Play.' }
     const p = action.payload as { package?: string; track?: string; toTrack?: string; userFraction?: number; versionCodes?: string[] }
     if (typeof p.package !== 'string' || !PKG.test(p.package)) return { ok: false, detail: 'The payload has no valid package name.' }
+    if (action.action === 'upload_listing_images' || action.action === 'set_promo_video') {
+      // The uploader lives in store-media-act.ts and is injected by api-ext only (api's size budget).
+      if (!ctx.storeMedia) return { ok: false, code: 'USE_RELEASE_KIT', status: 409, detail: USE_RELEASE_KIT_MESSAGE }
+      return ctx.storeMedia.play(ctx, action)
+    }
     const t = await accessToken(ctx, sa)
     const edit = await api(ctx, t, 'POST', `/${p.package}/edits`)
     if (edit.status !== 200 || !edit.body?.id) return { ok: false, detail: statusReason('Google Play', edit.status) }

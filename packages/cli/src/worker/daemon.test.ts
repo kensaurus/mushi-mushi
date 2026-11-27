@@ -364,7 +364,7 @@ describe('a first-time user test the console queued (ADR 0053 amendment)', () =>
     expect((without.calls[0]!.body as { host: { takes: string[] } }).host.takes).toEqual([])
     const able = harness({ freshEyes: async () => ({ result: 'ran', detail: 'ok' }) })
     await able.daemon.tick()
-    expect((able.calls[0]!.body as { host: { takes: string[] } }).host.takes).toEqual(['fresh_eyes'])
+    expect((able.calls[0]!.body as { host: { takes: string[] } }).host.takes).toEqual(['fresh_eyes', 'fresh_eyes_persona'])
   })
 
   it('a fix lane runs it before its own work, reports ran, and never logs the test account', async () => {

@@ -704,9 +704,9 @@ export function CompliancePage() {
         }
       >
         {stats.soc2Entitlement ? (
-          <Badge tone="okSubtle">SOC 2 enabled</Badge>
+          <Badge tone="ok">SOC 2 enabled</Badge>
         ) : (
-          <Badge tone="warnSubtle">{stats.planDisplayName} — upgrade for compliance</Badge>
+          <Badge tone="warn">{stats.planDisplayName} — upgrade for compliance</Badge>
         )}
         {/* Header actions are size sm on every page; these two were the default size (audit 2026-11-21). */}
         <Btn size="sm" onClick={refreshEvidence} disabled={refreshing} loading={refreshing} data-dav-anchor="compliance:act">

@@ -237,6 +237,17 @@ describe('a first-time user test the console queued (ADR 0053 amendment)', () =>
     expect(parseClaim(test({ dryRun: false, accounts: [{ ...acct, password: 'short' }] })).ok).toBe(false)
   })
 
+  it('takes the persona the console picked (ADR 0073), checked like everything else', () => {
+    const persona = { name: 'Japanese visitor', brief: 'You are "Japanese visitor".', locale: 'ja-JP', device: 'mobile', needs: ['reduced_motion'], steps: 30 }
+    const ok = parseClaim(test({ persona }))
+    expect(ok.ok && ok.value.kind === 'fresh_eyes' && ok.value.freshEyes.persona).toEqual(persona)
+    const none = parseClaim(test())
+    expect(none.ok && none.value.kind === 'fresh_eyes' && 'persona' in none.value.freshEyes).toBe(false)
+    for (const bad of [{ ...persona, brief: '--steps 999' }, { ...persona, locale: 'ja JP' }, { ...persona, device: 'car' }, { ...persona, needs: ['root'] }, { ...persona, steps: 3 }]) {
+      expect(parseClaim(test({ persona: bad })).ok, JSON.stringify(bad)).toBe(false)
+    }
+  })
+
   it('reads the lanes to wake from the heartbeat answer as lane ids only', () => {
     const r = parseHeartbeatAnswer({ guards: GUARDS, lanes: [], wake: [LANE, 'rm -rf /', 7] })
     expect('answer' in r && r.answer.wake).toEqual([LANE])

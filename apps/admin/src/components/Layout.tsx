@@ -90,10 +90,10 @@ const SECTION_TO_STAGE: Record<string, PdcaStageId> = {
 }
 
 const STAGE_TONE: Record<NonNullable<NavSection['stage']>, string> = {
-  P: CHIP_TONE.infoSubtle,
-  D: CHIP_TONE.brandSubtle,
-  C: CHIP_TONE.warnSubtle,
-  A: CHIP_TONE.okSubtle,
+  P: CHIP_TONE.info,
+  D: CHIP_TONE.brand,
+  C: CHIP_TONE.warn,
+  A: CHIP_TONE.ok,
 }
 
 
@@ -577,7 +577,7 @@ export function Layout({ children }: { children: ReactNode }) {
                 aria-label="Beta: send feedback"
                 className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
               >
-                <Badge tone="brandSubtle" className="hover:brightness-110">Beta</Badge>
+                <Badge tone="brand" className="hover:brightness-110">Beta</Badge>
               </Link>
               {desktop && renderSidebarToggle(false)}
             </div>
@@ -1236,9 +1236,9 @@ function computeStaleness(
 }
 
 const STALENESS_TONE: Record<SectionStaleness['tone'], string> = {
-  ok: CHIP_TONE.okSubtle,
-  warn: CHIP_TONE.warnSubtle,
-  danger: CHIP_TONE.dangerSubtle,
+  ok: CHIP_TONE.ok,
+  warn: CHIP_TONE.warn,
+  danger: CHIP_TONE.danger,
 }
 
 interface SectionRailHeaderProps {

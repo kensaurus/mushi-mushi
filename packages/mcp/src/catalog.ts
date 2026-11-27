@@ -305,6 +305,34 @@ export const TOOL_CATALOG: ToolSpec[] = [
     useCase: 'Ask to raise the Play rollout to 20%, for a person to approve.',
   },
   {
+    name: 'get_security_proof',
+    title: 'Security proof of a release',
+    description:
+      'Return the Security proof of one release (releaseId), one commit (commitSha) or, with neither, the newest commit the scans saw: per lane (dependencies = OSV-Scanner, secrets = Gitleaks, ai_review = claude-code-security-review, dast = ZAP baseline + Nuclei, weekly) its state passed | findings | error | skipped | off | unknown | stale, the counts by severity, the run it used and its findings (title, severity, location, report id, deduped_by). The scanners run in the app\'s own CI (mushi-security.yml) and post their results; Mushi never runs them. state is proven (dependencies and secrets green for the commit, nothing failing elsewhere), attention, incomplete (a required lane has no result for the commit; a lane that never ran is not a pass) or not_pinned (the release names no commit). Optional projectId. Returns { state, headline, commitSha, lanes, findings, release }. Read-only.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Did the scans come back green for the commit this release ships?',
+  },
+  {
+    name: 'export_release_kit',
+    title: 'Export a release kit',
+    description:
+      'Export the release kit of one release (releaseId) for a product-video tool: signs every ready asset (before/after screenshots copied from the UX baselines, Playwright clips, device recordings) for 24 hours, writes manifest.json beside them in lazycow\'s release-kit format (schema lazycow.release-kit, version 1: app, release, brand, screens with before/after, recordings, changelog; every asset with its own signed URL, bytes and sha256) and returns { kitUrl, expiresAt, preset, manifest }, where preset is lazycow\'s name (appstore-iphone | play-promo | social-9x16 | social-1x1). Pass both to lazycow\'s make_product_video({ kitUrl, preset }); the rendered file comes back as a product_video asset of the kit. Mushi never renders video. Mushi\'s own fields (per-asset store checks, the preset\'s output spec, the release\'s Security proof headline) are under manifest.mushi. An empty kit is 422 KIT_EMPTY. Optional projectId. Write: it writes the manifest and mints signed URLs.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    useCase: 'Hand this release\'s screenshots and clips to lazycow for a product video.',
+  },
+  {
+    name: 'request_store_media_upload',
+    title: 'Ask to upload store media (needs approval)',
+    description:
+      'Ask to put release-kit media on a store: action upload_screenshots (App Store, displayType such as APP_IPHONE_67), upload_app_preview (App Store, previewType such as IPHONE_67; 15–30 s, H.264 or ProRes 422 HQ, at most 30 fps), upload_listing_images (Google Play, imageType such as phoneScreenshots or featureGraphic) or set_promo_video (Google Play, a YouTube URL). Give releaseId, connectorId (an App Store Connect or Google Play connector bound to the app), locale and assetIds from the kit. Mushi checks each asset against the store\'s spec first (422 SPEC_CHECK_FAILED with the reason) and stores the exact payload, every asset pinned by its SHA-256. This only creates a request: nothing is uploaded until a team owner or admin approves it in the console and runs it there. Confirm with the user first. Returns { actionId, payloadSha256, payload, status: "pending_approval" }. Write.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    useCase: 'Ask to put the new screenshots on the App Store, for a person to approve.',
+  },
+  {
     name: 'get_store_status',
     title: 'Store review status',
     description:
@@ -384,6 +412,45 @@ export const TOOL_CATALOG: ToolSpec[] = [
     useCase: 'Which files are too big to change safely, and is the bundle growing?',
   },
   {
+    name: 'get_timeline',
+    title: 'The app release by release',
+    description:
+      "Return how one app got better, release by release (Plan 025, ADR 0072), without screenshots: rail ('releases' when the app has release rows, else 'runs': each UX or scorecard run is a stop), points oldest first [{ id, kind (release | unreleased | run), at, label, title, status, version, runs (run ids), cost_usd (what the runs' AI calls cost; null = not recorded), judged (verdicts that were a model call), cached (verdicts reused because the page had not changed), score (the newest scorecard mean, 1-10), improved_screens, reports_closed, reports [{ id, title }], baselines (screens pinned to it) }], surfaces [{ key, label, path, latest_score, first_score, frames (pinned shots) }], month (the last 30 days: releases, reports_closed, top_reports, screens_improved, runs, cost_usd, judged, cached, movers [{ key, label, from, to }]) and settings { keep_releases }. Optional projectId (defaults to the configured project). Read-only, no model call. Use get_surface_history with a surface key for that screen's screenshots, scores and kept changes; get_ux_run with a run id for one run.",
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Is my app getting better, and what did each release fix and cost?',
+  },
+  {
+    name: 'get_surface_history',
+    title: "One screen's history",
+    description:
+      "Return one screen's history across releases (ADR 0072): surface { key, label, path }, frames oldest first [{ id, viewport (desktop | mobile), version, release_id, run_id, score, penalty, cost_usd, pinned (kept forever), created_at, url (signed for one hour) }], scores across scorecard runs [{ at, run, score, cached (reused, no model call), cost_usd }] and the changes the UX loop kept on it [{ at, run, shipped (its PR merged), what, commit_sha }]. Required surfaceKey (a key from get_timeline's surfaces); optional projectId. Read-only, no model call. Use to show a before and after of a screen, or to check whether a fix changed what users see.",
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Show me how the checkout screen changed over the last releases.',
+  },
+  {
+    name: 'get_ux_run',
+    title: 'One UX run',
+    description:
+      "Return one UX run (ADR 0020/0067) by its local run id (from get_timeline's points[].runs, or the CLI): run { status, phase, agent, model, judge_model, branch, pr_url, counts, cost_usd, cost { judged, cached, unpriced }, started_at, finished_at, error }, surfaces (each screen with status, problem scores before and after, the review's verdict, and signed screenshot URLs valid for one hour) and iterations (each attempt with outcome, reason, commit and files). Required runId; optional projectId. Read-only. Use to see what a run changed and what it cost; get_timeline for the history across runs.",
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'What did the last UX run change, and what did it cost?',
+  },
+  {
+    name: 'start_ux_run',
+    title: 'How to start a UX run',
+    description:
+      "Return how to start a UX run for one app, without starting one (ADR 0017/0020/0072): a cloud run spends the repo's Actions minutes and Cursor credits, so only a person in the console starts it. Returns { started: false, why, console_path (the UX runs page, where Run in the cloud is one click), commands { scorecard, loop } (run on your own machine with your own keys; --sync mirrors the run to the console), next }. Optional kind (scorecard | loop, default scorecard) and projectId. No change is made and no model is called. After the run, read it with get_ux_run or get_timeline.",
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: false },
+    useCase: 'Run a UX check on my app.',
+  },
+  {
     name: 'get_ci_overview',
     title: 'CI runners and why fixes wait',
     description:
@@ -431,7 +498,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
     returnsUntrusted: true,
-    useCase: 'Ask to run yen-yen\'s PR jobs on the Alienware runner instead of paid GitHub minutes, for a person to approve.',
+    useCase: 'Ask to run my-app\'s PR jobs on my self-hosted runner instead of paid GitHub minutes, for a person to approve.',
   },
   {
     name: 'open_ci_cost_fix',
@@ -441,7 +508,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
     returnsUntrusted: true,
-    useCase: 'Stop glot.it\'s CI from running on draft agent PRs: open the skip-drafts fix for ci.yml as a draft PR to review.',
+    useCase: 'Stop my-app\'s CI from running on draft agent PRs: open the skip-drafts fix for ci.yml as a draft PR to review.',
   },
   {
     name: 'preview_ci_cost_fix_rollout',
@@ -471,7 +538,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: true },
     returnsUntrusted: true,
-    useCase: 'Did the CI fix PR for glot.it open, which fixes were refused, and what did it save after the merge?',
+    useCase: 'Did the CI fix PR for my-app open, which fixes were refused, and what did it save after the merge?',
   },
   {
     name: 'explain_finding',
@@ -593,7 +660,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
       'Declare whether one domain renews automatically at its registrar: autoRenew true, false, or null for not known. The domain id comes from get_accounts_register; only a domain one of the caller\'s apps uses can be changed (404 otherwise). It records what you declare and checks nothing at the registrar; false opens the registrar_autorenew_off rule. Team owners and admins only; needs an account-level key. Returns { id }. Write.',
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
-    useCase: 'Mark glot.it as renewing automatically.',
+    useCase: 'Mark example.com as renewing automatically.',
   },
   {
     name: 'get_spend_ledger',
@@ -1064,6 +1131,41 @@ export const TOOL_CATALOG: ToolSpec[] = [
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
     useCase: 'Record one in ten visitors for the next day so I can see where people get stuck.',
+  },
+  // ── Native UX captures and personas (Plan 025 P2/P3, ADR 0073) ──────
+  {
+    name: 'upload_ux_captures',
+    title: 'Upload app screenshots to the UX scorecard',
+    description:
+      'Open a UX scorecard run for screens another driver captured (a Maestro flow, adb screencap, the iOS simulator, an SDK debug build or a browser), so each screen is scored on the same written rubric as a web page (ADR 0073). ' +
+      'platform is ios | android | flutter | react_native | capacitor | web | other; optional device ("Pixel 8 (API 35)"), source (maestro | adb | simctl | sdk | playwright | other), app (a name), viewport ("390x844"), maxCostUsd (0.05–20, caps the scoring budget the run reserves) and projectId. ' +
+      'pages is 1 to 60 of { facts, shots }: facts are the scorecard page facts { key, path (starts with /), label, title, headings, text, controls, settleMs (null), axe (null), overflowX, consoleErrors, cls, viewport { width, height } } and shots is ["settled"] or ["early", "settled"]. ' +
+      'Returns { runId, reservedUsd, uploads: [{ page, name, signedUrl }], next }: PUT each PNG (Content-Type image/png, at most 8 MB) to its signedUrl, then score each page with POST next.score { facts, shots: [name] }, group with POST next.group, and close the run with PUT next.finish. ' +
+      'On the stdio server, dir instead reads <dir>/pages/<screen>/settled.png (plus early.png, facts.json, an Android window.xml or a Maestro hierarchy.json) and does the uploads itself; score=true also scores, groups and closes the run. ' +
+      'Refused with 402 when the AI budget cannot cover the run. Viewers cannot upload. Write: it stores screenshots and a run; nothing in the app or repo changes.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    useCase: 'Score my Android app’s onboarding screens like the web pages.',
+  },
+  {
+    name: 'list_personas',
+    title: 'List the app’s personas',
+    description:
+      'Return the user profiles a first-time user test or a PDCA critic can play for one project (ADR 0073): each persona { id, name, goal, locale, device (desktop | mobile | tablet), expertise (new | casual | power), accessibility (screen_reader, low_vision, keyboard_only, reduced_motion, color_blind, motor, plain_language), patienceSteps (the step cap), costCapUsd (the most one test may spend on Mushi Mushi\'s AI calls), brief (the words the visitor model reads), runs (its last 12 tests: status, ttfv_seconds, reached, steps) }, plus presets, the test-account setting { mode: off | mushi | hook } and the AI budget { monthlyUsd, spentUsd, heldUsd }. Optional projectId. Read-only.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'Which personas can test my app, and how did each do last time?',
+  },
+  {
+    name: 'start_fresh_eyes',
+    title: 'Start a first-time user test',
+    description:
+      'Queue a first-time user test (fresh eyes, ADR 0053) for the user\'s own local worker: an AI that has never seen the app tries one goal from its start page while Mushi Mushi times every step and notes where it got stuck. ' +
+      'Optional personaId (from list_personas: the visitor\'s device, language, needs and step cap), url (default: the app\'s known address), goal (default: the persona\'s goal, else the last one, else "sign up and start using the app"), sessions (1–5, default 3), successText (words on screen that mean the goal was reached), dryRun (true: look around only, file nothing; false, the default, files what stops the visitor as reports) and projectId. ' +
+      'It never signs up with test accounts: only an owner or admin can grant those, from the console. Answers 409 NO_WORKER with the one thing to do when no computer of the user\'s can run it, 402 when the AI budget cannot cover the run, 404 PERSONA_NOT_FOUND. Returns { runId, status: "queued", runner, personaId, reservedUsd }. Write: it queues a run that may file reports. The result shows on the console\'s First-time user test page.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    useCase: 'Have a Japanese phone user try to sign up and tell me where they get stuck.',
   },
 ];
 

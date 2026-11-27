@@ -71,7 +71,7 @@ export function PluginCard({
         </div>
         {inst ? (
           <span
-            className={`inline-flex rounded-sm px-2 py-0.5 text-3xs ${inst.is_active ? CHIP_TONE.okSubtle : CHIP_TONE.neutral}`}
+            className={`inline-flex rounded-sm px-2 py-0.5 text-3xs ${inst.is_active ? CHIP_TONE.ok : CHIP_TONE.neutral}`}
           >
             {inst.is_active ? 'Installed' : 'Disabled'}
           </span>

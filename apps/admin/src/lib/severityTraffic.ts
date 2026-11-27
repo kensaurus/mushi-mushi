@@ -15,15 +15,7 @@ export const SEVERITY_TRAFFIC = {
   unscored: { bg: 'bg-fg-faint/45', text: 'text-fg-muted', label: 'Unscored' },
 } as const
 
-export type SeverityTrafficKey = keyof typeof SEVERITY_TRAFFIC
-
-export const SEVERITY_TRAFFIC_ORDER: SeverityTrafficKey[] = [
-  'critical',
-  'high',
-  'medium',
-  'low',
-  'unscored',
-]
+type SeverityTrafficKey = keyof typeof SEVERITY_TRAFFIC
 
 export function severityTrafficBg(severity: string | null | undefined): string | null {
   if (!severity) return null
@@ -35,12 +27,4 @@ export function severityTrafficLabel(severity: string | null | undefined): strin
   if (!severity) return null
   const key = severity as SeverityTrafficKey
   return SEVERITY_TRAFFIC[key]?.label ?? severity
-}
-
-/** Badge chrome aligned to traffic-light fills — AA foreground on muted bg. */
-export const SEVERITY_TRAFFIC_BADGE: Record<string, string> = {
-  critical: 'bg-danger-muted/70 text-danger-foreground border border-danger/25',
-  high: 'bg-warn-muted/70 text-warn-foreground border border-warn/25',
-  medium: 'bg-sev-medium/20 text-fg-secondary border border-sev-medium/50',
-  low: 'bg-ok-muted/70 text-ok-foreground border border-ok/25',
 }

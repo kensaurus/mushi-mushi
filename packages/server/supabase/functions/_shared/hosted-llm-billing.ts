@@ -1,6 +1,10 @@
 /**
  * FILE: packages/server/supabase/functions/_shared/hosted-llm-billing.ts
- * PURPOSE: Meter the HOSTED LLM tier against the central KENSAURUS wallet.
+ * PURPOSE: Meter the HOSTED LLM tier against the hosting platform's central
+ *          wallet. The wallet is the hosting company's shared infrastructure
+ *          (module kensaurus-wallet.ts, env KENSAURUS_WALLET_*, header
+ *          x-kensaurus-internal-token, table kensaurus_model_prices): those
+ *          are external wire names and keep their spelling.
  *
  * WHAT GETS CHARGED
  *   Only calls that ran on a platform-owned provider key — `ResolvedKey.source

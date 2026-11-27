@@ -198,7 +198,7 @@ function ProjectUxRuns({ projectId }: { projectId: string }) {
                 >
                   <span className="flex items-center justify-between gap-2">
                     <span className="font-medium text-fg">{formatRelative(r.started_at)}</span>
-                    <Badge tone={r.status === 'running' ? 'infoSubtle' : r.status === 'done' ? 'okSubtle' : r.status === 'failed' ? 'dangerSubtle' : 'warnSubtle'}>
+                    <Badge tone={r.status === 'running' ? 'info' : r.status === 'done' ? 'ok' : r.status === 'failed' ? 'danger' : 'warn'}>
                       {UX_RUN_STATUS_LABEL[r.status] ?? r.status}
                     </Badge>
                   </span>

@@ -19,7 +19,6 @@ import type { Hono } from 'npm:hono@4';
 import type { Variables } from '../types.ts';
 
 import { registerSsoAuditRoutes } from './sso-audit.ts';
-import { registerFineTuningRoutes } from './fine-tuning.ts';
 import { registerIntegrationsRoutes } from './integrations.ts';
 import { registerPluginsMarketplaceRoutes } from './plugins-marketplace.ts';
 import { registerIntelligenceSyntheticRoutes } from './intelligence-synthetic.ts';
@@ -27,7 +26,7 @@ import { registerHealthRoutes } from './health.ts';
 
 export function registerEnterpriseIntegrationsRoutes(app: Hono<{ Variables: Variables }>): void {
   registerSsoAuditRoutes(app);
-  registerFineTuningRoutes(app);
+  // Fine-tuning (fine-tuning.ts) is served by api-ext since 2026-11-27 (api size budget); api forwards its paths.
   registerIntegrationsRoutes(app);
   registerPluginsMarketplaceRoutes(app);
   registerIntelligenceSyntheticRoutes(app);

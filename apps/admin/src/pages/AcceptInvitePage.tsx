@@ -27,7 +27,7 @@ interface PreviewResponse {
 
 const ROLE_TONE: Record<PreviewResponse['invitation']['role'], string> = {
   admin: CHIP_TONE.brand,
-  member: CHIP_TONE.okSubtle,
+  member: CHIP_TONE.ok,
   viewer: 'bg-surface-overlay text-fg-muted',
 }
 

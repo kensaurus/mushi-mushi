@@ -52,11 +52,11 @@ interface RegisterResult {
 }
 
 const REGISTRATION_TONE: Record<string, string> = {
-  registered: CHIP_TONE.okSubtle,
-  pending: CHIP_TONE.warnSubtle,
-  failed: CHIP_TONE.dangerSubtle,
+  registered: CHIP_TONE.ok,
+  pending: CHIP_TONE.warn,
+  failed: CHIP_TONE.danger,
   disabled: 'bg-surface-overlay text-fg-muted',
-  manual_required: CHIP_TONE.infoSubtle,
+  manual_required: CHIP_TONE.info,
 };
 
 export function SsoPage() {

@@ -262,13 +262,13 @@ export interface UxRunDetail {
 type Tone = keyof typeof CHIP_TONE
 
 export const UX_STATUS_META: Record<UxSurfaceStatus, { label: string; tone: Tone; hint: string }> = {
-  accepted: { label: 'Improved', tone: 'okSubtle', hint: 'An edit was kept: nothing measured got worse and the screen changed.' },
-  reverted: { label: 'Rolled back', tone: 'dangerSubtle', hint: 'Every attempt made a measured problem worse, so it was undone.' },
-  regressed: { label: 'Moved by another fix', tone: 'warnSubtle', hint: 'A change kept on another screen (often a shared component or token) changed this one.' },
+  accepted: { label: 'Improved', tone: 'ok', hint: 'An edit was kept: nothing measured got worse and the screen changed.' },
+  reverted: { label: 'Rolled back', tone: 'danger', hint: 'Every attempt made a measured problem worse, so it was undone.' },
+  regressed: { label: 'Moved by another fix', tone: 'warn', hint: 'A change kept on another screen (often a shared component or token) changed this one.' },
   blocked: { label: 'Not finished', tone: 'neutral', hint: 'The screen did not render for capture (check sign-in or the read allowlist), or the agent never finished an attempt. The screen note says which.' },
   skipped: { label: 'No change needed', tone: 'neutral', hint: 'The agent made no edit, or nothing visible changed.' },
-  iterating: { label: 'Agent working', tone: 'infoSubtle', hint: 'The agent is editing this screen now.' },
-  baseline: { label: 'Measuring', tone: 'infoSubtle', hint: 'Taking the before screenshots and measurements.' },
+  iterating: { label: 'Agent working', tone: 'info', hint: 'The agent is editing this screen now.' },
+  baseline: { label: 'Measuring', tone: 'info', hint: 'Taking the before screenshots and measurements.' },
   pending: { label: 'Queued', tone: 'neutral', hint: 'Waiting for its turn.' },
 }
 

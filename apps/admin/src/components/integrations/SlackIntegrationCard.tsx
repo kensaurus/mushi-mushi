@@ -401,7 +401,7 @@ export function SlackIntegrationCard({
             {loadingChannels ? (
               <div className="h-9 rounded-lg bg-surface-hover animate-pulse" />
             ) : channelLoadError ? (
-              <div className={`rounded-sm px-2.5 py-2 text-xs space-y-2 ${CHIP_TONE.warnSubtle}`}>
+              <div className={`rounded-sm px-2.5 py-2 text-xs space-y-2 ${CHIP_TONE.warn}`}>
                 <p className="leading-snug font-medium">Channel picker unavailable</p>
                 <p className="leading-snug text-fg-secondary">{channelLoadError}</p>
                 <div className="flex items-center gap-3 flex-wrap">
@@ -487,7 +487,7 @@ export function SlackIntegrationCard({
                 </Btn>
               </div>
             ) : (
-              <p className={`rounded-sm px-2.5 py-2 text-xs ${CHIP_TONE.warnSubtle}`}>
+              <p className={`rounded-sm px-2.5 py-2 text-xs ${CHIP_TONE.warn}`}>
                 No channels found — invite the Mushi Mushi bot to at least one Slack channel first, then retry.
               </p>
             )}

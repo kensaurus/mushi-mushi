@@ -13,11 +13,11 @@ import { apiFetchMutate } from '../../lib/supabase'
 import { VitalText } from '../signal/VitalText'
 import { foldSteps, problemLines, UX_PLAN_STEP_META, UX_STATUS_META, type UxIterationRow, type UxSurfaceRow, type UxViewport } from '../../lib/uxRuns'
 
-const OUTCOME: Record<UxIterationRow['outcome'], { label: string; tone: 'okSubtle' | 'dangerSubtle' | 'neutral' }> = {
-  accepted: { label: 'Kept', tone: 'okSubtle' },
-  rejected: { label: 'Rolled back', tone: 'dangerSubtle' },
-  agent_failed: { label: 'Agent failed', tone: 'dangerSubtle' },
-  capture_failed: { label: 'Screen broke', tone: 'dangerSubtle' },
+const OUTCOME: Record<UxIterationRow['outcome'], { label: string; tone: 'ok' | 'danger' | 'neutral' }> = {
+  accepted: { label: 'Kept', tone: 'ok' },
+  rejected: { label: 'Rolled back', tone: 'danger' },
+  agent_failed: { label: 'Agent failed', tone: 'danger' },
+  capture_failed: { label: 'Screen broke', tone: 'danger' },
   no_change: { label: 'No change', tone: 'neutral' },
 }
 

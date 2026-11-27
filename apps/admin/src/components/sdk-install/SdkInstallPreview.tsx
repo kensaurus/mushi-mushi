@@ -93,6 +93,7 @@ export function SdkInstallPreview({
       // Short until the button is pressed: a 320 px grey page with three skeleton bars read as a
       // broken preview (round-3 review, 2026-11-19). The open panel needs the full height.
       className={`relative w-full rounded-md border overflow-hidden ${panelOpen ? 'h-80' : 'h-32'}`}
+      // mushi-mushi-allowlist: the host's widget palette (preview of their app)
       style={{ colorScheme: isDark ? 'dark' : 'light', background: surface, color: ink, borderColor: hairline }}
       aria-label="Live preview of the issue-report widget in your app"
       data-testid="sdk-install-preview"
@@ -149,6 +150,7 @@ export function SdkInstallPreview({
             {/* The widget's banner "Report a bug" opens the report with Bug picked. */}
             <button
               type="button"
+              // mushi-mushi-allowlist: the host's widget palette (preview of their app)
               style={{ background: 'none', border: 0, color: 'inherit', cursor: 'pointer', font: 'inherit' }}
               onClick={() => {
                 open()
@@ -160,6 +162,7 @@ export function SdkInstallPreview({
             {config.bannerFeatureCta && (
               <button
                 type="button"
+                // mushi-mushi-allowlist: the host's widget palette (preview of their app)
                 style={{ background: 'none', border: 0, color: 'inherit', cursor: 'pointer', font: 'inherit', opacity: 0.8 }}
                 onClick={() => {
                   open()
@@ -256,6 +259,7 @@ export function SdkInstallPreview({
             >
               ⋯
             </span>
+            {/* mushi-mushi-allowlist: the host's widget palette (preview of their app) */}
             <button type="button" aria-label={t.widget.close} style={{ background: 'none', border: 0, color: muted, cursor: 'pointer' }} onClick={close}>
               ✕
             </button>
@@ -285,6 +289,7 @@ export function SdkInstallPreview({
                     aria-checked={chip === id}
                     data-category={id}
                     className="px-2 py-0.5"
+                    // mushi-mushi-allowlist: the host's widget palette (preview of their app)
                     style={{ ...pill, fontSize: 11, ...(chip === id ? { background: ink, color: paper, borderColor: ink } : {}) }}
                     onClick={() => setChip(chip === id ? null : id)}
                   >
@@ -323,6 +328,7 @@ export function SdkInstallPreview({
               aria-disabled={!sent && !canSend}
               title={!sent && !canSend ? rc.ui.addWords : undefined}
               data-testid="preview-send"
+              // mushi-mushi-allowlist: the host's widget palette (preview of their app)
               style={{ border: 0, borderRadius: 8, background: accent, color: onAccent, padding: '3px 12px', fontWeight: 600, cursor: 'pointer', opacity: !sent && !canSend ? 0.45 : 1 }}
               onClick={() => (sent ? close() : canSend && setSent(true))}
             >

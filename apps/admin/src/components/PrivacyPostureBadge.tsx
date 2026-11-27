@@ -86,12 +86,12 @@ export function PrivacyPostureBadge({ compact = false }: Props) {
   // Mushi Mushi's key is the hosted default, so it is information, not a warning.
   const dotClass = error ? 'bg-danger' : unknown ? 'bg-fg-faint' : isByok ? 'bg-ok' : 'bg-info';
   const textClass = error
-    ? CHIP_TONE.dangerSubtle
+    ? CHIP_TONE.danger
     : unknown
       ? CHIP_TONE.neutral
       : isByok
-        ? CHIP_TONE.okSubtle
-        : CHIP_TONE.infoSubtle;
+        ? CHIP_TONE.ok
+        : CHIP_TONE.info;
 
   // Base explanation, free of any click affordance — the two variants do
   // different things on click (the expanded badge opens a popover, the rail

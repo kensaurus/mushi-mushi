@@ -56,15 +56,15 @@ export interface ModernizationFinding {
 }
 
 export const SEVERITY_TONE: Record<ModernizationFinding['severity'], string> = {
-  security: CHIP_TONE.dangerSubtle,
-  deprecated: CHIP_TONE.warnSubtle,
-  major: CHIP_TONE.warnSubtle,
+  security: CHIP_TONE.danger,
+  deprecated: CHIP_TONE.warn,
+  major: CHIP_TONE.warn,
   minor: CHIP_TONE.neutral,
 }
 
 export const JOB_STATUS_TONE: Record<IntelligenceJob['status'], string> = {
   queued: runStatusChipTone('queued'),
-  running: CHIP_TONE.brandSubtle,
+  running: CHIP_TONE.brand,
   completed: runStatusChipTone('completed'),
   failed: runStatusChipTone('failed'),
   cancelled: runStatusChipTone('cancelled'),

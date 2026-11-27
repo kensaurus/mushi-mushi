@@ -134,10 +134,10 @@ function BannerChecklist({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className={`mb-4 inline-flex items-center gap-2 rounded-md border px-2.5 py-1 text-2xs motion-safe:transition-opacity ${
+        className={`mb-4 inline-flex items-center gap-2 rounded-md px-2.5 py-1 text-2xs motion-safe:transition-opacity ${
           allDone || requiredDone
-            ? CHIP_TONE.okSubtle
-            : CHIP_TONE.warnSubtle
+            ? CHIP_TONE.ok
+            : CHIP_TONE.warn
         } hover:brightness-110`}
         aria-label="Show setup checklist"
       >
@@ -402,9 +402,9 @@ function buildSdkDiagnostic(
 function SdkDiagnostic({ tone, lines }: { tone: 'ok' | 'warn' | 'info'; lines: string[] }) {
   const palette =
     tone === 'warn'
-      ? CHIP_TONE.warnSubtle
+      ? CHIP_TONE.warn
       : tone === 'ok'
-        ? CHIP_TONE.okSubtle
+        ? CHIP_TONE.ok
         : 'border-edge-subtle bg-surface-overlay/40 text-fg-secondary'
   const label = tone === 'warn' ? 'Wrong server' : 'App check-in'
   return (

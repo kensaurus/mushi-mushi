@@ -16,10 +16,10 @@ const cause = (patternKey: string, kind: UxScorecardCause['kind']): UxScorecardC
 
 describe('uxScorecard', () => {
   it('tones a score by what it means for the user', () => {
-    expect(scoreTone(3)).toBe('dangerSubtle')
-    expect(scoreTone(4)).toBe('dangerSubtle')
-    expect(scoreTone(5)).toBe('warnSubtle')
-    expect(scoreTone(7)).toBe('okSubtle')
+    expect(scoreTone(3)).toBe('danger')
+    expect(scoreTone(4)).toBe('danger')
+    expect(scoreTone(5)).toBe('warn')
+    expect(scoreTone(7)).toBe('ok')
   })
 
   it('labels a change since the last run, and says nothing for none', () => {

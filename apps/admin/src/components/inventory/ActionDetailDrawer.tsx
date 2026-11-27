@@ -124,7 +124,7 @@ export function ActionDetailDrawer({
                   key={`w-${i}`}
                   className="flex items-center gap-2 rounded-sm border border-edge-subtle bg-surface-overlay/40 px-2 py-1"
                 >
-                  <Badge className={`${CHIP_TONE.dangerSubtle} font-mono`}>
+                  <Badge tone="danger" className="font-mono">
                     {(d.operation ?? 'write').toUpperCase()}
                   </Badge>
                   <code className="text-2xs font-mono text-fg-secondary">
@@ -137,7 +137,7 @@ export function ActionDetailDrawer({
                   key={`r-${i}`}
                   className="flex items-center gap-2 rounded-sm border border-edge-subtle bg-surface-overlay/40 px-2 py-1"
                 >
-                  <Badge className={`${CHIP_TONE.infoSubtle} font-mono`}>
+                  <Badge tone="info" className="font-mono">
                     READ
                   </Badge>
                   <code className="text-2xs font-mono text-fg-secondary">
@@ -154,7 +154,7 @@ export function ActionDetailDrawer({
             Verified by ({tests.length})
           </p>
           {tests.length === 0 ? (
-            <div className={`rounded-sm ${CHIP_TONE.dangerSubtle} p-2 text-2xs`}>
+            <div className={`rounded-sm ${CHIP_TONE.danger} p-2 text-2xs`}>
               No <code className="font-mono">verified_by</code> entry. Without a test reference,
               this action can never reach <strong>verified</strong> status — the reconciler will
               keep it at <strong>wired</strong> at best. Add a Playwright/Vitest spec and
@@ -168,7 +168,7 @@ export function ActionDetailDrawer({
                   className="rounded-sm border border-edge-subtle bg-surface-overlay/40 px-2 py-1.5"
                 >
                   <div className="flex items-center gap-2 mb-0.5">
-                    <Badge className={`${CHIP_TONE.okSubtle} font-mono`}>
+                    <Badge tone="ok" className="font-mono">
                       {frameworkLabel(t)}
                     </Badge>
                     <span className="text-fg-secondary truncate">{t.name}</span>

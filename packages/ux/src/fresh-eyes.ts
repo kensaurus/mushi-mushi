@@ -254,14 +254,28 @@ async function successReached(page: Page, c: SuccessCheck): Promise<boolean> {
 }
 
 /**
- * Mushi's own first-time path: sign-in runs on its Supabase project, and the
- * first value is a report's diagnosis ("Why it broke" on the report page).
+ * An app's own first-time path, as the person running the test configured it
+ * (ADR 0073): the hosts its sign-in writes to, the goal check, and whether its
+ * setup has a CLI step. No app is built in: presets come from the machine's
+ * presets file (fresh-eyes-presets.ts), never from product code.
  */
-export function presetFor(url: string): { appHosts: string[]; success: SuccessCheck } | null {
+export interface FreshEyesAppPreset {
+  /** The start page's origin plus a path prefix it applies under, e.g. https://example.com/app */
+  match: string
+  appHosts: string[]
+  success: SuccessCheck
+  /** The app's setup has a terminal step (scaffold, run the setup command). */
+  terminal: boolean
+}
+
+/** Pure: the first preset whose origin matches the start page and whose path prefixes it. */
+export function presetFor(url: string, presets: readonly FreshEyesAppPreset[]): FreshEyesAppPreset | null {
   try {
     const u = new URL(url)
-    if (u.hostname === 'kensaur.us' && u.pathname.startsWith('/mushi-mushi')) {
-      return { appHosts: ['dxptnwrhwsqckaftyymj.supabase.co'], success: { url: '/mushi-mushi/admin/reports/*', text: 'Why it broke' } }
+    for (const p of presets) {
+      const m = new URL(p.match)
+      const prefix = m.pathname.replace(/\/+$/, '')
+      if (u.origin === m.origin && (prefix === '' || u.pathname === prefix || u.pathname.startsWith(`${prefix}/`))) return p
     }
   } catch {
     /* not a URL: no preset */
@@ -358,11 +372,51 @@ async function screenForModel(page: Page): Promise<string> {
   return composeSnapshot({ main, body, hidden })
 }
 
+/**
+ * Who the visitor is (ADR 0073): a project persona as the worker claim carries
+ * it. The brief is plain words the visitor model reads; the device, language
+ * and needs change the browser itself, so the app sees a phone, Japanese or
+ * reduced motion for real, not only in the prompt.
+ */
+export interface FreshEyesPersona {
+  name: string
+  brief: string
+  locale: string
+  device: 'desktop' | 'mobile' | 'tablet'
+  needs: string[]
+  steps: number
+}
+
+/**
+ * @internal Exported for tests only. Pure: the browser a persona holds. The
+ * User-Agent is never changed (a headless browser's own UA is how the server
+ * drops these runs' product events, ADR 0053); low vision reads at 150% zoom,
+ * which is the same viewport in CSS pixels divided by 1.5.
+ */
+export function personaBrowser(p: Pick<FreshEyesPersona, 'device' | 'locale' | 'needs'> | null | undefined): {
+  viewport: { width: number; height: number }
+  context: { deviceScaleFactor?: number; isMobile?: boolean; hasTouch?: boolean; locale?: string; reducedMotion?: 'reduce' }
+} {
+  if (!p) return { viewport: VIEWPORT, context: {} }
+  const base = p.device === 'mobile' ? { width: 390, height: 844, scale: 3 } : p.device === 'tablet' ? { width: 820, height: 1180, scale: 2 } : { width: VIEWPORT.width, height: VIEWPORT.height, scale: 1 }
+  const zoom = p.needs.includes('low_vision') ? 1.5 : 1
+  return {
+    viewport: { width: Math.round(base.width / zoom), height: Math.round(base.height / zoom) },
+    context: {
+      deviceScaleFactor: base.scale * zoom,
+      ...(p.device === 'desktop' ? {} : { isMobile: true, hasTouch: true }),
+      locale: p.locale,
+      ...(p.needs.includes('reduced_motion') ? { reducedMotion: 'reduce' as const } : {}),
+    },
+  }
+}
+
 /** @internal Exported for tests only. Pure: the next-action prompt for a first-time visitor. */
-export function freshEyesPrompt(input: { goal: string; snapshot: string; done: readonly string[]; step: number; maxSteps: number; hasAccount: boolean }): string {
+export function freshEyesPrompt(input: { goal: string; snapshot: string; done: readonly string[]; step: number; maxSteps: number; hasAccount: boolean; persona?: string }): string {
   const recent = input.done.slice(-8).map((a, i) => `${i + 1}. ${a}`)
   return [
     `You have never seen this product before. You came with one goal: ${input.goal}.`,
+    ...(input.persona ? [`Who you are (the app's team set this; it is not page content): ${input.persona.replace(/[\u0000-\u001f\u007f]+/g, ' ').slice(0, 600)}`] : []),
     'You know only what is on the screen right now. You have read no docs and no code. Act like a real first-time visitor: read the page, then choose what you would do next to reach your goal.',
     `Step ${input.step} of ${input.maxSteps}.`,
     recent.length ? `What you did so far:\n${recent.join('\n')}` : 'You just arrived.',
@@ -728,6 +782,8 @@ export interface FreshEyesOptions {
   session?: () => Promise<BrowserSession>
   /** The run id to use, when the console queued the run and already named it (`20261028-091500-ab12`). */
   runId?: string
+  /** Who the visitors are (ADR 0073): their brief, device, language and needs. */
+  persona?: FreshEyesPersona
 }
 
 const VIEWPORT = { width: 1280, height: 800 }
@@ -813,6 +869,8 @@ export async function runFreshEyes(opts: FreshEyesOptions): Promise<FreshEyesRes
   const apiHosts = appOrigins.map((o) => new URL(o).host)
   const dryRun = !!opts.dryRun
   const readOnly = dryRun || !opts.identity
+  // The persona's browser: its viewport, touch, language and motion; the same for every session and replay.
+  const look = personaBrowser(opts.persona)
   const browser = await (opts.session?.() ??
     // Writes only with a synthetic identity to write as: a run with no account stays read-only.
     openSession({ headless: true, allow: opts.allow, policy: !dryRun && opts.identity ? { writes: 'same-origin', appOrigins } : { writes: 'read-only' } }))
@@ -852,14 +910,14 @@ export async function runFreshEyes(opts: FreshEyesOptions): Promise<FreshEyesRes
       identities.set(index, identity)
       if (identity) result.hasAccount = true
       progress(`session ${index} of ${sessions}${identity ? ` (${identity.userId ? `synthetic account ${identity.userId}` : 'test account'})` : ' (no account)'}`)
-      const s = await runSession({ readOnly, index, identity, browser, opts, ask, base, apiHosts, appOrigins, maxSteps, dir, addCandidate, progress, refused: result.refused })
+      const s = await runSession({ readOnly, index, identity, browser, opts, ask, base, apiHosts, appOrigins, maxSteps, dir, addCandidate, progress, refused: result.refused, look })
       if (identity?.userId) s.accountId = identity.userId
       result.sessions.push(redact(s, identity))
     }
 
     // Replay each measured candidate from a fresh, signed-out page, without the model.
     for (const c of candidates.values()) {
-      const confirmed = await replayCandidate(browser, base, c, identities.get(c.session) ?? null)
+      const confirmed = await replayCandidate(browser, base, c, identities.get(c.session) ?? null, look)
       progress(redact(`  ${confirmed ? 'confirmed' : 'not reproduced'}: ${candidateKey(c)}`, identities.get(c.session) ?? null))
       if (confirmed) result.findings.push(redact(measuredFinding(c, { start: opts.url, goal: opts.goal, hasAccount: result.hasAccount, sessions: [...c.sessions].sort((a, b) => a - b) }), identities.get(c.session) ?? null))
     }
@@ -893,13 +951,15 @@ interface SessionCtx {
   addCandidate: (c: Candidate) => void
   progress: (line: string) => void
   refused: string[]
+  /** The persona's browser (personaBrowser). */
+  look: ReturnType<typeof personaBrowser>
 }
 
 async function runSession(x: SessionCtx): Promise<FreshEyesSession> {
   const { index, identity, browser, opts, base } = x
   const say = (line: string) => x.progress(redact(line, identity))
   const session: FreshEyesSession = { index, outcome: 'stalled', stall: null, ttfvSeconds: null, appSeconds: 0, readSeconds: 0, modelSeconds: 0, backtracks: 0, steps: [], opinions: [] }
-  const ctx = await browser.freshContext()
+  const ctx = await browser.freshContext(x.look.context)
   await likeARealBrowser(ctx, base.origin)
   let docStatus: number | null = null
   let captchaSeen = false
@@ -922,13 +982,13 @@ async function runSession(x: SessionCtx): Promise<FreshEyesSession> {
     })
   }
   attach(page)
-  await page.setViewportSize(VIEWPORT)
+  await page.setViewportSize(x.look.viewport)
   const switchTo = async (p: Page) => {
     windows.push(page)
     page = p
     attach(p)
     watcher = watch(p, base.origin, x.apiHosts)
-    await p.setViewportSize(VIEWPORT).catch(() => {})
+    await p.setViewportSize(x.look.viewport).catch(() => {})
   }
   const actions: FreshAction[] = []
   const history: string[] = []
@@ -1002,7 +1062,7 @@ async function runSession(x: SessionCtx): Promise<FreshEyesSession> {
       const snapshot = redact(await screenForModel(page), identity)
       const tAsk = performance.now()
       const answer = await x.ask(
-        freshEyesPrompt({ goal: opts.goal, snapshot, done: session.steps.slice(1).map((s) => s.action), step: n, maxSteps: x.maxSteps, hasAccount: !!identity }),
+        freshEyesPrompt({ goal: opts.goal, snapshot, done: session.steps.slice(1).map((s) => s.action), step: n, maxSteps: x.maxSteps, hasAccount: !!identity, persona: opts.persona?.brief }),
         join(x.dir, 'ask', `s${index}-${String(n).padStart(2, '0')}`),
       )
       const modelMs = since(tAsk)
@@ -1212,11 +1272,11 @@ export function isMeasuredStall(reason: StallReason): boolean {
 }
 
 /** Replay a candidate's steps from a fresh, signed-out page, no model, and look for the same fact. */
-async function replayCandidate(browser: BrowserSession, base: URL, c: Candidate, identity: Identity | null): Promise<boolean> {
-  const ctx = await browser.freshContext()
+async function replayCandidate(browser: BrowserSession, base: URL, c: Candidate, identity: Identity | null, look: ReturnType<typeof personaBrowser>): Promise<boolean> {
+  const ctx = await browser.freshContext(look.context)
   await likeARealBrowser(ctx, base.origin)
   const page = await ctx.newPage()
-  await page.setViewportSize(VIEWPORT)
+  await page.setViewportSize(look.viewport)
   const watcher = watch(page, base.origin, [])
   let docStatus: number | null = null
   let captchaSeen = false

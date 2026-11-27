@@ -54,9 +54,9 @@ function writeLastSeen(date: string) {
 }
 
 const TONE_BADGE: Record<ChangelogHighlight['tone'], string> = {
-  feature:  CHIP_TONE.brandSubtle,
-  fix:      CHIP_TONE.okSubtle,
-  breaking: CHIP_TONE.dangerSubtle,
+  feature:  CHIP_TONE.brand,
+  fix:      CHIP_TONE.ok,
+  breaking: CHIP_TONE.danger,
   note:     CHIP_TONE.neutral,
 }
 

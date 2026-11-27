@@ -70,7 +70,9 @@ const DesignPage = lazy(() => import('./pages/DesignPage').then(m => ({ default:
 const TeamPage = lazy(() => import('./pages/TeamPage').then(m => ({ default: m.TeamPage })))
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
 const UxRunsPage = lazy(() => import('./pages/UxRunsPage').then(m => ({ default: m.UxRunsPage })))
+const TimelinePage = lazy(() => import('./pages/TimelinePage').then(m => ({ default: m.TimelinePage })))
 const FirstUserTestPage = lazy(() => import('./pages/FirstUserTestPage').then(m => ({ default: m.FirstUserTestPage })))
+const PersonasPage = lazy(() => import('./pages/PersonasPage').then(m => ({ default: m.PersonasPage })))
 const JourneysPage = lazy(() => import('./pages/JourneysPage').then(m => ({ default: m.JourneysPage })))
 const AppsPage = lazy(() => import('./pages/AppsPage').then(m => ({ default: m.AppsPage })))
 const PromptLabPage = lazy(() => import('./pages/PromptLabPage').then(m => ({ default: m.PromptLabPage })))
@@ -423,7 +425,9 @@ export function App() {
                   <Route path="/credits" element={<CreditsPage />} />
                   <Route path="/design" element={<DesignPage />} />
                   <Route path="/ux-runs" element={<UxRunsPage />} />
+                  <Route path="/timeline" element={<TimelinePage />} />
                   <Route path="/first-user-test" element={<FirstUserTestPage />} />
+                  <Route path="/personas" element={<PersonasPage />} />
                   <Route path="/journeys" element={<JourneysPage />} />
                   <Route path="/portfolio" element={<AppsPage />} />
                   <Route path="/prompt-lab" element={<OperatorRoute><PromptLabPage /></OperatorRoute>} />

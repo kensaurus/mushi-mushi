@@ -15,8 +15,8 @@ import { parseUnifiedDiff, type DiffLineKind } from './designTokens'
 import type { DesignChangeState } from './useDesignChange'
 
 const LINE_CLS: Record<DiffLineKind, string> = {
-  add: 'bg-ok-muted/50 text-ok-foreground',
-  del: 'bg-danger-muted/50 text-danger-foreground',
+  add: 'bg-ok-muted/50 text-ok-foreground', // mushi-mushi-allowlist: full-width diff line wash, not a chip
+  del: 'bg-danger-muted/50 text-danger-foreground', // mushi-mushi-allowlist: full-width diff line wash, not a chip
   hunk: 'text-info-foreground',
   meta: 'text-fg-faint',
   ctx: 'text-fg-secondary',
@@ -61,8 +61,8 @@ export function FileDiffs({ files }: { files: DesignFileChange[] }) {
         <div key={f.path} className="flex flex-col gap-1">
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <span className="font-mono text-fg">{f.path}</span>
-            <Badge tone="okSubtle">+{f.additions}</Badge>
-            <Badge tone="dangerSubtle">−{f.deletions}</Badge>
+            <Badge tone="ok">+{f.additions}</Badge>
+            <Badge tone="danger">−{f.deletions}</Badge>
           </div>
           <UnifiedDiff diff={f.diff} />
         </div>

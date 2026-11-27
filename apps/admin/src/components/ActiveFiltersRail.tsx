@@ -38,11 +38,11 @@ interface ActiveFiltersRailProps {
 
 const TONE_CLASS: Record<NonNullable<ActiveFilter['tone']>, string> = {
   neutral: CHIP_TONE.neutral,
-  brand:   CHIP_TONE.brandSubtle,
-  ok:      CHIP_TONE.okSubtle,
-  warn:    CHIP_TONE.warnSubtle,
-  danger:  CHIP_TONE.dangerSubtle,
-  info:    CHIP_TONE.infoSubtle,
+  brand:   CHIP_TONE.brand,
+  ok:      CHIP_TONE.ok,
+  warn:    CHIP_TONE.warn,
+  danger:  CHIP_TONE.danger,
+  info:    CHIP_TONE.info,
 }
 
 /**

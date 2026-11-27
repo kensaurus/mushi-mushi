@@ -18,6 +18,8 @@
  */
 
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { createLogger } from '@mushi-mushi/core';
@@ -39,6 +41,7 @@ import {
 import { findMushiDoc, mushiDocMarkdownUrl, searchMushiDocs } from './docs-index.js';
 import { wrapUntrustedJson, type UntrustedContentRole } from './wrap-untrusted.js';
 import { installStdoutGuard } from './stdout-guard.js';
+import { readCapturePages } from './ux-captures.js';
 import { sdkKeyNextAction, type SdkKeyFixContext } from './key-scopes.js';
 import { changedWidgetKeys, WIDGET_LAUNCHERS, WIDGET_POSITIONS, WIDGET_THEMES, widgetSettingsBody, widgetSettingsView } from './widget-settings.js';
 import { normalizeArgAliases, snakeAliasOf } from './arg-aliases.js';
@@ -1577,6 +1580,80 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   );
 
+  // --- Plan 025 P4-P6 (ADR 0074): Security proof, release kit, store media -----
+
+  server.registerTool(
+    'get_security_proof',
+    {
+      title: titleOf('get_security_proof'),
+      description: descOf('get_security_proof'),
+      annotations: annotationsFor('get_security_proof'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+        releaseId: z.string().uuid().optional().describe('Release UUID; its pinned commit is the one proven'),
+        commitSha: z.string().regex(/^[0-9a-fA-F]{7,40}$/).optional().describe('A commit to prove instead of a release'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      const q = new URLSearchParams();
+      if (args.releaseId) q.set('release', args.releaseId);
+      if (args.commitSha) q.set('commit', args.commitSha);
+      const qs = q.toString();
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/security-proof${qs ? `?${qs}` : ''}`));
+    },
+  );
+
+  server.registerTool(
+    'export_release_kit',
+    {
+      title: titleOf('export_release_kit'),
+      description: descOf('export_release_kit'),
+      annotations: annotationsFor('export_release_kit'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+        releaseId: z.string().uuid().describe('Release UUID (list releases in the console or with get_release_calendar)'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/releases/${encodeURIComponent(args.releaseId)}/kit/export`, { method: 'POST', body: '{}' }));
+    },
+  );
+
+  server.registerTool(
+    'request_store_media_upload',
+    {
+      title: titleOf('request_store_media_upload'),
+      description: descOf('request_store_media_upload'),
+      annotations: annotationsFor('request_store_media_upload'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+        releaseId: z.string().uuid().describe('Release UUID whose kit holds the assets'),
+        connectorId: z.string().uuid().describe('App Store Connect or Google Play connector bound to the app (list_connectors)'),
+        action: z.enum(['upload_screenshots', 'upload_app_preview', 'upload_listing_images', 'set_promo_video']),
+        locale: z.string().min(2).max(20).describe('Store language, e.g. en-US'),
+        displayType: z.string().max(40).optional().describe('upload_screenshots: e.g. APP_IPHONE_67, APP_IPAD_PRO_3GEN_129'),
+        previewType: z.string().max(40).optional().describe('upload_app_preview: e.g. IPHONE_67'),
+        imageType: z.string().max(40).optional().describe('upload_listing_images: phoneScreenshots, featureGraphic, icon, …'),
+        replace: z.boolean().optional().describe('upload_listing_images: clear that image type for the language first'),
+        youtubeUrl: z.string().url().max(200).optional().describe('set_promo_video: the published YouTube video'),
+        previewFrameTimeCode: z.string().regex(/^\d{2}:\d{2}:\d{2}:\d{2}$/).optional().describe('upload_app_preview: poster frame, e.g. 00:00:05:00'),
+        assetIds: z.array(z.string().uuid()).max(10).optional().describe('Kit asset ids to upload'),
+        reason: z.string().max(500).optional().describe('Why, shown to the approver'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      const body = {
+        connectorId: args.connectorId, action: args.action, locale: args.locale, displayType: args.displayType,
+        previewType: args.previewType, imageType: args.imageType, replace: args.replace, youtubeUrl: args.youtubeUrl,
+        previewFrameTimeCode: args.previewFrameTimeCode, assetIds: args.assetIds ?? [], reason: args.reason,
+      };
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/releases/${encodeURIComponent(args.releaseId)}/kit/store-upload`, { method: 'POST', body: JSON.stringify(body) }));
+    },
+  );
+
   server.registerTool(
     'get_store_status',
     {
@@ -1713,6 +1790,81 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       const pid = await resolveProjectId(args.projectId);
       const qs = new URLSearchParams({ project_id: pid, days: String(args.days ?? 30) });
       return jsonText(await apiCall(`/v1/admin/code-health?${qs}`));
+    },
+  );
+
+  // The iteration timeline and UX runs (Plan 025 P1/P7, ADR 0072). No model call in any of these.
+  server.registerTool(
+    'get_timeline',
+    {
+      title: titleOf('get_timeline'),
+      description: descOf('get_timeline'),
+      annotations: annotationsFor('get_timeline'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/timeline?compact=1`));
+    },
+  );
+
+  server.registerTool(
+    'get_surface_history',
+    {
+      title: titleOf('get_surface_history'),
+      description: descOf('get_surface_history'),
+      annotations: annotationsFor('get_surface_history'),
+      inputSchema: z.object({
+        surfaceKey: z
+          .string()
+          .regex(/^[a-z0-9][a-z0-9-]{0,119}$/)
+          .describe("A screen key from get_timeline's surfaces[].key"),
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/timeline/surfaces/${encodeURIComponent(args.surfaceKey)}`));
+    },
+  );
+
+  server.registerTool(
+    'get_ux_run',
+    {
+      title: titleOf('get_ux_run'),
+      description: descOf('get_ux_run'),
+      annotations: annotationsFor('get_ux_run'),
+      inputSchema: z.object({
+        runId: z
+          .string()
+          .regex(/^[0-9]{8}-[0-9]{6}-[a-z0-9]{4}$/)
+          .describe('Local run id, e.g. 20261127-091500-ab3d (get_timeline points[].runs)'),
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/ux-runs/${encodeURIComponent(args.runId)}`));
+    },
+  );
+
+  server.registerTool(
+    'start_ux_run',
+    {
+      title: titleOf('start_ux_run'),
+      description: descOf('start_ux_run'),
+      annotations: annotationsFor('start_ux_run'),
+      inputSchema: z.object({
+        kind: z.enum(['scorecard', 'loop']).optional().describe('scorecard (score every page, default) or loop (a coding agent improves screens)'),
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      const qs = new URLSearchParams({ kind: args.kind ?? 'scorecard' });
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/timeline/run-plan?${qs}`));
     },
   );
 
@@ -4382,6 +4534,142 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         body: JSON.stringify(checked.body),
       });
       return jsonText({ ...data, next: journeyRecordingNextOf(checked.body.hours) });
+    },
+  );
+
+  // ── Native UX captures and personas (ADR 0073) ────────────────────
+  const UX_PLATFORMS = ['ios', 'android', 'flutter', 'react_native', 'capacitor', 'web', 'other'] as const;
+  const UX_SOURCES = ['maestro', 'adb', 'simctl', 'sdk', 'playwright', 'other'] as const;
+  server.registerTool(
+    'upload_ux_captures',
+    {
+      title: titleOf('upload_ux_captures'),
+      description: descOf('upload_ux_captures'),
+      annotations: annotationsFor('upload_ux_captures'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+        platform: z.enum(UX_PLATFORMS).describe('What the screens are from'),
+        device: z.string().max(120).optional().describe('The device or simulator, e.g. "Pixel 8 (API 35)"'),
+        source: z.enum(UX_SOURCES).optional().describe('The driver that captured them'),
+        app: z.string().max(120).optional().describe('What to call the app'),
+        viewport: z.string().optional().describe('WIDTHxHEIGHT, e.g. 390x844 (default: the first screen)'),
+        maxCostUsd: z.number().min(0.05).max(20).optional().describe('The most the run may spend on server scoring'),
+        pages: z
+          .array(z.object({ facts: z.record(z.string(), z.unknown()), shots: z.array(z.enum(['early', 'settled'])).min(1).max(2) }))
+          .max(60)
+          .optional()
+          .describe('The screens: { facts, shots }. Omit when dir is given.'),
+        dir: z.string().optional().describe('stdio only: a folder with pages/<screen>/settled.png (+ early.png, facts.json); uploads the PNGs too'),
+        score: z.boolean().optional().describe('With dir: score each screen, group the causes and close the run'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      if (!args.dir && !args.pages?.length) throw new MushiApiError(400, 'INVALID_PARAMS', 'Give pages, or dir on this stdio server.');
+      const local = args.dir ? readCapturePages(args.dir) : null;
+      const pages = local ? local.map((p) => ({ facts: p.facts, shots: p.shots })) : (args.pages ?? []);
+      const created = await apiCall<{ runId: string; reservedUsd: number | null; uploads: Array<{ page: string; name: string; signedUrl: string }>; next: Record<string, string> }>('/v1/ux/captures', {
+        method: 'POST',
+        body: JSON.stringify({
+          projectId: pid,
+          platform: args.platform,
+          ...(args.device ? { device: args.device } : {}),
+          ...(args.source ? { source: args.source } : {}),
+          ...(args.app ? { app: args.app } : {}),
+          ...(args.viewport ? { viewport: args.viewport } : {}),
+          ...(args.maxCostUsd !== undefined ? { maxCostUsd: args.maxCostUsd } : {}),
+          pages,
+        }),
+      });
+      if (!local) return jsonText(created);
+      // stdio with dir: PUT each PNG to its signed URL, then optionally score, group and close.
+      const byKey = new Map(local.map((p) => [p.facts.key, p]));
+      const names = new Map<string, string[]>();
+      for (const u of created.uploads ?? []) {
+        const p = byKey.get(u.page);
+        if (!p) continue;
+        const shot = u.name.endsWith('/early.png') ? 'early' : 'settled';
+        const put = await doFetch(u.signedUrl, { method: 'PUT', headers: { 'Content-Type': 'image/png' }, body: new Uint8Array(readFileSync(join(p.folder, `${shot}.png`))) });
+        if (!put.ok) throw new MushiApiError(502, 'UPLOAD_FAILED', `Screenshot ${u.name} not uploaded (storage answered ${put.status}). The run is ${created.runId}.`);
+        names.set(u.page, [...(names.get(u.page) ?? []), u.name]);
+      }
+      if (!args.score) return jsonText({ ...created, uploaded: [...names.values()].flat().length });
+      const base = `/v1/admin/projects/${encodeURIComponent(pid)}/ux-scorecard/${created.runId}`;
+      const scores = new Map<string, unknown>();
+      const errors: string[] = [];
+      for (const p of local) {
+        try {
+          const r = await apiCall<{ score?: { overall?: number } }>(`${base}/score`, { method: 'POST', body: JSON.stringify({ facts: p.facts, shots: names.get(p.facts.key) ?? [], app: args.app ?? 'this app' }) });
+          if (r.score) scores.set(p.facts.key, r.score);
+        } catch (err) {
+          errors.push(`${p.facts.key}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+      let causes: unknown[] = [];
+      try {
+        causes = (await apiCall<{ causes?: unknown[] }>(`${base}/group`, { method: 'POST', body: '{}' })).causes ?? [];
+      } catch (err) {
+        errors.push(`grouping: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      const vp = args.viewport ?? `${local[0]!.facts.viewport.width}x${local[0]!.facts.viewport.height}`;
+      await apiCall(base, {
+        method: 'PUT',
+        body: JSON.stringify({
+          status: 'done',
+          viewport: vp,
+          scored_by: 'server',
+          started_at: new Date().toISOString(),
+          finished_at: new Date().toISOString(),
+          pages: local.map((p) => ({ facts: p.facts, score: scores.get(p.facts.key) ?? null, shots: names.get(p.facts.key) ?? [], ...(scores.has(p.facts.key) ? {} : { error: 'Not scored.' }) })),
+          causes,
+        }),
+      });
+      const overall = [...scores.values()].map((s) => (s as { overall?: number }).overall ?? 0);
+      return jsonText({ runId: created.runId, reservedUsd: created.reservedUsd, scored: scores.size, pages: local.length, mean: overall.length ? Math.round((overall.reduce((a, b) => a + b, 0) / overall.length) * 10) / 10 : null, causes: causes.length, errors, next: created.next });
+    },
+  );
+
+  server.registerTool(
+    'list_personas',
+    {
+      title: titleOf('list_personas'),
+      description: descOf('list_personas'),
+      annotations: annotationsFor('list_personas'),
+      inputSchema: PROJECT_ID_INPUT,
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/personas`));
+    },
+  );
+
+  server.registerTool(
+    'start_fresh_eyes',
+    {
+      title: titleOf('start_fresh_eyes'),
+      description: descOf('start_fresh_eyes'),
+      annotations: annotationsFor('start_fresh_eyes'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+        personaId: z.string().optional().describe('A persona id from list_personas'),
+        url: z.string().max(500).optional().describe("The start page (default: the app's known address)"),
+        goal: z.string().max(300).optional().describe("What the visitor came to do (default: the persona's goal, else the last one)"),
+        sessions: z.number().int().min(1).max(5).optional().describe('Visitors, 1-5 (default 3)'),
+        successText: z.string().max(120).optional().describe('Words on screen that mean the goal was reached'),
+        dryRun: z.boolean().optional().describe('Look around only and file nothing'),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      const body = {
+        ...(args.personaId ? { personaId: args.personaId } : {}),
+        ...(args.url ? { url: args.url } : {}),
+        ...(args.goal ? { goal: args.goal } : {}),
+        ...(args.sessions !== undefined ? { sessions: args.sessions } : {}),
+        ...(args.successText ? { successText: args.successText } : {}),
+        ...(args.dryRun !== undefined ? { dryRun: args.dryRun } : {}),
+      };
+      return jsonText(await apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/fresh-eyes`, { method: 'POST', body: JSON.stringify(body) }));
     },
   );
 

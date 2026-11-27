@@ -44,9 +44,9 @@ function checksUrl(prUrl: string): string {
 }
 
 const TONE_CLASS: Record<CiTone, string> = {
-  ok: CHIP_TONE.okSubtle,
-  warn: CHIP_TONE.warnSubtle,
-  danger: CHIP_TONE.dangerSubtle,
+  ok: CHIP_TONE.ok,
+  warn: CHIP_TONE.warn,
+  danger: CHIP_TONE.danger,
   neutral: CHIP_TONE.neutral,
 }
 

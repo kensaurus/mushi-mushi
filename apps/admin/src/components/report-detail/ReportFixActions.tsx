@@ -87,7 +87,7 @@ export function ReportFixActions({ fixId, onChanged, children }: Props) {
         <p className="mt-1 flex flex-wrap items-center gap-1 text-2xs text-fg-muted" data-testid="report-fix-failing-checks">
           <span>Failing:</span>
           {item.failingChecks.slice(0, 8).map((c) => (
-            <Badge key={c} tone="dangerSubtle">{c}</Badge>
+            <Badge key={c} tone="danger">{c}</Badge>
           ))}
         </p>
       )}

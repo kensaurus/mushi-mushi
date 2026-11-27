@@ -235,9 +235,10 @@ export interface HeartbeatLane {
 /**
  * Claim kinds beyond its lanes' modes a daemon says it can run (ADR 0053
  * amendment 2026-10-28): `fresh_eyes`, a first-time user test the console
- * queued. A daemon that predates the list sends none and is offered none.
+ * queued; `fresh_eyes_persona`, it forwards the persona such a test plays
+ * (ADR 0073). A daemon that predates the list sends none and is offered none.
  */
-export const HOST_TAKES = ['fresh_eyes'] as const
+export const HOST_TAKES = ['fresh_eyes', 'fresh_eyes_persona'] as const
 export type HostTake = (typeof HOST_TAKES)[number]
 /** What the daemon can do when the console asks (ADR 0048 amendment 2026-10-28): a closed list, stored in the host's status as `can`. */
 export const HOST_CAN = ['cursor_login'] as const

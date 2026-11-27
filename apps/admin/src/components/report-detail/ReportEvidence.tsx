@@ -26,10 +26,10 @@ import { apiFetch } from '../../lib/supabase'
 import { CHIP_TONE } from '../../lib/chipTone'
 
 function statusBadge(status: number): string {
-  if (status >= 500) return CHIP_TONE.dangerSubtle
-  if (status >= 400) return CHIP_TONE.warnSubtle
-  if (status >= 300) return CHIP_TONE.infoSubtle
-  if (status >= 200) return CHIP_TONE.okSubtle
+  if (status >= 500) return CHIP_TONE.danger
+  if (status >= 400) return CHIP_TONE.warn
+  if (status >= 300) return CHIP_TONE.info
+  if (status >= 200) return CHIP_TONE.ok
   return 'bg-surface-overlay text-fg-muted border border-edge-subtle'
 }
 
@@ -372,7 +372,7 @@ export function ConsoleLogs({ logs }: { logs: ReportDetail['console_logs'] }) {
             </span>
             {/* Phase 4c: row-level provenance badge — "SDK" or "Sentry" */}
             <span
-              className="mt-0.5 shrink-0 inline-flex items-center rounded-sm px-1 py-px text-3xs font-medium bg-surface-overlay text-fg-faint"
+              className={`mt-0.5 shrink-0 inline-flex items-center rounded-sm px-1 py-px text-3xs font-medium ${CHIP_TONE.neutral}`}
               title={entry.correlationId ? `Captured by Mushi Mushi SDK (correlationId: ${entry.correlationId})` : 'Captured by Mushi Mushi SDK — console-wrap instrumentation'}
             >
               SDK
@@ -464,7 +464,7 @@ function BackendSpanCorrelation({
             key={span.id}
             className="flex items-center gap-1.5 rounded-sm border border-edge-subtle/40 bg-editorial-paper-wash px-2 py-1"
           >
-            <span className="shrink-0 rounded-sm px-1 py-px font-mono text-3xs font-semibold bg-accent-muted/55 text-accent-foreground">
+            <span className={`shrink-0 rounded-sm px-1 py-px font-mono text-3xs font-semibold ${CHIP_TONE.accent}`}>
               backend
             </span>
             <code
@@ -552,7 +552,7 @@ export function NetworkLogs({
               </span>
               {/* Phase 4c: capture method provenance badge ("fetch" | "xhr" | "SDK") */}
               <span
-                className="shrink-0 inline-flex items-center rounded-sm px-1 py-px text-3xs font-medium bg-surface-overlay text-fg-faint"
+                className={`shrink-0 inline-flex items-center rounded-sm px-1 py-px text-3xs font-medium ${CHIP_TONE.neutral}`}
                 title={
                   captureMethod === 'xhr'
                     ? 'Captured via XMLHttpRequest patch'
@@ -565,7 +565,7 @@ export function NetworkLogs({
               </span>
               {hasTrace && (
                 <span
-                  className="shrink-0 rounded-sm px-1 py-px font-mono text-3xs font-semibold bg-accent-muted/55 text-accent-foreground"
+                  className={`shrink-0 rounded-sm px-1 py-px font-mono text-3xs font-semibold ${CHIP_TONE.accent}`}
                   title={`W3C trace: ${traceId}`}
                 >
                   {isExpanded ? '▲ trace' : '▼ trace'}

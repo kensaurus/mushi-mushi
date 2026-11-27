@@ -4,7 +4,8 @@
  *
  *   - a path to a SKILL.md, or to a skill folder (SKILL.md + references/);
  *   - a skill name, read from a local checkout of the skills repo
- *     (MUSHI_UX_SKILLS_DIR) or fetched from GitHub (default kensaurus/skills).
+ *     (MUSHI_UX_SKILLS_DIR) or fetched from the skills package
+ *     (MUSHI_UX_SKILLS_REPO; default below).
  *
  * The whole folder is copied next to the prompt (.mushi-ux/skill/), so a
  * skill's references (scorecards, checklists) are there for the agent to
@@ -19,8 +20,10 @@ import { MAX_SKILL_CHARS } from './packet.js'
  * The published npm package (served by jsDelivr): pinned to one version per
  * run, no GitHub API limit (60 an hour unauthenticated). `owner/repo[@ref]`
  * still reads a GitHub repo, e.g. for an unreleased branch.
+ * MUSHI_UX_SKILLS_REPO overrides it (same forms); unset, the built-in package.
  */
-export const DEFAULT_SKILLS_REPO = 'npm:@kensaurus/skills'
+const BUILTIN_SKILLS_REPO = 'npm:@kensaurus/skills'
+export const DEFAULT_SKILLS_REPO = process.env.MUSHI_UX_SKILLS_REPO?.trim() || BUILTIN_SKILLS_REPO
 const NPM_RE = /^npm:((?:@[\w.-]+\/)?[\w.-]+)(?:@([\w.+-]+))?$/
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,80}$/
 const REPO_RE = /^([\w.-]+)\/([\w.-]+)(?:@([\w./-]+))?$/
@@ -45,7 +48,7 @@ export interface SkillListItem {
 }
 
 export interface SkillOptions {
-  /** npm:@scope/pkg[@version] (default npm:@kensaurus/skills, latest) or owner/repo[@ref] on GitHub. */
+  /** npm:@scope/pkg[@version] (default DEFAULT_SKILLS_REPO, latest) or owner/repo[@ref] on GitHub. */
   repo?: string
   /** A local checkout of the skills repo; wins over GitHub. Default: MUSHI_UX_SKILLS_DIR. */
   localDir?: string | null

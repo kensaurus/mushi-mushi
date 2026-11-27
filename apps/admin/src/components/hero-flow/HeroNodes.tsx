@@ -31,6 +31,7 @@ import {
 } from './heroFlow.data'
 import { useHeroFlow, type HeroTileId } from './HeroFlowContext'
 import { chipLinkForText, parseDecideMetric } from './heroMetricDisplay'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 // ─── Semantic tokens ───────────────────────────────────────────────────
 
@@ -268,7 +269,7 @@ function NodeShell({
 
       <div className="relative z-1 flex min-h-0 flex-1 flex-col">
         <header className="flex items-center gap-1.5 mb-1.5 shrink-0">
-          <span className="inline-flex items-center gap-1 rounded-sm bg-surface-overlay px-1.5 py-px text-3xs font-semibold text-fg-secondary">
+          <span className={`inline-flex items-center gap-1 rounded-sm ${CHIP_TONE.neutral} px-1.5 py-px text-3xs font-semibold`}>
             <span className="inline-flex shrink-0" style={{ color: accentHex }} aria-hidden>
               <KindIcon size={11} />
             </span>

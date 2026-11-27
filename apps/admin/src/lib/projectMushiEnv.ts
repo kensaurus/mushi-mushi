@@ -1,12 +1,13 @@
 /**
  * FILE: apps/admin/src/lib/projectMushiEnv.ts
- * PURPOSE: Map a project's slug to the env-var names its real codebase uses.
- *          Diagnostics and copy snippets previously hard-coded
- *          NEXT_PUBLIC_MUSHI_* everywhere, which misled Expo (yen-yen),
- *          Vite admin dogfood (mushi-mushi), and Vite SPA (solo-boss-cloud)
- *          integrators during setup. A detected framework (`next` / `nuxt` /
- *          `vite`) overrides that slug guess so a Next or Nuxt repo is not
- *          handed bare `MUSHI_*` names its bundler never inlines.
+ * PURPOSE: The env-var names an app's codebase uses for Mushi, from its
+ *          detected framework (`next` / `nuxt` / `vite` / `expo` …), never
+ *          from its name. Plan 025 P0 / ADR 0072: no product code path
+ *          special-cases a tenant. Without a detected framework the names are
+ *          the Next.js public ones (`NEXT_PUBLIC_MUSHI_*`), never bare
+ *          `MUSHI_*` names a bundler drops. The operator's own console (the
+ *          project in VITE_MUSHI_SELF_PROJECT_ID, config) gets its
+ *          `VITE_MUSHI_SELF_*` names.
  */
 
 interface ProjectMushiCiVar {
@@ -37,79 +38,38 @@ const DEFAULT_WEB: ProjectMushiEnvVars = {
   stackLabel: 'Next.js / web',
 }
 
-function normalizeSlug(slug: string): string {
-  return slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, '')
+const SELF_ENV: ProjectMushiEnvVars = {
+  projectIdVar: 'VITE_MUSHI_SELF_PROJECT_ID',
+  apiKeyVar: 'VITE_MUSHI_SELF_API_KEY',
+  endpointVar: 'VITE_MUSHI_SELF_API_ENDPOINT',
+  envFileHint: 'apps/admin/.env.local',
+  stackLabel: 'Mushi Mushi admin console (Vite dogfood)',
 }
 
-/** Normalise a project slug for comparisons (exported for UI call sites). */
-function normalizeProjectSlug(slug: string | null | undefined): string {
-  return normalizeSlug(slug ?? '')
+/** The project this console reports its own bugs to (VITE_MUSHI_SELF_PROJECT_ID), when configured. */
+export function isMushiSelfProject(projectId: string | null | undefined, selfProjectId: string | undefined = import.meta.env?.VITE_MUSHI_SELF_PROJECT_ID): boolean {
+  return Boolean(projectId && selfProjectId && projectId === selfProjectId)
 }
 
-/** True for Expo reporter stacks that use EXPO_PUBLIC_MUSHI_* (currently yen-yen). */
-export function isExpoReporterProject(slug: string | null | undefined): boolean {
-  const s = normalizeProjectSlug(slug)
-  return s === 'yen-yen' || s === 'yenyen'
-}
-
-/** Default GitHub repo for Expo reporter CI vars when slug maps to a known consumer. */
-export function expoReporterGithubRepo(slug: string | null | undefined): string | null {
-  return isExpoReporterProject(slug) ? 'kensaurus/yen-yen' : null
+/** True when the names are an Expo / React Native app's (`EXPO_PUBLIC_*`). */
+export function isExpoEnv(env: Pick<ProjectMushiEnvVars, 'projectIdVar'>): boolean {
+  return env.projectIdVar.startsWith('EXPO_PUBLIC_')
 }
 
 /**
- * Resolve env-var naming for a project slug.
- * Pass `framework` when a connected repo (or the CLI detector) named the
- * bundler. `next` / `nextjs` → `NEXT_PUBLIC_`, `nuxt` → `NUXT_PUBLIC_`,
- * `vue` / `svelte` / `react` / `vite` → `VITE_`, `expo` → `EXPO_PUBLIC_`.
- * An unknown framework keeps the slug table, whose default is
- * `NEXT_PUBLIC_` — never the bare `MUSHI_*` names a Next bundle drops.
+ * Env-var naming for a project. Pass `framework` when a connected repo (or
+ * the CLI detector) named the bundler: `next` / `nextjs` → `NEXT_PUBLIC_`,
+ * `nuxt` → `NUXT_PUBLIC_`, `vue` / `svelte` / `react` / `vite` → `VITE_`,
+ * `expo` / `react-native` → `EXPO_PUBLIC_`. Unknown or none → `NEXT_PUBLIC_`.
+ * `isSelf`: the operator's own console project (isMushiSelfProject).
  */
-export function mushiEnvVarsForProjectSlug(
-  slug: string | null | undefined,
-  framework?: string | null,
-): ProjectMushiEnvVars {
-  if (framework) {
-    const kind = bundlerKindForFramework(framework)
-    // `none` is "no bundler", not "Next". Keep the slug table so an
+export function mushiEnvVarsForProject(opts: { framework?: string | null; isSelf?: boolean } = {}): ProjectMushiEnvVars {
+  if (opts.isSelf) return SELF_ENV
+  if (opts.framework) {
+    const kind = bundlerKindForFramework(opts.framework)
+    // `none` is "no bundler", not "Next": keep the NEXT_PUBLIC_ default so an
     // unrecognised id cannot fall through to unprefixed MUSHI_*.
     if (kind !== 'none') return mushiEnvVarsForBundler(kind)
-  }
-  const s = normalizeProjectSlug(slug)
-  if (s === 'mushi-mushi' || s === 'mushimushi') {
-    return {
-      projectIdVar: 'VITE_MUSHI_SELF_PROJECT_ID',
-      apiKeyVar: 'VITE_MUSHI_SELF_API_KEY',
-      endpointVar: 'VITE_MUSHI_SELF_API_ENDPOINT',
-      envFileHint: 'apps/admin/.env.local',
-      stackLabel: 'Mushi Mushi admin console (Vite dogfood)',
-    }
-  }
-  if (s === 'yen-yen' || s === 'yenyen') {
-    return {
-      projectIdVar: 'EXPO_PUBLIC_MUSHI_PROJECT_ID',
-      apiKeyVar: 'EXPO_PUBLIC_MUSHI_API_KEY',
-      endpointVar: 'EXPO_PUBLIC_MUSHI_API_ENDPOINT',
-      envFileHint: 'apps/mobile/.env.local',
-      stackLabel: 'Expo / React Native',
-      ciVars: {
-        projectId: { name: 'EXPO_PUBLIC_MUSHI_PROJECT_ID', ghKind: 'variable' },
-        apiKey: { name: 'EXPO_PUBLIC_MUSHI_API_KEY', ghKind: 'secret' },
-        endpoint: { name: 'EXPO_PUBLIC_MUSHI_API_ENDPOINT', ghKind: 'variable' },
-      },
-    }
-  }
-  if (s === 'solo-boss-cloud' || s === 'solobosscloud') {
-    return {
-      projectIdVar: 'VITE_MUSHI_PROJECT_ID',
-      apiKeyVar: 'VITE_MUSHI_API_KEY',
-      endpointVar: 'VITE_MUSHI_ENDPOINT',
-      envFileHint: '.env.local',
-      stackLabel: 'Vite SPA (solo-boss-cloud-documentation)',
-    }
-  }
-  if (s === 'glot-it' || s === 'glotit') {
-    return DEFAULT_WEB
   }
   return DEFAULT_WEB
 }
@@ -197,11 +157,7 @@ export function bundlerKindForFramework(framework: string | null | undefined): M
   }
 }
 
-/**
- * Resolve env-var naming from a detected bundler kind. Prefer this over
- * `mushiEnvVarsForProjectSlug` whenever a repo `package.json` has been
- * inspected — it is accurate for *any* repo, not just the hardcoded few.
- */
+/** Env-var naming from a detected bundler kind (mushiEnvVarsForProject calls it). */
 export function mushiEnvVarsForBundler(kind: MushiBundlerKind): ProjectMushiEnvVars {
   const info = BUNDLER_PREFIX[kind]
   if (kind === 'none') {
@@ -218,7 +174,17 @@ export function mushiEnvVarsForBundler(kind: MushiBundlerKind): ProjectMushiEnvV
     projectIdVar: `${info.prefix}MUSHI_PROJECT_ID`,
     apiKeyVar: `${info.prefix}MUSHI_API_KEY`,
     endpointVar: `${info.prefix}MUSHI_API_ENDPOINT`,
-    envFileHint: kind === 'expo' ? 'apps/mobile/.env.local' : '.env.local',
-    stackLabel: info.bundlerLabel,
+    envFileHint: '.env.local',
+    stackLabel: kind === 'expo' ? 'Expo / React Native' : info.bundlerLabel,
+    // Store builds read public env at build time: CI must carry the same names.
+    ...(kind === 'expo'
+      ? {
+          ciVars: {
+            projectId: { name: 'EXPO_PUBLIC_MUSHI_PROJECT_ID', ghKind: 'variable' as const },
+            apiKey: { name: 'EXPO_PUBLIC_MUSHI_API_KEY', ghKind: 'secret' as const },
+            endpoint: { name: 'EXPO_PUBLIC_MUSHI_API_ENDPOINT', ghKind: 'variable' as const },
+          },
+        }
+      : {}),
   }
 }

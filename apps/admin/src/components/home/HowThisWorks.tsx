@@ -8,6 +8,7 @@
  */
 
 import { DisclosurePanel } from '../ui'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 const STEPS = [
   { title: 'A bug comes in', body: 'A user reports it from your app, or Mushi Mushi spots it on your live site or in your monitoring.' },
@@ -24,7 +25,7 @@ export function HowThisWorks({ defaultOpen }: { defaultOpen: boolean }) {
           {STEPS.map((s, i) => (
             <li key={s.title} className="min-w-0">
               <p className="text-xs font-semibold text-fg">
-                <span className="mr-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-brand-subtle text-2xs text-brand-foreground">{i + 1}</span>
+                <span className={`mr-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full ${CHIP_TONE.brand} text-2xs`}>{i + 1}</span>
                 {s.title}
               </p>
               <p className="mt-1 text-xs leading-relaxed text-fg-muted">{s.body}</p>

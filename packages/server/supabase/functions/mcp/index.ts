@@ -2254,6 +2254,8 @@ async function handleToolsCall(
  * packages/mcp/scripts/check-catalog-sync.mjs.
  */
 const UNTRUSTED_TOOLS: ReadonlySet<string> = new Set([
+  // Scanner findings and AI-review text come from the app's own CI (ADR 0074).
+  'get_security_proof',
   'get_recent_reports',
   'get_report_detail',
   'get_report_timeline',
@@ -2295,6 +2297,9 @@ const UNTRUSTED_TOOLS: ReadonlySet<string> = new Set([
   'get_release_calendar',
   'get_code_health',
   'get_ci_overview',
+  'get_timeline',
+  'get_surface_history',
+  'get_ux_run',
   'get_ci_costs',
   'get_ci_bill',
   'get_worker_status',

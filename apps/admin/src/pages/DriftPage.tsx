@@ -53,7 +53,7 @@ import { Drawer } from '../components/Drawer'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { PageHero } from '../components/PageHero'
 import type { PageAction } from '../components/PageActionBar'
-import { CHIP_TONE, runStatusChipTone, HEADER_BADGE_TONE } from '../lib/chipTone'
+import { CHIP_TONE, runStatusChipTone } from '../lib/chipTone'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -353,14 +353,14 @@ export function DriftPage() {
         <Badge
           className={
             bannerSeverity === 'ok'
-              ? CHIP_TONE.okSubtle
+              ? CHIP_TONE.ok
               : bannerSeverity === 'danger'
-                ? CHIP_TONE.dangerSubtle
+                ? CHIP_TONE.danger
                 : bannerSeverity === 'warn'
-                  ? CHIP_TONE.warnSubtle
+                  ? CHIP_TONE.warn
                   : bannerSeverity === 'brand'
-                    ? HEADER_BADGE_TONE.brand
-                    : HEADER_BADGE_TONE.neutral
+                    ? CHIP_TONE.neutral
+                    : CHIP_TONE.neutral
           }
         >
           {!stats.hasAnyProject
@@ -839,7 +839,7 @@ function FindingDetailDrawer({
       <div className="space-y-5 pb-8">
         <div className="flex flex-wrap items-center gap-2">
           {severityBadge(finding.severity)}
-          <Badge className={HEADER_BADGE_TONE.neutral}>{finding.surface}</Badge>
+          <Badge tone="neutral">{finding.surface}</Badge>
         </div>
 
         <div className="rounded-md bg-surface-overlay px-4 py-3 text-sm text-fg">{finding.message}</div>

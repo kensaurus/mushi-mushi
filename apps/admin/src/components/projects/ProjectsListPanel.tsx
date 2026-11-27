@@ -77,6 +77,7 @@ import {
   type ScopePresetId,
 } from './project-models'
 import { OpsKeyRow } from '../ops/OpsKeyRow'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 export interface ProjectsListPanelProps {
   projects: Project[]
@@ -269,7 +270,7 @@ export function ProjectsListPanel({
                       project.id,
                       project.pdca_bottleneck_label,
                     )}
-                    className="inline-flex max-w-full min-w-0 items-center gap-1 truncate rounded-sm bg-warn-muted px-2 py-0.5 text-2xs font-medium text-warn-foreground hover:opacity-90 motion-safe:transition-opacity"
+                    className={`inline-flex max-w-full min-w-0 items-center gap-1 truncate rounded-sm ${CHIP_TONE.warn} px-2 py-0.5 text-2xs font-medium hover:opacity-90 motion-safe:transition-opacity`}
                     title={`${project.pdca_bottleneck_label} — open to fix`}
                   >
                     {bottleneckHumanHeadline({
@@ -587,7 +588,7 @@ export function ProjectsListPanel({
                 <AssistantConfigCard projectId={project.id} />
               </div>
               <div className="mt-4 border-t border-edge-subtle pt-4">
-                <IdentitySecretCard projectId={project.id} projectSlug={project.slug} />
+                <IdentitySecretCard projectId={project.id} />
               </div>
             </div>
             )}

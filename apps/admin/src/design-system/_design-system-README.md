@@ -8,9 +8,29 @@ Authoritative catalog for Design System v2 primitives used in the operator conso
 |-------|--------|-------------|
 | **Primitives (DTCG)** | [`packages/brand/tokens/brand.tokens.json`](../../../../packages/brand/tokens/brand.tokens.json) → `pnpm build:brand-tokens` → [`packages/brand/src/editorial.css`](../../../../packages/brand/src/editorial.css) + `tokens.generated.ts` | Public/marketing (`--mushi-*`), docs, editorial pages |
 | **Semantic (`@theme`)** | [`apps/admin/src/index.css`](../index.css) → [`styles/theme-tokens.css`](../styles/theme-tokens.css) (+ modes / ask-mushi / components partials) — oklch color roots, spacing, type scale | Operator console Tailwind utilities (`bg-surface`, `text-fg-muted`, …) |
-| **Component recipes** | [`lib/chipTone.ts`](../lib/chipTone.ts), [`lib/tokens.ts`](../lib/tokens.ts), [`lib/motion-tokens.ts`](../lib/motion-tokens.ts) | Badges, banners, posture chips, viz runtime |
+| **Component recipes** | [`lib/chipTone.ts`](../lib/chipTone.ts), [`lib/actionIntent.ts`](../lib/actionIntent.ts), [`lib/tokens.ts`](../lib/tokens.ts), [`lib/motion-tokens.ts`](../lib/motion-tokens.ts) | Badges, banners, posture chips, action intents, viz runtime |
 
-**Rule of thumb:** never hand-roll `bg-*-muted text-*` or opacity chips (`bg-ok/15 text-ok`) — use `CHIP_TONE.*`, `statusChipTone()`, or `runStatusChipTone()`. For soft selected/pressed chips use `SELECTED_TONE` / `SELECTED_TONE_IDLE` (not `bg-brand/12 text-brand border border-brand/28`). Header PageHeaderBar severity Badge fallbacks use `HEADER_BADGE_TONE.brand` / `.neutral`. ESLint enforces muted pairings via `mushi-mushi/no-raw-semantic-on-muted` and redundant borders via `mushi-mushi/no-redundant-border-on-chip-tone`; CI also runs `scripts/audit-chip-contrast.mjs --strict` (muted + opacity). Prefer `editorial-*` utilities over raw `var(--mushi-*)` in operator TSX.
+**Rule of thumb:** never hand-roll `bg-*-muted text-*`, opacity chips (`bg-ok/15 text-ok`) or a grey `bg-surface-overlay` chip. Use a tone from `CHIP_TONE` (`ok · warn · danger · info · accent · brand · medium · neutral`) through a primitive below. Each tone is a tinted fill + its `*-foreground` ink + `inset-ring inset-ring-<tone>-edge`. The ring is inset, so chips never grow. For soft selected/pressed chips use `SELECTED_TONE` / `SELECTED_TONE_IDLE`. Prefer `editorial-*` utilities over raw `var(--mushi-*)` in operator TSX.
+
+### Chip, tag, count, banner and action primitives (2026-11-27, ADR 0071)
+
+| You need | Use | Not |
+|----------|-----|-----|
+| A label, plan tag, "Beta", "you", "Local dev" | `<Badge tone="brand">Beta</Badge>` (defaults to `neutral`; `icon` for a leading glyph) | `<span className="bg-brand-subtle text-brand px-1">` |
+| A bug severity | `<SeverityPill severity="critical" short />` → "▲ Crit" | tinted "Crit" text, colour alone |
+| A run state (queued / running / succeeded / failed) | `<StatusPill status="passed" label="Succeeded" />` (signal kit) | `Badge className={runStatusChipTone(…)}` for a run |
+| A count (sidebar, tab, "+3") | `<CountBadge count={n} tone="danger" label="3 failed fixes" />` | coloured digits |
+| A keyboard shortcut | `<Kbd>Ctrl</Kbd><Kbd>K</Kbd>` | grey text |
+| Tabs / views | `SegmentedControl`: selected = raised tile + accent edge | an accent wash on the label |
+| A banner or note | `<Callout tone="info">` (tone edge, 2px leading bar, default icon) | `<p className="bg-info-muted …">` |
+| A row or inline action | `<Btn intent="fix">Fix →</Btn>`, `intent="triage"`, `"primary"`, `"neutral"`, `"destructive"`; `btnClassName({ intent })` when it can't be a `Btn` | per-page `bg-brand text-brand-fg` pills |
+| Freshness | `FreshnessPill` | — |
+
+Intent → colour: `fix` = solid danger red (the Critical hue), `triage` = solid amber `warn-fill` with **dark** ink (white on yellow fails AA; this is the High hue), `primary` = brand, `neutral` = ghost, `destructive` = red confirm (never a row action). The map is in `lib/actionIntent.ts`, and `reportRowIntent(status)` picks one for a report row.
+
+**Don't:** put text on a flat tint with no edge, append `border`/`ring-1` to a `CHIP_TONE` recipe, or mix your own `/50` alpha. A heat-map cell, a full-width diff line, or a preview of the host app's own palette may keep a fill; mark it `// mushi-mushi-allowlist: <reason>`.
+
+Gates: `pnpm check:tinted-text` (`scripts/audit-tinted-text.mjs`, also in `lint:tokens` and `check:design`), ESLint `mushi-mushi/no-raw-semantic-on-muted` and `no-redundant-border-on-chip-tone`, `scripts/audit-chip-contrast.mjs --strict`. Contrast proof for every tone, edge and intent fill in dark / light / high contrast: `packages/server/src/__tests__/console-tone-contrast.test.ts`. Inventory and readability numbers: [`docs/design/tinted-text-inventory-2026-11-27.md`](../../../../docs/design/tinted-text-inventory-2026-11-27.md).
 
 ### Container-query responsive grids (Wave 2)
 
@@ -58,7 +78,8 @@ Primary work UI
 - ESLint `mushi-mushi/no-hand-rolled-tablist` — warn on `role="tablist"` in `*Page.tsx`
 - ESLint `mushi-mushi/no-missing-page-posture` — warn when operator pages omit `PagePosture`
 - ESLint `mushi-mushi/no-raw-semantic-on-muted` — error on WCAG-failing chip pairings
-- ESLint `mushi-mushi/no-redundant-border-on-chip-tone` — warn when appending `border` onto CHIP_TONE recipes
+- ESLint `mushi-mushi/no-redundant-border-on-chip-tone` — warn when appending `border` / `ring-1` onto CHIP_TONE recipes (they carry their inset ring edge)
+- `node scripts/audit-tinted-text.mjs --strict` — CI gate: no text on a tinted fill without an edge (`pnpm check:tinted-text`)
 - ESLint `mushi-mushi/no-text-3xs-on-interactive` — error (12px floor on buttons/links)
 - ESLint `mushi-mushi/no-allowlist-jsx-textnode` — error (`// mushi-mushi-allowlist` as JSX child text; use `{/* … */}` or attribute-line `//`)
 - `node scripts/audit-chip-contrast.mjs --strict` — CI gate for muted **and** opacity chip contrast drift

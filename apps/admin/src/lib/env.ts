@@ -178,6 +178,8 @@ interface RuntimeConfig {
   apiUrl?: string
   mcpHttpUrl?: string
   instanceType?: string
+  /** MUSHI_PUBLIC_ORIGIN: the public Mushi site's origin (see RESOLVED_PUBLIC_ORIGIN). */
+  publicOrigin?: string
 }
 
 /** @internal Exported for tests only. */
@@ -201,6 +203,7 @@ export function readRuntimeConfig(source: unknown): Required<RuntimeConfig> {
     apiUrl: url('apiUrl'),
     mcpHttpUrl: url('mcpHttpUrl'),
     instanceType: str('instanceType').toLowerCase(),
+    publicOrigin: url('publicOrigin'),
   }
 }
 
@@ -266,6 +269,28 @@ export function mcpOAuthSignInUrl(mcpHttpUrl: string): string {
 }
 
 export const RESOLVED_MCP_OAUTH_URL = mcpOAuthSignInUrl(RESOLVED_MCP_HTTP_URL)
+
+/** Scheme + host of a URL, or '' when it is not an http(s) URL. */
+function originOf(value: string): string {
+  try {
+    const u = new URL(value.trim())
+    return u.protocol === 'http:' || u.protocol === 'https:' ? u.origin : ''
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * MUSHI_PUBLIC_ORIGIN for the console: the origin (scheme + host, no path) of
+ * the public Mushi site — the marketing site, docs and hosted MCP live under
+ * `/mushi-mushi/` on it. Runtime config (`publicOrigin`) → build-time
+ * VITE_MUSHI_PUBLIC_ORIGIN → the hosted default, the origin of
+ * MUSHI_CANONICAL_URLS.home. An invalid value falls back to the default.
+ */
+export const RESOLVED_PUBLIC_ORIGIN =
+  originOf(RUNTIME.publicOrigin) ||
+  originOf(import.meta.env.VITE_MUSHI_PUBLIC_ORIGIN ?? '') ||
+  originOf(MUSHI_CANONICAL_URLS.home)
 
 // Langfuse host used to build click-through URLs from fix attempts and LLM
 // invocation rows. Defaults to the public cloud — self-hosted Langfuse users

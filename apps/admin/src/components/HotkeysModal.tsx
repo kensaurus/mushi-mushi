@@ -314,6 +314,7 @@ function HighlightedText({ text, match }: { text: string; match?: string }) {
   return (
     <>
       {text.slice(0, idx)}
+      {/* mushi-mushi-allowlist: a search-match <mark> is meant to read as a highlighter */}
       <mark className="bg-brand/20 text-fg rounded-sm px-0.5">{text.slice(idx, idx + q.length)}</mark>
       {text.slice(idx + q.length)}
     </>

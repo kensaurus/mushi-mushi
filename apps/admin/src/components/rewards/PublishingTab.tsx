@@ -87,8 +87,8 @@ const BOUNTY_ACTIONS = [
 ]
 
 function statusBadge(visibility: PublishedApp['visibility']) {
-  if (visibility === 'public')  return <Badge tone="okSubtle">Live</Badge>
-  if (visibility === 'paused')  return <Badge tone="warnSubtle">Paused</Badge>
+  if (visibility === 'public')  return <Badge tone="ok">Live</Badge>
+  if (visibility === 'paused')  return <Badge tone="warn">Paused</Badge>
   return <Badge className="bg-surface-overlay text-fg-muted whitespace-nowrap">Not published</Badge>
 }
 
@@ -662,7 +662,7 @@ export function PublishingTab({ paused = false }: { paused?: boolean }) {
                         className="inline-flex"
                       >
                         {state.tone === 'on' ? (
-                          <Badge tone="okSubtle">{state.label}</Badge>
+                          <Badge tone="ok">{state.label}</Badge>
                         ) : (
                           <Badge className="bg-surface-overlay text-fg-muted">{state.label}</Badge>
                         )}

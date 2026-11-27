@@ -38,6 +38,7 @@ import type { ReportDetail, ReportFixAttempt } from './types'
 import { isSampleModel, SAMPLE_EXPLANATION_LABEL } from '../../lib/reportInternals'
 import { dispatchSetupSentence, type DispatchSetupSteps } from '../../lib/dispatchSetupSteps'
 import { DispatchSetupLine } from './DispatchSetupLine'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 type StoryState = StageStamp
 
@@ -206,7 +207,7 @@ function StoryRow({ node, isLast }: { node: StoryNode; isLast: boolean }) {
           {detailsClean.map((d, i) => (
             <span
               key={i}
-              className="inline-flex items-center rounded-sm bg-surface-overlay/40 px-1.5 py-px text-3xs font-mono text-fg-muted"
+              className={`inline-flex items-center rounded-sm ${CHIP_TONE.neutral} px-1.5 py-px text-3xs font-mono`}
             >
               {d}
             </span>

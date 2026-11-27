@@ -91,7 +91,7 @@ export function BeforeAfterCard({ report, className = '' }: Props) {
             {report.severity && <Chip>severity: {report.severity}</Chip>}
             <Chip>{report.category}</Chip>
             {errorCount > 0 && (
-              <Chip tone={CHIP_TONE.dangerSubtle}>
+              <Chip tone={CHIP_TONE.danger}>
                 {errorCount} console error{errorCount === 1 ? '' : 's'}
               </Chip>
             )}
@@ -111,7 +111,7 @@ export function BeforeAfterCard({ report, className = '' }: Props) {
           <div className="flex items-center gap-2 flex-wrap">
             <Chip tone={prStateChipTone(prState)}>PR {prState}</Chip>
             {ci && (
-              <Chip tone={ci === 'success' ? CHIP_TONE.okSubtle : CHIP_TONE.dangerSubtle}>
+              <Chip tone={ci === 'success' ? CHIP_TONE.ok : CHIP_TONE.danger}>
                 CI {ci.replace(/_/g, ' ')}
               </Chip>
             )}
@@ -119,8 +119,8 @@ export function BeforeAfterCard({ report, className = '' }: Props) {
               <Chip
                 tone={
                   judge.classification_agreed === false
-                    ? CHIP_TONE.dangerSubtle
-                    : CHIP_TONE.okSubtle
+                    ? CHIP_TONE.danger
+                    : CHIP_TONE.ok
                 }
               >
                 judge {(judge.judge_score * 100).toFixed(0)}%

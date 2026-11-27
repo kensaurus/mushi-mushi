@@ -8,6 +8,8 @@
  * translated here, so a raw code never reaches the user.
  */
 
+import { SUPPORT_EMAIL } from './supportContact'
+
 const BILLING_ERROR_TEXT: Record<string, string> = {
   NO_STRIPE_CUSTOMER:
     'This project has no billing account yet, so there is nothing to manage. Pick a plan to start one.',
@@ -16,7 +18,7 @@ const BILLING_ERROR_TEXT: Record<string, string> = {
   STRIPE_NOT_CONFIGURED: 'Payments are not set up on this Mushi Mushi server yet, so plans cannot be bought here.',
   PLAN_NOT_CONFIGURED: 'That plan is not ready to buy yet. Try another plan, or email support.',
   PLAN_NOT_PURCHASABLE: 'That plan is free, so there is nothing to buy.',
-  PLAN_SALES_LED: 'That plan is arranged with our team, not bought online. Email kensaurus@gmail.com and we will set it up with you.',
+  PLAN_SALES_LED: `That plan is arranged with our team, not bought online. Email ${SUPPORT_EMAIL} and we will set it up with you.`,
   COMPLIMENTARY_ACCOUNT: 'This account is on a free complimentary plan, so there is nothing to pay.',
   ALREADY_SUBSCRIBED:
     'This project already has a paid plan. Use Change plan to switch between Builder and Studio or between monthly and annual.',

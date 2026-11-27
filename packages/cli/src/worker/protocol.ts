@@ -193,8 +193,35 @@ export interface FreshEyesTarget {
   /** Plain words that mean the visitor made it, or null. */
   successText: string | null
   dryRun: boolean
-  /** One synthetic account per session, for Mushi's own operator only. Never logged (the user id may be). */
+  /** One test account per session, when the app opted in and its owner or admin started the test (ADR 0073). Never logged (the user id may be). */
   accounts: Array<{ email: string; password: string; name: string; userId?: string }>
+  /** Who the visitors are (ADR 0073); sent only to a daemon that says it forwards one (`fresh_eyes_persona`). */
+  persona?: FreshEyesPersonaTarget
+}
+
+interface FreshEyesPersonaTarget {
+  name: string
+  brief: string
+  locale: string
+  device: 'desktop' | 'mobile' | 'tablet'
+  needs: string[]
+  steps: number
+}
+
+const PERSONA_NEEDS = ['screen_reader', 'low_vision', 'keyboard_only', 'reduced_motion', 'color_blind', 'motor', 'plain_language']
+
+function parsePersonaTarget(raw: unknown): Parsed<FreshEyesPersonaTarget | undefined> {
+  if (raw == null) return { ok: true, value: undefined }
+  const p = raw as Record<string, unknown>
+  const name = plainText(p.name, 60)
+  const brief = plainText(p.brief, 600)
+  if (!name || !brief) return { ok: false, message: 'the test claim\'s persona is not plain text' }
+  if (typeof p.locale !== 'string' || p.locale.length > 35 || !/^[a-z]{2,3}(-[A-Za-z0-9]{2,8}){0,3}$/.test(p.locale)) return { ok: false, message: 'the test claim\'s persona language is malformed' }
+  if (p.device !== 'desktop' && p.device !== 'mobile' && p.device !== 'tablet') return { ok: false, message: 'the test claim\'s persona device is malformed' }
+  const needs = Array.isArray(p.needs) ? p.needs : []
+  if (needs.some((n) => typeof n !== 'string' || !PERSONA_NEEDS.includes(n))) return { ok: false, message: 'the test claim\'s persona needs are malformed' }
+  if (typeof p.steps !== 'number' || !Number.isInteger(p.steps) || p.steps < 5 || p.steps > 80) return { ok: false, message: 'the test claim\'s persona step cap is not 5 to 80' }
+  return { ok: true, value: { name, brief, locale: p.locale, device: p.device, needs: [...new Set(needs as string[])], steps: p.steps } }
 }
 
 type ParsedClaim =
@@ -237,7 +264,9 @@ function parseFreshEyesTarget(raw: unknown): Parsed<FreshEyesTarget> {
     accounts.push({ email: a.email, password: a.password, name: plainText(a.name, 80) ?? 'Test visitor', ...(userId ? { userId } : {}) })
   }
   if (accounts.length > t.sessions || (t.dryRun && accounts.length)) return { ok: false, message: 'the test claim carries more accounts than it may use' }
-  return { ok: true, value: { runId: t.runId, url: url.toString(), goal, sessions: t.sessions, successText, dryRun: t.dryRun, accounts } }
+  const persona = parsePersonaTarget(t.persona)
+  if (!persona.ok) return persona
+  return { ok: true, value: { runId: t.runId, url: url.toString(), goal, sessions: t.sessions, successText, dryRun: t.dryRun, accounts, ...(persona.value ? { persona: persona.value } : {}) } }
 }
 
 /**

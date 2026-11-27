@@ -67,4 +67,9 @@ describe('a first-time user test on this machine (ADR 0053 amendment)', () => {
   it('the stdin document holds only the run', () => {
     expect(Object.keys(JSON.parse(freshEyesStdin(target())))).toEqual(['runId', 'url', 'goal', 'sessions', 'successText', 'dryRun', 'accounts'])
   })
+
+  it('forwards the persona when the claim has one', () => {
+    const persona = { name: 'Screen-reader user', brief: 'You use a screen reader.', locale: 'en-US', device: 'desktop' as const, needs: ['screen_reader'], steps: 40 }
+    expect(JSON.parse(freshEyesStdin({ ...target(), persona })).persona).toEqual(persona)
+  })
 })

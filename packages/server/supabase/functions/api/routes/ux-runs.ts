@@ -28,6 +28,7 @@ import { canonicalPrUrl, parsePullRequestUrl } from '../../_shared/pr-substance.
 import { fetchPullRequestDetails, type GithubRepoRef } from '../../_shared/github.ts'
 import { checkRuns, connectedRepoRefs, prTitle, repoTokenResolver, requiredChecks, sameRepo, stripCiSkips } from '../../_shared/github-pr-checks.ts'
 import { toPublicSupabaseUrl } from '../../_shared/public-url.ts'
+import { priceLlmCall } from '../../_shared/llm-cost.ts'
 import {
   buildUxLoopReport,
   countStatuses,
@@ -97,6 +98,18 @@ const Snapshot = z.object({
   error: z.string().max(1000).nullable().default(null),
   model: z.string().max(120).nullable(),
   judge_model: z.string().max(120).nullable(),
+  // ADR 0072: what the final review spent; absent from CLIs before 2026-11-27.
+  judge_usage: z
+    .object({
+      model: z.string().min(1).max(120),
+      judged: z.number().int().min(0).max(10_000),
+      reused: z.number().int().min(0).max(10_000),
+      input_tokens: z.number().int().min(0).max(1e9),
+      output_tokens: z.number().int().min(0).max(1e9),
+      cache_read_input_tokens: z.number().int().min(0).max(1e9),
+      cache_creation_input_tokens: z.number().int().min(0).max(1e9),
+    })
+    .optional(),
   branch: z.string().max(200).nullable(),
   base_sha: z.string().regex(/^[0-9a-f]{7,40}$/).nullable(),
   cli_version: z.string().max(40).nullable(),
@@ -188,6 +201,16 @@ export function registerUxRunsRoutes(app: Hono<{ Variables: Variables }>): void 
       snap.pr = { url: canonical, number: snap.pr.number }
     }
     const nowIso = new Date().toISOString()
+    // ADR 0072: price the review's tokens once, on the server's price table.
+    const judgeCost = snap.judge_usage
+      ? await priceLlmCall({
+          model: snap.judge_usage.model,
+          inputTokens: snap.judge_usage.input_tokens,
+          outputTokens: snap.judge_usage.output_tokens,
+          cacheReadTokens: snap.judge_usage.cache_read_input_tokens,
+          cacheWriteTokens: snap.judge_usage.cache_creation_input_tokens,
+        })
+      : null
 
     const { data: run, error: runErr } = await db
       .from('ux_runs')
@@ -213,6 +236,18 @@ export function registerUxRunsRoutes(app: Hono<{ Variables: Variables }>): void 
           base_sha: snap.base_sha,
           cli_version: snap.cli_version,
           ...(snap.pr !== undefined ? { pr_url: snap.pr?.url ?? null, pr_number: snap.pr?.number ?? null } : {}),
+          ...(snap.judge_usage && judgeCost
+            ? {
+                cost_usd: judgeCost.costUsd,
+                cost: {
+                  judged: snap.judge_usage.judged,
+                  cached: snap.judge_usage.reused,
+                  unpriced: judgeCost.costUsd == null ? snap.judge_usage.judged : 0,
+                  input_tokens: snap.judge_usage.input_tokens,
+                  output_tokens: snap.judge_usage.output_tokens,
+                },
+              }
+            : {}),
           counts: countStatuses(snap.surfaces.map((s) => s.status)),
           started_at: snap.started_at,
           finished_at: snap.finished_at,
@@ -327,7 +362,7 @@ export function registerUxRunsRoutes(app: Hono<{ Variables: Variables }>): void 
     if (!access.allowed) return jsonError(c, 'FORBIDDEN', 'Not a member of this project', 403)
     const { data, error } = await db
       .from('ux_runs')
-      .select('id, local_run_id, mode, status, agent, model, judge_model, skill, branch, counts, started_at, finished_at, updated_at')
+      .select('id, local_run_id, mode, status, agent, model, judge_model, skill, branch, counts, cost_usd, cost, started_at, finished_at, updated_at')
       .eq('project_id', projectId)
       // Fresh-eyes runs (ADR 0053) share the table and have their own tab.
       .eq('kind', 'loop')

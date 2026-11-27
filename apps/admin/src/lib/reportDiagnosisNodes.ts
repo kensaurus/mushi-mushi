@@ -58,6 +58,7 @@ const SOURCE_LABEL: Record<string, { title: string; detail: string }> = {
   ux_scorecard: { title: 'Found by the UX scorecard', detail: 'root cause across pages' },
   code_audit: { title: 'Found by a code audit', detail: 'no user reported it' },
   security_advisory: { title: 'From a security advisory', detail: 'a dependency is vulnerable' },
+  security_scan: { title: 'Found by your CI security scan', detail: 'no user reported it' },
   library_modernizer: { title: 'Found by the library check', detail: 'outdated dependency' },
   skill_run: { title: 'Found by a skill run', detail: 'improvement round' },
   fresh_eyes: { title: 'Found by a first-user test', detail: 'new-user journey' },
@@ -275,6 +276,11 @@ const NO_MODEL_WORDS: Record<string, { title: string; detail: string; why: strin
     title: 'Written from a template: no AI needed',
     detail: 'security advisory',
     why: 'Mushi Mushi filed this from the advisory record (the vulnerable version, the fixed version and how serious it is) with a plain-English template. No AI model reads it, so there is no diagnosis to wait for: the fix is the upgrade the report names.',
+  },
+  security_scan: {
+    title: 'Written from a template: no AI needed',
+    detail: 'CI security scan',
+    why: 'Your own CI ran the scanner (mushi-security.yml) and Mushi Mushi filed what it found with a plain-English template: the rule, where it is and how to fix it. No AI model reads it, so there is no diagnosis to wait for.',
   },
   sdk_health: {
     title: 'Written from a template: no AI needed',

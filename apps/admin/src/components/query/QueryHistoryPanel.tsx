@@ -28,7 +28,7 @@ export function HistoryItem({
       >
         <span className="inline-flex items-center gap-1.5 w-full min-w-0">
           {row.mode === 'raw' && (
-            <span className={`inline-flex shrink-0 px-1 py-0.5 rounded-micro text-2xs font-mono font-medium ${CHIP_TONE.warnSubtle}`}>SQL</span>
+            <span className={`inline-flex shrink-0 px-1 py-0.5 rounded-micro text-2xs font-mono font-medium ${CHIP_TONE.warn}`}>SQL</span>
           )}
           <span className="line-clamp-2">{row.prompt}</span>
         </span>

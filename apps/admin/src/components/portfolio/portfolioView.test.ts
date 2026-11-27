@@ -59,7 +59,7 @@ describe('portfolioView', () => {
   it('never shows a radar that has not run as a pass', () => {
     expect(radarLabel(card({}).radar)).toMatchObject({ text: 'Risk checks: not run yet', tone: 'neutral' })
     expect(radarLabel({ checkedAt: '2026-10-02T00:00:00Z', status: 'pass', open: { error: 0, warn: 0, info: 2 }, unchecked: 0, errored: 0 }).text).toBe('No risks found')
-    expect(radarLabel({ checkedAt: '2026-10-02T00:00:00Z', status: 'fail', open: { error: 1, warn: 2, info: 0 }, unchecked: 0, errored: 0 })).toMatchObject({ text: '3 risks to fix', tone: 'dangerSubtle' })
+    expect(radarLabel({ checkedAt: '2026-10-02T00:00:00Z', status: 'fail', open: { error: 1, warn: 2, info: 0 }, unchecked: 0, errored: 0 })).toMatchObject({ text: '3 risks to fix', tone: 'danger' })
     // A check that failed to run is never green.
     expect(radarLabel({ checkedAt: '2026-10-02T00:00:00Z', status: 'error', open: { error: 0, warn: 0, info: 0 }, unchecked: 0, errored: 1 })).toMatchObject({ text: 'Risk checks failed', tone: 'danger' })
   })
@@ -140,7 +140,7 @@ describe('radarStateMeta', () => {
     expect(openReportsText(unread)).toBe('3+')
     expect(kindLabel(unread)).toBe('Kind: could not read')
     expect(sdkLabel(unread.sdk, unread.unreadable).text).toBe('SDK: could not read')
-    expect(radarLabel(unread.radar, unread.unreadable).tone).not.toBe('okSubtle')
+    expect(radarLabel(unread.radar, unread.unreadable).tone).not.toBe('ok')
 
     const read = card({ spend: { llmUsd30d: 1.5, llmCalls30d: 3, partial: true, autofixCapUsd: 2, monthlyLlmBudgetUsd: null, capsKnown: true } })
     expect(spendText(read)).toBe('at least $1.50')
@@ -178,12 +178,12 @@ describe('cardStatusChips (chips instead of prose)', () => {
       ['sdk', 'SDK unknown', '/connect'],
       ['release', 'v1.4.0', '/releases'],
     ])
-    expect(chips[0].tone).toBe('warnSubtle')
+    expect(chips[0].tone).toBe('warn')
     expect(chips[1].hint).toMatch(/not a pass/)
   })
 
   it('reads a healthy app as ok, never as a warning', () => {
-    expect(cardStatusChips(card({ openReports: 0 }))[0]).toMatchObject({ text: '0 bugs', tone: 'okSubtle' })
+    expect(cardStatusChips(card({ openReports: 0 }))[0]).toMatchObject({ text: '0 bugs', tone: 'ok' })
   })
 
   it('never shows a cut-short count as exact', () => {
@@ -261,8 +261,8 @@ describe('sortPortfolioCards order toggle', () => {
 describe('radarBadge (2026-11-18)', () => {
   it('a serious finding is red Error, like Full-stack audit; the rest amber Warning', async () => {
     const { radarBadge } = await import('./portfolioView')
-    expect(radarBadge({ state: 'finding', findings: [{ severity: 'error' }] })).toEqual({ label: 'Error', tone: 'dangerSubtle' })
-    expect(radarBadge({ state: 'finding', findings: [{ severity: 'warn' }, { severity: 'info' }] })).toEqual({ label: 'Warning', tone: 'warnSubtle' })
+    expect(radarBadge({ state: 'finding', findings: [{ severity: 'error' }] })).toEqual({ label: 'Error', tone: 'danger' })
+    expect(radarBadge({ state: 'finding', findings: [{ severity: 'warn' }, { severity: 'info' }] })).toEqual({ label: 'Warning', tone: 'warn' })
     expect(radarBadge({ state: 'error', findings: [] }).label).toBe('Check failed')
     expect(radarBadge({ state: 'unknown', findings: [] }).label).toBe('Not checked')
   })

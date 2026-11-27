@@ -62,7 +62,7 @@ function render(onOpen = vi.fn()) {
 describe('toldText', () => {
   it('counts delivered messages, and says unknown without a summary', () => {
     expect(toldText(rel({ credit_summary: { credited: 3, told: 3 } })).text).toBe('All 3 reporters told')
-    expect(toldText(rel({ credit_summary: { credited: 3, told: 1 } }))).toEqual({ text: '1 of 3 reporters told', tone: 'warnSubtle' })
+    expect(toldText(rel({ credit_summary: { credited: 3, told: 1 } }))).toEqual({ text: '1 of 3 reporters told', tone: 'warn' })
     expect(toldText(rel({ credit_summary: { credited: 0, told: 0 } })).text).toBe('No reporters to tell')
     expect(toldText(rel({})).text).toBe('Reporters told: unknown')
     expect(toldText(rel({ status: 'draft' })).text).toBe('3 reporters to tell')
