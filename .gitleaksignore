@@ -137,3 +137,12 @@ b89da203e6a632a57d29436939846c7303546b4d:packages/server/src/__tests__/ops-route
 # `reporter_token_hash` "abcdef0123456789" is a hand-typed hex run, not a
 # token; the working tree now says `device-hash-1`. Pins the commit that added it.
 8883f1a52a93f86d36f9810fe0b08fe0c5f3dbba:apps/admin/src/pages/AntiGamingPage.empty.test.tsx:generic-api-key:104
+
+# Release 2026-11-27 (PR #1252) test fixtures, allowed inline with
+# gitleaks:allow in the working tree; these pin the commits that added them.
+# security-proof.test.ts:115 is a fake JWT-shaped string (header {"alg":"HS256"},
+# payload {"sub":"1234"}, signature "signature-value") that redactText must remove.
+fad5ee976875ba2861e45e27d5f6037633139f31:packages/server/src/__tests__/security-proof.test.ts:jwt:115
+# PersonasPage.test.tsx:281 is a fake test-account hook secret ('mtah_' + 0-9a-f)
+# for the one-time reveal test; it never signed anything.
+d7c3683defb3ed05d51bc59db05d45dda33acfdb:apps/admin/src/pages/PersonasPage.test.tsx:generic-api-key:281

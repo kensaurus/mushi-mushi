@@ -278,7 +278,7 @@ describe('test accounts', () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(url, 'https://app.example/hook')
       url.dispatchEvent(new Event('input', { bubbles: true }))
     })
-    mocks.reply = { ok: true, data: { mode: 'hook', hookUrl: 'https://app.example/hook', hasSecret: true, secret: 'mtah_0123456789abcdef' } }
+    mocks.reply = { ok: true, data: { mode: 'hook', hookUrl: 'https://app.example/hook', hasSecret: true, secret: 'mtah_0123456789abcdef' } } // gitleaks:allow — fake hook signing secret for the one-time reveal test
     await act(async () => ([...card().querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Save') as HTMLButtonElement).click())
     expect(mocks.calls).toEqual([{ path: `/v1/admin/projects/${P}/test-accounts`, method: 'PUT', body: { mode: 'hook', hookUrl: 'https://app.example/hook' } }])
     expect(card().textContent).toContain('mtah_0123456789abcdef')

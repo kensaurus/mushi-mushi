@@ -112,7 +112,7 @@ describe('parsers keep no secret and no snippet', () => {
   })
 
   it('redacts token-shaped text anywhere', () => {
-    expect(redactText(`key ${FAKE_KEY} and eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.c2lnbmF0dXJlLXZhbHVl ok`)).toBe('key [redacted] and [redacted] ok')
+    expect(redactText(`key ${FAKE_KEY} and eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.c2lnbmF0dXJlLXZhbHVl ok`)).toBe('key [redacted] and [redacted] ok') // gitleaks:allow — fake JWT-shaped text the redactor must remove
     expect(redactText('GHSA-jf85-cpcp-j695 in src/components/very/long/path/name.tsx')).toBe('GHSA-jf85-cpcp-j695 in src/components/very/long/path/name.tsx')
   })
 
