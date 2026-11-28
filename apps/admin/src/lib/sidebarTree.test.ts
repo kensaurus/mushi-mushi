@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { LAB_FEATURES } from './labs'
 import { BUILDER_CORE_NAV_PATHS, CORE_NAV_PATHS, NAV_REGISTRY, OPERATOR_ROUTES } from './navRegistry'
-import { NAV_CHILDREN, activeParent, isNavPathActive, morePages } from './sidebarTree'
+import { NAV_CHILDREN, activeParent, isNavPathActive, morePagePaths, morePages } from './sidebarTree'
 
 const EVERYONE = { isOperator: true, isSuperAdmin: true }
 const USER = { isOperator: false, isSuperAdmin: false }
@@ -13,16 +13,47 @@ const FOOTER_NAV_PATHS = ['/feedback']
 
 const registryPaths = new Set(NAV_REGISTRY.map((e) => e.path))
 const morePaths = (viewer = EVERYONE, pinned = NONE) =>
-  new Set(morePages(viewer, pinned).flatMap((g) => g.entries.map((e) => e.path)))
+  new Set(morePagePaths(morePages(viewer, pinned)))
 
 describe('every page has a place in the sidebar', () => {
-  it('lists each sidebar page as core, a sub-page, under More pages or in the footer', () => {
+  it('gives each sidebar page a row: core, under More pages (sub-pages included) or in the footer', () => {
+    // Having a parent is not a place: with Checks and Apps unpinned (ADR 0069)
+    // their 14 sub-pages had no row anywhere (owner, 2026-11-28).
     const more = morePaths()
-    const children = new Set(Object.values(NAV_CHILDREN).flat())
     const missing = NAV_REGISTRY.filter((e) => e.inSidebar !== false)
       .map((e) => e.path)
-      .filter((p) => !BUILDER_CORE_NAV_PATHS.includes(p) && !children.has(p) && !more.has(p) && !FOOTER_NAV_PATHS.includes(p))
+      .filter((p) => !BUILDER_CORE_NAV_PATHS.includes(p) && !more.has(p) && !FOOTER_NAV_PATHS.includes(p))
     expect(missing).toEqual([])
+  })
+
+  it('lists the checks and Manage apps under their page while that page is under More pages', () => {
+    const groups = morePages(EVERYONE, NONE)
+    const verify = groups.find((g) => g.sectionId === 'check')!
+    const checkKids = verify.children['/checks']!.flatMap((g) => g.entries.map((e) => e.path))
+    for (const p of ['/ci', '/qa-coverage', '/first-user-test', '/health', '/lessons']) expect(checkKids, p).toContain(p)
+    expect(verify.children['/checks']!.map((g) => g.title)).toEqual(['Your app', 'Builds & tests (CI)', 'Mushi Mushi itself'])
+    // A sub-page is listed once, under its page, not again as a top row.
+    expect(verify.entries.map((e) => e.path)).not.toContain('/ci')
+    const ship = groups.find((g) => g.sectionId === 'act')!
+    expect(ship.children['/portfolio']!.flatMap((g) => g.entries.map((e) => e.path))).toEqual(['/projects'])
+  })
+
+  it('moves the sub-pages back under their page once it is kept in the sidebar', () => {
+    const checksLab = LAB_FEATURES.find((f) => f.paths[0] === '/checks')!
+    const more = morePaths(EVERYONE, new Set([checksLab.id]))
+    expect(more.has('/qa-coverage')).toBe(false)
+    expect(more.has('/checks')).toBe(false)
+  })
+
+  it('lists a pinned sub-page in Labs only, not again under its page', () => {
+    const ciLab = LAB_FEATURES.find((f) => f.paths[0] === '/ci')!
+    expect(morePaths(EVERYONE, new Set([ciLab.id])).has('/ci')).toBe(false)
+  })
+
+  it('leaves operator sub-pages out for a builder', () => {
+    const more = morePaths(USER)
+    expect(more.has('/qa-coverage')).toBe(true)
+    for (const p of ['/ci', '/health', '/judge']) expect(more.has(p), p).toBe(false)
   })
 
   it('makes the sidebar the fix loop for every account (ADR 0069)', () => {
@@ -76,10 +107,9 @@ describe('More pages', () => {
 
   it('gives a builder every page they may open: short core, the rest under More pages', () => {
     const more = morePaths(USER)
-    const children = new Set(Object.values(NAV_CHILDREN).flat())
     const missing = NAV_REGISTRY.filter((e) => e.inSidebar !== false && !e.operatorOnly && !e.superAdmin)
       .map((e) => e.path)
-      .filter((p) => !BUILDER_CORE_NAV_PATHS.includes(p) && !children.has(p) && !more.has(p) && !FOOTER_NAV_PATHS.includes(p))
+      .filter((p) => !BUILDER_CORE_NAV_PATHS.includes(p) && !more.has(p) && !FOOTER_NAV_PATHS.includes(p))
     expect(missing).toEqual([])
     // The top-level pages that left the sidebar are under More pages until their Lab is on (ADR 0069).
     for (const p of ['/team', '/checks', '/portfolio', '/integrations/config', '/pipeline', '/journeys']) expect(more.has(p), p).toBe(true)

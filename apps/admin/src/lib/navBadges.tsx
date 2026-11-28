@@ -29,7 +29,6 @@ import {
   experimentsNavBadge,
   exploreNavBadge,
   featureBoardNavBadge,
-  fixesStatsNavBadge,
   fullstackAuditNavBadge,
   graphNavBadge,
   healthStatsNavBadge,
@@ -63,7 +62,6 @@ import {
 import {
   toneForBacklog,
   toneForFailed,
-  toneForInFlight,
   toneForOpen,
   type HealthTone,
   type NavCounts,
@@ -162,27 +160,37 @@ export type NavBadgeSpec =
   | { kind: 'integration' }
 
 /**
- * Collapse a slice badge into a spec, mirroring SidebarNavCount's own
- * precedence: an attention badge with a real count wins, otherwise the
- * inventory number renders neutral, otherwise nothing.
+ * Collapse a slice badge into a spec. Only an attention badge with a real
+ * count shows: the sidebar counts what a visit to the page lets you clear
+ * (owner, 2026-11-28: "many of the side bar show 99+ pills which is really
+ * unhelpful"). Inventory totals (indexed files, releases, stories, calls,
+ * members) stay on their pages; in the sidebar they read as work to do.
  */
-function sliceBadgeSpec(
-  badge: WorkspaceNavBadge | null,
-  inventoryFallback = 0,
-): NavBadgeSpec | null {
-  if (!badge) return null
-  if (badge.mode === 'attention' && badge.count > 0) {
-    return {
-      kind: 'health',
-      tone: badge.tone ?? 'warn',
-      count: badge.count,
-      label: badge.label,
-      hideWhenZero: true,
-    }
+function sliceBadgeSpec(badge: WorkspaceNavBadge | null): NavBadgeSpec | null {
+  if (!badge || badge.mode !== 'attention' || badge.count <= 0) return null
+  return {
+    kind: 'health',
+    tone: badge.tone ?? 'warn',
+    count: badge.count,
+    label: badge.label,
+    hideWhenZero: true,
   }
-  const count = badge.mode === 'inventory' ? badge.count : inventoryFallback
-  if (count <= 0) return null
-  return { kind: 'count', count, label: badge.label }
+}
+
+/**
+ * Above this a number stops helping: "99+" says only "a lot" and reads as an
+ * alarm that never clears. Past it the badge is a dot in the same tone, and
+ * the exact count stays in its label (tooltip and screen readers).
+ */
+const SIDEBAR_COUNT_MAX = 99
+
+function capForSidebar(spec: NavBadgeSpec | null): NavBadgeSpec | null {
+  if (!spec) return null
+  if (spec.kind === 'count') return spec.count > SIDEBAR_COUNT_MAX ? null : spec
+  if (spec.kind === 'health' && spec.count > SIDEBAR_COUNT_MAX) {
+    return { ...spec, count: 0, hideWhenZero: false }
+  }
+  return spec
 }
 
 export function resolveNavBadge(
@@ -191,6 +199,14 @@ export function resolveNavBadge(
   extras: NavBadgeExtras,
 ): NavBadgeSpec | null {
   if (!navCounts.ready) return null
+  return capForSidebar(resolveUncapped(path, navCounts, extras))
+}
+
+function resolveUncapped(
+  path: string,
+  navCounts: NavCounts,
+  extras: NavBadgeExtras,
+): NavBadgeSpec | null {
 
   const { slices } = navCounts
 
@@ -204,17 +220,14 @@ export function resolveNavBadge(
     case '/pipeline':
       return sliceBadgeSpec(workersNavBadge(slices.workers))
     case '/content':
-      return sliceBadgeSpec(
-        contentQualityNavBadge(slices.contentQuality),
-        slices.contentQuality?.needsAttentionCount ?? 0,
-      )
+      return sliceBadgeSpec(contentQualityNavBadge(slices.contentQuality))
     case '/projects': {
       const badge = projectsNavBadge({
         projectCount: navCounts.projectCount,
         neverIngestedCount: navCounts.neverIngestedCount,
         staleKeyCount: navCounts.staleKeyCount,
       })
-      return sliceBadgeSpec(badge, navCounts.projectCount)
+      return sliceBadgeSpec(badge)
     }
     case '/organization/members': {
       if (navCounts.memberCount == null && navCounts.pendingInvites === 0) return null
@@ -222,72 +235,42 @@ export function resolveNavBadge(
         memberCount: navCounts.memberCount ?? 0,
         pendingInvites: navCounts.pendingInvites,
       })
-      return sliceBadgeSpec(badge, navCounts.memberCount ?? 0)
+      return sliceBadgeSpec(badge)
     }
     case '/feature-board':
-      return sliceBadgeSpec(
-        featureBoardNavBadge(slices.featureBoard),
-        slices.featureBoard?.openCount ?? 0,
-      )
+      return sliceBadgeSpec(featureBoardNavBadge(slices.featureBoard))
     case '/rewards':
-      return sliceBadgeSpec(
-        rewardsNavBadge(slices.rewards),
-        slices.rewards?.activeContributors30d ?? 0,
-      )
+      return sliceBadgeSpec(rewardsNavBadge(slices.rewards))
     case '/billing':
       return sliceBadgeSpec(billingNavBadge(slices.billing))
     case '/audit':
-      return sliceBadgeSpec(auditNavBadge(slices.audit), slices.audit?.events24h ?? 0)
+      return sliceBadgeSpec(auditNavBadge(slices.audit))
     case '/fullstack-audit':
       return sliceBadgeSpec(fullstackAuditNavBadge(slices.fullstackAudit))
     case '/code-health':
       return sliceBadgeSpec(codeHealthNavBadge(slices.codeHealth))
     case '/qa-coverage':
-      return sliceBadgeSpec(
-        qaCoverageNavBadge(slices.qaCoverage),
-        slices.qaCoverage?.totalStories ?? 0,
-      )
+      return sliceBadgeSpec(qaCoverageNavBadge(slices.qaCoverage))
     case '/lessons':
-      return sliceBadgeSpec(
-        lessonsNavBadge(slices.lessons),
-        slices.lessons?.activeLessons ?? 0,
-      )
+      return sliceBadgeSpec(lessonsNavBadge(slices.lessons))
     case '/drift':
       return sliceBadgeSpec(driftNavBadge(slices.drift))
     case '/releases':
-      return sliceBadgeSpec(
-        releasesNavBadge(slices.releases),
-        slices.releases?.totalReleases ?? 0,
-      )
+      return sliceBadgeSpec(releasesNavBadge(slices.releases))
     case '/intelligence':
-      return sliceBadgeSpec(
-        intelligenceNavBadge(slices.intelligence),
-        slices.intelligence?.reportCount ?? 0,
-      )
+      return sliceBadgeSpec(intelligenceNavBadge(slices.intelligence))
     case '/explore':
-      return sliceBadgeSpec(
-        exploreNavBadge(slices.explore),
-        slices.explore?.indexedFiles ?? 0,
-      )
+      return sliceBadgeSpec(exploreNavBadge(slices.explore))
     case '/experiments':
-      return sliceBadgeSpec(
-        experimentsNavBadge(slices.experiments),
-        slices.experiments?.totalExperiments ?? 0,
-      )
+      return sliceBadgeSpec(experimentsNavBadge(slices.experiments))
     case '/anomalies':
       return sliceBadgeSpec(anomaliesNavBadge(slices.anomalies))
     case '/iterate':
-      return sliceBadgeSpec(iterateNavBadge(slices.iterate), slices.iterate?.total ?? 0)
+      return sliceBadgeSpec(iterateNavBadge(slices.iterate))
     case '/research':
-      return sliceBadgeSpec(
-        researchNavBadge(slices.research),
-        slices.research?.sessions ?? 0,
-      )
+      return sliceBadgeSpec(researchNavBadge(slices.research))
     case '/prompt-lab':
-      return sliceBadgeSpec(
-        promptLabNavBadge(slices.promptLab),
-        slices.promptLab?.totalPrompts ?? 0,
-      )
+      return sliceBadgeSpec(promptLabNavBadge(slices.promptLab))
     // The fallback gate checks the BADGE, not the spec. `sliceBadgeSpec` also
     // returns null for a zero count, so `?? fallback` would let a zero-count
     // slice badge fall through to the regression dot — which the pre-refactor
@@ -323,25 +306,32 @@ export function resolveNavBadge(
         hideWhenZero: true,
       }
     }
+    // What a visit to Fixes clears: stopped fixes a retry can restart, then
+    // pull requests waiting for your review. The red count of every report
+    // whose fix failed in 30 days sat at 99+ and never went down (owner,
+    // 2026-11-28); fixes in flight need nothing from you.
     case '/fixes': {
-      const sliceBadge = fixesStatsNavBadge(slices.fixes)
-      if (sliceBadge) return sliceBadgeSpec(sliceBadge)
-      return {
-        kind: 'health',
-        tone:
-          navCounts.fixesFailed > 0
-            ? toneForFailed(navCounts.fixesFailed)
-            : toneForInFlight(navCounts.fixesInFlight),
-        count:
-          navCounts.fixesFailed > 0 ? navCounts.fixesFailed : navCounts.fixesInFlight,
-        label:
-          navCounts.fixesFailed > 0
-            ? stoppedTitle(navCounts.fixesFailed)
-            : navCounts.fixesInFlight > 0
-              ? `${navCounts.fixesInFlight} fixes in flight`
-              : 'No active fixes',
-        hideWhenZero: true,
+      if (navCounts.fixesRetryable > 0) {
+        const n = navCounts.fixesRetryable
+        return {
+          kind: 'health',
+          tone: 'warn',
+          count: n,
+          label: `${n} stopped ${n === 1 ? 'fix' : 'fixes'} you can retry${navCounts.fixesFailed > n ? ` (${stoppedTitle(navCounts.fixesFailed)})` : ''}`,
+          hideWhenZero: true,
+        }
       }
+      if (navCounts.prsOpen > 0) {
+        const n = navCounts.prsOpen
+        return {
+          kind: 'health',
+          tone: 'ok',
+          count: n,
+          label: `${n} ${n === 1 ? 'fix' : 'fixes'} ready for your review`,
+          hideWhenZero: true,
+        }
+      }
+      return null
     }
     case '/repo': {
       const sliceBadge = repoStatsNavBadge(slices.repo)
@@ -369,7 +359,7 @@ export function resolveNavBadge(
       }
     }
     case '/skills':
-      return sliceBadgeSpec(skillsNavBadge(slices.skills), slices.skills?.catalogTotal ?? 0)
+      return sliceBadgeSpec(skillsNavBadge(slices.skills))
     case '/integrations/config': {
       // The self-fetching dot (two more requests) is only the fallback for a
       // missing slice; a slice with nothing to report means no badge.
@@ -379,10 +369,7 @@ export function resolveNavBadge(
     case '/mcp':
       return sliceBadgeSpec(mcpNavBadge(slices.mcp))
     case '/marketplace':
-      return sliceBadgeSpec(
-        marketplaceNavBadge(slices.marketplace),
-        slices.marketplace?.installedActive ?? 0,
-      )
+      return sliceBadgeSpec(marketplaceNavBadge(slices.marketplace))
     case '/settings':
       return sliceBadgeSpec(settingsNavBadge(slices.settings))
     case '/cost': {
@@ -397,7 +384,7 @@ export function resolveNavBadge(
           label: badge?.label ?? 'LLM spend spike in last 24h',
         }
       }
-      return sliceBadgeSpec(badge, costs?.calls24h ?? 0)
+      return sliceBadgeSpec(badge)
     }
     case '/sso':
       return sliceBadgeSpec(ssoNavBadge(slices.sso))
@@ -406,10 +393,7 @@ export function resolveNavBadge(
     case '/storage':
       return sliceBadgeSpec(storageNavBadge(slices.storage))
     case '/query':
-      return sliceBadgeSpec(
-        queryNavBadge(slices.query),
-        slices.query?.savedCount ?? slices.query?.runs24h ?? 0,
-      )
+      return sliceBadgeSpec(queryNavBadge(slices.query))
     case '/users':
       return sliceBadgeSpec(
         usersNavBadge(
@@ -419,9 +403,7 @@ export function resolveNavBadge(
                 churn30d: navCounts.superAdminChurn30d ?? 0,
               }
             : null,
-        ),
-        navCounts.superAdminSignups7d ?? 0,
-      )
+        ))
     case '/anti-gaming':
       return {
         kind: 'health',
@@ -483,18 +465,9 @@ export function resolveNavBadge(
             : 'To-do — all clear',
         hideWhenZero: true,
       }
-    case '/notifications':
-      return {
-        kind: 'health',
-        // Unread updates are not a failure: a neutral count, never the failure red (fresh-eyes 2026-11-18).
-        tone: 'idle',
-        count: navCounts.notificationsUnread,
-        label:
-          navCounts.notificationsUnread > 0
-            ? `${navCounts.notificationsUnread} unread notification${navCounts.notificationsUnread === 1 ? '' : 's'}`
-            : 'All notifications read',
-        hideWhenZero: true,
-      }
+    // No badge for Reporter updates: its "unread" count is updates your bug
+    // reporters have not opened in the widget yet. Nothing in the console
+    // clears it, so it sat at 99+ for good (owner, 2026-11-28).
     case '/queue':
       return {
         kind: 'health',

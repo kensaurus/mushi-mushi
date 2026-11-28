@@ -319,13 +319,43 @@ describe('resolveNavBadge', () => {
     })
   })
 
-  it('surfaces failed fixes ahead of in-flight fixes on /fixes', () => {
-    const counts = { ...NAV_COUNTS_ZERO, fixesFailed: 2, fixesInFlight: 5 }
+  // Fixes counts what a visit clears (owner, 2026-11-28: 99+ red pills).
+  it('counts stopped fixes a retry can restart on /fixes, naming the rest', () => {
+    const counts = { ...NAV_COUNTS_ZERO, fixesFailed: 140, fixesRetryable: 3, fixesInFlight: 5, prsOpen: 2 }
     expect(resolveNavBadge('/fixes', counts, NO_EXTRAS)).toMatchObject({
       kind: 'health',
-      count: 2,
-      label: 'Auto-fix stopped on 2 reports',
+      tone: 'warn',
+      count: 3,
+      label: '3 stopped fixes you can retry (Auto-fix stopped on 140 reports)',
     })
+  })
+
+  it('falls back to pull requests waiting for review, never fixes in flight', () => {
+    expect(resolveNavBadge('/fixes', { ...NAV_COUNTS_ZERO, fixesFailed: 9, prsOpen: 2, fixesInFlight: 5 }, NO_EXTRAS)).toMatchObject({
+      tone: 'ok',
+      count: 2,
+      label: '2 fixes ready for your review',
+    })
+    expect(resolveNavBadge('/fixes', { ...NAV_COUNTS_ZERO, fixesFailed: 9, fixesInFlight: 5 }, NO_EXTRAS)).toBeNull()
+  })
+
+  it('gives Reporter updates no badge: reporters read those in the widget', () => {
+    expect(resolveNavBadge('/notifications', { ...NAV_COUNTS_ZERO, notificationsUnread: 500 }, NO_EXTRAS)).toBeNull()
+  })
+
+  it('turns a count over 99 into a dot that keeps the exact number in its label', () => {
+    const spec = resolveNavBadge('/inbox', { ...NAV_COUNTS_ZERO, inboxOpenActions: 250 }, NO_EXTRAS)
+    expect(spec).toMatchObject({ kind: 'health', count: 0, hideWhenZero: false, label: '250 open actions in To-do' })
+    expect(navBadgeStatus(spec)).toMatchObject({ count: null, label: '250 open actions in To-do' })
+    expect(resolveNavBadge('/inbox', { ...NAV_COUNTS_ZERO, inboxOpenActions: 99 }, NO_EXTRAS)).toMatchObject({ count: 99 })
+  })
+
+  it('shows no inventory totals, only counts that need you', () => {
+    const counts = {
+      ...NAV_COUNTS_ZERO,
+      slices: { ...NAV_COUNTS_ZERO.slices, releases: { draftCount: 0, creditsPending: 0, totalReleases: 340, topPriority: 'healthy' } },
+    } as unknown as typeof NAV_COUNTS_ZERO
+    expect(resolveNavBadge('/releases', counts, NO_EXTRAS)).toBeNull()
   })
 
   it('returns the self-fetching integration badge for the integrations route', () => {

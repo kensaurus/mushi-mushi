@@ -158,13 +158,17 @@ export const NAV_SECTION_META: Record<
   }
 > = {
   start: {
-    title: 'Connect',
+    // Not "Connect": that is also the page's name, so More pages read
+    // "Connect › Connect" and the breadcrumb "1 · Connect › Connect"
+    // (owner, 2026-11-28: "uiux is confusing").
+    title: 'Set up & connect',
     step: 1,
     hint: 'Install Mushi Mushi in your app and connect your editor, your tools and your coding agents.',
     defaultCollapsed: true,
   },
   plan: {
-    title: 'Bugs',
+    // Not "Bugs", the name of its main page ("2 · Bugs › Bugs").
+    title: 'Find & sort bugs',
     step: 2,
     stage: 'P',
     hint: 'Your home page, your to-do list and the bugs your users and monitoring send in, sorted and grouped.',

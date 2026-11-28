@@ -465,11 +465,6 @@ export function toneForFailed(n: number): HealthTone {
   return 'danger'
 }
 
-export function toneForInFlight(n: number): HealthTone {
-  if (n === 0) return 'idle'
-  return 'ok'
-}
-
 export function toneForOpen(n: number, dangerAt: number): HealthTone {
   if (n === 0) return 'ok'
   if (n >= dangerAt) return 'danger'
