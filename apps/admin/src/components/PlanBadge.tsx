@@ -96,15 +96,14 @@ export function PlanBadge({ density = 'header' }: PlanBadgeProps) {
         } ${densityClasses(sidebar)}`}
       >
         <span aria-hidden="true" className="leading-none shrink-0 text-brand/80 text-2xs">◆</span>
-        <span className={sidebar ? 'truncate' : ''}>Admin</span>
+        {/* "Studio · free", not "Admin Studio": "Admin" read as a role or a
+            second product (journey walk, 2026-11-28). */}
+        <span className={sidebar ? 'truncate font-semibold text-fg-secondary' : ''}>{plan.displayName}</span>
         {sidebar ? (
-          // The UI font: "Admin Studio" with the plan in monospace read as code (round-3 review).
-          <span className="text-fg-secondary text-2xs shrink-0 font-semibold">
-            {plan.displayName}
-          </span>
+          <span className="text-fg-muted text-2xs shrink-0">· free</span>
         ) : (
           <span aria-hidden="true" className="shrink-0">
-            <Badge tone="neutral">{plan.displayName}</Badge>
+            <Badge tone="neutral">free</Badge>
           </span>
         )}
       </Link>

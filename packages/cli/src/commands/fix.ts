@@ -339,7 +339,7 @@ fixes
   )
   .option(
     '--override',
-    'Not available here: the CLI signs in with an API key, and only a person in the Mushi console can override an Opus "hold" (with a reason)',
+    'Not available here: the CLI signs in with an API key, and only a person in the Mushi console can override an AI review "hold" (with a reason)',
   )
   .option('--json', 'Machine-readable JSON output')
   .action(async (fixId: string, opts: { method: string; override?: boolean; json?: boolean }) => {
@@ -349,7 +349,7 @@ fixes
 
     if (opts.override) {
       console.error(
-        'Overriding an Opus "hold" needs a person in the Mushi console: open the fix, read the findings, and choose Merge anyway with a reason. The CLI signs in with an API key, which cannot override (ADR 0030).',
+        'Overriding an AI review "hold" needs a person in the Mushi console: open the fix, read the findings, and choose Merge anyway with a reason. The CLI signs in with an API key, which cannot override (ADR 0030).',
       )
       process.exit(1)
     }
@@ -425,7 +425,7 @@ function printReview(review: CliFixReview): void {
 
 fixes
   .command('review <fixId>')
-  .description('Re-run the Opus review of a fix PR (ADR 0030), or show the current one with --show')
+  .description('Re-run the AI review of a fix PR (ADR 0030), or show the current one with --show')
   .option('--show', 'Show the current review instead of starting a new one')
   .option('--json', 'Machine-readable JSON output')
   .action(async (fixId: string, opts: { show?: boolean; json?: boolean }) => {
@@ -456,7 +456,7 @@ fixes
   .option('--rerun', 'Re-check the gates now, then show them')
   .option('--json', 'Machine-readable JSON output')
   .addHelpText('after', `
-Gates: Opus review, CI, a test that fails without the fix, no tests weakened,
+Gates: AI review, CI, a test that fails without the fix, no tests weakened,
 a small change, and a second review. Mushi merges on its own only when every
 gate passes and Verified merge is on for the project.
 Docs: https://kensaur.us/mushi-mushi/docs/admin/verified-merge`)

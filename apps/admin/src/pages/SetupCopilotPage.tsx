@@ -194,7 +194,7 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
 
       {projectId && !projectRow && !projectsPayload && !projectsError && (
         <Card className="p-5">
-          <p className="text-xs text-fg-muted">Loading project details…</p>
+          <p className="text-xs text-fg-muted">Loading app details…</p>
         </Card>
       )}
 

@@ -142,7 +142,7 @@ export function CursorLevers({ spendDown, followups, now, onChanged }: Props) {
             />
           </div>
           <p className="text-xs text-fg-secondary">
-            When Opus says &ldquo;fix first&rdquo;, a new agent fixes exactly its findings on the same pull request (two rounds at most).
+            When The AI review says &ldquo;fix first&rdquo;, a new agent fixes exactly its findings on the same pull request (two rounds at most).
             {' '}Rounds run on {cursorModelLabel(fu.model) ?? "each app's model"}
             {fu.escalationModel ? `; the last round on ${cursorModelLabel(fu.escalationModel)}` : ''}.
           </p>

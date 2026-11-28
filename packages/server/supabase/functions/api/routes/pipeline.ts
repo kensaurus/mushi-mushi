@@ -292,7 +292,7 @@ export async function readPipeline(db: Db, projectIds: string[], now: Date) {
   // CI jobs start once the reviews are in, the action facts once the follow-ups are.
   const ciP = started(
     reviewsP.then(async (reviews) => {
-      // Reviewed heads too: a CI repair is judged on the commit Opus reviewed.
+      // Reviewed heads too: a CI repair is judged on the commit AI reviewed.
       const heads = [
         ...attempts.filter((a) => a.pr_state === 'open' || a.pr_state === 'draft').map((a) => a.commit_sha ?? ''),
         ...reviews.map((r) => r.head_sha ?? ''),
@@ -682,7 +682,7 @@ async function cloudReady(db: Db, projectId: string, cache: CloudReadyCache): Pr
 }
 
 /**
- * A follow-up on one PR: a CI repair (Opus said merge, CI fails on the code)
+ * A follow-up on one PR: a CI repair (The AI review said merge, CI fails on the code)
  * or the Opus "fix first" findings. Mushi's cloud agent when follow-ups can
  * run for the app; otherwise the local `mushi work --followups` lanes, which
  * read the request row (CI repair) or the review itself (findings).

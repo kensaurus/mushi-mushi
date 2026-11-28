@@ -1,7 +1,7 @@
 /**
  * FILE: packages/server/supabase/functions/_shared/prior-attempts.ts
  * PURPOSE: Tell a new fix agent what earlier attempts on the same report
- *          did: the Opus review of each earlier PR (ADR 0030) or why the
+ *          did: the AI review of each earlier PR (ADR 0030) or why the
  *          agent finished without one. Without it, a re-dispatch after a hold
  *          starts blind and often repeats the theory the review rejected
  *          (2026-10-24: a solo-boss PR guarded `status.toUpperCase()` that
@@ -31,7 +31,7 @@ export interface PriorAttempt {
   mergedAt: string | null
   /** fix_attempts.error: why the agent finished without a PR, or why the run failed. */
   note: string | null
-  /** The latest completed Opus review of its PR, if any. */
+  /** The latest completed AI review of its PR, if any. */
   review: { verdict: string | null; summary: string | null; fixesReport: boolean | null; findings: FollowupFinding[] } | null
 }
 

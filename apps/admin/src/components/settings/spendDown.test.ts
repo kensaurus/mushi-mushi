@@ -122,9 +122,9 @@ const totals = (over: Partial<SpendDownCounts> = {}): SpendDownCounts => ({
 })
 
 describe('spendDownScoreLine', () => {
-  it('reads runs → PRs → mergeable, merged, and the Opus review cost', () => {
+  it('reads runs → PRs → mergeable, merged, and the AI review cost', () => {
     expect(spendDownScoreLine({ ...base, scoreboard: { days: 7, totals: totals() } })).toBe(
-      'Last 7 days: 258 runs → 154 PRs → 19 mergeable, 0 merged · Opus review $8.04 (latest review per PR)',
+      'Last 7 days: 258 runs → 154 PRs → 19 mergeable, 0 merged · AI review $8.04 (latest review per PR)',
     )
   })
 

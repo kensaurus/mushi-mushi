@@ -9,7 +9,7 @@ description: Get your first bug report into Mushi Mushi with the console's Set u
 
 # Onboarding
 
-**Route:** `/onboarding` (sidebar: **More pages › Connect › Set up**)
+**Route:** `/onboarding` (sidebar: **More pages › Set up & connect › Set up**)
 
 > **Scenario:** You signed up 5 minutes ago. Your goal: get a real bug report from your
 > app into Mushi Mushi before your afternoon standup. The page's own target is a first

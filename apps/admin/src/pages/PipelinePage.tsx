@@ -323,7 +323,7 @@ export function PipelinePage() {
         icon={<IconNetwork />}
         description="Every bug from report to deploy, where it is stuck, and the fix."
         helpTitle="About the pipeline"
-        helpWhatIsIt="Each bug moves from a report to a fix PR, an Opus review, CI, a release train, a merge and a deploy. This page shows how many are in each step now, which are stuck, and why."
+        helpWhatIsIt="Each bug moves from a report to a fix PR, an AI review, CI, a release batch, a merge and a deploy. This page shows how many are in each step now, which are stuck, and why."
         helpHowToUse="Start with the coloured stage: ▲ red is the bottleneck, ◆ amber is nearly as stuck; the rest show their stuck count in plain ink. The age bar shows how long stuck work has waited. In the stuck groups, the one marked Start here is the one to do first. Each group's left edge shows how long its oldest item has waited: grey under 3 days, amber 3 to 7 days, red 7 to 30 days, deep red over 30 days, and the age is written beside it. ◆ means slow or waiting. Groups that take the same fix sit under one heading with one button for all of them. Open a group to see its PRs with the failing checks or review findings; More holds the rest (re-run, close with a reason). Every action asks first."
       >
         {tab === 'workers' ? null : page.isValidating && !page.loading ? (

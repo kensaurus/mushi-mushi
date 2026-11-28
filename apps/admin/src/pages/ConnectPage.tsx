@@ -115,8 +115,8 @@ function resolveProjectFallback(opts: {
   missing: boolean
   hasError: boolean
 }): { text: string; busy: boolean } {
-  if (opts.pending) return { text: 'Loading project…', busy: true }
-  if (opts.hasError) return { text: "Couldn't load your projects — use Retry above.", busy: false }
+  if (opts.pending) return { text: 'Loading app…', busy: true }
+  if (opts.hasError) return { text: "Couldn't load your apps — use Retry above.", busy: false }
   if (opts.missing) {
     return {
       text: "That project isn't in your account (or hasn't loaded). Pick one from the project switcher above.",

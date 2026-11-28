@@ -112,8 +112,8 @@ describe('the vibe-coding cycle (ADR 0027)', () => {
 
   it('orders the Advanced sections along the cycle', () => {
     expect(sections.map((s) => s.title)).toEqual([
-      'Connect',
-      'Bugs',
+      'Set up & connect',
+      'Find & sort bugs',
       'Fix',
       'Verify',
       'Ship & watch',
@@ -124,8 +124,8 @@ describe('the vibe-coding cycle (ADR 0027)', () => {
 
   it('puts each step’s first page where the cycle starts it', () => {
     const first = (title: string) => sections.find((s) => s.title === title)?.items[0]?.path
-    expect(first('Connect')).toBe('/onboarding')
-    expect(first('Bugs')).toBe('/dashboard')
+    expect(first('Set up & connect')).toBe('/onboarding')
+    expect(first('Find & sort bugs')).toBe('/dashboard')
     expect(first('Fix')).toBe('/fixes')
     expect(first('Verify')).toBe('/qa-coverage')
     expect(first('Ship & watch')).toBe('/portfolio')
@@ -146,9 +146,9 @@ describe('the vibe-coding cycle (ADR 0027)', () => {
 
 describe('routeSection (breadcrumb)', () => {
   it('names the section a page sits in and links to its first page', () => {
-    expect(routeSection('/graph')).toEqual({ title: 'Bugs', firstPath: '/dashboard' })
-    expect(routeSection('/reports/abc')).toEqual({ title: 'Bugs', firstPath: '/dashboard' })
-    expect(routeSection('/integrations/config')).toEqual({ title: 'Connect', firstPath: '/onboarding' })
+    expect(routeSection('/graph')).toEqual({ title: 'Find & sort bugs', firstPath: '/dashboard' })
+    expect(routeSection('/reports/abc')).toEqual({ title: 'Find & sort bugs', firstPath: '/dashboard' })
+    expect(routeSection('/integrations/config')).toEqual({ title: 'Set up & connect', firstPath: '/onboarding' })
     expect(routeSection('/judge')?.title).toBe('Verify')
   })
   it('returns null outside the sidebar', () => {

@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  *
- * Merge popover with the Opus review of a cloud agent's PR (ADR 0030):
+ * Merge popover with the AI review of a cloud agent's PR (ADR 0030):
  * a hold disables the merge until "Merge anyway" is ticked, and then sends
  * override: true; fix-first findings show before merging; a PR with no review
  * says "Not reviewed" and merges as before.
@@ -42,7 +42,7 @@ import { MergeFixPreflight } from './MergeFixPreflight'
 const HOLD: FixReview = {
   ...NOT_REVIEWED,
   state: 'hold',
-  label: 'Opus review: hold',
+  label: 'AI review: hold',
   verdict: 'hold',
   fixesReport: true,
   risk: 'high',
@@ -72,7 +72,7 @@ const mergeBody = () => {
   return call ? JSON.parse(String((call[1] as RequestInit).body)) : null
 }
 
-describe('MergeFixPreflight — Opus review gate', () => {
+describe('MergeFixPreflight — AI review gate', () => {
   let container: HTMLDivElement
   let root: Root
   const onMerged = vi.fn()
@@ -101,7 +101,7 @@ describe('MergeFixPreflight — Opus review gate', () => {
     respond(HOLD)
     await open()
     const text = document.body.textContent ?? ''
-    expect(text).toContain('Opus review: hold')
+    expect(text).toContain('AI review: hold')
     expect(text).toContain('Deletes the resume-lesson flow.')
     expect(text).toContain('Resume where you left off')
     expect(button('Squash merge').disabled).toBe(true)
@@ -148,7 +148,7 @@ describe('MergeFixPreflight — Opus review gate', () => {
   })
 
   it('a hold on an older commit, or while a re-review runs, still needs the override', async () => {
-    respond({ ...HOLD, state: 'stale', stale: true, rerunning: true, label: 'Opus review: hold (older commit) · re-review in progress' })
+    respond({ ...HOLD, state: 'stale', stale: true, rerunning: true, label: 'AI review: hold (older commit) · re-review in progress' })
     await open()
     expect(document.body.textContent).toContain('This verdict is about an older commit')
     expect(button('Squash merge').disabled).toBe(true)
@@ -165,7 +165,7 @@ describe('MergeFixPreflight — Opus review gate', () => {
   })
 
   it('a fix-first review lists its findings and still merges', async () => {
-    respond({ ...HOLD, state: 'fix_first', label: 'Opus review: fix first', verdict: 'fix_first', findings: [{ ...HOLD.findings[0], severity: 'major' }] })
+    respond({ ...HOLD, state: 'fix_first', label: 'AI review: fix first', verdict: 'fix_first', findings: [{ ...HOLD.findings[0], severity: 'major' }] })
     await open()
     expect(document.body.textContent).toContain('Major')
     expect(document.body.querySelector('input[type="checkbox"]')).toBeNull()
@@ -175,7 +175,7 @@ describe('MergeFixPreflight — Opus review gate', () => {
   it('while the first review runs, says so and sends the confirmation with the click', async () => {
     respond({ ...NOT_REVIEWED, state: 'queued', label: 'Review in progress' })
     await open()
-    expect(document.body.textContent).toContain('The Opus review is still running. Merging now skips it')
+    expect(document.body.textContent).toContain('The AI review is still running. Merging now skips it')
     await act(async () => button('Squash merge').click())
     expect(mergeBody()).toEqual({ mergeMethod: 'squash', confirmPendingReview: true })
   })

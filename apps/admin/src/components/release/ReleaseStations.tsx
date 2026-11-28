@@ -61,10 +61,10 @@ export function ReleaseStations({ stations, href, testId = 'home-release-station
 
 /** "Train (PR 902) with 3 fixes is running CI", or the last one, or none this week. */
 export function ReleaseTrainLine({ train, href }: { train: ReleaseTrainNow | null; href: string }) {
-  if (!train) return <span className="text-fg-muted">No release train this week.</span>
+  if (!train) return <span className="text-fg-muted">No release batch this week.</span>
   return (
     <Link to={href} className="hover:underline">
-      {train.active ? 'Train' : 'Last train'}
+      {train.active ? 'Release batch' : 'Last release batch'}
       {train.prNumber ? ` #${train.prNumber}` : ''} with {train.members} {train.members === 1 ? 'fix' : 'fixes'} {TRAIN_STATE[train.state] ?? train.state}
     </Link>
   )

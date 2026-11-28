@@ -130,3 +130,24 @@ highlighted while you were on one.
   Settings › Display & sidebar (formerly Labs; `?tab=labs` still opens it).
   The Admin / Tester switch at the top of the admin sidebar became a link in
   that menu; the tester portal keeps its switch back.
+
+## Amendment (owner, 2026-11-28): section titles never repeat a page name
+
+The owner said the console is confusing and that some pages were missing
+from the sidebar. Two section titles were also page names: "Connect" headed
+the Connect page, and "Bugs" headed the Bugs page. That gave "Connect ›
+Connect" under More pages and "2 · Bugs › Bugs" in the breadcrumb. The
+owner delegated the call ("be autonomous … fix any weird uiux").
+
+- `start` is now **1 · Set up & connect** and `plan` is **2 · Find & sort
+  bugs**. The ids, order, stages and membership are unchanged, and the
+  docs admin sidebar separators follow.
+- A sub-page whose page is not in the sidebar (Checks and Apps have been
+  Labs since ADR 0069) is listed under that page in More pages, grouped as
+  on the Checks page. Before this, the 13 checks and Manage apps had no row
+  at all. `sidebarTree.test.ts` now fails when a page has no row of its own;
+  having a parent no longer counts as a place.
+- A sidebar count is only shown for something a visit to that page can
+  clear. Totals left the sidebar, and so did the reporters' own unread
+  updates. Above 99 a count becomes a dot that keeps the exact number in its
+  label.

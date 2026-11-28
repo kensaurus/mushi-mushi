@@ -4,7 +4,7 @@
  *          `mushi work` (ADR 0032 amendment 2026-10-24), served by `api-ext`
  *          (deploy size limit; `api` forwards these paths).
  *
- *   GET  /v1/admin/projects/:id/local-followups   local fixes whose latest Opus review says "fix first" on their head
+ *   GET  /v1/admin/projects/:id/local-followups   local fixes whose latest AI review says "fix first" on their head
  *   POST /v1/admin/fixes/:id/local-followup       claim one round: live checks, then the screened prompt
  *   POST /v1/admin/fixes/:id/local-followup/done  { headBefore, headAfter?, note? } record the outcome; a push re-queues the review
  *
@@ -339,7 +339,7 @@ export function registerLocalFollowupRoutes(app: Hono<{ Variables: Variables }>)
         kind: 'followup',
         status: 'fail',
         label: 'Local follow-up skipped',
-        detail: `All ${droppedCount} Opus findings were left out by the safety screen; a person decides this one.`,
+        detail: `All ${droppedCount} AI review findings were left out by the safety screen; a person decides this one.`,
         at: new Date().toISOString(),
         dedupe_key: localFollowupSkipDedupe(attempt.id, gate.headSha),
         payload: { local: true, headSha: gate.headSha, dropped: droppedCount },
@@ -386,7 +386,7 @@ export function registerLocalFollowupRoutes(app: Hono<{ Variables: Variables }>)
       kind: 'followup',
       status: 'pending',
       label: 'Local follow-up started',
-      detail: `${prompt.findingsSent} Opus finding(s) sent to a local agent (mushi work), round ${gate.round}${droppedCount > 0 ? `; ${droppedCount} left out by the safety screen` : ''}.`,
+      detail: `${prompt.findingsSent} AI review finding(s) sent to a local agent (mushi work), round ${gate.round}${droppedCount > 0 ? `; ${droppedCount} left out by the safety screen` : ''}.`,
       at: new Date().toISOString(),
       dedupe_key: localFollowupDedupe(attempt.id, gate.headSha),
       payload: { local: true, headSha: gate.headSha, round: gate.round, findings: prompt.findingsSent, dropped: droppedCount },
@@ -436,7 +436,7 @@ export function registerLocalFollowupRoutes(app: Hono<{ Variables: Variables }>)
       status: pushed ? 'ok' : 'fail',
       label: pushed ? 'Local follow-up pushed' : 'Local follow-up made no change',
       detail: pushed
-        ? `New commit ${headAfter!.slice(0, 7)} on the pull request; Opus reviews it again.`
+        ? `New commit ${headAfter!.slice(0, 7)} on the pull request; AI reviews it again.`
         : note ? `The local agent pushed nothing: ${note}` : 'The local agent pushed nothing.',
       at: new Date().toISOString(),
       dedupe_key: `local-followup-done:${attempt.id}:${headBefore}`,

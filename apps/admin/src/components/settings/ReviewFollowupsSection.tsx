@@ -1,9 +1,9 @@
 /**
  * FILE: apps/admin/src/components/settings/ReviewFollowupsSection.tsx
  * PURPOSE: Settings → AI keys → Cursor: "Review follow-ups" (ADR 0032). When
- *          the Opus review of an agent's pull request says "fix first", Mushi
+ *          the AI review of an agent's pull request says "fix first", Mushi
  *          sends the PR back to a new Cursor agent once, with the review's
- *          findings, and Opus reviews the push. This block shows what the
+ *          findings, and AI reviews the push. This block shows what the
  *          follow-ups produced in the last 7 days and lets an organization
  *          owner or admin turn them on or off and pick the Cursor key, the
  *          model (from that key's Cursor model list) and the daily limit.
@@ -106,7 +106,7 @@ export function ReviewFollowupsSection({ keysToken }: Props) {
       {/* One line + (i): the rules ran three lines, six at 390 px (round-3 review 2026-11-19). */}
       <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-fg-muted">
         <span>A fix-first pull request goes back to a new Cursor agent once, with the review&apos;s findings.</span>
-        <InfoHint content="Opus reviews the push. Only pull requests a Mushi Mushi cloud agent opened, at most two per pull request, never on a hold, inside each app's auto-fix limits. Off until you turn it on; turning it on also picks up the last 3 days of fix-first pull requests." />
+        <InfoHint content="The AI review checks the push. Only pull requests a Mushi Mushi cloud agent opened, at most two per pull request, never on a hold, inside each app's auto-fix limits. Off until you turn it on; turning it on also picks up the last 3 days of fix-first pull requests." />
       </p>
       <p className="text-xs text-fg-secondary">
         {settings.enabled

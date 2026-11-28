@@ -57,11 +57,11 @@ function render(props: Parameters<typeof ProjectSnapshotMeta>[0]) {
 describe('ProjectSnapshotMeta chips', () => {
   it('spells out the bottleneck stage instead of a bare letter', () => {
     render({ snapshot, compact: true, linkless: true })
-    const chip = container.querySelector('[title^="PDCA bottleneck"]')
+    const chip = container.querySelector('[title^="Stuck at"]')
     expect(chip).not.toBeNull()
-    expect(chip?.textContent).toBe('Stuck: Do')
+    expect(chip?.textContent).toBe('Stuck at Fix')
     expect(chip?.getAttribute('aria-label')).toBe(
-      'PDCA bottleneck: Do — 3 reports still unfixed after an auto-fix attempt',
+      'Stuck at Fix: 3 reports still unfixed after an auto-fix attempt',
     )
   })
 
@@ -80,8 +80,8 @@ describe('ProjectSnapshotMeta chips', () => {
 
   it('keeps the accessible name when the bottleneck chip is a link', () => {
     render({ snapshot, compact: true })
-    const link = container.querySelector('a[aria-label^="PDCA bottleneck"]')
+    const link = container.querySelector('a[aria-label^="Stuck at"]')
     expect(link).not.toBeNull()
-    expect(link?.textContent).toBe('Stuck: Do')
+    expect(link?.textContent).toBe('Stuck at Fix')
   })
 })

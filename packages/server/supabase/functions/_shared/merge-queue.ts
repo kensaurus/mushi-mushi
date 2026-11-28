@@ -114,7 +114,7 @@ export function nextQueueStep(pr: PullView, checks: ChecksView): QueueStep {
 
 /**
  * What a refused gated merge means for the queue row, in words the console
- * shows (2026-10-23: "Mushi merges on its own only when the Opus review of this
+ * shows (2026-10-23: "Mushi merges on its own only when the AI review of this
  * exact commit says merge" told nobody what to do). A held row does not hold
  * its repo; it is looked at again whenever nothing else there moves.
  */

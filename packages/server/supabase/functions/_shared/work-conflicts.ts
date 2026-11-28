@@ -10,7 +10,7 @@
  *          local_claim_id), so a cloud agent never starts on a row a lane
  *          holds. Ending the claim frees the row with what happened, gives
  *          the cap slot back when the machine was at fault, and after a push
- *          re-queues the Opus review of the new head. The rules are in
+ *          re-queues the AI review of the new head. The rules are in
  *          _shared/work-modes.ts.
  */
 
@@ -152,7 +152,7 @@ export async function claimConflict(db: Db, lane: ModeLane, now: Date, leaseUnti
 /**
  * A conflict claim ended (done, or its lease ran out): free the queue row with
  * what happened, give the cap slot back when the machine was at fault, and
- * after a push re-queue the Opus review of the new head (the push webhook
+ * after a push re-queue the AI review of the new head (the push webhook
  * also does; this does not wait for it).
  */
 export async function endConflictClaim(

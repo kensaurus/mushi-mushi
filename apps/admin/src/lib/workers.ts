@@ -17,7 +17,7 @@ type LaneMode = 'fix' | 'followups' | 'conflicts' | 'audit' | 'skill'
 /** What each mode does, as the Workers tab offers it (ADR 0048; P3: 0049, 0050, 0042 amendment). */
 export const LANE_MODES: ReadonlyArray<{ value: LaneMode; label: string; hint: string }> = [
   { value: 'fix', label: 'Fix reports and follow-ups', hint: 'Takes its queue first, then the worst open reports, and opens a draft PR for each.' },
-  { value: 'followups', label: 'Review follow-ups only', hint: 'Fixes what Opus asked for on PRs a local agent opened.' },
+  { value: 'followups', label: 'Review follow-ups only', hint: 'Fixes what the AI review asked for on PRs a local agent opened.' },
   { value: 'conflicts', label: 'Resolve merge conflicts', hint: "Merges the base branch into PRs of this clone's repository that wait in the merge queue. The agent may change only the conflicted files; anything else is refused." },
   { value: 'audit', label: 'Audit the code, screen by screen', hint: 'A model proposes bugs; the machine files only those its own check reproduces. A fix lane for the same app on this machine gets them.' },
   { value: 'skill', label: 'Run skill runs', hint: 'Takes only the rounds of skill runs started on /credits with this lane.' },

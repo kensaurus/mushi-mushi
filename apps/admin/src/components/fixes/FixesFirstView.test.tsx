@@ -84,7 +84,7 @@ describe('FixesFirstView', () => {
     ])
   })
 
-  // /pipeline also files a PR whose Opus review was skipped (no key) as
+  // /pipeline also files a PR whose AI review was skipped (no key) as
   // approved and green; that is not an Opus "merge" (2026-10-28 review).
   it('does not list a PR without an Opus merge verdict, even when /pipeline counts it green', async () => {
     const unreviewed = { ...approvedSkippedSummary, review_verdict: null, review_head_sha: null } as FixAttempt

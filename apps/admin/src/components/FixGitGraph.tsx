@@ -137,7 +137,7 @@ function kindLabel(kind: FixTimelineEvent['kind']): string {
     case 'pr_state_changed':
       return 'PR state changed'
     case 'reviewed':
-      return 'Opus review'
+      return 'AI review'
     case 'followup':
       return 'Review follow-up'
     case 'completed':

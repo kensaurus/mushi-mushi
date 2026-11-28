@@ -25,6 +25,7 @@
  *          section further down.
  */
 
+import { reportHasCodeLocation } from '../../lib/reportCodeLocation'
 import { roundLongDecimals } from '../../lib/format'
 import { summaryPlace } from './summaryPlace'
 import type { ReactNode } from 'react'
@@ -124,7 +125,10 @@ export function DiagnosisFixHero({
 
         <CodeContextBadge report={report} />
 
-        {!stage2 && isConfident && report.component && (
+        {/* Only where an agent has somewhere to start: with no code location
+            the page also says "no stack trace or file to change", and the
+            two read as a contradiction (journey walk, 2026-11-28). */}
+        {!stage2 && isConfident && report.component && reportHasCodeLocation(report) && (
           <p className="mt-1.5 text-2xs text-fg-faint">
             Likely in{' '}
             <code className="rounded-sm border border-edge-subtle bg-surface-overlay/50 px-1 py-0.5 font-mono text-fg-secondary">

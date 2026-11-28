@@ -169,7 +169,7 @@ describe('runAgentStatusPoll — transitions', () => {
     expect(findQueries(queries, 'reports', 'update')[0].payload).toMatchObject({ fix_pr_url: 'https://github.com/o/r/pull/7', status: 'fixing' })
     expect(mocks.notifyTeamFixEvent).toHaveBeenCalledTimes(1)
     expect(mocks.notifyTeamFixEvent.mock.calls[0][3]).toBe('fix_pr_opened')
-    // ADR 0030: the accepted PR is queued for the Opus review, once per attempt.
+    // ADR 0030: the accepted PR is queued for the AI review, once per attempt.
     const queued = findQueries(queries, 'fix_reviews', 'upsert')
     expect(queued).toHaveLength(1)
     expect(queued[0].payload).toMatchObject({ fix_attempt_id: 'fa-1', status: 'queued', pr_url: 'https://github.com/o/r/pull/7', repo: 'o/r', pr_number: 7 })

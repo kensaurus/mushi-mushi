@@ -112,7 +112,7 @@ export const OUTCOME: Record<CleanupItemResult['outcome'], { label: string; tone
 
 export const WHY_LABEL: Record<CleanupPr['why'][number], string> = {
   superseded: 'Replaced by a newer fix',
-  hold: 'Opus said hold',
+  hold: 'The AI review said hold',
   stale: 'No new commits',
 }
 

@@ -34,7 +34,7 @@ function verdictFor(report: ReportDetail, byId: Map<string, DiagnosisNode>): Dia
   if (status === 'fixed' || byId.get('attempt')?.state === 'done') return { tone: 'ok', label: 'Fixed' }
   if (cause?.state === 'failed') return { tone: 'danger', label: 'Diagnosis failed' }
   if (cause?.state === 'pending') return { tone: 'info', label: 'Diagnosis in progress' }
-  if (judge?.title.startsWith('Judge disagrees')) return { tone: 'warn', label: 'Judge disagrees: check the triage' }
+  if (judge?.title.startsWith('A second AI disagrees')) return { tone: 'warn', label: 'A second AI disagrees: check the triage' }
   // Only the first check ran: it is sure of the kind of bug, not of a cause.
   // "Confident diagnosis" over "no full diagnosis" contradicted itself.
   const view = reportDiagnosisView(report).kind

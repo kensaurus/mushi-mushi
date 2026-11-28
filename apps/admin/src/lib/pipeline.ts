@@ -281,7 +281,7 @@ export const ACTION_META: Record<PipelineAction, ActionMeta> = {
   },
   followup: {
     label: 'Send to follow-up',
-    confirm: 'Sends each PR’s Opus findings to an agent that fixes them on the same branch: Mushi Mushi’s cloud agent when review follow-ups can run, otherwise your local mushi work lanes on their next mushi work --followups run.',
+    confirm: 'Sends each PR’s AI review findings to an agent that fixes them on the same branch: Mushi Mushi’s cloud agent when review follow-ups can run, otherwise your local mushi work lanes on their next mushi work --followups run.',
     needsConfirm: true,
     needsReason: false,
     variant: 'ghost',
@@ -295,7 +295,7 @@ export const ACTION_META: Record<PipelineAction, ActionMeta> = {
   },
   re_review: {
     label: 'Re-run review',
-    confirm: 'Asks Opus to review each PR again on its latest commit. A new verdict replaces the old one.',
+    confirm: 'Asks the AI to review each PR again on its latest commit. A new verdict replaces the old one.',
     needsConfirm: true,
     needsReason: false,
     variant: 'ghost',
@@ -400,7 +400,7 @@ async function perFix(ids: string[], kind: 're_review' | 'rerun_ci'): Promise<Ac
       kind === 're_review'
         ? await apiFetch<unknown>(`/v1/admin/fixes/${encodeURIComponent(id)}/review`, { method: 'POST', scope: 'enumeration' })
         : await apiFetch<unknown>(`/v1/admin/fixes/${encodeURIComponent(id)}/ci/rerun`, { method: 'POST', scope: 'enumeration' })
-    const done = kind === 're_review' ? 'Review queued; Opus answers within about 10 minutes.' : 'Failed jobs re-run on GitHub.'
+    const done = kind === 're_review' ? 'Review queued; the AI review answers within about 10 minutes.' : 'Failed jobs re-run on GitHub.'
     out.push(res.ok ? { id, ok: true, message: done } : { id, ok: false, message: res.error?.message ?? 'The request failed.' })
   }
   return out

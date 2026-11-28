@@ -88,7 +88,7 @@ export interface FixAttempt {
   retryable?: boolean;
   /** Set on the latest attempt when it failed on a rejected key. keyHealthy null = not checked yet. */
   credential_block?: { provider: string; keyHealthy: boolean | null } | null;
-  /** Latest completed Opus review verdict of this PR (GET /v1/admin/fixes, ADR 0030); null when not reviewed. */
+  /** Latest completed AI review verdict of this PR (GET /v1/admin/fixes, ADR 0030); null when not reviewed. */
   review_verdict?: 'merge' | 'fix_first' | 'hold' | null;
   /** The commit that verdict is about; a different head means the verdict is stale. */
   review_head_sha?: string | null;

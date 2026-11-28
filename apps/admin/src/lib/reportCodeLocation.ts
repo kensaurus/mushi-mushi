@@ -17,6 +17,10 @@
  *     which skips `in_app: false` frames; `_shared/sentry-frames.ts`);
  *   - the classifier named a file: a path token with a `/` and a code
  *     extension in the component. A prose component name does not count;
+ *   - or a folder three levels deep (`supabase/functions/delete-account`):
+ *     the report page showed "Likely in <that folder>" right beside "no file
+ *     to change" (journey walk, 2026-11-28). A one-slash route name
+ *     (`app/words`) still does not count;
  *   - a captured request failed (status >= 400, or an error).
  */
 
@@ -73,8 +77,11 @@ function stackHasFirstPartyFrame(stack: string): boolean {
 /** A path token like `features/chat/chat-input.tsx`: a folder and a code extension. */
 const FILE_PATH_RE = /[\w@.-]+\/[\w@./-]*\.(?:[cm]?[jt]sx?|vue|svelte|astro|py|rb|go|rs|java|kt|kts|swift|dart|php|cs|ex|exs|scala)\b/i
 
+/** A repo folder at least three segments deep, as one token: `supabase/functions/delete-account`. A date (`11/28/2026`) is not one. */
+const FOLDER_PATH_RE = /(?:^|[\s`'"(])[A-Za-z_@.][\w@.-]*\/[\w@.-]+\/[\w@./-]+/
+
 function namesFile(value: unknown): boolean {
-  return typeof value === 'string' && FILE_PATH_RE.test(value)
+  return typeof value === 'string' && (FILE_PATH_RE.test(value) || FOLDER_PATH_RE.test(value))
 }
 
 type CodeLocationSource = Pick<

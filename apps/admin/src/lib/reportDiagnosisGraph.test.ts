@@ -180,7 +180,7 @@ describe('buildDiagnosisGraph verdicts', () => {
 
   it('a judge that disagrees wins over confidence', () => {
     const g = buildDiagnosisGraph(report({ judge_eval: { id: 'j', judge_score: 0.4, classification_agreed: false, judge_reasoning: 'Wrong severity.', created_at: '' } }))
-    expect(g.verdict.label).toBe('Judge disagrees: check the triage')
+    expect(g.verdict.label).toBe('A second AI disagrees: check the triage')
   })
 
   it('a merged fix reads as fixed, with production as the next step', () => {

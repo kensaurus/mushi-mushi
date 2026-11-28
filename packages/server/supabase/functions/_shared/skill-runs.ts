@@ -6,7 +6,7 @@
  *
  *          Each round is a report (source 'skill_run', filed classified) that
  *          spend-down dispatches on the app's own pooled Cursor key; its PR
- *          gets the Opus review (ADR 0030), review follow-ups (ADR 0032) and
+ *          gets the AI review (ADR 0030), review follow-ups (ADR 0032) and
  *          the merge queue (ADR 0041). The next round is filed after a merge;
  *          the run ends when the agent finds nothing left in scope.
  *

@@ -7,7 +7,7 @@
  * a model's verdict. Each tick this function:
  *
  *   1. picks cloud-agent fix attempts with an open PR whose latest completed
- *      Opus review is about the PR's head (`fix_attempts.commit_sha`) and that
+ *      AI review is about the PR's head (`fix_attempts.commit_sha`) and that
  *      have no `fix_merge_gates` row for that head yet, or one older than
  *      10 minutes whose gates are not final; at most 10 a tick and 3 per app;
  *   2. reads the PR, its files (up to 300) and the check runs on its live
@@ -15,7 +15,7 @@
  *      host's fail-to-pass proof, protected paths, diff budget) and upserts
  *      the row for that head under a `run_id` claim; every write of the run
  *      is guarded on it;
- *   3. when gates 1 and 3 to 6 pass, runs the second review: the Opus review
+ *   3. when gates 1 and 3 to 6 pass, runs the second review: the AI review
  *      prompt and rules (`buildReviewPrompt`, `normalizeReview`) on a second
  *      model family through an OpenAI-compatible call, on the project's own
  *      OpenAI or OpenRouter key (ADR 0023/0031 order; never the platform key;
@@ -427,7 +427,7 @@ async function runSecondJudge(
   // No key of the app's own: the platform keys run the second review through
   // the fix-verifier-judge KENSAURUS AI route (2026-11-21, ADR 0035 amendment),
   // on OpenAI-compatible candidates only, so it stays a different model family
-  // from the Opus review. Off and over-budget still mean unavailable.
+  // from the AI review. Off and over-budget still mean unavailable.
   const onRoute = !resolved.key && resolved.reason === 'no_key'
   if (!resolved.key && !onRoute) return { state: { kind: 'unavailable', reason: resolved.reason }, record: stored }
 

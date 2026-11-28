@@ -433,7 +433,7 @@ interface BlockContext {
 }
 
 /**
- * Why the server would refuse a follow-up (Opus findings or a CI repair) for
+ * Why the server would refuse a follow-up (AI review findings or a CI repair) for
  * this PR, in the words api/routes/pipeline.ts sendFollowup answers with, or
  * null when it may go through. Same predicates: the cloud trigger when cloud
  * follow-ups can run for the app, else the local lanes' hand-off rules.

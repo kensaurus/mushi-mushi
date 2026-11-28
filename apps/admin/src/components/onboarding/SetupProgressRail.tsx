@@ -10,6 +10,11 @@
  *            2. The next step only, with its one button: Make the key, copy
  *               the snippet, send a test bug, or open the first report.
  *            3. The last heartbeat: when, which key, from where.
+ *            4. Once reports are wired up, what is left before a fix can be
+ *               sent: the same preflight checks the report page's disabled
+ *               "Dispatch fix" reads. Set up said "All 6 checks pass" while
+ *               the report said "Set up first: Codebase indexed" (journey
+ *               walk, 2026-11-28); now both read one list.
  *
  *          It replaces the status banner, four tiles and steps guide that sat
  *          above the tabs. The model is lib/setupRail.
@@ -25,6 +30,9 @@ import { DEFAULT_SDK_CONFIG, installCommand, renderSnippet } from '../../lib/sdk
 import { detectWebBundler, resolveDefaultSdkFramework, snippetBundler } from '../../lib/sdkInstallDefaults'
 import type { SetupProject } from '../../lib/useSetupStatus'
 import type { OnboardingTabId } from './types'
+import { useDispatchPreflight } from '../../lib/useDispatchPreflight'
+import { dispatchSetupSteps } from '../../lib/dispatchSetupSteps'
+import { DispatchSetupLine } from '../report-detail/DispatchSetupLine'
 
 interface SetupProgressRailProps {
   project: SetupProject | null
@@ -45,6 +53,10 @@ export function SetupProgressRail({ project, apiKey, onTab, onMintKey, minting, 
     { deps: [project?.project_id ?? null] },
   )
   const rail = buildSetupRail({ project, ttfd: ttfd ?? null })
+  // Asked only once reports are wired up: before that the next step is the rail's.
+  const preflight = useDispatchPreflight(rail.next ? null : project?.project_id ?? null)
+  const fixSetup = rail.next || preflight.loading || preflight.error ? null : dispatchSetupSteps(preflight.checks)
+  const fixReady = !rail.next && !preflight.loading && !preflight.error && preflight.checks.length > 0 && !fixSetup
 
   return (
     <section
@@ -55,9 +67,21 @@ export function SetupProgressRail({ project, apiKey, onTab, onMintKey, minting, 
     >
       <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <h2 className="text-sm font-semibold text-fg">
-          {rail.next ? `${rail.doneCount} of ${rail.steps.length} done. Next: ${rail.next.action}` : 'Your app is wired up'}
+          {rail.next
+            ? `${rail.doneCount} of ${rail.steps.length} done. Next: ${rail.next.action}`
+            : fixReady
+              ? 'Your app is wired up, and fixes are ready'
+              : 'Your app is wired up'}
         </h2>
       </div>
+      {fixSetup ? (
+        <DispatchSetupLine
+          setup={fixSetup}
+          lead="Bug reports arrive. To get fixes too:"
+          className="mt-1 text-xs"
+          data-testid="setup-fix-steps"
+        />
+      ) : null}
       <ol className="mt-3 grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4">
         {rail.steps.map((step, i) => (
           <RailStep key={step.id} step={step} index={i} onTab={onTab} />

@@ -588,7 +588,7 @@ export function ProjectsPage() {
   }
 
   if (loading)
-    return <TableSkeleton rows={4} columns={4} showFilters={false} label="Loading projects" />
+    return <TableSkeleton rows={4} columns={4} showFilters={false} label="Loading apps" />
   if (error) return <PageLoadError error={error} resource="projects" onRetry={reloadAll} />
 
   // A just-made app reads "Setting up", like the banner (lib/newApps.ts).

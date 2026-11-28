@@ -273,7 +273,7 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
           className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-fg-secondary"
           data-testid="auto-decide-note"
         >
-          <span className="text-2xs font-semibold text-fg">The Opus review decides:</span>
+          <span className="text-2xs font-semibold text-fg">The AI review decides:</span>
           <span className="inline-flex items-center gap-1">
             <StatusGlyph tone="ok" />
             <span className="font-semibold text-fg">merge</span> → queue
@@ -291,7 +291,7 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
           <p className="text-3xs text-fg-secondary">
             {batching
               ? `Batch: one release train ${intervalLabel(release?.intervalMinutes ?? 360)}, one CI run, one merge · security fixes and critical bugs skip the wait`
-              : 'Each PR: branch updated, CI and an Opus “merge” on the final commit, then merged, one per repo at a time'}{' '}
+              : 'Each PR: branch updated, CI and an AI review “merge” on the final commit, then merged, one per repo at a time'}{' '}
             · you can leave this page
           </p>
         </div>

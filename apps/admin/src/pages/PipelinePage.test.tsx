@@ -266,7 +266,7 @@ describe('PipelinePage', () => {
     expect(f1.querySelector('a[href="https://github.com/kensaurus/glot.it/pull/1"]')).not.toBeNull()
     expect(q('pipeline-item-f1-last-event')!.textContent).toBe('· last: CI finished: failed (3 h ago)')
     await click(q('pipeline-group-hold-toggle'))
-    expect(q('pipeline-item-f5')!.textContent).toContain('Opus: hold')
+    expect(q('pipeline-item-f5')!.textContent).toContain('AI review: hold')
     expect(q('pipeline-item-f5')!.textContent).toContain('The Shop card is not fixed.')
   })
 

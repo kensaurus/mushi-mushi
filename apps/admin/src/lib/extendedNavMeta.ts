@@ -737,7 +737,7 @@ export function healthStatsNavBadge(stats: NavStatSlices['health']): WorkspaceNa
   return null
 }
 
-export function fixesStatsNavBadge(stats: NavStatSlices['fixes']): WorkspaceNavBadge | null {
+function fixesStatsNavBadge(stats: NavStatSlices['fixes']): WorkspaceNavBadge | null {
   if (!stats) return null
   if (stats.failed > 0) {
     return attentionBadge(

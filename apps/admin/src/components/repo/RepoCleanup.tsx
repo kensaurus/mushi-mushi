@@ -284,7 +284,7 @@ function RepoCard({ repo, canRequest, busy, staleDays, maxItems, onAsk }: {
         <section className="flex flex-col gap-1.5">
           <h4 className="text-xs font-medium text-fg">Fix pull requests to close ({repo.prs.length})</h4>
           {repo.prs.length === 0 ? (
-            <p className="text-2xs text-fg-muted">None: no open Mushi Mushi fix is replaced by a newer one, held by Opus, or without new commits for {staleDays} days.</p>
+            <p className="text-2xs text-fg-muted">None: no open Mushi Mushi fix is replaced by a newer one, held by the AI review, or without new commits for {staleDays} days.</p>
           ) : (
             <>
               <ul className="flex flex-col gap-1">

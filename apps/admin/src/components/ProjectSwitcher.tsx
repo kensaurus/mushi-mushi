@@ -182,7 +182,7 @@ export function ProjectSwitcher() {
         },
         { replace: true },
       )
-      toast.info(`Switched to team ${detail.teamName}`, 'The project in this link belongs to that team.')
+      toast.info(`Switched to team ${detail.teamName}`, 'The app in this link belongs to that team.')
     }
     window.addEventListener(TEAM_AUTO_SWITCH_EVENT, onAutoSwitch)
     return () => window.removeEventListener(TEAM_AUTO_SWITCH_EVENT, onAutoSwitch)
@@ -299,7 +299,7 @@ export function ProjectSwitcher() {
         invalidateApiCache()
         refetchProjectData()
         toast.info(
-          'That link pointed to a project you can’t open',
+          'That link pointed to an app you can’t open',
           `It may have been deleted, or you may not be a member. Showing ${recovery.project_name} instead.`,
           { label: 'Pick another', onClick: () => setOpen(true) },
         )
@@ -373,10 +373,10 @@ export function ProjectSwitcher() {
     if (setup.error) {
       return (
         <HeaderContextChip
-          label="Projects unavailable"
+          label="Apps unavailable"
           trailing={<span className="text-fg-faint">Retry</span>}
           onClick={() => setup.reload()}
-          title={`Could not load your projects: ${setup.error}. Click to retry.`}
+          title={`Could not load your apps: ${setup.error}. Click to retry.`}
         />
       )
     }
@@ -390,7 +390,7 @@ export function ProjectSwitcher() {
       return (
         <HeaderContextChip
           data-testid="project-switcher-chip"
-          aria-label="Project: All apps — switch project"
+          aria-label="App: All apps — switch app"
           title="All apps. The app list is still loading. Click to try again."
           onClick={() => setup.reload()}
           label={
@@ -402,12 +402,12 @@ export function ProjectSwitcher() {
         />
       )
     }
-    return <HeaderContextChipSkeleton label="Loading project" />
+    return <HeaderContextChipSkeleton label="Loading app" />
   }
   if (setup.data.projects.length === 0) {
     return (
-      <HeaderContextChipLink to="/projects?tab=create" title="No projects in this team yet">
-        <span className="truncate max-w-48">No projects yet</span>
+      <HeaderContextChipLink to="/projects?tab=create" title="No apps in this team yet">
+        <span className="truncate max-w-48">No apps yet</span>
         <span aria-hidden className="text-fg-faint">→</span>
       </HeaderContextChipLink>
     )
@@ -482,7 +482,7 @@ export function ProjectSwitcher() {
     ? `All apps (pages that show one app use ${active.project_name})`
     : allApps
       ? `This page shows one app at a time: ${active.project_name}. All apps stays on elsewhere.`
-      : `Project: ${active.project_name}`
+      : `App: ${active.project_name}`
 
   return (
     <div ref={containerRef} className="relative inline-flex min-w-0 max-w-full items-center gap-1">
@@ -491,7 +491,7 @@ export function ProjectSwitcher() {
         // spent header width that long slugs needed, so it lives in the
         // tooltip now instead of truncating the name.
         title={chipTitle}
-        aria-label={`Project: ${chipName} — switch project`}
+        aria-label={`App: ${chipName} — switch app`}
         data-testid="project-switcher-chip"
         label={
           <span className="inline-flex items-center gap-1.5 min-w-0">
@@ -536,7 +536,7 @@ export function ProjectSwitcher() {
             </p>
           )}
           {groupList.length > 0 && (
-            <div role="group" aria-label="Filter by project group" className="flex flex-wrap gap-1 px-2.5 pt-2 pb-1">
+            <div role="group" aria-label="Filter by app group" className="flex flex-wrap gap-1 px-2.5 pt-2 pb-1">
               {[null, ...groupList].map((g) => {
                 const slug = g?.slug ?? null
                 const selected = (activeGroup?.slug ?? null) === slug
@@ -557,7 +557,7 @@ export function ProjectSwitcher() {
               })}
             </div>
           )}
-          <ul role="listbox" aria-label="Projects in this team" className="divide-y divide-edge-subtle/60">
+          <ul role="listbox" aria-label="Apps in this team" className="divide-y divide-edge-subtle/60">
             <li>
               <button
                 type="button"
@@ -581,7 +581,7 @@ export function ProjectSwitcher() {
               </button>
             </li>
             {shownProjects.length === 0 && (
-              <li className="px-2.5 py-2 text-xs text-fg-faint">No projects in this group. Add some from Portfolio → Manage groups.</li>
+              <li className="px-2.5 py-2 text-xs text-fg-faint">No apps in this group. Add some from Apps → Manage groups.</li>
             )}
             {shownProjects.map((p) => {
               const isActive = !allApps && p.project_id === active.project_id
@@ -643,7 +643,7 @@ export function ProjectSwitcher() {
               <p className="px-2.5 pt-2 pb-1 text-3xs font-semibold text-fg-secondary">
                 {team.name}
               </p>
-              <ul role="listbox" aria-label={`Projects in ${team.name}`} className="pb-1">
+              <ul role="listbox" aria-label={`Apps in ${team.name}`} className="pb-1">
                 {teamProjects.map((p) => (
                   <li key={p.id}>
                     <button
@@ -679,7 +679,7 @@ export function ProjectSwitcher() {
               onClick={() => setOpen(false)}
               className="flex w-full items-center justify-between gap-1.5 border-b border-edge-subtle px-2.5 py-1.5 text-left text-xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-opacity focus-visible:outline-none focus-visible:bg-surface-overlay"
             >
-              <span>View project page</span>
+              <span>Manage apps</span>
               <span aria-hidden className="text-fg-faint">→</span>
             </Link>
             {!mayCreateProject ? (
@@ -706,10 +706,10 @@ export function ProjectSwitcher() {
                       setCreating(false)
                     }
                   }}
-                  placeholder="New project name"
+                  placeholder="New app name"
                   maxLength={120}
                   className="flex-1 min-w-0 rounded-sm border border-edge bg-surface-root px-2 py-1 text-xs text-fg placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
-                  aria-label="New project name"
+                  aria-label="New app name"
                 />
                 <button
                   type="submit"
@@ -726,13 +726,13 @@ export function ProjectSwitcher() {
                 className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-left text-xs text-brand hover:bg-surface-overlay motion-safe:transition-opacity focus-visible:outline-none focus-visible:bg-surface-overlay"
               >
                 <span aria-hidden className="text-sm leading-none">+</span>
-                <span>New project</span>
+                <span>New app</span>
               </button>
             )}
             {createError ? (
               <div className="border-t border-edge-subtle p-2">
                 <ErrorAlert
-                  title={createError.code === 'PLAN_APP_LIMIT' ? PLAN_APP_LIMIT_TITLE : "Couldn't create project"}
+                  title={createError.code === 'PLAN_APP_LIMIT' ? PLAN_APP_LIMIT_TITLE : "Couldn't create the app"}
                   message={createError.message}
                   code={createError.code}
                   actions={createError.code === 'PLAN_APP_LIMIT' ? [{ label: 'See plans', onClick: () => navigate(PLANS_HREF) }] : undefined}

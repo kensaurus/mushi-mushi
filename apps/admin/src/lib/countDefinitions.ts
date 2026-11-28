@@ -52,7 +52,7 @@
  *     usually smaller; say "stuck at CI", never "failing CI", for it.
  *
  *   Ready to merge — Unit: an open fix PULL REQUEST. Not a draft, its
- *     latest Opus review says "merge" about its current commit, and its own
+ *     latest AI review says "merge" about its current commit, and its own
  *     CI passed on the code (a stopped test machine is not a pass).
  *     isReadyToMerge picks /fixes "Ready to merge" from the fix list; /repo
  *     "Mergeable now" applies the same rule to GitHub's live checks
@@ -90,7 +90,7 @@ export interface ReadyToMergeSignals {
   check_run_conclusion?: string | null
   ci_infra?: { infra: boolean } | null
   review_verdict?: string | null
-  /** The commit the latest Opus review is about; unknown on an older server. */
+  /** The commit the latest AI review is about; unknown on an older server. */
   review_head_sha?: string | null
 }
 
@@ -185,7 +185,7 @@ export function inFlightHeadline(localReports: number, ...serverCounts: Array<nu
 
 /** One-line definitions, for a hint beside the number. */
 export const COUNT_HINTS = {
-  readyToMerge: 'Open fix PRs whose Opus review says merge about their latest commit and whose CI passed.',
+  readyToMerge: 'Open fix PRs whose AI review says merge about their latest commit and whose CI passed.',
   stuck: 'Items waiting longer than their step should take, or that need a person. Each counts once, at the step it sits in.',
   stopped:
     'Reports whose latest auto-fix attempt failed, was skipped, or whose PR closed unmerged. Fixed and dismissed reports never count.',

@@ -1,5 +1,5 @@
 /**
- * The Opus review of a cloud agent's PR (ADR 0030), compact enough for the
+ * The AI review of a cloud agent's PR (ADR 0030), compact enough for the
  * merge popover: verdict chip, the summary, then what to look at before
  * merging (findings, removed behaviour, an owner decision). "Not reviewed"
  * is said plainly, never hidden.
@@ -35,10 +35,10 @@ interface Props {
 
 export function FixReviewSummary({ review, loading, error, rerunning, onRerun }: Props) {
   if (loading && !review) {
-    return <p className="text-2xs text-fg-faint">Loading the Opus review…</p>
+    return <p className="text-2xs text-fg-faint">Loading the AI review…</p>
   }
   if (error && !review) {
-    return <p className="text-2xs text-fg-muted">Opus review: could not load ({error}).</p>
+    return <p className="text-2xs text-fg-muted">AI review: could not load ({error}).</p>
   }
   if (!review) return null
 
@@ -46,12 +46,12 @@ export function FixReviewSummary({ review, loading, error, rerunning, onRerun }:
   const findings = showDetails ? review.findings : review.findings.filter((f) => f.severity !== 'minor')
 
   return (
-    <section aria-label="Opus review" className="rounded-sm border border-edge-subtle bg-surface p-2 space-y-1.5">
+    <section aria-label="AI review" className="rounded-sm border border-edge-subtle bg-surface p-2 space-y-1.5">
       <div className="flex items-center justify-between gap-2">
         <StatusPill status={reviewStatus(review)} label={review.label} />
         {canRerunReview(review) && (
           <Btn type="button" variant="ghost" size="sm" onClick={onRerun} disabled={rerunning} loading={rerunning}>
-            {review.state === 'not_reviewed' ? 'Review with Opus' : 'Re-run review'}
+            {review.state === 'not_reviewed' ? 'Run the AI review' : 'Re-run review'}
           </Btn>
         )}
       </div>

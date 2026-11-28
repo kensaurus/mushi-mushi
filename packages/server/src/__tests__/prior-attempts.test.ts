@@ -1,7 +1,7 @@
 /**
  * FILE: prior-attempts.test.ts
  * PURPOSE: A re-dispatched fix agent learns what earlier attempts on the
- *          report did (the Opus review of each PR, or why the agent stopped),
+ *          report did (the AI review of each PR, or why the agent stopped),
  *          screened and fenced, so it does not repeat a rejected theory.
  */
 import { describe, expect, it } from 'vitest'

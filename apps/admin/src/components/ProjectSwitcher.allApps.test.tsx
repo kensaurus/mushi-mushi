@@ -115,7 +115,7 @@ describe('ProjectSwitcher — All apps', () => {
     await click(chip())
     await click(allRow()!)
     expect(chip().textContent).toContain('All apps')
-    expect(chip().getAttribute('aria-label')).toBe('Project: All apps — switch project')
+    expect(chip().getAttribute('aria-label')).toBe('App: All apps — switch app')
     expect(params().get('apps')).toBe('all')
     expect(params().get('project')).toBe(PROJECT_A)
     expect(getStoredProjectScopeMode()).toBe('all')
@@ -183,9 +183,9 @@ describe('ProjectSwitcher — All apps', () => {
     setup.value = { loading: true, error: null, data: null, reload }
     await render('/reports?apps=all')
     expect(chip().textContent).toContain('All apps')
-    expect(chip().getAttribute('aria-label')).toBe('Project: All apps — switch project')
+    expect(chip().getAttribute('aria-label')).toBe('App: All apps — switch app')
     expect(chip().getAttribute('aria-busy')).toBeNull()
-    expect(host.textContent).not.toContain('Loading project')
+    expect(host.textContent).not.toContain('Loading app')
     await click(chip())
     expect(reload).toHaveBeenCalledOnce()
   })
@@ -193,7 +193,7 @@ describe('ProjectSwitcher — All apps', () => {
   it('keeps the loading chip for one app until the list arrives', async () => {
     setup.value = { loading: true, error: null, data: null, reload: vi.fn() }
     await render(`/reports?project=${PROJECT_A}`)
-    expect(host.querySelector('[aria-label="Loading project"]')).not.toBeNull()
+    expect(host.querySelector('[aria-label="Loading app"]')).not.toBeNull()
     expect(host.querySelector('[data-testid="project-switcher-chip"]')).toBeNull()
   })
 
@@ -201,7 +201,7 @@ describe('ProjectSwitcher — All apps', () => {
     await render(`/fixes?project=${PROJECT_B}&apps=all`)
     expect(chip().textContent).toContain('yen-yen')
     expect(chip().textContent).not.toContain('All apps')
-    expect(chip().getAttribute('aria-label')).toBe('Project: yen-yen — switch project')
+    expect(chip().getAttribute('aria-label')).toBe('App: yen-yen — switch app')
     expect(chip().getAttribute('title')).toContain('This page shows one app at a time: yen-yen')
     // The choice itself is untouched — it still applies on pages that combine.
     expect(params().get('apps')).toBe('all')

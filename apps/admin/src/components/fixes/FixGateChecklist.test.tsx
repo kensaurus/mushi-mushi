@@ -24,7 +24,7 @@ const VERIFICATION: FixVerification = {
   passed: false,
   secondJudge: null,
   gates: [
-    { id: 'review', status: 'pass', label: 'Opus review: merge', detail: 'Nothing to do.' },
+    { id: 'review', status: 'pass', label: 'AI review: merge', detail: 'Nothing to do.' },
     { id: 'ci', status: 'fail', label: 'CI is green', detail: 'Fix the failing check "test" and push.' },
     {
       id: 'fail_to_pass',
@@ -93,7 +93,7 @@ describe('FixGateChecklist', () => {
 
     expect(q('fix-gate-summary')!.textContent).toBe('2 of 6 checks passed on commit abcdef1')
     expect(q('fix-gate-review')!.textContent).toContain('Passed')
-    expect(q('fix-gate-review')!.textContent).toContain('Opus review: merge')
+    expect(q('fix-gate-review')!.textContent).toContain('AI review: merge')
     expect(q('fix-gate-review')!.textContent).not.toContain('Nothing to do.')
     expect(q('fix-gate-ci')!.textContent).toContain('Failed')
     expect(q('fix-gate-ci')!.textContent).toContain('Fix the failing check "test" and push.')

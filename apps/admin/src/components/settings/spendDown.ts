@@ -130,7 +130,7 @@ function plural(n: number, one: string, many = `${one}s`): string {
 }
 
 /**
- * "Last 7 days: 258 runs → 154 PRs → 19 mergeable, 0 merged · Opus review
+ * "Last 7 days: 258 runs → 154 PRs → 19 mergeable, 0 merged · AI review
  * $8.04 (latest review per PR)", or null before the key has run anything in
  * the period (or when the scoreboard could not be read).
  */
@@ -140,7 +140,7 @@ export function spendDownScoreLine(k: SpendDownKeyStatus): string | null {
   const t = board.totals
   const review =
     t.reviewed > 0 || t.latestReviewCostUsd > 0
-      ? ` · Opus review $${t.latestReviewCostUsd.toFixed(2)} (latest review per PR)`
+      ? ` · AI review $${t.latestReviewCostUsd.toFixed(2)} (latest review per PR)`
       : ''
   return `Last ${plural(board.days, 'day')}: ${plural(t.runs, 'run')} → ${plural(t.prsOpened, 'PR')} → ${t.verdicts.merge} mergeable, ${t.merged} merged${review}`
 }

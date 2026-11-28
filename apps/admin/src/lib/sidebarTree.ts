@@ -87,16 +87,33 @@ export function activeParent(pathname: string, search: string): string | null {
 
 const CHILD_PATHS: ReadonlySet<string> = new Set(Object.values(NAV_CHILDREN).flat())
 
+/** A headed run of sub-pages under a page in More pages (Checks › Your app, …); `title` null = no heading. */
+interface MorePagesChildGroup {
+  id: string
+  title: string | null
+  entries: NavRegistryEntry[]
+}
+
 export interface MorePagesGroup {
   sectionId: NavSectionId
   title: string
   entries: NavRegistryEntry[]
+  /**
+   * Sub-pages of a page listed here, keyed by that page's path. A sub-page
+   * used to be dropped whenever its page HAD a parent, even when that parent
+   * was itself only under More pages (ADR 0069 unpinned Checks and Apps), so
+   * the 13 checks and Manage apps had no row at all (owner, 2026-11-28:
+   * "some pages are not displayed on the side bar"). They now sit under
+   * their page here.
+   */
+  children: Readonly<Record<string, MorePagesChildGroup[]>>
 }
 
 /**
  * Every page that has no place in the sidebar right now, by section: not
- * core, not a core page's sub-page, not a Lab kept in the sidebar, not a
- * footer link, and one the viewer may open.
+ * core, not a sub-page of a page that IS in the sidebar, not a Lab kept in
+ * the sidebar, not a footer link, and one the viewer may open. A sub-page of
+ * a page that is under More pages is listed under that page (`children`).
  */
 export function morePages(viewer: SidebarViewer, pinnedLabIds: ReadonlySet<string>): MorePagesGroup[] {
   const pinned = new Set(
@@ -104,21 +121,49 @@ export function morePages(viewer: SidebarViewer, pinnedLabIds: ReadonlySet<strin
   )
   // The core is the five builder pages for every account (ADR 0069): Apps,
   // Integrations, Checks, Team, Pipeline and Journeys are here unless their
-  // Lab is on. Sub-pages stay with their page (Checks lists its checks), so
-  // the list does not grow by a dozen check pages.
+  // Lab is on.
   const core = new Set(BUILDER_CORE_NAV_PATHS)
-  const hidden = NAV_REGISTRY.filter(
-    (e) =>
-      e.inSidebar !== false &&
-      !core.has(e.path) &&
-      !CHILD_PATHS.has(e.path) &&
-      !pinned.has(e.path) &&
-      !FOOTER_NAV_PATHS.includes(e.path) &&
-      visibleToViewer(e, viewer),
-  )
-  return SECTION_ORDER.map((sectionId) => ({
-    sectionId,
-    title: NAV_SECTION_META[sectionId].title,
-    entries: hidden.filter((e) => e.sectionId === sectionId),
-  })).filter((g) => g.entries.length > 0)
+  const inSidebar = (path: string) => core.has(path) || pinned.has(path)
+  const placeable = (e: NavRegistryEntry) =>
+    e.inSidebar !== false &&
+    !inSidebar(e.path) &&
+    !FOOTER_NAV_PATHS.includes(e.path) &&
+    visibleToViewer(e, viewer)
+  // A sub-page whose page is in the sidebar is listed under it there (Layout).
+  const childOfSidebarPage = (path: string) =>
+    Object.entries(NAV_CHILDREN).some(([parent, kids]) => kids.includes(path) && inSidebar(parent))
+  const hidden = NAV_REGISTRY.filter((e) => placeable(e) && !CHILD_PATHS.has(e.path))
+  const byPath = new Map(NAV_REGISTRY.map((e) => [e.path, e] as const))
+  const childrenFor = (parent: string): MorePagesChildGroup[] => {
+    const pick = (paths: readonly string[]) =>
+      paths
+        .map((p) => byPath.get(p))
+        .filter((e): e is NavRegistryEntry => e != null && placeable(e) && !childOfSidebarPage(e.path))
+    const groups = NAV_CHILD_GROUPS[parent]
+    const out = groups
+      ? groups.map((g) => ({ id: g.id, title: g.title, entries: pick(g.paths) }))
+      : [{ id: parent, title: null, entries: pick(NAV_CHILDREN[parent] ?? []) }]
+    return out.filter((g) => g.entries.length > 0)
+  }
+  return SECTION_ORDER.map((sectionId) => {
+    const entries = hidden.filter((e) => e.sectionId === sectionId)
+    const children: Record<string, MorePagesChildGroup[]> = {}
+    for (const e of entries) {
+      if (!NAV_CHILDREN[e.path]) continue
+      const groups = childrenFor(e.path)
+      if (groups.length > 0) children[e.path] = groups
+    }
+    return { sectionId, title: NAV_SECTION_META[sectionId].title, entries, children }
+  }).filter((g) => g.entries.length > 0)
+}
+
+/**
+ * Every path More pages lists, sub-pages included.
+ * @internal Exported for tests.
+ */
+export function morePagePaths(groups: readonly MorePagesGroup[]): string[] {
+  return groups.flatMap((g) => [
+    ...g.entries.map((e) => e.path),
+    ...Object.values(g.children).flatMap((cg) => cg.flatMap((c) => c.entries.map((e) => e.path))),
+  ])
 }

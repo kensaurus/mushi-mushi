@@ -24,9 +24,9 @@ export type FixTimelineKind =
   | 'ci_started'
   | 'ci_resolved'
   | 'pr_state_changed'
-  /** The independent Opus review of a cloud agent's PR (ADR 0030). */
+  /** The independent AI review of a cloud agent's PR (ADR 0030). */
   | 'reviewed'
-  /** A review follow-up: a new Cursor agent sent to the PR with the Opus findings (ADR 0032). */
+  /** A review follow-up: a new Cursor agent sent to the PR with the AI review findings (ADR 0032). */
   | 'followup'
   /** Verified fixes (ADR 0035): every gate passed, merged on proof, a regression after a merge, a revert PR opened. */
   | 'verified'
