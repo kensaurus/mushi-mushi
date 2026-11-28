@@ -138,9 +138,9 @@ const ESTABLISHED_HOME = {
   ]),
   release: section({
     stations: [
-      { id: 'fix', label: 'Fix PRs', count: 2, stuck: 0 },
+      { id: 'fix', label: 'Fixes', count: 2, stuck: 0 },
       { id: 'ci', label: 'CI', count: 1, stuck: 0 },
-      { id: 'train', label: 'In train', count: 0, stuck: 0 },
+      { id: 'train', label: 'Waiting to merge', count: 0, stuck: 0 },
       { id: 'merged', label: 'Merged', count: 3, stuck: 0 },
       { id: 'deployed', label: 'Deployed', count: 3, stuck: 0 },
     ],

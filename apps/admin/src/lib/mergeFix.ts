@@ -12,7 +12,7 @@ export interface MergeFixResult {
   reportStatus?: string | null
   alreadyMerged?: boolean
   error?: string
-  /** Server error code; `REVIEW_HOLD` when the Opus review says hold (ADR 0030). */
+  /** Server error code; `REVIEW_HOLD` when the AI review says hold (ADR 0030). */
   code?: string
 }
 

@@ -132,7 +132,7 @@ describe('one button per place', () => {
 
   it('hides a card with nothing to show, never one whose read failed', () => {
     const emptyRelease: HomeRelease = {
-      stations: [{ id: 'fix', label: 'Fix PRs', count: 0, stuck: 0 }],
+      stations: [{ id: 'fix', label: 'Fixes', count: 0, stuck: 0 }],
       train: null,
       lastDeploy: null,
       waiting: { counts: { critical: 0, high: 0, medium: 0, low: 0, unrated: 0 }, total: 0 },

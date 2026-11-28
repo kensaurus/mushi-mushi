@@ -396,7 +396,7 @@ export function checkNodes(report: ReportDetail): DiagnosisNode[] {
     nodes.push({
       id: 'judge',
       lane: 'check',
-      title: agreed ? 'Judge agrees with the triage' : 'Judge disagrees with the triage',
+      title: agreed ? 'A second AI agrees with the triage' : 'A second AI disagrees with the triage',
       detail: score != null ? `score ${Math.round(score * 100)}%` : 'second model',
       state: agreed && (score == null || score >= NEEDS_LOOK_BELOW) ? 'ok' : 'weak',
       confidence: score,

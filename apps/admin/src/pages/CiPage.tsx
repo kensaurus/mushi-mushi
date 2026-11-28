@@ -246,7 +246,7 @@ export function CiPage() {
   const firstRead = useReadTimedOut(page.loading && !data && !page.error)
 
   // "Mushi fix" links for jobs on a fix's PR (this app only).
-  const fixes = usePageData<{ fixes: FixAttempt[] }>(scope === 'project' && projectId ? '/v1/admin/fixes?limit=100' : null)
+  const fixes = usePageData<{ fixes: FixAttempt[] }>(scope === 'project' && projectId ? `/v1/admin/fixes?limit=100&project_id=${encodeURIComponent(projectId)}` : null)
   const fixLinks = useMemo(() => buildFixLinks(fixes.data?.fixes ?? []), [fixes.data])
 
   const [selected, setSelected] = useState<string | null>(null)

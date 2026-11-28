@@ -110,6 +110,13 @@ describe('DiagnosisFixHero', () => {
     expect(text).not.toContain('Why it broke')
   })
 
+  // Journey walk 2026-11-28: "Likely in <x>" sat beside "no stack trace or file to change".
+  it('names where the bug likely is only when an agent has a code location to start from', () => {
+    expect(render(report({ stage2_analysis: null, component: 'app/words page' }))).not.toContain('Likely in')
+    expect(render(report({ stage2_analysis: null, component: 'supabase/functions/delete-account' }))).toContain('Likely in')
+    expect(render(report({ stage2_analysis: null, component: 'src/features/chat/ChatInput.tsx' }))).toContain('Likely in')
+  })
+
   // The settings link moved to the LLM classification section (ADR 0069); it still explains itself.
   it('Stage2AbsentNote says why behind the info hint and links to the threshold', () => {
     act(() => root.render(createElement(MemoryRouter, null, createElement(Stage2AbsentNote, { report: report({ stage2_analysis: null }) }))))

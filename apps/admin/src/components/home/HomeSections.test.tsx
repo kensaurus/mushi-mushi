@@ -149,6 +149,17 @@ describe('HealthStrip layout and times', () => {
 })
 
 describe('NeedsYouCard', () => {
+  it('opens its items for the app Home shows, leaving a stored All apps (journey walk 2026-11-28)', async () => {
+    window.localStorage.setItem('mushi:active_project_id', P)
+    window.localStorage.setItem('mushi:project_scope', 'all')
+    await render(createElement(NeedsYouCard, { section: ok([need('a', 90)]) }))
+    const button = byTestId('home-needs-you')!.querySelector('a')!
+    await act(async () => button.click())
+    expect(window.localStorage.getItem('mushi:project_scope')).toBeNull()
+    expect(window.localStorage.getItem('mushi:active_project_id')).toBe(P)
+    window.localStorage.removeItem('mushi:active_project_id')
+  })
+
   it('puts leading items first and stops at five, one button each', async () => {
     await render(createElement(NeedsYouCard, { section: ok(['a', 'b', 'c', 'd', 'e'].map((id, i) => need(id, 90 - i))), leading: [need('setup', 200)] }))
     const rows = byTestId('home-needs-you')!.querySelectorAll('li')
@@ -237,9 +248,9 @@ describe('NeedsYouCard', () => {
 
 const release = (over: Partial<HomeRelease> = {}): HomeRelease => ({
   stations: [
-    { id: 'fix', label: 'Fix PRs', count: 5, stuck: 3 },
+    { id: 'fix', label: 'Fixes', count: 5, stuck: 3 },
     { id: 'ci', label: 'CI', count: 1, stuck: 0 },
-    { id: 'train', label: 'In train', count: 2, stuck: 0 },
+    { id: 'train', label: 'Waiting to merge', count: 2, stuck: 0 },
     { id: 'merged', label: 'Merged', count: 4, stuck: 0 },
     { id: 'deployed', label: 'Deployed', count: 0, stuck: 0 },
   ],
@@ -255,9 +266,9 @@ describe('ReleaseCard', () => {
     await render(createElement(ReleaseCard, { section: ok(release()), projectId: P }))
     const stations = byTestId('home-release-stations')!
     const labels = Array.from(stations.querySelectorAll('a')).map((a) => a.getAttribute('aria-label'))
-    expect(labels).toEqual(['Fix PRs: 5, 3 need you', 'CI: 1', 'In train: 2', 'Merged: 4', 'Deployed: 0'])
+    expect(labels).toEqual(['Fixes: 5, 3 need you', 'CI: 1', 'Waiting to merge: 2', 'Merged: 4', 'Deployed: 0'])
     expect(stations.textContent).toContain('3 need you')
-    expect(text()).toContain('Train #57 with 2 fixes is running CI')
+    expect(text()).toContain('Release batch #57 with 2 fixes is running CI')
     expect(text()).toContain('v1.103.0 seen live')
     expect(hrefs()).toContain(`/pipeline?project=${P}`)
   })

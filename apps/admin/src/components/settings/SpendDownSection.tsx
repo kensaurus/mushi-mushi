@@ -6,7 +6,7 @@
  *          and how many days ahead to start. The spend-down worker does the
  *          dispatching, inside each app's auto-fix caps; fixes open draft PRs.
  *          Each key also shows what its last 7 days produced (runs → PRs →
- *          mergeable → merged, Opus review cost) and the apps the stop-loss
+ *          mergeable → merged, AI review cost) and the apps the stop-loss
  *          paused, with why. A paused app still gets one probe fix a day;
  *          Resume clears its stop-loss evidence (owner or admin). One line
  *          above the keys shows what review follow-ups (ADR 0032) made of

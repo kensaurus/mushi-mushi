@@ -3,7 +3,7 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_121 configuration knobs across 19 sections · last regenerated 2026-11-22._
+_121 configuration knobs across 19 sections · last regenerated 2026-11-28._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
@@ -1955,7 +1955,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 `byok.review_followups`
 
-**Summary** — When the Opus review of an agent's pull request says "fix first", Mushi Mushi sends it back to a new Cursor agent once with the review's findings, and Opus reviews the push.
+**Summary** — When the AI review of an agent's pull request says "fix first", Mushi Mushi sends it back to a new Cursor agent once with the review's findings, and the AI review checks the push.
 
 **How it works** — Off until an organization owner or admin turns it on; turning it on also picks up the last 3 days of "fix first" reviews. Every 10 minutes the review-followup worker looks for "fix first" reviews of the latest commit of pull requests a Mushi Mushi cloud agent opened (never a person's pull request, a fork, or a branch the agent did not create). For each, it starts a new Cursor agent on that pull request's branch with the report's summary and diagnosis and every finding about a file the pull request changed (findings that read as instructions to the agent, or whose fix carries a foreign URL or a shell command, are never sent), asking it to fix exactly those, add or adjust tests, run them and push to the same branch, or to explain why a finding is wrong. One follow-up per reviewed commit and two per pull request; never on a "hold" (that needs a person) or a "merge"; never on a closed or merged pull request; never when the app's auto-fix is off. Each follow-up counts against the app's auto-fix daily limit and the organization's follow-ups per day. Before each one, the model is checked against the Cursor key's model list (read at most once an hour); a model the key cannot run waits instead of dispatching. "Last round model" (optional) runs a pull request's second follow-up, the one that happens only after the first did not satisfy the reviewer, on a stronger model such as Opus while the first stays on the cheaper one. When the agent pushes, Opus reviews the new commit, and the scoreboard shows the verdict after.
 

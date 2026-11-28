@@ -153,7 +153,7 @@ const ACTIVITY_KIND_LABEL: Record<ActivityKind, string> = {
   commit: 'Commit',
   pr_opened: 'PR opened',
   ci_resolved: 'CI result',
-  reviewed: 'Opus review',
+  reviewed: 'AI review',
   followup: 'Review follow-up',
   completed: 'Completed',
   failed: 'Failed',

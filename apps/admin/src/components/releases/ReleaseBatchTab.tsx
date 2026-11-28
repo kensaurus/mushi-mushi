@@ -278,7 +278,7 @@ export function ReleaseBatchTab({ projectId }: { projectId: string | null }) {
         action={
           <HelpPopover label="How trains work" title="How release trains work" align="end">
             <p className="text-xs text-fg-secondary">
-              Approved fix pull requests ride one train per repo: one branch, one CI run, one merge and one deploy. A fix rides when Opus said merge at its current commit, it is not a draft, its own CI is green, and it did not keep failing trains at that commit. Urgent fixes merge alone.
+              Approved fix pull requests ride one train per repo: one branch, one CI run, one merge and one deploy. A fix rides when The AI review said merge at its current commit, it is not a draft, its own CI is green, and it did not keep failing trains at that commit. Urgent fixes merge alone.
             </p>
             <p className="mt-2 text-xs text-fg-muted">This tab only reads. Re-run, merge and remove from /pipeline.</p>
           </HelpPopover>

@@ -131,7 +131,7 @@ const AGENT_OUTCOME_GROUP_IDS: ReadonlySet<string> = new Set(['agent_failed', 'a
 const AGENT_OUTCOME_HEADING = "Agent couldn't fix"
 
 const VERDICT_STATUS: Record<string, RunStatus> = { merge: 'passed', fix_first: 'slow', hold: 'failed' }
-const VERDICT_LABEL: Record<string, string> = { merge: 'Opus: merge', fix_first: 'Opus: fix first', hold: 'Opus: hold' }
+const VERDICT_LABEL: Record<string, string> = { merge: 'AI review: merge', fix_first: 'AI review: fix first', hold: 'AI review: hold' }
 
 /** Where the person fixes what blocks an action, when it is a setting. */
 /** A group's signal as a RunStatus, for the per-app header counts. */

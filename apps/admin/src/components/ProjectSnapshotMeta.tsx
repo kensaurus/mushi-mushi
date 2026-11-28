@@ -12,6 +12,7 @@
 import { Link } from 'react-router-dom'
 import type { ProjectSnapshot } from '../lib/projectSnapshotTypes'
 import { PDCA_STAGES } from '../lib/pdca'
+import { stageChipCopy } from '../lib/navRegistry'
 import {
   PDCA_BOTTLENECK_TONE,
   bottleneckDeepLink,
@@ -57,9 +58,12 @@ export function ProjectSnapshotMeta({
 
   const trendTooltip = showTrend && trend ? buildTrendTooltip(snapshot) : null
   const stage = snapshot.pdca_bottleneck ? PDCA_STAGES[snapshot.pdca_bottleneck] : null
-  const bottleneckText = stage ? `Stuck: ${stage.label}` : ''
+  // The cycle step's own name ("Stuck at Fix"), never the PDCA letter word
+  // ("Stuck: Do"), which meant nothing to a builder (journey walk 2026-11-28).
+  const stepTitle = snapshot.pdca_bottleneck ? stageChipCopy(snapshot.pdca_bottleneck).label : ''
+  const bottleneckText = stage ? `Stuck at ${stepTitle}` : ''
   const bottleneckAria = stage
-    ? `PDCA bottleneck: ${stage.label} — ${snapshot.pdca_bottleneck_label}`
+    ? `Stuck at ${stepTitle}: ${snapshot.pdca_bottleneck_label}`
     : ''
   const criticalAria = `${critical} critical report${critical === 1 ? '' : 's'} in the last 30 days`
   const trendAria = trend

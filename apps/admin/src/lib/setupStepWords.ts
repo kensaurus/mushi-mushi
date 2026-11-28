@@ -66,9 +66,18 @@ const WORDS: Record<string, Partial<Pick<SetupStep, 'label' | 'description' | 'c
 /** The steps in plain words, with no second button to a page an earlier open step already offers. */
 export function plainSetupSteps(steps: readonly SetupStep[]): SetupStep[] {
   const offered = new Set<string>()
+  // A test report from the console ticks "first bug report" before the button
+  // is in the app, so the list read "Get your first bug report ✓" under
+  // "Put the report button in your app — do this next" (journey walk,
+  // 2026-11-28). Say which report it was.
+  const buttonLive = steps.find((s) => s.id === 'sdk_installed')?.complete !== false
   return steps.map((step) => {
     const words = WORDS[step.id] ?? {}
     const next: SetupStep = { ...step, ...words }
+    if (step.id === 'first_report_received' && step.complete && !buttonLive) {
+      next.label = 'Test report received'
+      next.description = 'Your test report arrived. Add the report button so real users can send them too.'
+    }
     if (!step.complete && step.cta_to) {
       const page = step.cta_to.split('#')[0]!.split('?')[0]!
       // A link to its own card (#anchor) is its own action: Slack and Sentry both live on

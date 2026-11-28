@@ -8,7 +8,7 @@
  * Data: GET  /v1/admin/projects/:pid/pull-requests
  *       POST /v1/admin/projects/:pid/pull-requests/:owner/:repo/:number/merge { method }
  * Nothing merges on its own (ADR 0017): a person reads the confirmation and clicks Confirm.
- * A Mushi fix PR shows its Opus review (ADR 0030); a hold disables Merge here and
+ * A Mushi fix PR shows its AI review (ADR 0030); a hold disables Merge here and
  * points to the fix, whose merge dialog shows the findings and the override.
  *
  * The list is grouped by what the person can do (console journeys 2026-10-27):
@@ -41,7 +41,7 @@ export interface OpenPullRequest {
   baseRef: string
   updatedAt: string
   checks: UxPullRequest['checks']
-  /** The Opus review when this PR is a Mushi fix (ADR 0030). */
+  /** The AI review when this PR is a Mushi fix (ADR 0030). */
   review?: {
     state: FixReviewState
     label: string
@@ -59,7 +59,7 @@ const POLL_MS = 30_000
  * @internal Exported for tests only.
  */
 export function openPrMergeBlocker(pr: Pick<OpenPullRequest, 'checks' | 'review'>): string | null {
-  if (pr.review?.verdict === 'hold') return 'The Opus review says hold: open the fix to read the findings.'
+  if (pr.review?.verdict === 'hold') return 'The AI review says hold: open the fix to read the findings.'
   const checks = uxRequiredChecks(pr.checks)
   const failing = checks.filter((c) => c.result === 'fail').map((c) => c.name)
   if (failing.length) return `Required check failing: ${failing.join(', ')}.`
@@ -86,9 +86,9 @@ function openPrGroup(pr: Pick<OpenPullRequest, 'checks' | 'review' | 'draft'>): 
 }
 
 const GROUPS: Array<{ id: OpenPrGroup; title: string; hint: string }> = [
-  { id: 'mergeable', title: 'Ready to merge', hint: 'Required checks passed; a Mushi Mushi fix also has an Opus "merge" on its latest commit.' },
-  { id: 'needs_fix', title: 'Needs a fix', hint: 'A required check fails, or Opus said fix first. Open the fix to send it back.' },
-  { id: 'hold', title: 'Hold', hint: 'Opus said hold: a person decides. The fix page shows the findings.' },
+  { id: 'mergeable', title: 'Ready to merge', hint: 'Required checks passed; a Mushi Mushi fix also has an AI review "merge" on its latest commit.' },
+  { id: 'needs_fix', title: 'Needs a fix', hint: 'A required check fails, or the AI review said fix first. Open the fix to send it back.' },
+  { id: 'hold', title: 'Hold', hint: 'The AI review said hold: a person decides. The fix page shows the findings.' },
   { id: 'waiting', title: 'Waiting', hint: 'CI or a review is still running, or the PR is a draft.' },
 ]
 
@@ -260,7 +260,7 @@ function OpenPullRequestRow({
           <div className="flex flex-col gap-2">
             <p className="text-xs text-fg">
               Merge #{pr.number} into {pr.baseRef}? {pr.draft ? 'It is a draft, so it is marked ready first. ' : ''}
-              {reviewPending ? 'Its Opus review is still running; merging now skips it. ' : ''}Your repository’s CI runs on {pr.baseRef} after the merge; for a mobile app this can start a store release.
+              {reviewPending ? 'Its AI review is still running; merging now skips it. ' : ''}Your repository’s CI runs on {pr.baseRef} after the merge; for a mobile app this can start a store release.
             </p>
             <div className="flex flex-wrap items-end gap-2">
               <SelectField label="Merge method" value={method} disabled={merging} onChange={(e) => setMethod(e.target.value as MergeMethod)}>

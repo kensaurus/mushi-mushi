@@ -43,10 +43,10 @@ describe('shell chrome static contract', () => {
     const project = readFileSync(resolve(root, 'components/ProjectSwitcher.tsx'), 'utf8')
     // The favicon already conveys "project"; the word belongs in the tooltip.
     expect(project).not.toContain('kicker="Project"')
-    // One app: the tooltip names it as a project (all-apps modes have their
+    // One app: the tooltip names it as an app (all-apps modes have their
     // own titles, so the chip takes a precomputed `chipTitle`).
     expect(project).toContain('title={chipTitle}')
-    expect(project).toMatch(/: `Project: \$\{active\.project_name\}`/)
+    expect(project).toMatch(/: `App: \$\{active\.project_name\}`/)
   })
 
   it('chrome-top-row lives in @layer components so hidden md:flex wins on mobile', () => {

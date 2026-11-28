@@ -305,7 +305,7 @@ export function VerifiedMergeCard({ projectId }: { projectId: string | null }) {
           purpose={
             <>
               When this is on, Mushi Mushi squash-merges a cloud agent&apos;s pull request only when every check passes on its
-              latest commit: Opus says merge, a second AI from another company says merge, CI is green, a test fails
+              latest commit: The AI review says merge, a second AI from another company says merge, CI is green, a test fails
               without the fix and passes with it, no test was weakened, and the change is small. It never merges a
               report that is already fixed. Off: you merge every fix yourself.
             </>

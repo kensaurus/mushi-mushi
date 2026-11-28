@@ -3,7 +3,7 @@
  * Confirm popover for merging a Mushi draft PR from the console.
  * Mirrors DispatchFixPreflight — user stays in control, nothing auto-merges.
  *
- * Shows the Opus review of the PR (ADR 0030) before the merge button: a
+ * Shows the AI review of the PR (ADR 0030) before the merge button: a
  * "fix first" lists its findings, a "hold" needs "Merge anyway" ticked
  * (the server refuses a hold without `override: true`), and a PR with no
  * review says "Not reviewed".
@@ -216,14 +216,14 @@ export function MergeFixPreflight({
               <FixGateChecklist fixId={fixId} />
             ) : (
               <p className="text-2xs text-fg-muted" data-testid="fix-gate-local">
-                Merge checks: a fix from your own lane is checked by its Opus review above and its CI. The extra gates run on cloud agents&apos; pull requests.
+                Merge checks: a fix from your own lane is checked by its AI review above and its CI. The extra gates run on cloud agents&apos; pull requests.
               </p>
             )}
           </div>
 
           {reviewPending && (
             <p className={`mt-2 rounded-sm px-2 py-1.5 text-2xs ${CHIP_TONE.warn}`}>
-              The Opus review is still running. Merging now skips it; wait a few minutes to see what it finds.
+              The AI review is still running. Merging now skips it; wait a few minutes to see what it finds.
             </p>
           )}
 

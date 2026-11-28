@@ -5,7 +5,7 @@
  *          round after round on that app's own Cursor key. The app picker
  *          starts on the open app (?project= or the stored app) and still
  *          lists every app, so a run is not filed on whichever app is first.
- *          Each round is a pull request that Opus reviews; with "merge each
+ *          Each round is a pull request that AI reviews; with "merge each
  *          round when ready" an approved round goes to the merge queue, and
  *          the next round builds on it. "Run on" can pick one of your local
  *          worker lanes for the app instead of the cloud (ADR 0042
@@ -112,7 +112,7 @@ export function SkillRunsCard({ projects }: Props) {
     <div className="space-y-3">
       <p className="text-xs text-fg-secondary">
         Improve an app with one skill at a time, on the app&apos;s own Cursor key. Each round is a pull request: the agent measures first, changes only the part you name, and
-        Opus reviews it. The next round builds on the last; the run ends when the agent finds nothing left.
+        AI reviews it. The next round builds on the last; the run ends when the agent finds nothing left.
       </p>
       <div className="grid gap-2 sm:grid-cols-2">
         <SelectField label="App" value={projectId} onChange={(e) => setChosenId(e.target.value)} disabled={!projects?.length}>
@@ -147,7 +147,7 @@ export function SkillRunsCard({ projects }: Props) {
           ))}
         </SelectField>
         <div className="flex items-end">
-          <Toggle label="Merge each round when Opus approves and CI passes" checked={autoMerge} onChange={setAutoMerge} />
+          <Toggle label="Merge each round when the AI review approves and CI passes" checked={autoMerge} onChange={setAutoMerge} />
         </div>
         {lanes.length > 0 && (
           <SelectField label="Run on" value={laneId} onChange={(e) => setChosenLane(e.target.value)} data-testid="skill-run-on">
