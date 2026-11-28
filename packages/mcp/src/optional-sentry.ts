@@ -9,8 +9,38 @@
 
 /** The slice of `@sentry/node` this module uses. */
 interface SentryModule {
-  init(options: { dsn: string; environment: string; tracesSampleRate: number }): unknown
+  init(options: SentryInitOptions): unknown
 }
+
+/**
+ * Both supported majors are passed the same object. `@sentry/node` 10 reads
+ * `sendDefaultPii`; 11 removed it and reads `dataCollection`, whose defaults
+ * collect user info, headers, bodies and MCP tool content. Each major ignores
+ * the key it does not know, so the privacy posture is the same on both.
+ */
+interface SentryInitOptions {
+  dsn: string
+  environment: string
+  tracesSampleRate: number
+  sendDefaultPii: false
+  attachStacktrace: false
+  dataCollection: Record<string, unknown>
+}
+
+/** Collect nothing beyond the error itself (the v10 `sendDefaultPii: false` behaviour). */
+const DATA_COLLECTION_OFF = {
+  userInfo: false,
+  cookies: false,
+  httpHeaders: false,
+  httpBodies: [],
+  urlQueryParams: false,
+  graphQL: { document: false, variables: false },
+  genAI: { inputs: false, outputs: false },
+  mcp: { inputs: false, outputs: false },
+  databaseQueryData: false,
+  queues: false,
+  stackFrameVariables: false,
+} as const
 
 export type OptionalSentryStatus = 'disabled' | 'enabled' | 'unavailable'
 
@@ -51,6 +81,9 @@ export async function initOptionalSentry(
     dsn,
     environment: env.MUSHI_SENTRY_ENVIRONMENT ?? env.NODE_ENV ?? 'development',
     tracesSampleRate: 0,
+    sendDefaultPii: false,
+    attachStacktrace: false,
+    dataCollection: DATA_COLLECTION_OFF,
   })
   return 'enabled'
 }

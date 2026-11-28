@@ -23,8 +23,9 @@
  * @napi-rs/keyring API (sync):
  *   const entry = new Entry(service, account)
  *   entry.setPassword(value: string): void
- *   entry.getPassword(): string | null
- *   entry.deletePassword(): void
+ *   entry.getPassword(): string | null   (v2: throws on a store error)
+ *   entry.deletePassword(): boolean      (v2: throws on a store error)
+ * Every call below is wrapped in try/catch, so a throw reads as "no key".
  */
 
 import { createRequire } from 'node:module'
