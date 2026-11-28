@@ -143,8 +143,8 @@ describe('ReviewFollowupsSection', () => {
     await render()
     const text = document.body.textContent ?? ''
     expect(text).toContain("On: up to 30 a day, on the key each app's fixes use.")
-    expect(text).toContain('Review follow-ups, last 7 days: 5 sent → 4 pushed, 1 no change → Opus after: 3 merge, 1 fix first, 0 hold (75% fix first → merge)')
-    expect(text).toContain('glot.it: pushed bbbbbbb, Opus: merge')
+    expect(text).toContain('Review follow-ups, last 7 days: 5 sent → 4 pushed, 1 no change → AI review after: 3 merge, 1 fix first, 0 hold (75% fix first → merge)')
+    expect(text).toContain('glot.it: pushed bbbbbbb, AI review: merge')
     expect(text).toContain("yen-yen: queued, waiting: The app's auto-fix limit is reached.")
   })
 
@@ -242,7 +242,7 @@ describe('ReviewFollowupsSection', () => {
     expect(document.body.textContent).toContain('An organization owner or admin can change review follow-ups.')
     // No action buttons; the only button left is the (i) beside the one-line intro.
     const actions = Array.from(document.body.querySelectorAll('button')).filter(
-      (b) => !(b.getAttribute('aria-label') ?? '').startsWith('Opus reviews the push'),
+      (b) => !(b.getAttribute('aria-label') ?? '').startsWith('The AI review checks the push'),
     )
     expect(actions.length).toBe(0)
   })

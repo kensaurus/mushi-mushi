@@ -4,9 +4,11 @@
  *          Domain resolution lives in @mushi-mushi/core/favicon.
  */
 
+import { RESOLVED_PUBLIC_ORIGIN } from './env'
 import type { SetupProject, SetupStepDiagnostic } from './useSetupStatus'
 import type { ProjectSnapshot } from './projectSnapshotTypes'
 import { sdkFreshness } from './heartbeat'
+import { CHIP_TONE } from './chipTone'
 import {
   projectInitials,
   projectInitialsThemeIndex,
@@ -19,17 +21,29 @@ export {
 }
 
 const INITIALS_CHIP_THEMES = [
-  'bg-info-muted/50 text-info-foreground border border-info/25 border-info/35',
-  'bg-brand/12 text-brand border border-brand/28 border-brand/35',
-  'bg-warn-muted/50 text-warn-foreground border-warn/35',
-  'bg-ok-muted/50 text-ok-foreground border border-ok/25 border-ok/35',
-  'bg-accent-muted/55 text-accent-foreground border-accent/35',
+  CHIP_TONE.info,
+  CHIP_TONE.brand,
+  CHIP_TONE.warn,
+  CHIP_TONE.ok,
+  CHIP_TONE.accent,
 ] as const
 
 /** Stable accent so the same project always gets the same initials colour. */
 export function projectInitialsChipClass(projectId: string): string {
   return INITIALS_CHIP_THEMES[projectInitialsThemeIndex(projectId)]!
 }
+
+/**
+ * The console's own hosting origin serves many apps under paths, so its root
+ * favicon is never an app's icon (MUSHI_PUBLIC_ORIGIN; config, not a tenant list).
+ */
+export const FAVICON_SHARED_HOSTS: readonly string[] = (() => {
+  try {
+    return [new URL(RESOLVED_PUBLIC_ORIGIN).hostname.toLowerCase()]
+  } catch {
+    return []
+  }
+})()
 
 /** Merge setup checklist + projects snapshot into a favicon source. */
 export function faviconSourceFromProject(
@@ -45,6 +59,7 @@ export function faviconSourceFromProject(
     sdk_origin: sdkFromSetup ?? sdkFromKeys,
     repo_url: snapshot?.primary_repo?.repo_url ?? null,
     icon_url: snapshot?.icon_url ?? null,
+    shared_hosts: FAVICON_SHARED_HOSTS,
   }
 }
 

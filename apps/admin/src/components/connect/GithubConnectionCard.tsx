@@ -29,11 +29,11 @@ interface GithubConnectionCardProps {
   fallbackRepoUrl: string | null
 }
 
-export function GithubConnectionCard({
-  projectId,
-  preflight,
-  fallbackRepoUrl,
-}: GithubConnectionCardProps) {
+/**
+ * Whether the app's GitHub repo is connected, read once for the card and for
+ * Connect's GitHub step row so the two never disagree (ADR 0069).
+ */
+export function useGithubConnection(projectId: string | null, preflight: PreflightState, fallbackRepoUrl: string | null) {
   const githubCheck = preflight.checks.find((c) => c.key === 'github')
   const { data: repoData } = usePageData<LinkedRepo[]>(
     projectId ? `/v1/admin/repo/repos?project_id=${encodeURIComponent(projectId)}` : null,
@@ -42,6 +42,15 @@ export function GithubConnectionCard({
   const repoUrl = preflight.repoUrl ?? fallbackRepoUrl ?? linked[0]?.repo_url ?? null
   const hasGithub = Boolean(repoUrl) && (githubCheck?.ready ?? Boolean(repoUrl))
   const loading = preflight.loading && !repoUrl
+  return { githubCheck, linked, repoUrl, hasGithub, loading }
+}
+
+export function GithubConnectionCard({
+  projectId,
+  preflight,
+  fallbackRepoUrl,
+}: GithubConnectionCardProps) {
+  const { githubCheck, linked, repoUrl, hasGithub, loading } = useGithubConnection(projectId, preflight, fallbackRepoUrl)
 
   // Not connected (or back from GitHub): the connect flow itself, not a link
   // to another page that has it.

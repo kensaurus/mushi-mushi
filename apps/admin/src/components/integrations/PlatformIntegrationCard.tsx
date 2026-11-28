@@ -292,7 +292,7 @@ export function PlatformIntegrationCard({
       <div className="px-3 pt-3 pb-2">
         {/* Blocking banner — GitHub must be connected before fix agents work */}
         {hasDependencyBlock && (
-          <div className={`mb-2 flex items-start gap-2 rounded-sm px-3 py-2 text-2xs ${CHIP_TONE.warnSubtle}`}>
+          <div className={`mb-2 flex items-start gap-2 rounded-sm px-3 py-2 text-2xs ${CHIP_TONE.warn}`}>
             <IconAlertTriangle size={11} className="mt-0.5 shrink-0" />
             <span className="leading-snug">
               <strong>{dependencyLabel ?? 'GitHub'} must be connected first</strong> — this fix agent needs a repo URL and token to open pull requests.{' '}
@@ -331,7 +331,7 @@ export function PlatformIntegrationCard({
               {/* Inheritance source badges */}
               {orgFields > 0 && (
                 <Tooltip content={`${orgFields} field${orgFields > 1 ? 's' : ''} inherited from org defaults — project-level values take precedence when set.`}>
-                  <Badge className={`${CHIP_TONE.brandSubtle} cursor-default`}>
+                  <Badge tone="brand" className="cursor-default">
                     Inherited from org
                   </Badge>
                 </Tooltip>
@@ -347,7 +347,7 @@ export function PlatformIntegrationCard({
               )}
               {hasInheritance && projectFields > 0 && (
                 <Tooltip content="Some fields use project-level credentials; others fall back to org defaults or environment variables.">
-                  <Badge className={`${CHIP_TONE.okSubtle} cursor-default`}>
+                  <Badge tone="ok" className="cursor-default">
                     Overridden here
                   </Badge>
                 </Tooltip>

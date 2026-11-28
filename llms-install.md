@@ -83,7 +83,7 @@ Configure). The same block works in Claude Desktop and Cursor.
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.31.8"],
+      "args": ["-y", "@mushi-mushi/mcp@0.33.1"],
       "env": {
         "MUSHI_API_KEY": "mushi_...",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",

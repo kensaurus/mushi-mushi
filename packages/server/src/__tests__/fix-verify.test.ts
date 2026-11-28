@@ -401,13 +401,13 @@ describe('ciGate', () => {
 
 describe('reviewGate', () => {
   it('passes only a merge verdict about this head', () => {
-    expect(reviewGate({ status: 'completed', verdict: 'merge', headSha: HEAD }, HEAD)).toMatchObject({ status: 'pass', label: 'Opus review: merge' })
-    expect(reviewGate({ status: 'completed', verdict: 'fix_first', headSha: HEAD }, HEAD)).toMatchObject({ status: 'fail', label: 'Opus review: fix first' })
-    expect(reviewGate({ status: 'completed', verdict: 'hold', headSha: HEAD }, HEAD)).toMatchObject({ status: 'fail', label: 'Opus review: hold' })
+    expect(reviewGate({ status: 'completed', verdict: 'merge', headSha: HEAD }, HEAD)).toMatchObject({ status: 'pass', label: 'AI review: merge' })
+    expect(reviewGate({ status: 'completed', verdict: 'fix_first', headSha: HEAD }, HEAD)).toMatchObject({ status: 'fail', label: 'AI review: fix first' })
+    expect(reviewGate({ status: 'completed', verdict: 'hold', headSha: HEAD }, HEAD)).toMatchObject({ status: 'fail', label: 'AI review: hold' })
     expect(reviewGate({ status: 'completed', verdict: 'merge', headSha: BASE }, HEAD).status).toBe('pending')
     expect(reviewGate(null, HEAD).status).toBe('pending')
     expect(reviewGate({ status: 'queued', verdict: null, headSha: null }, HEAD).status).toBe('pending')
-    expect(reviewGate({ status: 'skipped', verdict: null, headSha: null, reason: 'No Anthropic key' }, HEAD)).toMatchObject({ status: 'unavailable', label: 'Opus review skipped' })
+    expect(reviewGate({ status: 'skipped', verdict: null, headSha: null, reason: 'No Anthropic key' }, HEAD)).toMatchObject({ status: 'unavailable', label: 'AI review skipped' })
   })
 })
 
@@ -697,7 +697,7 @@ describe('what callers see', () => {
         fix_attempt_id: 'f1',
         head_sha: HEAD,
         base_sha: null,
-        gates: [{ id: 'review', status: 'pass', label: 'Opus review: merge', detail: 'x' }, { id: 'vibes', status: 'pass' }],
+        gates: [{ id: 'review', status: 'pass', label: 'AI review: merge', detail: 'x' }, { id: 'vibes', status: 'pass' }],
         passed: false,
         second_judge: null,
         auto_merge_state: 'skipped',

@@ -33,7 +33,7 @@ import {
   type SentryResolveBackResult,
 } from './sentry-resolve-back.ts';
 import { getSentryIssue, SentryApiError } from './sentry-api.ts';
-import { resolveReportFromSentry } from './sentry-ingest.ts';
+import { recordSentryLastSeen, resolveReportFromSentry, sentryLastSeenAt } from './sentry-ingest.ts';
 
 const log = rootLog.child('sentry-reconcile');
 
@@ -220,7 +220,7 @@ export async function pullSentryResolves(
     batch?: number;
     now?: () => number;
     credentials?: (db: SupabaseClient, projectId: string) => Promise<SentryCredentials | null>;
-    getIssue?: (token: string, org: string, issueId: string) => Promise<Parameters<typeof followsSentryResolve>[0]>;
+    getIssue?: (token: string, org: string, issueId: string) => Promise<Parameters<typeof followsSentryResolve>[0] & { lastSeen?: string }>;
     resolveReport?: (db: SupabaseClient, projectId: string, issueId: string) => Promise<{ outcome: string }>;
   } = {},
 ): Promise<PullSummary> {
@@ -264,6 +264,8 @@ export async function pullSentryResolves(
     summary.checked++;
     try {
       const issue = await getIssue(creds.token, creds.orgSlug, item.issueId);
+      // The issue is read anyway: keep Sentry's own last seen for the report page.
+      await recordSentryLastSeen(db, item.projectId, item.issueId, sentryLastSeenAt(null, issue));
       if (!followsSentryResolve(issue, item.since)) continue;
       const r = await resolveReport(db, item.projectId, item.issueId);
       if (r.outcome === 'resolved') summary.resolved++;

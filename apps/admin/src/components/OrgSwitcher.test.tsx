@@ -22,8 +22,8 @@ describe('orgPillLabel', () => {
     expect(orgPillLabel(team({ plan_id: 'pro' }), 'self-hosted')).toBe('Self-hosted')
   })
 
-  it('keeps "comp" for a complimentary team either way', () => {
-    expect(orgPillLabel(team({ billing_mode: 'complimentary' }), 'cloud')).toBe('comp')
-    expect(orgPillLabel(team({ billing_mode: 'complimentary' }), 'self-hosted')).toBe('comp')
+  it('says a complimentary team is free, in words, either way', () => {
+    expect(orgPillLabel(team({ billing_mode: 'complimentary', plan_id: 'pro' }), 'cloud')).toBe('Studio · free')
+    expect(orgPillLabel(team({ billing_mode: 'complimentary', plan_id: 'pro' }), 'self-hosted')).toBe('Studio · free')
   })
 })

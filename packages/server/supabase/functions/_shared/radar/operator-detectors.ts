@@ -298,8 +298,13 @@ export function evaluateProviderKeys(obs: readonly CredentialObservation[], now:
   if (judged.length === 0) return { ruleId, state: 'unknown', reason: `The newest check of each credential is over ${CREDENTIAL_FRESH_DAYS} days old. Press Probe on the connector or Test on the key (Settings → AI keys), or wait for the next scheduled check.`, findings: [] }
   const isStore = (k: string) => (STORE_CONNECTOR_KINDS as readonly string[]).includes(k)
   const findings: RadarFinding[] = []
+  // A rejected BYOK key with a working key of the same provider beside it was
+  // replaced (Settings → AI keys: "Replaced"); byok_key_invalid reports it as
+  // a tidy-up. It is not a key that stopped working.
+  const workingByokProviders = new Set(judged.filter((o) => o.kind === 'byok' && o.ok && o.provider).map((o) => o.provider))
   for (const o of judged) {
     if (o.ok) continue
+    if (o.kind === 'byok' && o.provider && workingByokProviders.has(o.provider)) continue
     // A store key's missing permission is store_credential_scope_missing; here only a rejected key counts.
     const rejected = o.failure === 'credential_rejected'
     const denied = o.failure === 'permission_missing' && !isStore(o.kind)

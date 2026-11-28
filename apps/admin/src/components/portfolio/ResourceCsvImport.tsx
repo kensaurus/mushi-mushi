@@ -23,7 +23,7 @@ interface CsvImportResult {
 /** The server's cap; checked here so a too-large file never makes a round trip. */
 const CSV_MAX_BYTES = 256 * 1024
 
-const CSV_EXAMPLE = 'kind,external_id,project,role\ndomain,glot.it,glot-it,site\nsupabase_project,abcd1234,yen-yen,backend'
+const CSV_EXAMPLE = 'kind,external_id,project,role\ndomain,example.com,my-app,site\nsupabase_project,abcd1234,my-app,backend'
 
 /** One line for the result: what was saved and what was not. */
 function describeCsvImport(r: CsvImportResult): { tone: 'ok' | 'warn'; text: string } {

@@ -20,7 +20,6 @@ import { Section, Badge, Btn, CodeValue } from '../ui'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
 import { formatRelative as formatAgo } from '../ui/metrics'
-import { CHIP_TONE } from '../../lib/chipTone'
 import { IconBolt, IconExternalLink, IconClock, IconLink, IconAlertTriangle } from '../icons'
 import type {
   ReportBreadcrumb,
@@ -28,6 +27,7 @@ import type {
   ReportSentryContext,
   ReportSentryLink,
 } from './types'
+import { sentryLastSeenAt } from './sentryLastEvent'
 
 interface Props {
   /** Mushi-side breadcrumbs from `reports.breadcrumbs`. May be null/empty. */
@@ -53,6 +53,11 @@ interface Props {
   onSentryClosed?: () => void
   /** The page lists missing breadcrumbs on its one "Not captured" line. */
   hideNoBreadcrumbsNote?: boolean
+  /**
+   * The newest Sentry event Mushi received for this report (sentryLastEventAt), so an old error does not read as live.
+   * Shown only when no link carries Sentry's own last seen (`last_seen_at`), which wins.
+   */
+  lastEventAt?: string | null
 }
 
 /** What closing a report's open Sentry issues does: mirrors sentryCloseKind in api/routes/report-sentry.ts. */
@@ -223,6 +228,7 @@ export function SentryContextPanel({
   reportStatus,
   onSentryClosed,
   hideNoBreadcrumbsNote = false,
+  lastEventAt = null,
 }: Props) {
   const toast = useToast()
   const [closing, setClosing] = useState(false)
@@ -242,6 +248,8 @@ export function SentryContextPanel({
   const transactionName = sentryContext?.transactionName ?? null
   const sentryUser = sentryContext?.user ?? null
   const links = sentryLinks ?? []
+  // Sentry's own last seen when stored on a link; else what Mushi Mushi received.
+  const seenInSentryAt = sentryLastSeenAt(links)
   const closeKind = sentryCloseKind(reportStatus)
   const openLinks = links.filter((l) => !l.resolved_at && !l.archived_at)
   const canClose = Boolean(reportId && closeKind && openLinks.length > 0)
@@ -277,7 +285,7 @@ export function SentryContextPanel({
 
   // A report imported from Sentry often carries only the issue link: it still
   // needs this card, for the link and for "resolves when the fix merges".
-  if (!hasSentry && unified.length === 0 && !hasTags && !issueUrl && links.length === 0) {
+  if (!hasSentry && unified.length === 0 && !hasTags && !issueUrl && links.length === 0 && !lastEventAt && !seenInSentryAt) {
     // Don't render an empty card — the report didn't carry any
     // observability extras. The detail page already has enough chrome.
     return null
@@ -302,6 +310,27 @@ export function SentryContextPanel({
         ) : undefined
       }
     >
+      {seenInSentryAt ? (
+        <p
+          className="mb-2 flex flex-wrap items-center gap-1.5 text-2xs text-fg-muted"
+          data-testid="sentry-last-event"
+          title={`${new Date(seenInSentryAt).toLocaleString()}. Sentry's own last event for this issue, as of the last time Mushi Mushi heard from Sentry about it.`}
+        >
+          <IconClock className="size-3 shrink-0" aria-hidden="true" />
+          <span>Last seen in Sentry:</span>
+          <span className="font-medium text-fg-secondary">{formatAgo(seenInSentryAt)}</span>
+        </p>
+      ) : lastEventAt && (
+        <p
+          className="mb-2 flex flex-wrap items-center gap-1.5 text-2xs text-fg-muted"
+          data-testid="sentry-last-event"
+          title={`${new Date(lastEventAt).toLocaleString()}. Mushi Mushi records the event it filed this from, and a later one only when it reopens a fixed report; Sentry may have seen newer events.`}
+        >
+          <IconClock className="size-3 shrink-0" aria-hidden="true" />
+          <span>Last Sentry event Mushi Mushi received:</span>
+          <span className="font-medium text-fg-secondary">{formatAgo(lastEventAt)}</span>
+        </p>
+      )}
       {links.length > 0 && (
         <ul className="mb-3 space-y-1 text-2xs" aria-label="Sentry issues">
           {links.map((link) => (
@@ -320,17 +349,17 @@ export function SentryContextPanel({
                 <span className="font-mono text-fg-secondary">{link.external_id}</span>
               )}
               {link.resolved_at ? (
-                <Badge className={CHIP_TONE.okSubtle} title={new Date(link.resolved_at).toLocaleString()}>
+                <Badge tone="ok" title={new Date(link.resolved_at).toLocaleString()}>
                   Resolved in Sentry {formatAgo(link.resolved_at)}
                 </Badge>
               ) : link.archived_at ? (
-                <Badge className={CHIP_TONE.neutral} title={new Date(link.archived_at).toLocaleString()}>
+                <Badge tone="neutral" title={new Date(link.archived_at).toLocaleString()}>
                   Archived in Sentry {formatAgo(link.archived_at)}
                 </Badge>
               ) : closeKind ? (
-                <Badge className={CHIP_TONE.warnSubtle}>Still open in Sentry</Badge>
+                <Badge tone="warn">Still open in Sentry</Badge>
               ) : (
-                <Badge className={CHIP_TONE.neutral}>Resolves in Sentry when the fix merges</Badge>
+                <Badge tone="neutral">Resolves in Sentry when the fix merges</Badge>
               )}
             </li>
           ))}

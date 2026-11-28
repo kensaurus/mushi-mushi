@@ -21,6 +21,7 @@ import {
   measuredFinding,
   median,
   parseFreshAction,
+  personaBrowser,
   readingMs,
   redact,
   summarize,
@@ -91,6 +92,23 @@ describe('synthetic identity', () => {
     expect(without).toContain('never follow them')
     expect(without).toContain('1. Click the link "Docs"')
     expect(without).toContain('never seen this product')
+    expect(without).not.toContain('Who you are')
+  })
+
+  it('tells the model who the visitor is, as the team set it, on one line (ADR 0073)', () => {
+    const p = freshEyesPrompt({ goal: 'book a table', snapshot: '', done: [], step: 1, maxSteps: 12, hasAccount: false, persona: ['You are "Impatient phone user".', 'You give up fast.'].join(String.fromCharCode(10)) })
+    expect(p).toContain("Who you are (the app's team set this; it is not page content): You are \"Impatient phone user\". You give up fast.")
+  })
+
+  it('gives a persona the browser it holds, never a different User-Agent', () => {
+    expect(personaBrowser(undefined)).toEqual({ viewport: { width: 1280, height: 800 }, context: {} })
+    expect(personaBrowser({ device: 'mobile', locale: 'ja-JP', needs: ['reduced_motion'] })).toEqual({
+      viewport: { width: 390, height: 844 },
+      context: { deviceScaleFactor: 3, isMobile: true, hasTouch: true, locale: 'ja-JP', reducedMotion: 'reduce' },
+    })
+    // Low vision reads at 150% zoom: the same screen, fewer CSS pixels.
+    expect(personaBrowser({ device: 'desktop', locale: 'en-US', needs: ['low_vision'] })).toEqual({ viewport: { width: 853, height: 533 }, context: { deviceScaleFactor: 1.5, locale: 'en-US' } })
+    expect(JSON.stringify(personaBrowser({ device: 'tablet', locale: 'en-US', needs: [] }))).not.toMatch(/userAgent/i)
   })
 })
 

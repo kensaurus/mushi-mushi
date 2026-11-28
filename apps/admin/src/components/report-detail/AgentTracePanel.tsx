@@ -78,7 +78,7 @@ export function AgentTracePanel({ report }: Props) {
     <Card className="p-4 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-fg">Agent trace</h3>
-        <Badge className="bg-surface-overlay text-fg-muted text-3xs">
+        <Badge tone="neutral" className="text-3xs">
           <span data-testid="agent-trace-total">{totalCost == null ? 'Cost not captured' : `$${totalCost.toFixed(4)} total`}</span>
         </Badge>
       </div>

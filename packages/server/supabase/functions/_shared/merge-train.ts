@@ -77,13 +77,17 @@ export interface TrainCandidate {
 
 /**
  * Express lane: a fix too urgent to wait for the window merges on its own,
- * as before ADR 0044 (a known hole in a dependency, or a critical bug).
+ * as before ADR 0044 (a known hole in a dependency, or a critical bug), and
+ * a high or critical finding of the app's own CI security scan (ADR 0074
+ * decision 15, amending ADR 0044's list). It still needs its approval at head.
  */
 export function isExpress(c: Pick<TrainCandidate, 'severity' | 'source'>): boolean {
-  return c.source === 'security_advisory' || (c.severity ?? '').toLowerCase() === 'critical'
+  const severity = (c.severity ?? '').toLowerCase()
+  if (c.source === 'security_advisory' || severity === 'critical') return true
+  return c.source === 'security_scan' && severity === 'high'
 }
 
-/** Opus says merge on its exact head and nothing holds it. */
+/** The AI review says merge on its exact head and nothing holds it. */
 export function isApprovedAtHead(c: TrainCandidate): boolean {
   return c.prOpen && !c.held && c.verdict === 'merge' && !!c.headSha && c.headSha === c.verdictHead
 }
@@ -244,7 +248,7 @@ export function trainPullRequest(args: { members: TrainMemberLine[]; attempt: nu
     // rejected "release:", so every train there failed on its title).
     title: `fix: release train, ${n} fix${n === 1 ? '' : 'es'} (${date})${args.attempt > 1 ? `, retry ${args.attempt}` : ''}`,
     body: [
-      `Mushi release train: ${n} pull request${n === 1 ? '' : 's'} Opus approved, merged together so they ship as one deploy and one release (ADR 0044).`,
+      `Mushi release train: ${n} pull request${n === 1 ? '' : 's'} the AI review approved, merged together so they ship as one deploy and one release (ADR 0044).`,
       '',
       ...lines,
       '',

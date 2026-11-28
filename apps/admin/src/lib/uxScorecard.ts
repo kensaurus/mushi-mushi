@@ -60,16 +60,66 @@ export interface UxScorecardCause {
   evidenceSeen: boolean
 }
 
+/** Where a run's screens came from (ADR 0073): a browser, or a phone app's own screenshots. */
+const UX_PLATFORMS = ['web', 'ios', 'android', 'flutter', 'react_native', 'capacitor', 'other'] as const
+type UxPlatform = (typeof UX_PLATFORMS)[number]
+type UxCaptureSource = 'playwright' | 'maestro' | 'adb' | 'simctl' | 'sdk' | 'other'
+
+/** The server's capturesDetail labels, so the run line and its detail use the same words. */
+const UX_PLATFORM_LABEL: Readonly<Record<UxPlatform, string>> = {
+  web: 'Web',
+  ios: 'iOS',
+  android: 'Android',
+  flutter: 'Flutter',
+  react_native: 'React Native',
+  capacitor: 'Capacitor',
+  other: 'App',
+}
+
 interface UxScorecardRun {
   local_run_id: string
   status: 'queued' | 'running' | 'done' | 'failed' | 'stopped'
   model: string | null
+  /** Null for a native capture run: it has screens, not a start page. */
   start_url: string | null
   detail: string | null
   counts: { pages?: number; scored?: number; failed?: number; mean?: number | null; causes?: number; prompt?: string } | null
   started_at: string
   finished_at: string | null
   error: string | null
+  /** Absent on rows from before native captures: those are web runs. */
+  platform?: UxPlatform | null
+  device?: string | null
+  capture_source?: UxCaptureSource | null
+}
+
+/** A run's platform; a missing or unknown one is a browser run. */
+function runPlatform(run: Pick<UxScorecardRun, 'platform'>): UxPlatform {
+  return run.platform && (UX_PLATFORMS as readonly string[]).includes(run.platform) ? run.platform : 'web'
+}
+
+/** "Android · Pixel 8", "iOS · iPhone 16 simulator", or null for a web run (it shows nothing extra). */
+export function runPlatformLabel(run: Pick<UxScorecardRun, 'platform' | 'device'>): string | null {
+  const platform = runPlatform(run)
+  if (platform === 'web') return null
+  const device = run.device?.trim()
+  return device ? `${UX_PLATFORM_LABEL[platform]} · ${device}` : UX_PLATFORM_LABEL[platform]
+}
+
+/**
+ * The run's detail without the platform and device, for a native run whose
+ * badge already says them (the server writes "app · Android · Pixel 8 · viewport 390x844").
+ */
+export function runDetailWithoutPlatform(run: Pick<UxScorecardRun, 'platform' | 'device' | 'detail'>): string | null {
+  if (!run.detail) return null
+  const platform = runPlatform(run)
+  if (platform === 'web') return run.detail
+  const drop = new Set([UX_PLATFORM_LABEL[platform], run.device?.trim() ?? ''].filter(Boolean))
+  const rest = run.detail
+    .split(' · ')
+    .filter((part) => !drop.has(part.trim()))
+    .join(' · ')
+  return rest || null
 }
 
 export interface UxScorecardData {
@@ -86,9 +136,9 @@ export interface UxScorecardData {
 
 /** A score's tone: red when the page misleads or blocks (1–4), amber for a real problem (5–6), green otherwise. */
 export function scoreTone(score: number): BadgeTone {
-  if (score <= 4) return 'dangerSubtle'
-  if (score <= 6) return 'warnSubtle'
-  return 'okSubtle'
+  if (score <= 4) return 'danger'
+  if (score <= 6) return 'warn'
+  return 'ok'
 }
 
 /** "+2", "−1", or null for no change or no earlier run. */

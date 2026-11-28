@@ -20,7 +20,7 @@ const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }))
 vi.mock('../../lib/supabase', () => ({ apiFetch: api.fetch }))
 vi.mock('../../lib/toast', () => ({ useToast: () => toast }))
 
-import { HealthStrip, showHealthDetail } from './HealthStrip'
+import { HealthStrip, healthAtLabel, healthTileSpansRow, showHealthDetail } from './HealthStrip'
 import { NeedsYouCard } from './NeedsYouCard'
 import { ReleaseCard, releaseIsEmpty } from './ReleaseCard'
 import { SitemapCard } from './SitemapCard'
@@ -122,7 +122,44 @@ describe('HealthStrip', () => {
 
 const need = (id: string, impact: number): NeedsYouItem => ({ id, impact, text: `Thing ${id}.`, action: { label: 'Open', to: `/${id}` } })
 
+describe('HealthStrip layout and times', () => {
+  it('leaves no empty cell in two columns: the last tile of an odd count takes the row', () => {
+    const spans = (n: number) => Array.from({ length: n }, (_, i) => healthTileSpansRow(n, i))
+    expect(spans(4)).toEqual([false, false, false, false])
+    expect(spans(5)).toEqual([false, false, false, false, true])
+    expect(spans(6)).toEqual([false, false, false, false, false, false])
+    expect(spans(1)).toEqual([false])
+  })
+
+  it('renders five lights with the last one spanning the row', async () => {
+    const ids = ['site', 'errors', 'sdk', 'ci', 'setup'] as const
+    await render(createElement(HealthStrip, { section: ok(ids.map((id) => signal({ id }))) }))
+    const items = Array.from(container.querySelectorAll('[data-testid="home-health"] li'))
+    expect(items).toHaveLength(5)
+    expect(items.map((li) => li.className.includes('sm:col-span-2'))).toEqual([false, false, false, false, true])
+  })
+
+  it('says what the time is: the site light reads "Checked <when>", not a bare time', async () => {
+    const at = new Date(Date.now() - 26 * 3600 * 1000).toISOString()
+    await render(createElement(HealthStrip, { section: ok([signal({ id: 'site', at })]) }))
+    expect(byTestId('home-health-site')?.textContent).toMatch(/Checked (yesterday|1 day ago)/)
+    expect(healthAtLabel('ci')).toBe('Last run')
+    expect(healthAtLabel('unknown')).toBe('Updated')
+  })
+})
+
 describe('NeedsYouCard', () => {
+  it('opens its items for the app Home shows, leaving a stored All apps (journey walk 2026-11-28)', async () => {
+    window.localStorage.setItem('mushi:active_project_id', P)
+    window.localStorage.setItem('mushi:project_scope', 'all')
+    await render(createElement(NeedsYouCard, { section: ok([need('a', 90)]) }))
+    const button = byTestId('home-needs-you')!.querySelector('a')!
+    await act(async () => button.click())
+    expect(window.localStorage.getItem('mushi:project_scope')).toBeNull()
+    expect(window.localStorage.getItem('mushi:active_project_id')).toBe(P)
+    window.localStorage.removeItem('mushi:active_project_id')
+  })
+
   it('puts leading items first and stops at five, one button each', async () => {
     await render(createElement(NeedsYouCard, { section: ok(['a', 'b', 'c', 'd', 'e'].map((id, i) => need(id, 90 - i))), leading: [need('setup', 200)] }))
     const rows = byTestId('home-needs-you')!.querySelectorAll('li')
@@ -211,9 +248,9 @@ describe('NeedsYouCard', () => {
 
 const release = (over: Partial<HomeRelease> = {}): HomeRelease => ({
   stations: [
-    { id: 'fix', label: 'Fix PRs', count: 5, stuck: 3 },
+    { id: 'fix', label: 'Fixes', count: 5, stuck: 3 },
     { id: 'ci', label: 'CI', count: 1, stuck: 0 },
-    { id: 'train', label: 'In train', count: 2, stuck: 0 },
+    { id: 'train', label: 'Waiting to merge', count: 2, stuck: 0 },
     { id: 'merged', label: 'Merged', count: 4, stuck: 0 },
     { id: 'deployed', label: 'Deployed', count: 0, stuck: 0 },
   ],
@@ -229,9 +266,9 @@ describe('ReleaseCard', () => {
     await render(createElement(ReleaseCard, { section: ok(release()), projectId: P }))
     const stations = byTestId('home-release-stations')!
     const labels = Array.from(stations.querySelectorAll('a')).map((a) => a.getAttribute('aria-label'))
-    expect(labels).toEqual(['Fix PRs: 5, 3 need you', 'CI: 1', 'In train: 2', 'Merged: 4', 'Deployed: 0'])
+    expect(labels).toEqual(['Fixes: 5, 3 need you', 'CI: 1', 'Waiting to merge: 2', 'Merged: 4', 'Deployed: 0'])
     expect(stations.textContent).toContain('3 need you')
-    expect(text()).toContain('Train #57 with 2 fixes is running CI')
+    expect(text()).toContain('Release batch #57 with 2 fixes is running CI')
     expect(text()).toContain('v1.103.0 seen live')
     expect(hrefs()).toContain(`/pipeline?project=${P}`)
   })
@@ -385,6 +422,13 @@ describe('AccessCard', () => {
     expect(byTestId('home-keys-unused')!.textContent).toBe('1 never used: Web SDK')
     expect(t).toContain('All 3 keys')
     expect(hrefs()).not.toContain('/team?view=audit')
+  })
+
+  // ADR 0069: Needs you's "Update" already opens Connect; the chip is not a second button there.
+  it('keeps the SDK chip a label when Needs you carries the update', async () => {
+    await render(createElement(AccessCard, { section: ok(access()), auditLog: false, sdkLinkElsewhere: true }))
+    expect(byTestId('home-access')!.textContent).toContain('Update available')
+    expect(hrefs()).not.toContain('/connect')
   })
 
   it('links the audit log only on a plan that has it', async () => {

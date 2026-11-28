@@ -8,7 +8,7 @@
  * worker checked.
  */
 
-import type { Identity } from './fresh-eyes.js'
+import type { FreshEyesPersona, Identity } from './fresh-eyes.js'
 
 export interface FreshEyesStdinRequest {
   /** The console's run id: the run syncs into the row the console made. */
@@ -20,6 +20,27 @@ export interface FreshEyesStdinRequest {
   successText: string | null
   dryRun: boolean
   accounts: Identity[]
+  /** Who the visitors are (ADR 0073), when the console picked a persona and the worker forwards it. */
+  persona: FreshEyesPersona | null
+}
+
+const LOCALE_RE = /^[a-z]{2,3}(-[A-Za-z0-9]{2,8}){0,3}$/
+const DEVICES = ['desktop', 'mobile', 'tablet'] as const
+const NEEDS = ['screen_reader', 'low_vision', 'keyboard_only', 'reduced_motion', 'color_blind', 'motor', 'plain_language']
+
+/** The persona in a request, or null; throws on one that is malformed. */
+function parsePersona(raw: unknown): FreshEyesPersona | null {
+  if (raw == null) return null
+  const p = raw as Record<string, unknown>
+  const name = plain(p.name, 60)
+  const brief = plain(p.brief, 600)
+  if (!name || !brief) throw new Error('The persona in the request is malformed.')
+  if (typeof p.locale !== 'string' || p.locale.length > 35 || !LOCALE_RE.test(p.locale)) throw new Error('The persona language must be a code like en-US.')
+  if (!(DEVICES as readonly unknown[]).includes(p.device)) throw new Error('The persona device must be desktop, mobile or tablet.')
+  const needs = Array.isArray(p.needs) ? p.needs : []
+  if (needs.length > NEEDS.length || needs.some((n) => typeof n !== 'string' || !NEEDS.includes(n))) throw new Error('The persona needs are malformed.')
+  if (typeof p.steps !== 'number' || !Number.isInteger(p.steps) || p.steps < 5 || p.steps > 80) throw new Error('The persona step cap must be 5 to 80.')
+  return { name, brief, locale: p.locale, device: p.device as FreshEyesPersona['device'], needs: [...new Set(needs as string[])], steps: p.steps }
 }
 
 const RUN_ID_RE = /^[0-9]{8}-[0-9]{6}-[a-z0-9]{4}$/
@@ -64,7 +85,7 @@ export function parseStdinRequest(text: string): FreshEyesStdinRequest {
     accounts.push({ email, password: a.password, name: plain(a.name, 80) ?? undefined, ...(userId ? { userId } : {}) })
   }
   if (r.dryRun && accounts.length) throw new Error('A look-around run uses no account.')
-  return { runId: r.runId, url: url.toString(), goal, sessions: r.sessions, successText, dryRun: r.dryRun, accounts }
+  return { runId: r.runId, url: url.toString(), goal, sessions: r.sessions, successText, dryRun: r.dryRun, accounts, persona: parsePersona(r.persona) }
 }
 
 /**
@@ -81,8 +102,10 @@ export function syncsToConsole(flags: { sync?: boolean; file?: boolean }, hasLog
  * in, naming a project and the CLI step did not fit in 30 on Mushi's first live
  * run with accounts (it ran out on "Name your project", 2026-10-28).
  */
-export function stepsFor(given: string | undefined, hasAccount: boolean): number {
+export function stepsFor(given: string | undefined, hasAccount: boolean, personaSteps?: number | null): number {
   if (given !== undefined && given.trim() !== '') return Number(given)
+  // A persona's patience is its own step cap (ADR 0073).
+  if (personaSteps != null) return personaSteps
   return hasAccount ? 60 : 30
 }
 

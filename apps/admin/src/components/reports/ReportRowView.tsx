@@ -13,9 +13,9 @@
  */
 
 import { memo, useCallback } from 'react'
-import { Link } from 'react-router-dom'
-import { Tooltip } from '../ui'
+import { Badge, Btn, Tooltip } from '../ui'
 import { closedRowAction } from './reportRowAction'
+import { reportRowIntent } from '../../lib/actionIntent'
 import { variantChip } from './reportDisplayRows'
 import { useRowFlash } from '../../lib/useRowFlash'
 import { useStaggeredAppear } from '../../lib/useStaggeredAppear'
@@ -26,8 +26,7 @@ import { BreadcrumbPeek } from './BreadcrumbPeek'
 import { ReportRowMeta, ReportRowLayerPill, ReportTagChips } from './ReportRowSummaryMeta'
 import { DispatchFixPreflight } from './DispatchFixPreflight'
 import type { PreflightState } from '../../lib/useDispatchPreflight'
-import { IconShare, IconExternalLink, IconClose } from '../icons'
-import { CHIP_TONE } from '../../lib/chipTone'
+import { ReportRowMoreMenu } from './ReportRowMoreMenu'
 import { ReportSourceTag } from './ReportSourceTag'
 import { reportSourceKind, showsSeverity } from '../../lib/reportSourceKind'
 import { isLocalDevUrl, LOCAL_DEV_TOOLTIP } from '../../lib/reportOrigin'
@@ -45,8 +44,8 @@ import {
 } from './reportsTableLayout'
 import {
   BlastRadiusMeter,
+  LowConfidenceChip,
   RecencyHeatLabel,
-  TableConfidenceCell,
   TableSeverityCell,
 } from './ReportMetricCells'
 import { reportHeadline } from '../../lib/format'
@@ -181,7 +180,7 @@ function ReportRowViewInner({
           aria-hidden="true"
         />
       </td>
-      <td className={`${REPORTS_TABLE_COL.checkbox} ${TABLE_CELL.pxLead} py-2 align-top pl-3`}>
+      <td className={`${REPORTS_TABLE_COL.checkbox} ${TABLE_CELL.pxLead} py-2.5 align-top pl-3`}>
         <input
           type="checkbox"
           checked={isSelected}
@@ -191,8 +190,10 @@ function ReportRowViewInner({
           className="h-3.5 w-3.5 accent-brand"
         />
       </td>
-      <td className={`${REPORTS_TABLE_COL.summary} ${TABLE_CELL.pxLead} py-2 align-top min-w-0 overflow-hidden ${isVariant ? 'pl-7' : ''}`}>
-        <div className="min-w-0 space-y-0.5">
+      <td className={`${REPORTS_TABLE_COL.summary} ${TABLE_CELL.pxLead} py-2.5 align-top min-w-0 overflow-hidden ${isVariant ? 'pl-7' : ''}`}>
+        {/* One unit per row (Gestalt proximity, 2026-11-27): summary, then the
+            meta line (source · app · path) 4px under it, 10px row padding. */}
+        <div className="min-w-0 space-y-1">
           <div className="flex items-start gap-1 min-w-0">
             {onToggleGroup && (
               <Tooltip portal content={expanded ? 'Hide variants' : `Show ${(variantCount ?? 1) - 1} more variant${(variantCount ?? 1) - 1 === 1 ? '' : 's'}`}>
@@ -226,16 +227,15 @@ function ReportRowViewInner({
                 {/* Two lines, then clipped: one line cut titles mid-word
                     ("…projects-to-organizations relatio…", R2 sweep 2026-11-18). */}
                 <div
-                  className="line-clamp-2 break-words text-sm font-medium leading-snug text-fg"
+                  // ≤ 65ch a line (≤ 80 Latin / ≈ 36 CJK characters), two lines, full text on hover.
+                  className="line-clamp-2 max-w-prose break-words text-sm font-medium leading-normal text-fg"
                   title={typeof displayTitle === 'string' ? displayTitle : undefined}
                 >
                   {/* Where it came from: a user, Sentry, an alarm, a setup task, a test or a check. */}
                   <ReportSourceTag report={row} className="mr-1.5 align-middle" />
                   {isLocalDevUrl(row.environment?.url) && (
                     <Tooltip content={LOCAL_DEV_TOOLTIP}>
-                      <span className={`mr-1.5 inline-flex items-center rounded-sm px-1.5 py-px align-middle text-2xs font-medium ${CHIP_TONE.neutral}`}>
-                        Local dev
-                      </span>
+                      <Badge tone="neutral" className="mr-1.5 align-middle">Local dev</Badge>
                     </Tooltip>
                   )}
                   {typeof displayTitle === 'string' ? <VitalText text={reportHeadline(displayTitle)} /> : displayTitle}
@@ -243,7 +243,7 @@ function ReportRowViewInner({
                 {/* Subtext: technical summary, only when title differs (i.e. title exists) */}
                 {row.title && summary && row.title !== summary && (
                   <div
-                    className="mt-0.5 truncate text-xs leading-snug text-fg-faint"
+                    className="mt-0.5 max-w-prose truncate text-xs leading-normal text-fg-muted"
                     title={typeof summary === 'string' ? summary : undefined}
                   >
                     {typeof summary === 'string' ? <VitalText text={summary} /> : summary}
@@ -252,6 +252,8 @@ function ReportRowViewInner({
               </div>
             </BreadcrumbPeek>
             <div className="shrink-0 flex items-center gap-1 pt-px">
+              {/* Only a low score shows; the "Conf." column read 95–100% on nearly every row. */}
+              <LowConfidenceChip confidence={row.confidence} />
               {blastRadius > 1 && (
                 <BlastRadiusMeter
                   value={blastRadius}
@@ -264,9 +266,7 @@ function ReportRowViewInner({
               )}
               {reporterReplied && (
                 <Tooltip portal content="Reporter replied — open thread">
-                  <span className="shrink-0 rounded-sm bg-accent-muted/70 px-1.5 py-px text-2xs font-medium text-accent-foreground cursor-help">
-                    reply
-                  </span>
+                  <Badge tone="accent" className="shrink-0 cursor-help">reply</Badge>
                 </Tooltip>
               )}
               {variantCount && variantCount > 1 && !isVariant && (
@@ -300,16 +300,13 @@ function ReportRowViewInner({
           <TableSeverityCell severity={showsSeverity(reportSourceKind(row)) ? row.severity : null} />
         </div>
       </td>
-      <td className={`reports-metric-cell reports-metric-cell--confidence ${REPORTS_TABLE_COL.confidence} ${TABLE_CELL.pxMeta}`}>
-        <div className="reports-metric-cell-slot reports-metric-cell-slot--confidence">
-          <TableConfidenceCell confidence={row.confidence} layout="table" />
-        </div>
-      </td>
       <td className={`reports-action-cell ${REPORTS_TABLE_COL.action} ${TABLE_CELL.pxMeta}`}>
         <div className={`reports-action-stack ${REPORTS_ACTION_STACK_MAX} ml-auto w-full min-w-0`}>
           <div className="reports-action-top ml-auto w-full min-w-0">
-            <span className="row-kebab-reveal pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto inline-flex shrink-0 items-center gap-0">
-              <RowKebab newTabHref={newTabHref} onCopyLink={onCopyLink} onDismiss={onDismiss} />
+            {/* One "More" menu (copy link, new tab, dismiss): shown on row hover and
+                keyboard focus; always on touch, where it is a 44 px target. */}
+            <span className="row-kebab-reveal pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto pointer-coarse:pointer-events-auto inline-flex shrink-0 items-center gap-0">
+              <ReportRowMoreMenu newTabHref={newTabHref} onCopyLink={onCopyLink} onDismiss={onDismiss} />
             </span>
             {canDispatch ? (
               <span
@@ -332,22 +329,28 @@ function ReportRowViewInner({
             ) : closedAction ? (
               // A fixed or dismissed report has nothing left to triage: a red
               // "Triage →" there read as an alarm on finished work.
-              <Link
+              <Btn
                 to={detailPath}
+                intent={closedAction.intent}
+                size="sm"
                 onClick={(e) => e.stopPropagation()}
-                className={`inline-flex h-5 shrink-0 items-center justify-center truncate px-1.5 text-3xs font-medium leading-none rounded-sm ${closedAction.className}`}
+                className="shrink-0 truncate"
                 data-testid="report-row-closed-action"
               >
                 {closedAction.label}
-              </Link>
+              </Btn>
             ) : (
-              <Link
+              // Triage is the amber intent (lib/actionIntent.ts), the High-severity hue.
+              <Btn
                 to={detailPath}
+                intent={reportRowIntent(row.status)}
+                size="sm"
                 onClick={(e) => e.stopPropagation()}
-                className="inline-flex h-5 shrink-0 items-center justify-center truncate px-1.5 text-3xs font-medium leading-none rounded-sm bg-brand text-brand-fg hover:bg-brand-hover"
+                className="shrink-0 truncate"
+                data-testid="report-row-triage-action"
               >
                 Triage →
-              </Link>
+              </Btn>
             )}
           </div>
           <div className="reports-action-age">
@@ -361,58 +364,6 @@ function ReportRowViewInner({
         </div>
       </td>
     </tr>
-  )
-}
-
-interface KebabProps {
-  /** Absolute, base-path-aware URL for "Open in new tab". */
-  newTabHref: string
-  onCopyLink: () => void
-  onDismiss: () => void
-}
-
-function RowKebab({ newTabHref, onCopyLink, onDismiss }: KebabProps) {
-  return (
-    <>
-      <Tooltip portal content="Copy share link">
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            onCopyLink()
-          }}
-          className="p-1 text-fg-faint hover:text-fg-muted hover:bg-surface-overlay rounded-sm"
-          aria-label="Copy link"
-        >
-          <IconShare size={12} />
-        </button>
-      </Tooltip>
-      <Tooltip portal content="Open in new tab">
-        <a
-          href={newTabHref}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          className="p-1 text-fg-faint hover:text-fg-muted hover:bg-surface-overlay rounded-sm inline-flex"
-          aria-label="Open in new tab"
-        >
-          <IconExternalLink size={12} />
-        </a>
-      </Tooltip>
-      <Tooltip portal content="Dismiss">
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            onDismiss()
-          }}
-          className="p-1 text-fg-faint hover:text-danger hover:bg-danger-muted/20 rounded-sm"
-          aria-label="Dismiss"
-        >
-          <IconClose size={12} />
-        </button>
-      </Tooltip>
-    </>
   )
 }
 

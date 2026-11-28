@@ -81,7 +81,7 @@ export function DogfoodNarrativeBanner() {
     >
       <span
         aria-hidden="true"
-        className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${CHIP_TONE.infoSubtle} text-sm`}
+        className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${CHIP_TONE.info} text-sm`}
         title="Where most bugs come from"
       >
         ◆

@@ -58,6 +58,7 @@ const SOURCE_LABEL: Record<string, { title: string; detail: string }> = {
   ux_scorecard: { title: 'Found by the UX scorecard', detail: 'root cause across pages' },
   code_audit: { title: 'Found by a code audit', detail: 'no user reported it' },
   security_advisory: { title: 'From a security advisory', detail: 'a dependency is vulnerable' },
+  security_scan: { title: 'Found by your CI security scan', detail: 'no user reported it' },
   library_modernizer: { title: 'Found by the library check', detail: 'outdated dependency' },
   skill_run: { title: 'Found by a skill run', detail: 'improvement round' },
   fresh_eyes: { title: 'Found by a first-user test', detail: 'new-user journey' },
@@ -263,7 +264,52 @@ export function signalNodes(report: ReportDetail): DiagnosisNode[] {
   return nodes
 }
 
-export function diagnosisNodes(report: ReportDetail): DiagnosisNode[] {
+/**
+ * A report sorted without a model, in its source's own words. Every other
+ * source (or a report a person sorted) gets the generic line. Report
+ * f6df5143 (2026-11-22): a vuln-watch advisory, written from a template with
+ * no model call, read "Diagnosis in progress · usually under a minute" four
+ * days later while the Pipeline strip said the AI stages were not needed.
+ */
+const NO_MODEL_WORDS: Record<string, { title: string; detail: string; why: string }> = {
+  security_advisory: {
+    title: 'Written from a template: no AI needed',
+    detail: 'security advisory',
+    why: 'Mushi Mushi filed this from the advisory record (the vulnerable version, the fixed version and how serious it is) with a plain-English template. No AI model reads it, so there is no diagnosis to wait for: the fix is the upgrade the report names.',
+  },
+  security_scan: {
+    title: 'Written from a template: no AI needed',
+    detail: 'CI security scan',
+    why: 'Your own CI ran the scanner (mushi-security.yml) and Mushi Mushi filed what it found with a plain-English template: the rule, where it is and how to fix it. No AI model reads it, so there is no diagnosis to wait for.',
+  },
+  sdk_health: {
+    title: 'Written from a template: no AI needed',
+    detail: 'setup task',
+    why: 'The SDK health check wrote these setup steps itself. A setup task gets no AI diagnosis: the steps in the report are the fix.',
+  },
+  code_audit: {
+    title: 'Written by the code audit: no AI triage needed',
+    detail: 'code audit finding',
+    why: 'The local code audit filed this finding with the file, the rule and the evidence line it reproduced, so it skips the AI triage.',
+  },
+}
+
+const NO_MODEL_GENERIC = {
+  title: 'Sorted without AI',
+  detail: 'no AI diagnosis',
+  why: 'This report was sorted without an AI model (filed already sorted by a Mushi Mushi check, or sorted by a person), so there is no AI diagnosis. The report text and the fix prompt hold what is known.',
+}
+
+/** After this long with no result and no error, a missing diagnosis is not "in progress". */
+const DIAGNOSIS_PENDING_FOR_MS = 10 * 60_000
+
+/** The first line of a stored error, capped: the full text sits behind the Pipeline strip's Details. */
+function firstLine(raw: string, max = 200): string {
+  const line = raw.split(/\r?\n| \/ /)[0]?.trim() ?? raw
+  return line.length > max ? `${line.slice(0, max - 1)}…` : line
+}
+
+export function diagnosisNodes(report: ReportDetail, now: number = Date.now()): DiagnosisNode[] {
   const view = reportDiagnosisView(report)
   if (view.kind === 'full' || view.kind === 'streaming') {
     const d = view.diagnosis
@@ -317,7 +363,11 @@ export function diagnosisNodes(report: ReportDetail): DiagnosisNode[] {
   }
   const base = { id: 'cause', lane: 'diagnosis' as const, confidence: report.confidence ?? null, source: 'stage2_analysis', anchor: DIAGNOSIS_ANCHORS.diagnosis }
   if (view.kind === 'failed') {
-    return [{ ...base, title: 'Diagnosis failed', detail: 'deep diagnosis did not finish', state: 'failed', needsLook: true, why: view.message }]
+    return [{ ...base, title: 'Diagnosis failed', detail: 'deep diagnosis did not finish', state: 'failed', needsLook: true, why: `${firstLine(view.message)} The Pipeline strip above has the full error and a Retry button.` }]
+  }
+  if (view.kind === 'no_model') {
+    const words = (view.source && NO_MODEL_WORDS[view.source]) || NO_MODEL_GENERIC
+    return [{ ...base, confidence: null, ...words, state: 'ok', needsLook: false }]
   }
   if (view.kind === 'stage1_only') {
     // The report's confidence is the first check's certainty about the
@@ -325,7 +375,16 @@ export function diagnosisNodes(report: ReportDetail): DiagnosisNode[] {
     // of, so no % here: "no full diagnosis 97%" read as a 97% diagnosis.
     return [{ ...base, confidence: null, title: 'Quick summary only; no full diagnosis', detail: STAGE1_ONLY_DETAIL, state: 'ok', needsLook: false, why: 'Only the category was decided, so there is no root cause to show here. The fix prompt still gives your agent everything Mushi Mushi knows.' }]
   }
+  const created = report.created_at ? Date.parse(report.created_at) : NaN
+  if (Number.isFinite(created) && now - created >= DIAGNOSIS_PENDING_FOR_MS) {
+    return [{ ...base, confidence: null, title: 'Not diagnosed', detail: 'no result and no error', state: 'weak', needsLook: true, why: 'No diagnosis was stored for this report and no error either, so triage most likely never ran on it. The Pipeline strip above shows where it stopped, with a Retry when one can help.' }]
+  }
   return [{ ...base, title: 'Diagnosis in progress', detail: 'usually under a minute', state: 'pending', needsLook: false, why: 'Mushi Mushi is still reading this report.' }]
+}
+
+/** True when nothing a model wrote is on this report, so the judge has nothing to grade. */
+function sortedWithoutModel(report: ReportDetail): boolean {
+  return reportDiagnosisView(report).kind === 'no_model'
 }
 
 export function checkNodes(report: ReportDetail): DiagnosisNode[] {
@@ -337,12 +396,24 @@ export function checkNodes(report: ReportDetail): DiagnosisNode[] {
     nodes.push({
       id: 'judge',
       lane: 'check',
-      title: agreed ? 'Judge agrees with the triage' : 'Judge disagrees with the triage',
+      title: agreed ? 'A second AI agrees with the triage' : 'A second AI disagrees with the triage',
       detail: score != null ? `score ${Math.round(score * 100)}%` : 'second model',
       state: agreed && (score == null || score >= NEEDS_LOOK_BELOW) ? 'ok' : 'weak',
       confidence: score,
       needsLook: !agreed || (score != null && score < NEEDS_LOOK_BELOW),
       why: text(judge.judge_reasoning) ?? 'A second model graded the category, severity, component and repro steps.',
+      source: 'judge_eval',
+    })
+  } else if (sortedWithoutModel(report)) {
+    nodes.push({
+      id: 'judge',
+      lane: 'check',
+      title: 'Nothing for the judge to grade',
+      detail: 'no AI triage ran',
+      state: 'unchecked',
+      confidence: null,
+      needsLook: false,
+      why: 'The judge grades what an AI model decided about a report. No model sorted this one, so there is no grade to wait for.',
       source: 'judge_eval',
     })
   } else {

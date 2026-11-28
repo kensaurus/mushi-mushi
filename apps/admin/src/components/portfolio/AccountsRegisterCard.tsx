@@ -162,7 +162,7 @@ export function AccountsRegisterCard({ orgId }: { orgId: string }) {
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-fg">
                         {a.name} <span className="text-xs font-normal text-fg-muted">{PROVIDER_LABEL[a.provider]}</span>
-                        {open && <Badge tone="warnSubtle" className="ml-2">Look at</Badge>}
+                        {open && <Badge tone="warn" className="ml-2">Look at</Badge>}
                       </p>
                       <p className="text-2xs text-fg-muted">
                         Owner {a.ownerEmail ?? 'not recorded'} · 2FA {triLabel(a.twoFactorDeclared)} · {a.adminCount} {a.adminCount === 1 ? 'person' : 'people'} can get in

@@ -38,6 +38,9 @@ interface Props {
   onToggle: () => void
   onRetry: () => void
   compactTable?: boolean
+  /** Phone width: no Started column (the time sits under the agent) and the
+   *  summary wraps, so the row fits without a sideways scroll. */
+  phone?: boolean
   /** Bulk selection (console QA 92): shown when the page passes a handler. */
   selected?: boolean
   onSelectChange?: (selected: boolean) => void
@@ -59,6 +62,7 @@ function FixRowViewInner({
   onToggle,
   onRetry,
   compactTable = false,
+  phone = false,
   selected = false,
   onSelectChange,
   selectionDisabled = false,
@@ -126,32 +130,40 @@ function FixRowViewInner({
         </td>
         <td className={`${FIXES_TABLE_COL.status} ${TABLE_CELL.pxMeta} py-2 align-middle whitespace-nowrap`}>
           <div className="flex flex-col gap-0.5 min-w-0">
-            {onSelectChange ? (
-              <label
-                className="inline-flex items-center gap-1 text-2xs text-fg-faint cursor-pointer w-fit"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <input
-                  type="checkbox"
-                  checked={selected}
-                  disabled={selectionDisabled}
-                  onChange={(e) => onSelectChange(e.target.checked)}
-                  aria-label={`Select the fix for ${fixReportLabel(fix)}`}
-                  className="h-3.5 w-3.5 rounded-sm border-edge accent-brand"
+            {/* The checkbox sits beside the state it selects, not on a line of its
+                own above it (2026-11-22 design pass: the row read as misaligned). */}
+            <div className="flex min-w-0 items-center gap-1.5">
+              {onSelectChange ? (
+                <label
+                  className="inline-flex shrink-0 items-center cursor-pointer pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:justify-center"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected}
+                    disabled={selectionDisabled}
+                    onChange={(e) => onSelectChange(e.target.checked)}
+                    aria-label={`Select the fix for ${fixReportLabel(fix)}`}
+                    className="h-3.5 w-3.5 rounded-sm border-edge accent-brand"
+                  />
+                </label>
+              ) : null}
+              {superseded ? (
+                <StatusPill status="idle" label="Superseded" className="w-fit max-w-full min-w-0 truncate" />
+              ) : (
+                <StatusPill
+                  status={fixRunStatus(fix.status)}
+                  label={pipelineStatusLabel(fix.status)}
+                  className="w-fit max-w-full min-w-0 truncate"
                 />
-                <span className="sr-only">Select</span>
-              </label>
-            ) : null}
-            {superseded ? (
-              <StatusPill status="idle" label="Superseded" className="w-fit max-w-full min-w-0 truncate" />
-            ) : (
-              <StatusPill
-                status={fixRunStatus(fix.status)}
-                label={pipelineStatusLabel(fix.status)}
-                className="w-fit max-w-full min-w-0 truncate"
-              />
-            )}
+              )}
+            </div>
             <span className="text-2xs text-fg-faint font-mono truncate">{agentShort}</span>
+            {phone ? (
+              <span data-testid="fix-row-started-phone">
+                <RelativeTime value={fix.started_at} className="text-2xs text-fg-muted" />
+              </span>
+            ) : null}
           </div>
         </td>
         <td className={`${FIXES_TABLE_COL.report} ${TABLE_CELL.pxLead} py-2 align-middle min-w-0 overflow-hidden`}>
@@ -159,7 +171,7 @@ function FixRowViewInner({
             <Link
               to={`/reports/${fix.report_id}`}
               onClick={(e) => e.stopPropagation()}
-              className="text-xs text-fg-secondary hover:text-fg font-medium truncate block"
+              className={`text-xs text-fg-secondary hover:text-fg font-medium block ${phone ? 'line-clamp-3 wrap-break-word' : 'truncate'}`}
               title={fix.report_title ?? undefined}
             >
               {fixReportLabel(fix)}
@@ -232,9 +244,11 @@ function FixRowViewInner({
             </div>
           </td>
         ) : null}
-        <td className={`${FIXES_TABLE_COL.started} ${TABLE_CELL.pxMeta} py-2 align-middle text-right tabular-nums whitespace-nowrap`}>
-          <RelativeTime value={fix.started_at} className="text-2xs text-fg-muted" />
-        </td>
+        {!phone ? (
+          <td className={`${FIXES_TABLE_COL.started} ${TABLE_CELL.pxMeta} py-2 align-middle text-right tabular-nums whitespace-nowrap`}>
+            <RelativeTime value={fix.started_at} className="text-2xs text-fg-muted" />
+          </td>
+        ) : null}
         <td className={`${FIXES_TABLE_COL.action} ${TABLE_CELL.pxMeta} py-2 align-middle text-right whitespace-nowrap`}>
           <div
             className="flex items-center justify-end gap-1"
@@ -257,7 +271,9 @@ function FixRowViewInner({
                 </Btn>
               )
             )}
-            {fix.pr_url && isGithubUrl(fix.pr_url) && (
+            {/* One action per row (ADR 0069): Retry when it can help, else the PR.
+                The PR link stays in the row's details. */}
+            {fix.pr_url && isGithubUrl(fix.pr_url) && !(fix.retryable === true && !isInFlight) && (
               <a
                 href={fix.pr_url}
                 target="_blank"

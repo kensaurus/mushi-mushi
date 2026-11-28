@@ -377,8 +377,8 @@ export function McpSetupPanel({
               data-testid="mcp-connection-result"
               className={`flex items-start gap-2.5 rounded-lg px-3 py-2.5 text-xs ${
                 connectionTestResult.ok
-                  ? CHIP_TONE.okSubtle
-                  : CHIP_TONE.dangerSubtle
+                  ? CHIP_TONE.ok
+                  : CHIP_TONE.danger
               }`}
             >
               <span className="shrink-0 text-sm leading-none mt-0.5" aria-hidden>
@@ -498,7 +498,7 @@ export function McpSetupPanel({
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-sm font-semibold text-fg">Connect all your projects</h3>
-              <Badge className={`${CHIP_TONE.infoSubtle} text-2xs`}>
+              <Badge tone="info" className="text-2xs">
                 {projects.length} project{projects.length === 1 ? '' : 's'}
               </Badge>
             </div>

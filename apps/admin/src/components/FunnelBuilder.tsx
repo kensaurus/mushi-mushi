@@ -111,7 +111,7 @@ export function FunnelBuilder({
             {steps.map((name, i) => (
               <li key={name} className="flex items-center gap-1">
                 {i > 0 && <span className="text-fg-faint text-xs" aria-hidden="true">→</span>}
-                <span className={`${CHIP_BASE} ${CHIP_TONE.brandSubtle}`}>
+                <span className={`${CHIP_BASE} ${CHIP_TONE.brand}`}>
                   <span className="tabular-nums text-fg-faint">{i + 1}</span>
                   <span>{name}</span>
                   <button
@@ -244,7 +244,7 @@ export function FunnelBuilder({
           <button
             type="button"
             onClick={() => onLoad(SIGNUP_ACTIVATED_PRESET)}
-            className={`${CHIP_BASE} ${CHIP_TONE.infoSubtle} hover:text-fg`}
+            className={`${CHIP_BASE} ${CHIP_TONE.info} hover:text-fg`}
           >
             {SIGNUP_ACTIVATED_PRESET.name}
           </button>

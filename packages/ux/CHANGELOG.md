@@ -1,5 +1,46 @@
 # @mushi-mushi/ux
 
+## 0.5.1
+
+### Patch Changes
+
+- 0c06725: Dependency updates. `@mushi-mushi/mcp` now accepts `@sentry/node` 10 or 11 as its optional peer. On 11 it sends the same data as before: no user info, cookies, headers, request bodies or tool inputs and outputs. `@mushi-mushi/ux` moves to `@anthropic-ai/sdk` 1.x, and `@mushi-mushi/cli` to `@napi-rs/keyring` 2. `@mushi-mushi/react-native` builds and type-checks against React Native 0.88; its floating button no longer casts its animated style. The Svelte and Vue starter templates now use Vite 8 and TypeScript 6.
+
+## 0.5.0
+
+### Minor Changes
+
+- ec62b78: Phone apps get the same UX scorecard as web pages, and first-time user tests can play a persona (ADR 0073).
+
+  - `mushi-ux upload <dir> --platform android|ios|…` sends the screenshots any driver made (a Maestro flow, `adb exec-out screencap`, `xcrun simctl io booted screenshot`, an SDK debug build) and scores each screen on the written rubric. It reads an Android `uiautomator` dump or a `maestro hierarchy` next to a screenshot for the screen's words and buttons. Templates are in `docs/templates/ux-native/`.
+  - `mushi-ux fresh-eyes` plays the persona a queued test carries: its device (viewport, touch), language, 150% zoom for low vision, reduced motion, and its patience as the step cap. The local worker forwards the persona (it now says it can, `fresh_eyes_persona`).
+  - `--mint-account` sends the app it is for; the server makes accounts in Mushi's own sign-in only for an app that opted in.
+  - New MCP tools: `upload_ux_captures`, `list_personas` and `start_fresh_eyes`.
+
+- ec62b78: `mushi-ux clips` records short Playwright clips of an app's top flows (read-only, at most 5 flows, capped in length and size) and uploads them into a release kit for a product video. Opt-in per app.
+- ec62b78: The UX tools now spend fewer tokens and show what each run cost (Plan 025, ADR 0072).
+
+  `@mushi-mushi/ux`: `mushi-ux scorecard` sends a perceptual hash of each page's settled screenshot. When a page's text and look are unchanged from a run in the last 30 days, the server reuses that page's score instead of making a model call, with today's speed and accessibility measurements applied. The UX loop's final review makes no call when a kept version looks the same as the original, and reuses its verdict for an identical pair of screenshots (cached in `.mushi/ux/judge-cache/`). `mushi ux run --sync` now sends the review's token counts, so the console can show the run's cost. `MUSHI_UX_SKILLS_REPO` overrides the default skills repo.
+
+  `@mushi-mushi/mcp`: four new read-only tools. `get_timeline` returns the app release by release: bugs fixed, screens improved, scorecard average and AI cost per release. `get_surface_history` returns one screen's pinned screenshots, scores and kept changes. `get_ux_run` reads one UX run. `start_ux_run` returns the console link and the local command to start a run; it never starts a cloud run itself. Examples in the tool descriptions no longer name the maintainer's own apps, and `MUSHI_PUBLIC_ORIGIN` sets the public site origin (default unchanged).
+
+  `@mushi-mushi/core`: favicon lookup no longer carries a per-app table. It uses the app's icon, repo and SDK origin, skips an SDK origin served under a path of a shared host, and takes `shared_hosts` from the caller.
+
+  `@mushi-mushi/cli`: `MUSHI_PUBLIC_ORIGIN` sets the public site origin used for the hosted console and the MCP sign-in link (default unchanged).
+
+## 0.4.0
+
+### Minor Changes
+
+- 1e4f022: - **`mushi-ux scorecard` scores every page of a live app** — each page gets a 1–10 score on eight written dimensions (clarity, hierarchy, consistency, states, truthfulness, copy, accessibility, speed), its top problems with quoted evidence and a fix, and the overall score follows its worst dimension. It reads the page as a person meets it: the tab title, the text, a screenshot early in the load and one once it settles, the settle time and axe. The settle time and axe cap the speed and accessibility scores (ADR 0067).
+  - **Problems that repeat across pages become one root cause** — the same shared component, banner or status rule on ten pages is one cause with ten pages, and two pages that disagree about the same fact are flagged. `--file` files the top causes as Mushi reports, one per cause and at most five a run; a cause already open only gets its pages refreshed.
+  - **Score on Mushi or on your machine** — `--score-via server` (the default) uses your app's AI key, then Mushi's; `claude-code`, `cursor` and `anthropic-api` score locally. `--sync` puts the scorecard on the console (UX runs → Scorecard) with each page's trend across runs. Pages come from `--path` / `--paths-file`, your source (`--routes-from`) or a crawl; `/team?view=sso` counts as its own page. `--from-captures` scores captures another browser driver made, so no second browser opens on a profile already in use.
+
+### Patch Changes
+
+- 0e9fb5d: - **A scorecard run keeps its top 60 root causes** — causes that span pages or contradict come first, then the rest by rank, so a large app's run syncs and files instead of failing with "at most 60" (the first real run on Mushi's console grouped 235). `scorecard.json` on your machine still lists every cause.
+  - **A server-scored run keeps its screenshots** — `--score-via server` sends the screenshot names it uploaded with the final sync, so the console no longer loses them.
+
 ## 0.3.1
 
 ### Patch Changes

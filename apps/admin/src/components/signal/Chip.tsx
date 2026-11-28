@@ -11,9 +11,9 @@ import type { ReactNode } from 'react'
 export type ChipTone = 'neutral' | 'strong' | 'danger'
 
 const TONE: Record<ChipTone, string> = {
-  neutral: 'border-edge-subtle bg-surface-overlay text-fg-secondary',
+  neutral: 'border-neutral-edge bg-surface-overlay text-fg-secondary',
   strong: 'border-edge bg-surface-raised text-fg',
-  danger: 'border-st-failed/55 bg-st-failed-soft text-st-failed-ink',
+  danger: 'border-st-failed/55 bg-st-failed-soft text-st-failed-ink', // mushi-mushi-allowlist: the Chip root adds `border`
 }
 
 export function Chip({ children, title, tone = 'neutral', className = '' }: { children: ReactNode; title?: string; tone?: ChipTone; className?: string }) {

@@ -4,7 +4,13 @@
  *          runs, ADR 0053 and its 2026-10-28 amendment): a first-time visitor
  *          tries one goal and the time it takes. Run now queues a test that
  *          a computer of the user's runs; the page says plainly when none can.
+ *          A test can play one of the app's personas (ADR 0073, lib/personas.ts).
  */
+
+import type { PersonaFields } from './personas'
+
+/** A persona as the test page reads it (GET …/fresh-eyes `personas`): the saved fields, no brief. */
+export type FreshEyesPersona = PersonaFields & { id: string }
 
 export type FreshEyesStallReason = 'signup_wall' | 'captcha' | 'external' | 'dead_end' | 'blocked' | 'error' | 'model_gave_up' | 'model_unavailable' | 'out_of_steps'
 
@@ -69,6 +75,8 @@ export interface FreshEyesRunListItem {
   /** Why a queued or worker-run test failed or stopped, in plain words. */
   detail?: string | null
   sessions_requested?: number | null
+  /** The persona the test played; null for a plain first-time visitor. */
+  persona_id?: string | null
 }
 
 /** Whether a computer of the user's can take a test now (server: freshEyesRunner). */
@@ -82,8 +90,12 @@ export interface FreshEyesListData {
   runs: FreshEyesRunListItem[]
   trend: FreshEyesTrendPoint[]
   defaults?: { url: string | null; urlSource: string | null; goal: string; sessions: number }
-  /** Only Mushi's own operators, on Mushi's own project, from the console. */
+  /** The app turned test accounts on and the caller may grant them (an owner or admin, in the console). */
   canUseTestAccount?: boolean
+  /** How the app makes test accounts, and why they are not offered (null when they are). */
+  testAccounts?: { mode: 'off' | 'mushi' | 'hook'; unavailable: string | null }
+  /** The personas a test can play, oldest first. */
+  personas?: FreshEyesPersona[]
   /** null: Mushi could not read the computers just now. */
   runner?: FreshEyesRunner | null
 }

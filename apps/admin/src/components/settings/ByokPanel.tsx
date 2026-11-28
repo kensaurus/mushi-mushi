@@ -50,7 +50,7 @@ import {
 import { RowStatus, SettingsList, SettingsRow } from './SettingsRow';
 import { SpendDownSection } from './SpendDownSection';
 import { ReviewFollowupsSection } from './ReviewFollowupsSection';
-import { AiProviderSection } from './AiProviderSection';
+import { AiProviderSection, type AiProvider } from './AiProviderSection';
 import { StatusPill } from '../signal/StatusMark';
 
 interface ProviderMeta {
@@ -63,6 +63,20 @@ interface ProviderMeta {
   emptyDetail: string;
   /** Extra setup steps shown in the add form. */
   guidance?: string;
+}
+
+/**
+ * A key card's one line under the "Run AI on" choice. With OpenAI chosen the
+ * cards still said Claude "drafts the fix" and OpenAI was the "backup",
+ * right under "No Claude key is used" (journey walk, 2026-11-28).
+ * @internal Exported for tests.
+ */
+export function providerPurpose(provider: string, aiProvider: AiProvider | null): string | undefined {
+  if (aiProvider === 'openai') {
+    if (provider === 'anthropic') return 'Not used while "Run AI on" is OpenAI. Kept for when you switch back to Claude.';
+    if (provider === 'openai') return 'Runs every AI step: triage, the diagnosis, fixes and reviews. Also search embeddings and speech-to-text for voice reports.';
+  }
+  return PROVIDER_META[provider]?.purpose;
 }
 
 const PROVIDER_META: Record<string, ProviderMeta> = {
@@ -240,6 +254,8 @@ function providerActionLabel(view: KeyStatusView, keyCount: number): string {
 export function ByokPanel() {
   const entitlements = useEntitlements();
   const byokLocked = isByokLocked(entitlements);
+  // The saved "Run AI on" choice, so each key card says what it does under it.
+  const [aiProvider, setAiProvider] = useState<AiProvider | null>(null);
   const pool = useByokPool(!byokLocked);
   // Free reads: the provider's own balance where it publishes one, and what
   // Mushi recorded spending through each provider in the last 30 days.
@@ -568,7 +584,7 @@ export function ByokPanel() {
             <span className="font-mono text-fg-secondary">{hint}</span>
             {poolKey && (() => {
               const chipClass = `rounded-full px-2 py-0.5 text-2xs font-medium ${
-                keyScope === 'universal' ? CHIP_TONE.accentSubtle : keyScope === 'organization' ? CHIP_TONE.infoSubtle : CHIP_TONE.neutral
+                keyScope === 'universal' ? CHIP_TONE.accent : keyScope === 'organization' ? CHIP_TONE.info : CHIP_TONE.neutral
               }`;
               if (rowScopes.length <= 1) return <span className={chipClass}>{scopeChipLabel(poolKey, sharing)}</span>;
               const open = scopeOpen === poolKey.id;
@@ -762,6 +778,7 @@ export function ByokPanel() {
       >
         <AiProviderSection
           keysToken={allKeys.filter((k) => k.provider_slug === 'openai').map((k) => k.id).join(',')}
+          onProvider={setAiProvider}
           onNeedOpenAiKey={() => {
             if (addProvider !== 'openai') openAddForm('openai');
             document.getElementById('key-openai')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
@@ -806,7 +823,7 @@ export function ByokPanel() {
               id={`key-${provider}`}
               icon={<BrandIcon brand={provider} size={18} decorative />}
               title={meta.name}
-              purpose={meta.purpose}
+              purpose={providerPurpose(provider, aiProvider) ?? meta.purpose}
               status={providerStatus}
               action={
                 <>

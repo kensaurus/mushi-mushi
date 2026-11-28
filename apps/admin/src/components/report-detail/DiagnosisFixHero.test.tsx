@@ -17,7 +17,7 @@ import type { ReportDetail } from './types'
 
 vi.mock('./FixWithAgentPanel', () => ({ FixWithAgentPanel: () => null }))
 
-import { DiagnosisFixHero, inlineMarkdown } from './DiagnosisFixHero'
+import { DiagnosisFixHero, Stage2AbsentNote, inlineMarkdown } from './DiagnosisFixHero'
 
 let container: HTMLDivElement
 let root: Root
@@ -102,12 +102,34 @@ describe('DiagnosisFixHero', () => {
   it('is honest when only the stage-1 classifier ran', () => {
     const text = render(report({ stage2_analysis: null, title: 'Lesson time is wrong' }))
     expect(text).toContain('Lesson card shows the wrong duration')
+    // ADR 0069: one plain line pointing at the fix prompt; no settings link in the diagnosis card.
+    expect(container.querySelector('[data-testid="stage2-absent-hero"]')?.textContent).toContain('No full diagnosis for this bug yet.')
+    expect(container.querySelector('[data-testid="stage2-absent"]')).toBeNull()
+    expect(text).not.toContain('Change threshold')
+    expect(text).not.toContain('classifier confident')
+    expect(text).not.toContain('Why it broke')
+  })
+
+  // Journey walk 2026-11-28: "Likely in <x>" sat beside "no stack trace or file to change".
+  it('names where the bug likely is only when an agent has a code location to start from', () => {
+    expect(render(report({ stage2_analysis: null, component: 'app/words page' }))).not.toContain('Likely in')
+    expect(render(report({ stage2_analysis: null, component: 'supabase/functions/delete-account' }))).toContain('Likely in')
+    expect(render(report({ stage2_analysis: null, component: 'src/features/chat/ChatInput.tsx' }))).toContain('Likely in')
+  })
+
+  // The settings link moved to the LLM classification section (ADR 0069); it still explains itself.
+  it('Stage2AbsentNote says why behind the info hint and links to the threshold', () => {
+    act(() => root.render(createElement(MemoryRouter, null, createElement(Stage2AbsentNote, { report: report({ stage2_analysis: null }) }))))
+    const text = container.textContent ?? ''
     expect(text).toContain('Quick summary only.')
     // The why sits behind the info hint; the line itself is one sentence and a link.
     expect(container.querySelector('[data-testid="stage2-absent"] [aria-label*="did not run"]')).not.toBeNull()
     expect(container.querySelector('[data-testid="stage2-absent"] a')?.textContent).toBe('Change threshold')
-    expect(text).not.toContain('classifier confident')
-    expect(text).not.toContain('Why it broke')
+  })
+
+  it('Stage2AbsentNote points at AI keys when only the rule-based sort ran', () => {
+    act(() => root.render(createElement(MemoryRouter, null, createElement(Stage2AbsentNote, { report: report({ stage2_analysis: null, stage1_model: 'heuristic' }) }))))
+    expect(container.querySelector('[data-testid="stage2-absent"] a')?.textContent).toBe('Check AI keys')
   })
 })
 

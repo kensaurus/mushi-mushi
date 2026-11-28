@@ -1,5 +1,5 @@
 /**
- * The independent Opus review of a cloud agent's pull request (ADR 0030), as
+ * The independent AI review of a cloud agent's pull request (ADR 0030), as
  * the console shows it. The server shape is `PublicFixReview` in
  * packages/server/supabase/functions/_shared/fix-review.ts; it rides on
  * GET /v1/admin/fixes/:id/timeline (`data.review`).

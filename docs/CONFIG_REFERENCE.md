@@ -3,7 +3,7 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_120 configuration knobs across 19 sections · last regenerated 2026-11-20._
+_121 configuration knobs across 19 sections · last regenerated 2026-11-28._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
@@ -26,7 +26,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 - [Billing](#billing) (6)
 - [Onboarding](#onboarding) (2)
 - [MCP install](#mcp-install) (1)
-- [SDK install card](#sdk-install-card) (16)
+- [SDK install card](#sdk-install-card) (17)
 - [Settings → Page-aware assistant](#settings-page-aware-assistant) (5)
 
 ## Settings → General
@@ -1723,7 +1723,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Which corner of the user's app the bug-capture trigger pins to — top-left, top-right, bottom-left, bottom-right.
 
-**How it works** — Drives the live preview and the generated `Mushi.init({ widget: { position: '…' }})` call. The widget mounts in a shadow DOM, so the position is independent of the host app's CSS.
+**How it works** — Drives the live preview and the generated `Mushi.init({ widget: { position: '…' }})` call. The widget mounts in a shadow DOM, so the position is independent of the host app's CSS. If your app's code sets this, your code's value wins (ADR 0068).
 
 **Default** — `bottom-right`
 
@@ -1783,13 +1783,27 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 `sdk-install.theme`
 
-**Summary** — Light, dark, or auto — auto follows the user's `prefers-color-scheme` media query.
+**Summary** — Light, dark, auto or inherit — auto follows the user's `prefers-color-scheme` media query, inherit follows your page's own dark/light class.
 
-**How it works** — Auto re-evaluates on system theme change so the widget never goes white-on-white when the user toggles dark mode at night. Light/dark force the theme regardless of system preference.
+**How it works** — Auto re-evaluates on system theme change so the widget never goes white-on-white when the user toggles dark mode at night. Light/dark force the theme regardless of system preference. Inherit reads your page: a `dark`/`light` class or `data-theme` / `data-color-scheme` on <html>, else the page background. If your app's code sets this, your code's value wins (ADR 0068).
 
 **Default** — `auto`
 
 **When to change** — Force `light` or `dark` when your app explicitly ignores system preference (rare). Otherwise stay on auto for the best a11y default.
+
+### Widget colour
+
+<a id="sdk-install-accent"></a>
+
+`sdk-install.accent`
+
+**Summary** — The widget's brand colour: the Send button, focus rings and the launcher's underline. Auto matches your site.
+
+**How it works** — Auto (the default) uses your site's `--mushi-accent` or `accent-color` when it finds one with enough contrast, else the widget's own. A custom colour is one hex code; Mushi picks black or white text for it, whichever reads better (never under 3:1), and installed SDKs pick it up at their next start, with no redeploy. Also settable with `mushi widget set --accent` or the MCP tool `set_widget_settings`. If your app's code sets this, your code's value wins (ADR 0068).
+
+**Default** — `auto`
+
+**When to change** — Set it when the widget should carry your brand colour and your site does not expose one through `--mushi-accent` or `accent-color`.
 
 ### Trigger text
 
@@ -1799,7 +1813,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Short label shown next to the bug-capture trigger button (or hidden if the button is icon-only).
 
-**How it works** — Localise this for non-English audiences (e.g. `バグ報告` for Japanese). Empty string = icon-only mode, which saves space but loses the affordance for first-time users.
+**How it works** — Localise this for non-English audiences (e.g. `バグ報告` for Japanese). Empty string = icon-only mode, which saves space but loses the affordance for first-time users. If your app's code sets this, your code's value wins (ADR 0068).
 
 **Default** — `Report`
 
@@ -1941,7 +1955,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 `byok.review_followups`
 
-**Summary** — When the Opus review of an agent's pull request says "fix first", Mushi Mushi sends it back to a new Cursor agent once with the review's findings, and Opus reviews the push.
+**Summary** — When the AI review of an agent's pull request says "fix first", Mushi Mushi sends it back to a new Cursor agent once with the review's findings, and the AI review checks the push.
 
 **How it works** — Off until an organization owner or admin turns it on; turning it on also picks up the last 3 days of "fix first" reviews. Every 10 minutes the review-followup worker looks for "fix first" reviews of the latest commit of pull requests a Mushi Mushi cloud agent opened (never a person's pull request, a fork, or a branch the agent did not create). For each, it starts a new Cursor agent on that pull request's branch with the report's summary and diagnosis and every finding about a file the pull request changed (findings that read as instructions to the agent, or whose fix carries a foreign URL or a shell command, are never sent), asking it to fix exactly those, add or adjust tests, run them and push to the same branch, or to explain why a finding is wrong. One follow-up per reviewed commit and two per pull request; never on a "hold" (that needs a person) or a "merge"; never on a closed or merged pull request; never when the app's auto-fix is off. Each follow-up counts against the app's auto-fix daily limit and the organization's follow-ups per day. Before each one, the model is checked against the Cursor key's model list (read at most once an hour); a model the key cannot run waits instead of dispatching. "Last round model" (optional) runs a pull request's second follow-up, the one that happens only after the first did not satisfy the reviewer, on a stronger model such as Opus while the first stays on the cheaper one. When the agent pushes, Opus reviews the new commit, and the scoreboard shows the verdict after.
 

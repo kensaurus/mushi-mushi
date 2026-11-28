@@ -18,7 +18,8 @@
  *
  *            3. INSTALL SNIPPETS — framework tabs (React / Vue / Svelte /
  *               Vanilla) with the matching `npm install` command and the
- *               init code, with the configured options baked in.
+ *               init code. Web snippets leave the look to the console
+ *               unless "Lock these settings in my code" is on (ADR 0068).
  *
  *          Used in four places — Onboarding Card 4, ProjectsPage per-project,
  *          Settings → Health, and McpPage — so the snippet content lives in
@@ -87,6 +88,8 @@ export function SdkInstallCard({
   const [framework, setFramework] = useState<Framework>(() => detectedFramework)
   const autoFrameworkApplied = useRef(false)
   const [config, setConfig] = useState<SdkPreviewConfig>(DEFAULT_SDK_CONFIG)
+  // Off by default: the web snippet leaves the look to the console (ADR 0068).
+  const [lockInCode, setLockInCode] = useState(false)
   const [savedConfig, setSavedConfig] = useState<SdkPreviewConfig>(DEFAULT_SDK_CONFIG)
   const [enabled, setEnabled] = useState(true)
   const [savedEnabled, setSavedEnabled] = useState(true)
@@ -111,8 +114,8 @@ export function SdkInstallCard({
   const bundler = snippetBundler(framework, reactSetup)
   const askSetup = framework === 'react' && reactSetup === null
   const code = useMemo(
-    () => renderSnippet(framework, projectId, snippetKey, config, projectSlug, bundler),
-    [framework, projectId, snippetKey, config, projectSlug, bundler],
+    () => renderSnippet(framework, projectId, snippetKey, config, projectSlug, bundler, { lockInCode }),
+    [framework, projectId, snippetKey, config, projectSlug, bundler, lockInCode],
   )
   const install = installCommand(framework)
   const isDirty = enabled !== savedEnabled || JSON.stringify(config) !== JSON.stringify(savedConfig)
@@ -149,6 +152,10 @@ export function SdkInstallCard({
         const nextEnabled = res.data.enabled !== false
         setEnabled(nextEnabled)
         setSavedEnabled(nextEnabled)
+        // Members read the settings since 2026-11-22; saving stays with owners and admins.
+        if (res.data.canEdit === false) {
+          setSaveMessage('Read-only: only project owners and admins can save these settings.')
+        }
       } else {
         setSaveMessage(res.error?.message ?? 'Could not load saved SDK config')
       }
@@ -214,6 +221,7 @@ export function SdkInstallCard({
     config.theme === DEFAULT_SDK_CONFIG.theme &&
     config.trigger === DEFAULT_SDK_CONFIG.trigger &&
     config.triggerText === DEFAULT_SDK_CONFIG.triggerText &&
+    config.accent === DEFAULT_SDK_CONFIG.accent &&
     config.attachToSelector === DEFAULT_SDK_CONFIG.attachToSelector &&
     config.bannerVariant === DEFAULT_SDK_CONFIG.bannerVariant &&
     config.bannerPosition === DEFAULT_SDK_CONFIG.bannerPosition &&
@@ -266,7 +274,7 @@ export function SdkInstallCard({
         <div>
           <h3 className="text-sm font-semibold text-fg">Configure & install the SDK</h3>
           <p className="text-xs text-fg-muted mt-1">
-            Tune the widget on the left, then copy the snippet on the right into your app.
+            Copy the snippet on the right into your app once. Save the widget settings on the left and your app picks them up at startup, no redeploy.
           </p>
         </div>
       )}
@@ -278,17 +286,10 @@ export function SdkInstallCard({
         className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1.5 text-xs text-fg-secondary"
         data-testid="sdk-install-fast-paths"
       >
-        {/* Where the key comes from, in one row, on Set up and on Connect. */}
-        {!snippetKey ? (
-          <>
-            <dt className="font-medium text-fg">Key</dt>
-            <dd className="min-w-0" data-testid="sdk-snippet-key-hint">
-              Press <span className="font-medium text-fg">Make a key and fill it in</span> above; it is shown only once.
-            </dd>
-          </>
-        ) : null}
+        {/* No "Key" row: the key panel right above has the button and says the key shows once
+            (it said so twice, ADR 0069 word budget). */}
         <dt className="font-medium text-fg">No coding</dt>
-        <dd className="min-w-0">Script tag below, or Lovable / Bolt under &ldquo;Where does your app run?&rdquo;</dd>
+        <dd className="min-w-0">The Script tag, or pick Lovable / Bolt below</dd>
         <dt className="font-medium text-fg">Terminal</dt>
         <dd className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
           <CodeValue value="npx mushi-mushi" inline />
@@ -354,6 +355,8 @@ export function SdkInstallCard({
             framework={framework}
             onEnabledChange={setEnabled}
             onChange={setConfig}
+            lockInCode={lockInCode}
+            onLockInCodeChange={setLockInCode}
           />
           <div className="flex items-center justify-between gap-2">
             <p className="text-2xs text-fg-faint">
@@ -440,15 +443,31 @@ function SdkInstallShell({
   return <Card className={className}>{children}</Card>
 }
 
-/** The widget preview and settings: a closed disclosure on setup, a column elsewhere. */
+/**
+ * The widget preview and settings: closed on setup, a column elsewhere. Closed
+ * renders nothing inside (ADR 0069): the settings live in the card's state, so
+ * opening it again shows what was picked.
+ */
 function WidgetCustomizeColumn({ compact, children }: { compact?: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false)
   if (!compact) return <div className="space-y-3">{children}</div>
   return (
-    <details className="group rounded-sm border border-edge-subtle">
-      <summary className="cursor-pointer select-none px-3 py-2 text-xs text-fg-secondary hover:text-fg">
-        Customize the report button (optional, the defaults work)
-      </summary>
-      <div className="space-y-3 border-t border-edge-subtle p-3">{children}</div>
-    </details>
+    <div className="rounded-sm border border-edge-subtle">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls="sdk-customize-button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full cursor-pointer select-none px-3 py-2 text-left text-xs text-fg-secondary hover:text-fg"
+        data-testid="sdk-customize-toggle"
+      >
+        Customize the report button (optional)
+      </button>
+      {open && (
+        <div id="sdk-customize-button" className="space-y-3 border-t border-edge-subtle p-3">
+          {children}
+        </div>
+      )}
+    </div>
   )
 }

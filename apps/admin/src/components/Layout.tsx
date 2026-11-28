@@ -13,7 +13,7 @@ import {
   IconSignOut, IconBell, IconEye, IconChevronRight, IconSidebar,
 } from './icons'
 import { useNavCounts, toneForBacklog } from '../lib/useNavCounts'
-import { navSlicesForPaths, renderNavBadge, resolveNavBadge } from '../lib/navBadges'
+import { navBadgeStatus, navSlicesForPaths, renderNavBadge, resolveNavBadge } from '../lib/navBadges'
 import { NavRailFlyout } from './sidebar/NavRailFlyout'
 import { NavRailLink, railBadgeText, railDescriptionId } from './sidebar/NavRailLink'
 import { workspaceSectionAttention } from '../lib/workspaceNavMeta'
@@ -28,7 +28,7 @@ import { OrgSwitcher } from './OrgSwitcher'
 import { useMediaQuery } from '../lib/useMediaQuery'
 import { stageForPath, type PdcaStageId } from '../lib/pdca'
 import { NAV_ITEM_BY_PATH, buildOperatorNav, type BuiltNavItem, type BuiltNavSection } from '../lib/buildNav'
-import { coreNavPathsFor } from '../lib/navRegistry'
+import { BUILDER_CORE_NAV_PATHS } from '../lib/navRegistry'
 import { LAB_FEATURES, useLabs } from '../lib/labs'
 import { NAV_CHILDREN, NAV_CHILD_GROUPS, activeParent, isNavPathActive, morePages } from '../lib/sidebarTree'
 import { Tooltip, Btn, Badge } from './ui'
@@ -68,6 +68,8 @@ import { MUSHI_CANONICAL_URLS } from '@mushi-mushi/brand'
 import brandMark from '../assets/brand/mushi-mark.webp'
 
 type NavItem = BuiltNavItem
+/** A headed run of sub-pages under a page (Checks › Your app); `title` null = no heading. */
+type ChildGroup = { id: string; title: string | null; items: NavItem[] }
 
 /**
  * One sidebar for every account (console audit 2026-10-20): the core pages in
@@ -90,10 +92,10 @@ const SECTION_TO_STAGE: Record<string, PdcaStageId> = {
 }
 
 const STAGE_TONE: Record<NonNullable<NavSection['stage']>, string> = {
-  P: CHIP_TONE.infoSubtle,
-  D: CHIP_TONE.brandSubtle,
-  C: CHIP_TONE.warnSubtle,
-  A: CHIP_TONE.okSubtle,
+  P: CHIP_TONE.info,
+  D: CHIP_TONE.brand,
+  C: CHIP_TONE.warn,
+  A: CHIP_TONE.ok,
 }
 
 
@@ -150,6 +152,8 @@ export function Layout({ children }: { children: ReactNode }) {
   const [railSignOutOpen, setRailSignOutOpen] = useState(false)
   const labs = useLabs()
   const [morePagesOpen, setMorePagesOpen] = useState(false)
+  // Pages under More pages whose sub-pages the user opened by hand (Checks › …).
+  const [openMoreParents, setOpenMoreParents] = useState<ReadonlySet<string>>(() => new Set())
   const palette = useCommandPalette()
   const askPanel = useAskMushiPanel()
   const [hotkeysOpen, setHotkeysOpen] = useState(false)
@@ -343,15 +347,15 @@ export function Layout({ children }: { children: ReactNode }) {
         .filter((i): i is NavItem => i != null)
         .filter(visibleByRole)
         .filter(visibleByFeature)
-    // A builder gets the short sidebar; operators keep the full one (audit 2026-11-11).
-    const core = pick(coreNavPathsFor({ isOperator }))
+    // Every account gets the five-page fix loop, the owner's too (ADR 0069): operator pages are Labs, off by default.
+    const core = pick(BUILDER_CORE_NAV_PATHS)
     const labItems = pick(LAB_FEATURES.filter((f) => labs.isEnabled(f.id)).map((f) => f.paths[0]))
     const sections: NavSection[] = [{ id: 'core', title: 'Pages', hint: 'The pages every account has.', items: core }]
     if (labItems.length > 0) {
       sections.push({
         id: 'labs',
         title: 'Labs',
-        hint: 'Pages you switched on in Settings › Labs.',
+        hint: 'Pages kept in your sidebar from Settings › Labs.',
         items: labItems,
       })
     }
@@ -380,33 +384,68 @@ export function Layout({ children }: { children: ReactNode }) {
       .filter(visibleByRole)
       .filter(visibleByFeature)
   }, [openParent, isSuperAdmin, isOperator, has])
-  // Headed groups (Checks › Your app / Builds & tests (CI) / Mushi Mushi
-  // itself); a group the viewer can see nothing in is dropped.
-  const childGroups = useMemo(() => {
-    if (!openParent) return null
-    const groups = NAV_CHILD_GROUPS[openParent]
-    if (!groups) return null
-    const visible = new Map(childItems.map((i) => [i.path, i]))
-    return groups
-      .map((g) => ({ id: g.id, title: g.title, items: g.paths.map((p) => visible.get(p)).filter((i): i is NavItem => i != null) }))
-      .filter((g) => g.items.length > 0)
-  }, [openParent, childItems])
-  const moreGroups = useMemo(
-    () =>
-      morePages({ isOperator, isSuperAdmin }, labs.enabled).map((g) => ({
-        ...g,
-        items: g.entries
-          .map((e) => NAV_ITEM_BY_PATH.get(e.path))
-          .filter((i): i is NavItem => i != null)
-          .filter(visibleByFeature),
-      })),
-    [isOperator, isSuperAdmin, has, labs.enabled],
+  const moreGroups = useMemo(() => {
+    const toItems = (entries: ReadonlyArray<{ path: string }>) =>
+      entries
+        .map((e) => NAV_ITEM_BY_PATH.get(e.path))
+        .filter((i): i is NavItem => i != null)
+        .filter(visibleByFeature)
+    return morePages({ isOperator, isSuperAdmin }, labs.enabled).map((g) => ({
+      sectionId: g.sectionId,
+      title: g.title,
+      items: toItems(g.entries),
+      // Sub-pages of a page that is itself under More pages (Checks › CI
+      // runners, Apps › Manage apps): listed under that page.
+      children: Object.fromEntries(
+        Object.entries(g.children).map(([parent, groups]) => [
+          parent,
+          groups
+            .map((cg) => ({ id: cg.id, title: cg.title, items: toItems(cg.entries) }))
+            .filter((cg) => cg.items.length > 0),
+        ]),
+      ) as Record<string, ChildGroup[]>,
+    }))
+  }, [isOperator, isSuperAdmin, has, labs.enabled])
+  const moreChildItems = useMemo(
+    () => moreGroups.flatMap((g) => Object.values(g.children).flatMap((cgs) => cgs.flatMap((cg) => cg.items))),
+    [moreGroups],
   )
   const isCurrent = (path: string) => isNavPathActive(pathname, search, path)
+  // A sub-page has its own row wherever its page is: under it in the sidebar,
+  // or under it in More pages. The parent marks where you are only when the
+  // sub-page you are on has no row of its own (one this viewer cannot see).
+  const currentChildHasRow =
+    childItems.some((c) => isCurrent(c.path)) || moreChildItems.some((c) => isCurrent(c.path))
   // A parent is the current page only when none of its sub-pages is.
   const isCurrentNav = (path: string) =>
-    isCurrent(path) && !(path === openParent && childItems.some((c) => isCurrent(c.path)))
-  const onMorePage = moreGroups.some((g) => g.items.some((i) => isCurrent(i.path)))
+    (isCurrent(path) && !(path === openParent && currentChildHasRow)) ||
+    (path === openParent && !currentChildHasRow)
+  const onMorePage =
+    moreGroups.some((g) => g.items.some((i) => isCurrentNav(i.path))) ||
+    moreChildItems.some((i) => isCurrentNav(i.path))
+  // What a closed "More pages" hides that needs you: one dot in the worst
+  // tone, the pages named in its label (owner rule: group repeats, a status
+  // is a mark, not a sentence).
+  const moreAttention = useMemo(() => {
+    const hits = [...moreGroups.flatMap((g) => g.items), ...moreChildItems]
+      .map((item) => ({ item, status: navBadgeStatus(resolveNavBadge(item.path, navCounts, { criticalReports30d })) }))
+      .filter((h) => h.status && (h.status.tone === 'danger' || h.status.tone === 'warn'))
+    if (hits.length === 0) return null
+    return {
+      tone: hits.some((h) => h.status!.tone === 'danger') ? ('danger' as const) : ('warn' as const),
+      label: `Needs you under More pages: ${hits.map((h) => h.item.label).join(', ')}`,
+    }
+  }, [moreGroups, moreChildItems, navCounts, criticalReports30d])
+  /** Sub-pages under a More-pages entry are open while you are in that family, or when opened by hand. */
+  const moreParentOpen = (path: string) => path === openParent || openMoreParents.has(path)
+  function toggleMoreParent(path: string) {
+    setOpenMoreParents((prev) => {
+      const next = new Set(prev)
+      if (next.has(path)) next.delete(path)
+      else next.add(path)
+      return next
+    })
+  }
   // Opening a page that lives under "More pages" opens the list, so the
   // sidebar always shows where you are.
   useEffect(() => {
@@ -476,6 +515,69 @@ export function Layout({ children }: { children: ReactNode }) {
 
   function renderNavLink(item: NavItem, compact: boolean) {
     return compact ? renderRailLink(item) : renderFullNavLink(item)
+  }
+
+  /**
+   * A page kept in the sidebar that has sub-pages (Checks, Apps as Labs):
+   * the same folded list More pages gives it. They used to show only while
+   * you were inside that family, so the 13 checks had no row elsewhere.
+   */
+  function sidebarChildGroups(parent: string): ChildGroup[] {
+    const kids = NAV_CHILDREN[parent]
+    if (!kids) return []
+    const visible = new Map(
+      kids
+        .map((path) => NAV_ITEM_BY_PATH.get(path))
+        .filter((i): i is NavItem => i != null)
+        .filter(visibleByRole)
+        .filter(visibleByFeature)
+        .map((i) => [i.path, i] as const),
+    )
+    const headed = NAV_CHILD_GROUPS[parent]
+    const groups: ChildGroup[] = headed
+      ? headed.map((g) => ({ id: g.id, title: g.title, items: g.paths.map((p) => visible.get(p)).filter((i): i is NavItem => i != null) }))
+      : [{ id: parent, title: null, items: [...visible.values()] }]
+    return groups.filter((g) => g.items.length > 0)
+  }
+
+  /** A page row with a "13 ›" toggle and its sub-pages under it, folded unless you are in that family. */
+  function renderParentWithChildren(item: NavItem, kids: ChildGroup[], where: 'more' | 'sidebar') {
+    const open = moreParentOpen(item.path)
+    const kidCount = kids.reduce((n, cg) => n + cg.items.length, 0)
+    const listId = `nav-${where}-children-${item.path.replace(/\W+/g, '-')}`
+    const toggleLabel = `${open ? 'Hide' : 'Show'} the ${kidCount} pages under ${item.label}`
+    return (
+      <Fragment key={item.path}>
+        <div className="flex items-center">
+          <div className="min-w-0 flex-1">{renderNavLink(item, false)}</div>
+          <button
+            type="button"
+            onClick={() => toggleMoreParent(item.path)}
+            aria-expanded={open}
+            aria-controls={listId}
+            aria-label={toggleLabel}
+            title={toggleLabel}
+            data-testid={where === 'more' ? 'nav-more-children-toggle' : 'nav-children-toggle'}
+            className="inline-flex h-7 shrink-0 items-center gap-0.5 rounded-md px-1.5 text-2xs tabular-nums text-fg-muted hover:bg-surface-overlay/40 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          >
+            {kidCount}
+            <IconChevronRight className={`h-3 w-3 motion-safe:transition-transform ${open ? 'rotate-90' : ''}`} />
+          </button>
+        </div>
+        {open ? (
+          <div id={listId} className="ml-3 space-y-0.5 border-l border-edge/40 pl-2" data-testid={where === 'more' ? 'nav-more-children' : 'nav-children'}>
+            {kids.map((cg) => (
+              <div key={cg.id} className="space-y-0.5" data-testid={cg.title ? `nav-child-group-${cg.id}` : undefined}>
+                {cg.title ? (
+                  <p className="px-2 pt-1 text-3xs font-semibold uppercase tracking-wider text-fg-muted">{cg.title}</p>
+                ) : null}
+                {cg.items.map((child) => renderNavLink(child, false))}
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </Fragment>
+    )
   }
 
   // Desktop collapse / expand toggle. It lives at the TOP of the sidebar, by
@@ -573,7 +675,7 @@ export function Layout({ children }: { children: ReactNode }) {
                 aria-label="Beta: send feedback"
                 className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
               >
-                <Badge tone="brandSubtle" className="hover:brightness-110">Beta</Badge>
+                <Badge tone="brand" className="hover:brightness-110">Beta</Badge>
               </Link>
               {desktop && renderSidebarToggle(false)}
             </div>
@@ -627,21 +729,9 @@ export function Layout({ children }: { children: ReactNode }) {
                 >
                   {section.items.map((item) => (
                     <Fragment key={item.path}>
-                      {renderNavLink(item, compact)}
-                      {!compact && item.path === openParent && childItems.length > 0 ? (
-                        <div className="ml-3 space-y-0.5 border-l border-edge/40 pl-2" data-testid="nav-children">
-                          {childGroups
-                            ? childGroups.map((group) => (
-                                <div key={group.id} className="space-y-0.5" data-testid={`nav-child-group-${group.id}`}>
-                                  <p className="px-2 pt-1.5 text-3xs font-semibold uppercase tracking-wider text-fg-secondary">
-                                    {group.title}
-                                  </p>
-                                  {group.items.map((child) => renderNavLink(child, false))}
-                                </div>
-                              ))
-                            : childItems.map((child) => renderNavLink(child, false))}
-                        </div>
-                      ) : null}
+                      {!compact && sidebarChildGroups(item.path).length > 0
+                        ? renderParentWithChildren(item, sidebarChildGroups(item.path), 'sidebar')
+                        : renderNavLink(item, compact)}
                       {/* The icon rail has no room for the list: it shows
                           only the sub-page you are on, under its page. */}
                       {compact && item.path === openParent
@@ -651,9 +741,8 @@ export function Layout({ children }: { children: ReactNode }) {
                   ))}
                   {section.id === 'core' && compact ? (
                     <>
-                      {moreGroups
-                        .flatMap((group) => group.items)
-                        .filter((item) => isCurrent(item.path))
+                      {[...moreGroups.flatMap((group) => group.items), ...moreChildItems]
+                        .filter((item) => isCurrentNav(item.path))
                         .map((item) => renderNavLink(item, true))}
                       <Tooltip
                         side="right"
@@ -691,13 +780,22 @@ export function Layout({ children }: { children: ReactNode }) {
                       >
                         <IconChevronRight className={`nav-link-icon opacity-70 motion-safe:transition-transform ${morePagesOpen ? 'rotate-90' : ''}`} />
                         <span>More pages</span>
+                        {!morePagesOpen && moreAttention ? (
+                          <span role="img" aria-label={moreAttention.label} title={moreAttention.label} className="ml-auto inline-flex items-center" data-testid="nav-more-attention">
+                            <span className={`inline-block h-1.5 w-1.5 rounded-full ${moreAttention.tone === 'danger' ? 'bg-danger' : 'bg-warn'}`} />
+                          </span>
+                        ) : null}
                       </button>
                       {morePagesOpen ? (
                         <div id="nav-more-pages" className="ml-3 space-y-1.5 border-l border-edge/40 pl-2" data-testid="nav-more-pages">
                           {moreGroups.map((group) => (
                             <div key={group.sectionId} className="space-y-0.5">
                               <p className="px-2 pt-1 text-3xs font-semibold text-fg-secondary">{group.title}</p>
-                              {group.items.map((item) => renderNavLink(item, false))}
+                              {group.items.map((item) => {
+                                const kids = group.children[item.path]
+                                if (!kids || kids.length === 0) return renderNavLink(item, false)
+                                return renderParentWithChildren(item, kids, 'more')
+                              })}
                             </div>
                           ))}
                           <Link to="/settings?tab=display#sidebar-pages" className="nav-link w-full justify-start text-2xs text-fg-muted hover:text-fg-secondary">
@@ -1232,9 +1330,9 @@ function computeStaleness(
 }
 
 const STALENESS_TONE: Record<SectionStaleness['tone'], string> = {
-  ok: CHIP_TONE.okSubtle,
-  warn: CHIP_TONE.warnSubtle,
-  danger: CHIP_TONE.dangerSubtle,
+  ok: CHIP_TONE.ok,
+  warn: CHIP_TONE.warn,
+  danger: CHIP_TONE.danger,
 }
 
 interface SectionRailHeaderProps {

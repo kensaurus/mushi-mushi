@@ -244,6 +244,8 @@ export {
   MUSHI_ACCENT_SHADOW,
   MUSHI_BANNER_BRAND_BORDER,
   MUSHI_REPORTER_STATUS,
+  MUSHI_REPORT_TYPE_COLORS,
+  MUSHI_REPORT_TYPE_WASH,
   mushiPalette,
   mushiTokens,
   resolveWidgetAccent,
@@ -251,6 +253,8 @@ export {
   type MushiThemeMode,
   type MushiColorPalette,
   type MushiTokenSnapshot,
+  type MushiReportTypeId,
+  type MushiReportTypeTone,
 } from './design-tokens';
 /** @public */
 export {

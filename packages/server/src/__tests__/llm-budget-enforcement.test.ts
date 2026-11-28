@@ -118,6 +118,25 @@ describe('readLlmBudgetState', () => {
     expect(ops.map((o) => o.table)).toEqual(['project_settings'])
   })
 
+  it('an unpriced row adds no dollars; it is counted with its tokens', async () => {
+    const { db } = project(5, 1, (op) =>
+      op.table === 'llm_invocations'
+        ? { data: [
+            { used_model: 'claude-sonnet-5-5', input_tokens: 10, output_tokens: 10, cost_usd: 0.5 },
+            { used_model: 'claude-made-up-9', input_tokens: 1_000, output_tokens: 200, cost_usd: null },
+          ] }
+        : null,
+    )
+    const s = await budget.readLlmBudgetState(db as never, 'p1', NOW)
+    expect(s).toMatchObject({ spendUsd: 0.5, unpricedCalls: 1, unpricedTokens: 1_200, over: false })
+  })
+
+  it('resolveCostUsd never re-prices: NULL stays unpriced', () => {
+    expect(budget.resolveCostUsd(null)).toBeNull()
+    expect(budget.resolveCostUsd('0.25')).toBe(0.25)
+    expect(budget.resolveCostUsd(0)).toBe(0)
+  })
+
   it('a failed read throws instead of reading as $0', async () => {
     const { db } = project(5, 0, (op) =>
       op.table === 'llm_invocations' ? { error: { message: 'statement timeout' } } : null,

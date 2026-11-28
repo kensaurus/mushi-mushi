@@ -47,7 +47,7 @@ export function RepoSnapshotStrip({ stats, statsFetchedAt, statsValidating, stat
       freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
       metrics={[
         {
-          label: statLabels?.prOpen ?? 'PRs open',
+          label: statLabels?.prOpen ?? 'Fix PRs open',
           value: stats.prOpen,
           hint: 'Open fix pull requests, whatever their CI says.',
           to: repoLinks.prOpen,

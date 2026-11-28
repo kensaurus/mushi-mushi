@@ -32,7 +32,7 @@ import {
   SegmentedControl,
   Input,
 } from '../components/ui'
-import { CHIP_TONE, SELECTED_TONE, SELECTED_TONE_IDLE, runStatusChipTone } from '../lib/chipTone'
+import { SELECTED_TONE, SELECTED_TONE_IDLE, runStatusChipTone } from '../lib/chipTone'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -256,7 +256,7 @@ function FeatureRow({
           <h3 className="text-sm font-medium leading-snug text-fg">{ticket.subject}</h3>
           <div className="flex shrink-0 items-center gap-1.5">
             {isShipped && ticket.status !== 'resolved' && (
-              <Badge className={`${CHIP_TONE.okSubtle} text-3xs`}>
+              <Badge tone="ok" className="text-3xs">
                 Shipped
               </Badge>
             )}

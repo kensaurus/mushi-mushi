@@ -3,7 +3,7 @@
 > One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code.
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
-Pages: 246
+Pages: 250
 
 This file contains the full prose of every documentation page, stripped of
 JSX syntax, suitable for offline LLM ingestion. Getting-started pages come
@@ -334,7 +334,7 @@ Add to `.cursor/mcp.json` in your repo root:
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.31.8"],
+      "args": ["-y", "@mushi-mushi/mcp@0.33.1"],
       "env": {
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
         "MUSHI_API_KEY": "mushi_..."
@@ -366,7 +366,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.31.8"],
+      "args": ["-y", "@mushi-mushi/mcp@0.33.1"],
       "env": {
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
         "MUSHI_API_KEY": "mushi_..."
@@ -1752,8 +1752,14 @@ in your page, like the key of any chat or analytics tool.
 
 ## Change how the button looks
 
-The line takes a few settings, such as `data-position` and `data-theme`. The
-full list is on the [script-tag reference](/quickstart/web#no-bundler-script-tag).
+Change it in the Mushi console: **Connect → Report button → Customize the report button**, then Save. Your
+app picks up the corner, theme, label and colour at its next start, so you do
+not paste a new line or redeploy. You can also ask your editor's agent (MCP
+`set_widget_settings`) or run `mushi widget set`.
+
+The line also takes settings, such as `data-position` and `data-theme`, but a
+setting on the line wins over the console for good, so add one only to lock it.
+The full list is on the [script-tag reference](/quickstart/web#no-bundler-script-tag).
 
 ## If nothing shows up
 
@@ -2561,7 +2567,7 @@ The SDK adds the report button to your app and sends reports to Mushi Mushi.
 
 **Do this:**
 
-1. Open **Connect → Bug capture SDK**. Pick your framework tab and copy the
+1. Open **Connect → Report button**. Pick your framework and copy the
    snippet. **Make a key and fill it in** puts your key into the snippet.
 2. Put the project ID and key in environment variables, not in code:
    - Vite (React, Vue, Svelte): `VITE_MUSHI_PROJECT_ID` and `VITE_MUSHI_API_KEY`
@@ -2748,7 +2754,7 @@ events. If no deploy has been seen in 14 days, it says so. See
 **Privacy and data:**
 
 - **Screenshots.** Reporters see a preview of the screenshot and can remove it
-  before they send. Under **Connect → Bug capture SDK**, keep **Privacy caption
+  before they send. Under **Connect → Report button → Customize the report button**, keep **Privacy caption
   on screenshot preview** on, or write your own text.
 - **Retention.** Reports older than your plan's window are deleted daily: Free
   30 days, Builder 90, Studio 180, Enterprise custom.
@@ -2950,8 +2956,24 @@ start a second copy. With no `data-project` and `data-key` it does nothing.
 | `data-trigger-text` | `widget.triggerText` |
 | `data-banner-variant` | `widget.bannerConfig.variant` (`neon`, `brand` or `subtle`) |
 | `data-banner-position` | `widget.bannerConfig.position` (`top` or `bottom`) |
+| `data-accent` | `widget.accent` (`#rrggbb`, `rgb()`, `hsl()` or `oklch()`) |
+| `data-accent-text` | `widget.accentText` (picked for you when left out) |
+| `data-locale` | `widget.locale` (`auto`, `en`, `ja`, `th`, `es` or `zh`) |
+| `data-hide-on-routes` | `widget.hideOnRoutes`, comma-separated (`/admin/*, /checkout`) |
 | `data-endpoint` | `apiEndpoint`, for a self-hosted server |
 | `data-debug` | `debug` when set to `"true"` |
+
+The look attributes (`data-trigger`, `data-theme`, `data-position`,
+`data-trigger-text`, `data-accent`, `data-accent-text`, the banner ones) lock that setting: a value in your code
+wins over the console's widget settings
+([ADR 0068](https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0068-host-code-wins-over-console-widget-settings.md)).
+The console prints the tag without them unless you tick **Lock these settings
+in my code**, so you can change the look from the console without editing the
+tag.
+
+A value the widget does not accept is skipped with one console warning that
+names the attribute and the values it takes; it never breaks your page.
+Colours, CSS tokens and route rules: [Theming the bug widget](/sdks/theming).
 
 Anything else (capture options, `beforeSend`, `captureEvent` from your own
 code) needs the npm package above. The console's **Script tag** install tab
@@ -6793,7 +6815,7 @@ at `/v1/agent-card` for proxies that strip dotfiles.
 ```mermaid
 flowchart TB
   subgraph Inbound["Inbound to Mushi Mushi"]
-    MCP["MCP — both stdio AND Streamable HTTP<br/>133 tools / 8 resources / 4 prompts"]
+    MCP["MCP — both stdio AND Streamable HTTP<br/>145 tools / 8 resources / 4 prompts"]
     REST["REST /v1/admin/*<br/>OpenAPI 3.1 at /openapi.json<br/>adminOrApiKey({ scope: 'mcp:read|write' })"]
     A2A["A2A v1.0.0 /v1/a2a/tasks<br/>create / get / cancel / SSE subscribe"]
     AGUI["AG-UI v0.4 SSE<br/>fix dispatch stream<br/>API key OR JWT"]
@@ -6816,7 +6838,7 @@ flowchart TB
 Mushi Mushi ships BOTH MCP transports so you can pick the one that matches
 your client:
 
-- **stdio** — `npx -y @mushi-mushi/mcp@0.31.8`. Default for editor
+- **stdio** — `npx -y @mushi-mushi/mcp@0.33.1`. Default for editor
   integrations (Cursor / Claude Desktop / Claude Code / Continue /
   Cline / Zed / Windsurf). Your client launches the server as a
   subprocess and pipes JSON-RPC over stdio.
@@ -6841,7 +6863,7 @@ your client:
 }
 ```
 
-The full tool catalog (133 tools, 8 resources, 4 prompts) lives in
+The full tool catalog (145 tools, 8 resources, 4 prompts) lives in
 [`@mushi-mushi/mcp`](/sdks/mcp) — see also the generated catalog at
 [`MCP tools reference`](/sdks/mcp-tools). Tools that move money
 (`dispatch_fix`, `transition_status`, `submit_fix_result`, `trigger_judge`,
@@ -7017,7 +7039,7 @@ helpful message for unregistered ids.
 
 | Orchestrator                                        | Recommended path                 | Why                                                                                                                                                                                                              |
 | --------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 133 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
+| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 145 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
 | **Claude Agent SDK / Claude Desktop / Claude Code** | stdio MCP                        | Same path, same surface                                                                                                                                                                                          |
 | **OpenAI Agents SDK** (TS / Python)                 | Streamable HTTP MCP              | Per OpenAI's MCP guide, Streamable HTTP and stdio are preferred over deprecated SSE. Mushi Mushi's hosted MCP at `/functions/v1/mcp` fits                                                                              |
 | **ChatGPT Agent**                                   | Streamable HTTP MCP              | Same — no subprocess in the hosted runtime                                                                                                                                                                       |
@@ -7349,7 +7371,10 @@ copy from **Projects → SDK install** without rebuilding.
 
   Host `init()` still wins when you wired something explicitly — for example
   `widget: { trigger: 'banner' }` or `capture: { screenshot: 'off' }`. The
-  console cannot silently reset those back to defaults.
+  console cannot silently reset those back to defaults. For the widget's look
+  (position, theme, trigger text, colour) the rule is simple: if your app's
+  code sets it, your code's value wins; the console fills what your code left
+  out. To let the console decide, remove the option from your code.
 
 ## Setup default
 
@@ -7374,6 +7399,9 @@ builds.
 | `capture.screenshot: 'off'` | Unconfigured (default on-report) | Screenshot stays off |
 | `capture.console: true` | `console: false` | Console capture turns off (console explicitly set it) |
 | Nothing (defaults) | Banner message + variant | Console banner applies |
+| `widget.position: 'top-left'` | `bottom-left` | `top-left` (your code wins) |
+| `widget.accent: '#e03c2c'` | `#3b5bdb` | `#e03c2c` (your code wins) |
+| Nothing (defaults) | Colour `#3b5bdb` | The widget turns `#3b5bdb`, with black or white text checked for contrast |
 
 Full precedence rules:
 [SDK_RUNTIME_CONFIG.md](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SDK_RUNTIME_CONFIG.md)
@@ -7381,8 +7409,16 @@ Full precedence rules:
 ## Console tuning without rebuild
 
 1. Open **Projects →** your project → **SDK install**
-2. Change launcher, banner copy, capture toggles, or screenshot privacy caption
+2. Change launcher, position, theme, colour, banner copy, capture toggles, or screenshot privacy caption
 3. Save — live apps pick it up on the next config fetch (usually within seconds)
+
+From your editor instead: the MCP tools `get_widget_settings` and
+`set_widget_settings`, or the CLI:
+
+```bash
+mushi widget show
+mushi widget set --accent '#3b5bdb' --position bottom-left --theme dark --trigger-text 'Report a bug'
+```
 
 No npm publish or app store resubmit required for these knobs.
 
@@ -7684,15 +7720,15 @@ Mushi Mushi's npm packages ship on independent semver tracks (see [npm](https://
 
 | Package | Version |
 | --- | --- |
-| @mushi-mushi/core, @mushi-mushi/web | 1.37.x |
+| @mushi-mushi/core, @mushi-mushi/web | 1.40.x |
 | @mushi-mushi/react | 1.35.x |
-| @mushi-mushi/react-native | 0.25.x |
-| @mushi-mushi/cli | 0.41.x |
-| @mushi-mushi/mcp | 0.31.x |
+| @mushi-mushi/react-native | 0.26.x |
+| @mushi-mushi/cli | 0.43.x |
+| @mushi-mushi/mcp | 0.33.x |
 | @mushi-mushi/capacitor | 1.2.x |
 | @mushi-mushi/node | 1.3.x |
 | @mushi-mushi/angular, @mushi-mushi/vue, @mushi-mushi/svelte | 1.0.x |
-| mushi-mushi (launcher) | 1.38.x |
+| mushi-mushi (launcher) | 1.40.x |
 
 See [Project ID & API keys](/concepts/credentials) for credential formats (project UUID, and the one `mushi_…` key format every SDK and the MCP server share).
 
@@ -8644,6 +8680,8 @@ Console URL resolution: `MUSHI_CONSOLE_URL` → saved config → localhost `:646
 | `mushi project create` | Create project, mint key, write config |
 | `mushi doctor` | Local + optional server preflight checks |
 | `mushi nudge` | Print a phase-tuned `Mushi.init()` snippet (`alpha` / `beta` / `ga`) |
+| `mushi widget show` | The bug widget's look as the console serves it: colour, corner, theme, trigger text, launcher |
+| `mushi widget set` | Change it without a redeploy, e.g. `--accent '#3b5bdb' --position bottom-left --theme dark --trigger-text 'Report a bug'` (`--accent auto` matches your site; owners and admins). A value your app's code sets wins ([ADR 0068](https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0068-host-code-wins-over-console-widget-settings.md)) |
 | `mushi reset  --confirm` | Archive project and wipe test data (irreversible) |
 | `mushi completion <bash\|zsh\|fish>` | Print a tab-completion script generated from the live command tree |
 
@@ -10472,7 +10510,7 @@ entry.
 
 ## Two transports
 
-- **stdio (local)**: `npx -y @mushi-mushi/mcp@0.31.8`. This is what
+- **stdio (local)**: `npx -y @mushi-mushi/mcp@0.33.1`. This is what
   `mushi setup --stdio` writes, and what `setup` always writes for Continue and
   Zed. Use it for any client that only runs local servers. Your client launches
   the server as a subprocess and pipes JSON-RPC over stdio.
@@ -10528,7 +10566,7 @@ read the contract before drafting a fix.
 ```
 
 See [`@mushi-mushi/mcp`](https://www.npmjs.com/package/@mushi-mushi/mcp)
-on npm for the full **133-tool** catalog and
+on npm for the full **145-tool** catalog and
 [Connecting your orchestrator](/concepts/orchestrator-interop) for the
 non-MCP surfaces (REST, A2A, AG-UI SSE).
 
@@ -10681,7 +10719,7 @@ description: Every tool, resource and prompt the Mushi Mushi MCP server exposes 
 
   Auto-generated from `packages/mcp/src/catalog.ts`. Do not edit by hand — run `pnpm gen:mcp-tools-doc`.
 
-**133 tools** · **8 resources** · **4 prompts**
+**145 tools** · **8 resources** · **4 prompts**
 
 ## Read tools (`mcp:read`)
 
@@ -10689,34 +10727,39 @@ description: Every tool, resource and prompt the Mushi Mushi MCP server exposes 
 |------|-------|-------------|
 | `get_recent_reports` | Recent bug reports | List recent bug reports for a project, newest first. Returns \{ reports: [\{ id, status, category, severity, summary, component, created_at, processing_error }], total }; includeRaw=true returns every list column instead. Reporter identifiers (end-user id, reporter token hash, session id, display name) are never returned. Optional filters: status (new\|classified\|grouped\|fixing\|fixed\|verified\|reopened\|dismissed\|…), category (bug\|slow\|visual\|confusing\|other), severity (critical\|high\|medium\|low), limit (default 20, max 100). Use to survey open reports; for one report use get_report_detail, to find a bug by text use search_reports. |
 | `get_report_detail` | Report detail | Fetch the full record for one bug report by id: description, console logs, network requests, screenshot URL, classification (stage 1/2), fix history, the paste-ready fix packet and the inventory action it is filed against. Returns \{ report } with the documented fields; includeRaw=true returns every column the detail route has instead. Reporter identifiers (end-user id, reporter token hash, session id, display name) are never returned. Read-only. Use when you have a reportId and need everything about it; for evidence only use get_report_evidence, for the activity thread use get_report_timeline, for a one-call fix bundle use get_fix_context. |
-| `get_report_timeline` | Unified report timeline | Return the ordered activity timeline for one report (oldest to newest), merging reporter comments, fix events, QA runs, skill-pipeline steps, and Ask Mushi Mushi turns into one lane. Returns \{ events: [\{ ts, kind, actor, summary }] }. Read-only. Use to see what happened end-to-end on a report thread; use get_report_detail for the static record or get_fix_timeline to debug one fix attempt. |
+| `get_report_timeline` | Unified report timeline | Return the ordered activity timeline for one report (oldest to newest), merging reporter comments, fix events, QA runs, skill-pipeline steps, and Ask Mushi turns into one lane. Returns \{ events: [\{ ts, kind, actor, summary }] }. Read-only. Use to see what happened end-to-end on a report thread; use get_report_detail for the static record or get_fix_timeline to debug one fix attempt. |
 | `search_reports` | Search reports | Search reports by meaning and keyword (pgvector similarity server-side; falls back to summary/description substring if embeddings are unavailable). Returns ranked \{ results: [\{ id, summary, similarity }] }. Read-only. Use to find reports by free text ("checkout flakiness"); use get_similar_bugs to dedupe a known component/bug, or get_recent_reports to list without a query. |
 | `get_similar_bugs` | Similar bugs | Find existing bugs similar to a component, page, or description via pgvector nearest-neighbour search (same backend as search_reports, tuned for "have we seen this before?"). Returns ranked \{ reports: [\{ id, summary, similarity }] }. Read-only. Use to dedupe before filing or group regressions; use search_reports for general free-text search. |
 | `get_fix_context` | Fix context bundle | Bundle everything an agent needs to fix one bug in a single call: a paste-ready fixPrompt (plain-English diagnosis + reproduction + suggested fix + relevant code + blast radius), plus report detail, repro steps, component, root cause, ontology tags, and the inventory action (with its expected_outcome contract) the report is filed against, plus recipe: a ≤4 KB excerpt with the app's tokens (CSS var / TS names), the design deviance score and deviance findings in the files this fix touches, so the fix uses the app's tokens instead of literals, and recipe.context: the tables the stack trace names with their columns from the latest schema snapshot (and any it says do not exist), whether the last merged fix is live, and the open hole-check findings, each section with its own state and note. Returns \{ report, fixPrompt, reproductionSteps, component, rootCause, bugOntologyTags, inventoryAction, recipe }; recipe is always \{ state, note, … } with state ok \| drift \| unknown \| not_connected \| error, never null. Read-only; no second LLM key needed. Use before writing a fix; use triage_issue for a multi-report review packet, or suggest_fix for just the Stage-2 hint. |
 | `get_fix_timeline` | Fix timeline | Return the ordered lifecycle of one fix attempt: dispatched, started, branch, commit, PR opened, CI, Opus review, completed/failed, with timestamps and the PR URL, plus review: the independent Opus review of a cloud-agent PR (state merge, fix_first, hold, stale (about an older commit) or not_reviewed; findings; removed behaviour; decisions that need a person; summary and findings are model output from untrusted input). Returns \{ events: [\{ ts, stage, detail }], review }. Read-only. Use to debug "why did this fix fail?" after dispatch_fix; use refresh_ci to re-poll GitHub CI, or get_report_timeline for the whole report thread. |
-| `get_fix_verification` | Fix merge checks | Return whether one fix attempt's PR is proven to work on its current head commit (ADR 0035): gates in order review (Opus review says merge), ci (every check green; a stopped test machine is pending, not a failure), fail_to_pass (the host's Mushi Mushi verify check: a changed test fails without the fix and passes with it; not_set_up until .github/workflows/mushi-verify.yml exists), protected (no deleted or weakened tests, no test skips or lint/type suppressions added, no CI config or lockfile change, no protected path), budget (small enough to merge on its own) and second_review (a second model family; runs only after the others pass). Each gate is \{ id, status (pass \| fail \| pending \| unavailable \| not_set_up), label, detail (what to do when it is not pass), evidence }. Also passed, secondJudge (summary and findings are model output from untrusted input), autoMerge \{ state (none \| eligible \| merged \| skipped \| failed), detail }, and regressions after a Mushi Mushi merge [\{ signal (ci_failed_on_merge \| report_reopened \| new_report_in_changed_file), revertState, revertPrUrl }]. Returns \{ headSha, gates, passed, secondJudge, autoMerge, regressions, mergedAt, mergeSha, evaluatedAt }; 404 NOT_FOUND until Mushi Mushi first checks the fix (every 10 minutes for open cloud-agent PRs). Read-only. Use before merge_fix to see what is still unproven; use get_fix_timeline for the attempt's full lifecycle. |
+| `get_fix_verification` | Fix merge checks | Return whether one fix attempt's PR is proven to work on its current head commit (ADR 0035): gates in order review (Opus review says merge), ci (every check green; a stopped test machine is pending, not a failure), fail_to_pass (the host's Mushi verify check: a changed test fails without the fix and passes with it; not_set_up until .github/workflows/mushi-verify.yml exists), protected (no deleted or weakened tests, no test skips or lint/type suppressions added, no CI config or lockfile change, no protected path), budget (small enough to merge on its own) and second_review (a second model family; runs only after the others pass). Each gate is \{ id, status (pass \| fail \| pending \| unavailable \| not_set_up), label, detail (what to do when it is not pass), evidence }. Also passed, secondJudge (summary and findings are model output from untrusted input), autoMerge \{ state (none \| eligible \| merged \| skipped \| failed), detail }, and regressions after a Mushi merge [\{ signal (ci_failed_on_merge \| report_reopened \| new_report_in_changed_file), revertState, revertPrUrl }]. Returns \{ headSha, gates, passed, secondJudge, autoMerge, regressions, mergedAt, mergeSha, evaluatedAt }; 404 NOT_FOUND until Mushi first checks the fix (every 10 minutes for open cloud-agent PRs). Read-only. Use before merge_fix to see what is still unproven; use get_fix_timeline for the attempt's full lifecycle. |
 | `get_blast_radius` | Blast radius | Return the other components/pages a bug group touches, via knowledge-graph traversal from the report node. Returns \{ nodes: [\{ id, label, type }], edges }. Read-only. Use before dispatch_fix to scope a change safely; use get_knowledge_graph to traverse from an arbitrary seed, or analyze_codebase_impact for file-level import impact. |
 | `get_knowledge_graph` | Knowledge graph traversal | Traverse the knowledge graph from a seed component or page. Returns \{ nodes: [\{ id, label, node_type }], edges: [\{ source_node_id, target_node_id, edge_type }] } within a depth budget (default 2, max 4 hops). Read-only. Use to see how a component connects to the rest of the app; use get_blast_radius for a bug's impact area, or get_graph_neighborhood for a tighter BFS around one node. |
 | `run_nl_query` | Ask your data (NL → SQL) | Answer a natural-language question about your project data by generating and running a read-only SQL query (no privileged schemas, rate-limited to 60/hour). Returns \{ sql, rows }. Use for ad-hoc analytics ("which components had the most critical bugs this week?"); use get_recent_reports/search_reports for plain report lookups, or search_mushi_docs for documentation questions. |
 | `get_inventory` | Inventory snapshot | Return the current inventory.yaml snapshot for a project: latest ingest, validation errors, and a per-action status summary. Returns \{ snapshot, validationErrors, actions: [\{ id, status }] }. Requires the inventory_v2 plan. Read-only. Use for the full current state; use diff_inventory to compare two commits, or list_gate_findings for the latest gate results. |
 | `diff_inventory` | Inventory diff | Diff two ingested inventory commits (fromSha to toSha): added/removed nodes and edges. Returns \{ added, removed, changed }. Requires inventory_v2. Read-only. Use before merging a PR that touches inventory.yaml to see what changed; use get_inventory for the current snapshot. |
-| `list_gate_findings` | Gate findings | List recent inventory gate runs and their findings for a project, newest first. Returns \{ runs: [\{ id, gate, status, findings_count, … }], findings: [\{ severity, rule_id, message, file_path, node_id, … }] }. Filter by gate (dead_handler \| mock_leak \| api_contract \| crawl \| status_claim \| spec_drift \| orphan_endpoint \| unknown_call \| schema_drift \| code_health \| design_drift \| ci_drift \| deploy_drift \| env_drift \| radar \| portfolio_radar \| portfolio_radar_ci \| portfolio_radar_vulns \| store_review) or finding severity (info \| warn \| error). The *_drift gates are the App Recipe checks: design_drift is code that drifts off the design tokens, ci_drift / deploy_drift / env_drift are CI, deploy and env vars that drift from the recipe; radar is the Mushi Mushi setup checks (a rejected provider key, no spend cap or AI budget, a webhook that never delivered, a stale code index), each with a suggested_fix (a spend-cap fix is applied in the console by a signed-in project admin, not through an API key); portfolio_radar / portfolio_radar_ci / portfolio_radar_vulns / store_review are the app hole checks (prefer get_radar). Available on every plan. Read-only. Use to see which CI gates failed on the last crawl; use diff_inventory to compare two commits, or get_inventory for the full snapshot. |
+| `list_gate_findings` | Gate findings | List recent inventory gate runs and their findings for a project, newest first. Returns \{ runs: [\{ id, gate, status, findings_count, … }], findings: [\{ severity, rule_id, message, file_path, node_id, … }] }. Filter by gate (dead_handler \| mock_leak \| api_contract \| crawl \| status_claim \| spec_drift \| orphan_endpoint \| unknown_call \| schema_drift \| code_health \| design_drift \| ci_drift \| deploy_drift \| env_drift \| radar \| portfolio_radar \| portfolio_radar_ci \| portfolio_radar_vulns \| store_review) or finding severity (info \| warn \| error). The *_drift gates are the App Recipe checks: design_drift is code that drifts off the design tokens, ci_drift / deploy_drift / env_drift are CI, deploy and env vars that drift from the recipe; radar is the Mushi setup checks (a rejected provider key, no spend cap or AI budget, a webhook that never delivered, a stale code index), each with a suggested_fix (a spend-cap fix is applied in the console by a signed-in project admin, not through an API key); portfolio_radar / portfolio_radar_ci / portfolio_radar_vulns / store_review are the app hole checks (prefer get_radar). Available on every plan. Read-only. Use to see which CI gates failed on the last crawl; use diff_inventory to compare two commits, or get_inventory for the full snapshot. |
 | `get_app_recipe` | App recipe | Return the App Recipe for a project: one card per element (schema, design, routes, gates, ci, deploy, env, integrations), each with a state, a plain-English reason, key facts, a findings count and console links, plus the worst state overall and the mushi.recipe.json manifest status. Every element is exactly one of ok \| drift \| unknown \| not_connected \| error. unknown means configured but not observed recently and never means healthy; not_connected means nothing is configured. Returns \{ projectId, worst, elements: \{ \: \{ state, reason, facts, findingsCount, lastCheckedAt, links } }, manifest, snapshotHash }. Read-only. Use to see how the app is put together and which part is drifting; use get_design_tokens for the token values, get_design_deviance for code that drifts off them, or list_gate_findings for gate detail. |
 | `get_design_tokens` | Design tokens | Return the app's normalized design tokens (DTCG: path, type, resolved value, hex / px, alias, CSS var, TS and RN names, description, defining file) for the active token set, plus nameMap (CSS var or TS name → token path). This is the tool that makes a fix use the app's tokens instead of hard-coded literals: look up the token for a colour, spacing, radius or font before writing one. Optional filters: group (first path segment, e.g. color, space), type (color \| dimension \| fontFamily \| …), direction (a named token set instead of the active one). Returns \{ projectId, set, tokens, nameMap, total }; at most 500 tokens. Read-only. Use get_design_deviance to see where code drifts off these tokens, or get_app_recipe for the overall state. |
 | `get_design_deviance` | Design deviance | Return how far the code drifts off the design system: the latest 0–100 deviance score (lower is better; null means not scored yet), its per-rule breakdown, the score trend, a scan still running if any, the top findings (file, line, literal value, rule, and the nearest token to use instead), and the active rules (off_token_color, off_token_font, off_scale_spacing, off_scale_radius, contrast_below_aa, raw_interactive_element). Optional limit: findings to return (1–200, default 25). Returns \{ projectId, latest, running, trend, findings, rules }. Read-only. Use to find and fix off-token code; use get_design_tokens for the full token list. |
-| `get_portfolio` | Portfolio — every app at once | Return every project in one organization as a card: the worst App Recipe state (ok \| drift \| unknown \| not_connected \| error; unknown and not_connected never mean healthy), open reports, the latest release, the Mushi Mushi SDK version against the latest release of the same package, the hole-check (radar) status with open findings by severity (never_run means not checked yet), and the 30-day LLM spend Mushi Mushi itself used. Optional organizationId (UUID); omitted, the only organization of the key owner is used, and a 400 ORG_REQUIRED lists the choices when there are several. Needs an account-level key; a project-bound key gets 403. Returns \{ organizationId, organizationName, cards, totalProjects, repeatedGroups, holes, readErrors }. A read that failed or was cut short is listed in readErrors and in the unreadable list of each card: those columns are unknown, never zero, "no cap" or "none yet" (holes is null when the integrations could not be read). Read-only. Use list_portfolio_findings for the problems open in two or more apps. |
-| `list_portfolio_findings` | Portfolio findings — fix once | Return what to fix across the apps of one organization: groups of the same finding rule open in two or more projects (rule, gate, highest severity, affected projectIds, a sample message and one paste-ready fix prompt), the Mushi Mushi SDK version per project and package (current \| behind \| unknown), and integrations most sibling projects have but one lacks. Open means the latest completed gate run per project and gate, not allowlisted; info findings are left out. Optional organizationId as for get_portfolio. Needs an account-level key. Returns \{ organizationId, groups, sdkSkew, holes, crossProject, readErrors }; a part named in readErrors is unknown, not empty. Read-only. Fix a group repo by repo with list_gate_findings in each project. |
-| `get_recipe_drift` | Recipe drift | Return what drifted from the app recipe, with a fix for each: CI workflows (no concurrency or timeout, macOS on every run, long artifact retention, crons more than daily, the default branch red), deploys (a merged fix not live yet, a failed version probe, web and mobile on different versions), env names declared but missing in CI, migrations in the repo but not applied, and off-token design values. For each gate it says when it last ran (never_run means not checked, never healthy). Returns \{ projectId, gates: \{ \: \{ status, checkedAt, commitSha } }, findings: [\{ gate, ruleId, severity, message, filePath, line, suggestedFix }] }. Read-only. Mushi Mushi never runs DDL or edits workflows: apply schema and CI fixes from your editor. |
+| `get_portfolio` | Portfolio — every app at once | Return every project in one organization as a card: the worst App Recipe state (ok \| drift \| unknown \| not_connected \| error; unknown and not_connected never mean healthy), open reports, the latest release, the Mushi SDK version against the latest release of the same package, the hole-check (radar) status with open findings by severity (never_run means not checked yet), and the 30-day LLM spend Mushi itself used. Optional organizationId (UUID); omitted, the only organization of the key owner is used, and a 400 ORG_REQUIRED lists the choices when there are several. Needs an account-level key; a project-bound key gets 403. Returns \{ organizationId, organizationName, cards, totalProjects, repeatedGroups, holes, readErrors }. A read that failed or was cut short is listed in readErrors and in the unreadable list of each card: those columns are unknown, never zero, "no cap" or "none yet" (holes is null when the integrations could not be read). Read-only. Use list_portfolio_findings for the problems open in two or more apps. |
+| `list_portfolio_findings` | Portfolio findings — fix once | Return what to fix across the apps of one organization: groups of the same finding rule open in two or more projects (rule, gate, highest severity, affected projectIds, a sample message and one paste-ready fix prompt), the Mushi SDK version per project and package (current \| behind \| unknown), and integrations most sibling projects have but one lacks. Open means the latest completed gate run per project and gate, not allowlisted; info findings are left out. Optional organizationId as for get_portfolio. Needs an account-level key. Returns \{ organizationId, groups, sdkSkew, holes, crossProject, readErrors }; a part named in readErrors is unknown, not empty. Read-only. Fix a group repo by repo with list_gate_findings in each project. |
+| `get_recipe_drift` | Recipe drift | Return what drifted from the app recipe, with a fix for each: CI workflows (no concurrency or timeout, macOS on every run, long artifact retention, crons more than daily, the default branch red), deploys (a merged fix not live yet, a failed version probe, web and mobile on different versions), env names declared but missing in CI, migrations in the repo but not applied, and off-token design values. For each gate it says when it last ran (never_run means not checked, never healthy). Returns \{ projectId, gates: \{ \: \{ status, checkedAt, commitSha } }, findings: [\{ gate, ruleId, severity, message, filePath, line, suggestedFix }] }. Read-only. Mushi never runs DDL or edits workflows: apply schema and CI fixes from your editor. |
 | `list_connectors` | Connectors | List the sources connected to an organization: each connector instance with its kind, status (connected \| not_connected \| blocked \| error; blocked means an outside party refuses, for example an App Store agreement not accepted), the scopes it was granted, enabled capabilities and the projects it is bound to, plus the kinds that can be added and those still planned. Never returns credentials. Optional organizationId; account-level key needed. Returns \{ organizationId, available, planned, instances, legacy }. Read-only. |
+| `get_security_proof` | Security proof of a release | Return the Security proof of one release (releaseId), one commit (commitSha) or, with neither, the newest commit the scans saw: per lane (dependencies = OSV-Scanner, secrets = Gitleaks, ai_review = claude-code-security-review, dast = ZAP baseline + Nuclei, weekly) its state passed \| findings \| error \| skipped \| off \| unknown \| stale, the counts by severity, the run it used and its findings (title, severity, location, report id, deduped_by). The scanners run in the app's own CI (mushi-security.yml) and post their results; Mushi never runs them. state is proven (dependencies and secrets green for the commit, nothing failing elsewhere), attention, incomplete (a required lane has no result for the commit; a lane that never ran is not a pass) or not_pinned (the release names no commit). Optional projectId. Returns \{ state, headline, commitSha, lanes, findings, release }. Read-only. |
 | `get_store_status` | Store review status | Return the latest store review of an app: listing text in the repo vs what is live on the App Store and Google Play (listing_drift, a language out of sync, store length limits), listing claims checked against the code (listing_claim_contradicts_code: for example "never leaves your phone" while the code uploads, or "open source" for a private repo), privacy labels vs data-collecting SDKs, iOS screenshots that look Android-shaped or older than recent releases, and a pre-submission checklist with a risk per item. Each result is ok \| finding \| unknown (not checked, never healthy). This is a check against the code, not legal advice. status never_run means it has not run yet; it runs from the console. Returns \{ projectId, checkedAt, status, results, checklist, findings }. Read-only. |
 | `get_radar` | Hole checks (radar) | Return the hole checks that catch a problem before a user hits it: store names that differ between the App Store and Google Play, a store listing missing a language, a domain or HTTPS certificate about to expire, missing security headers, a broken privacy link, storage rows deleted with SQL (files left behind and billed), and an Android target SDK or iOS build that the stores will refuse. scope "project" (default; projectId optional) returns every check with state ok \| finding \| unknown \| error, a plain-English reason, and each finding with its fix; unknown means not checked and never means healthy. scope "organization" (organizationId optional, account-level key) returns the open findings of every app. Read-only. To run the checks again, use the console Recipe page. |
-| `get_release_calendar` | Release calendar | Return the release calendar of one organization: per app, what is live, the fixes merged since (waiting to ship) and the store state, plus a suggested batch of apps to release now versus next that respects the estimated CI minutes of each build. Mushi Mushi only proposes the batch; your CI builds and submits. Optional organizationId (UUID); omitted, the only organization of the key owner is used, and a 400 ORG_REQUIRED lists the choices when there are several. Needs an account-level key; a project-bound key gets 403. Returns \{ rows, batchSuggestion, note }. Read-only. |
+| `get_release_calendar` | Release calendar | Return the release calendar of one organization: per app, what is live, the fixes merged since (waiting to ship) and the store state, plus a suggested batch of apps to release now versus next that respects the estimated CI minutes of each build. Mushi only proposes the batch; your CI builds and submits. Optional organizationId (UUID); omitted, the only organization of the key owner is used, and a 400 ORG_REQUIRED lists the choices when there are several. Needs an account-level key; a project-bound key gets 403. Returns \{ rows, batchSuggestion, note }. Read-only. |
 | `get_code_health` | Code health | Return the code health your CI pushed for one project: files over the size budget (god files) from the latest code_health run, each with severity, file, line, message and suggested fix, the bundle-size and largest-file trends, and a summary \{ error_count, warn_count, max_loc, latest_bundle_kb }. latestRunAt null means CI has never pushed (add MUSHI_INGEST_KEY to CI). Optional projectId and days (trend window, 1–365, default 30); a project-bound key reads its own project, an account-level key must pass projectId (400 PROJECT_REQUIRED otherwise). Returns \{ trends, godFiles, latestRunAt, latestRunStatus, summary }. Read-only. Use explain_finding with a god-file id for its fix; split the file before adding to it. |
+| `get_timeline` | The app release by release | Return how one app got better, release by release (Plan 025, ADR 0072), without screenshots: rail ('releases' when the app has release rows, else 'runs': each UX or scorecard run is a stop), points oldest first [\{ id, kind (release \| unreleased \| run), at, label, title, status, version, runs (run ids), cost_usd (what the runs' AI calls cost; null = not recorded), judged (verdicts that were a model call), cached (verdicts reused because the page had not changed), score (the newest scorecard mean, 1-10), improved_screens, reports_closed, reports [\{ id, title }], baselines (screens pinned to it) }], surfaces [\{ key, label, path, latest_score, first_score, frames (pinned shots) }], month (the last 30 days: releases, reports_closed, top_reports, screens_improved, runs, cost_usd, judged, cached, movers [\{ key, label, from, to }]) and settings \{ keep_releases }. Optional projectId (defaults to the configured project). Read-only, no model call. Use get_surface_history with a surface key for that screen's screenshots, scores and kept changes; get_ux_run with a run id for one run. |
+| `get_surface_history` | One screen's history | Return one screen's history across releases (ADR 0072): surface \{ key, label, path }, frames oldest first [\{ id, viewport (desktop \| mobile), version, release_id, run_id, score, penalty, cost_usd, pinned (kept forever), created_at, url (signed for one hour) }], scores across scorecard runs [\{ at, run, score, cached (reused, no model call), cost_usd }] and the changes the UX loop kept on it [\{ at, run, shipped (its PR merged), what, commit_sha }]. Required surfaceKey (a key from get_timeline's surfaces); optional projectId. Read-only, no model call. Use to show a before and after of a screen, or to check whether a fix changed what users see. |
+| `get_ux_run` | One UX run | Return one UX run (ADR 0020/0067) by its local run id (from get_timeline's points[].runs, or the CLI): run \{ status, phase, agent, model, judge_model, branch, pr_url, counts, cost_usd, cost \{ judged, cached, unpriced }, started_at, finished_at, error }, surfaces (each screen with status, problem scores before and after, the review's verdict, and signed screenshot URLs valid for one hour) and iterations (each attempt with outcome, reason, commit and files). Required runId; optional projectId. Read-only. Use to see what a run changed and what it cost; get_timeline for the history across runs. |
+| `start_ux_run` | How to start a UX run | Return how to start a UX run for one app, without starting one (ADR 0017/0020/0072): a cloud run spends the repo's Actions minutes and Cursor credits, so only a person in the console starts it. Returns \{ started: false, why, console_path (the UX runs page, where Run in the cloud is one click), commands \{ scorecard, loop } (run on your own machine with your own keys; --sync mirrors the run to the console), next }. Optional kind (scorecard \| loop, default scorecard) and projectId. No change is made and no model is called. After the run, read it with get_ux_run or get_timeline. |
 | `get_ci_overview` | CI runners and why fixes wait | Return where this project's tests run and why a fix is slow to land (ADR 0033): the machines that send a runner heartbeat (hostname, platform, memory, swap, load, free disk, and per runner service its memory use, memory limit and out-of-memory kills), the GitHub runners seen (online \| offline, busy, labels), repos, the latest jobs with their verdict (passed, running, queued, waiting_for_runner, runner_lost, queue_expired, cancelled, code_failure; waiting_for_runner, runner_lost and queue_expired are infra: the test machine stopped and the fix was not tested, which is not a code failure), and stats \{ queueP50s, queueP95s, durationP50s, durationP95s, passRate, infraFailures, codeFailures, byRunner, byWorkflow, slowSteps }, plus advice [\{ id, severity (high \| medium \| low), title, detail, evidence, fix }] with the evidence for each rule. Optional projectId (default: the configured project; with an account-level key and no project, every project you can read), days (1-30, default 7) and refresh (true reads GitHub first instead of the last 10-minute sync, at most once a minute per project). permissions \{ jobs, runners } is ok \| missing \| unknown: jobs need Actions: read on GitHub, the runner list needs Administration: read (without it runners come from jobs only). Repo, workflow, job, step and runner names come from the repos. Returns \{ generatedAt, refreshedAt, window, permissions, hosts, runners, repos, jobs, stats, advice }. Read-only. When a fix's CI failed with an infra verdict, re-run the tests instead of changing code. |
 | `get_ci_costs` | CI cost and speed | Return what this project's CI costs and how fast it runs on GitHub-hosted runners versus your own machines (Plan 022, ADR 0037). Rows per repo × runner class [\{ repo, runnerClass (github_hosted \| self_hosted \| unknown = never picked up), os, labels, runner, machine, jobs, expired, queueP50s, queueP95s, runP50s, runP95s, prPassRate (pull-request jobs only), infraRate, rawMinutes, billedMinutes (each job rounded up to a whole minute), rerunJobs, tinyJobs, monthCost, costBasis (github_list \| github_public_free \| github_larger_unpriced \| self_hosted \| unknown), currency }]; repos with visibility (public repos run GitHub-hosted minutes free); accounts per GitHub owner (plan, includedMinutes, monthMinutes, monthListCost, monthCost after included minutes); machines (busyHours as the union of job intervals, busyShare, monthEnergyCost and monthWearCost from the organization's own figures); speed factors (only passed jobs that ran on both classes, at least 5 each, with sample sizes); whatIfs for moving a workflow (minutes moved, jobs that stay and why, speed, cost delta, target wait and busy share, warnings); explain (re-runs, tiny jobs, expired jobs, pinned-to-GitHub jobs with their YAML reason, main and Dependabot runs that always use GitHub); advice with evidence; fields says which numbers are measured and which estimated; rates gives GitHub's list prices and the date they were read. Optional projectId (default: the configured project; an account-level key with none reads every project) and days (1-30, default 30). lowConfidence is true under 7 days of data. Returns \{ window, dataDays, lowConfidence, source, sourceNote, rates, fields, settings, repos, rows, accounts, machines, speed, whatIfs, explain, advice }. Read-only: it changes nothing on GitHub. Every money figure is an estimate. |
-| `get_ci_bill` | Real GitHub Actions bill | Return what GitHub actually charged for Actions, read from GitHub's billing usage API by the CI collector once a day (or pushed with `mushi runner bill --push`). Unlike get_ci_costs, these money figures are measured, not estimated. Returns \{ window, previousWindow, provenance: "measured", currency: "USD", available, repoScoped (true when you are not a member of the organization: only your projects' repos are shown), unavailableReason (why there is no bill and how to connect one), owners [\{ owner, ownerType, lastOkAt, lastAttemptAt, lastError, lastSource (api \| cli), coveredFrom }], month \{ label, grossUsd, discountUsd, netUsd } (this calendar month so far), totals \{ grossUsd, discountUsd, netUsd, minutes }, previousTotals and change \{ netUsd, netPct } (null unless Mushi Mushi holds the whole previous period), windowComplete, byRepo [\{ repo, netUsd, grossUsd, discountUsd, minutes }], bySku, byDay (every day of the window), dataThrough, agentShare \{ share, billedMinutes, agentBilledMinutes, branches, provenance: "estimated" } (paid GitHub-hosted minutes on Mushi Mushi agent branches, from the jobs Mushi Mushi recorded) }. Net is what was charged; public repos and included minutes show as discount. Optional projectId (default: the configured project; an account-level key with none reads every project) and days (1-90, default 30). Read-only. |
+| `get_ci_bill` | Real GitHub Actions bill | Return what GitHub actually charged for Actions, read from GitHub's billing usage API by the CI collector once a day (or pushed with `mushi runner bill --push`). Unlike get_ci_costs, these money figures are measured, not estimated. Returns \{ window, previousWindow, provenance: "measured", currency: "USD", available, repoScoped (true when you are not a member of the organization: only your projects' repos are shown), unavailableReason (why there is no bill and how to connect one), owners [\{ owner, ownerType, lastOkAt, lastAttemptAt, lastError, lastSource (api \| cli), coveredFrom }], month \{ label, grossUsd, discountUsd, netUsd } (this calendar month so far), totals \{ grossUsd, discountUsd, netUsd, minutes }, previousTotals and change \{ netUsd, netPct } (null unless Mushi holds the whole previous period), windowComplete, byRepo [\{ repo, netUsd, grossUsd, discountUsd, minutes }], bySku, byDay (every day of the window), dataThrough, agentShare \{ share, billedMinutes, agentBilledMinutes, branches, provenance: "estimated" } (paid GitHub-hosted minutes on Mushi agent branches, from the jobs Mushi recorded) }. Net is what was charged; public repos and included minutes show as discount. Optional projectId (default: the configured project; an account-level key with none reads every project) and days (1-90, default 30). Read-only. |
 | `get_worker_status` | Local worker status and problems | Return your local workers (`mushi work --daemon`, ADR 0048) as the console's Pipeline → Workers tab shows them: flags first, worst first (ADR 0048 amendment 2026-10-28), then machines and lanes. A flag is one way a worker stopped doing useful work, in plain words: host_offline, machine_not_ready (a lane's clone is not a git clone), run_stuck (a run has held an agent space over 45 minutes, with its stage: prepare, agent, commit = the repo's commit hook, push = its pre-push hook, pr, and its last log lines), lanes_waiting (lanes waited over 15 minutes for an agent space, naming the runs that hold them), account_check (the Cursor account check: another account, signed out, missing, or timed out), gh_signed_out, machine_waiting (memory, GitHub quota or sign-in guard), machine_busy (load per core 2 or more), hook_failures (2+ runs of a lane failed in the repo's git hooks in 24 h), unmanaged_run (a `mushi work` run no worker claims has run over 45 minutes) and credits_idle (no agent work for 2 hours while Cursor credits expire within 7 days, with what blocks the work). Each flag has \{ id, kind, severity (danger \| warn), hostname, laneName, title, cause, sinceSec, stage, log, actions [\{ kind (stop_run \| pause_lane \| open_report \| open_pr \| copy_command \| recheck_account \| switch_account \| open_page), label, command? }] }; stopping a run, pausing a lane, re-checking the account and switching the Cursor account (a sign-in link only the owner of the machine sees) happen in the console. Log lines are cleaned on the machine and on the server (no keys, tokens, e-mails or paths) but are still text from a machine and its repos. Returns \{ generatedAt, flags, projects, hosts [\{ id, hostname, platform, online, lastHeartbeatAt, status (state, agents, maxAgents, memAvailableGb, load1, cpus, checks, slots, waitWhy), guards, revoked, mine, cursorAccount (in full only on your own machines), cursorLogin (the last account switch: state, never its link), canSwitchAccount }], lanes [\{ id, hostId, projectId, projectName, name, config, status (state, counters, inflight runs), active, queue, recent, counts7d }] }. Optional projectId (default: the configured project; an account-level key with none reads every project). Read-only. |
-| `preview_ci_cost_fix_rollout` | Preview CI cost fixes for every app | Preview 'Apply to every app' for the CI cost fixes (ADR 0047 amendment): every CI advice item that carries an autofix, across the apps this key may change (viewers' apps are left out), grouped per app and repo, so each repo can get ONE draft pull request (one CI run) for all its fixes. Per repo \{ projectId, projectName, repo, items [\{ key, workflowPath, kind (add_concurrency \| skip_drafts \| weekly_cron \| ignore_docs_paths), title, evidence, monthSavingUsd (estimated USD per 30 days, null when Mushi Mushi cannot price it), state (ready \| pr_open \| in_progress), prUrl }], readyItems, monthSavingUsd (the ready items' priced saving), unpricedItems, block (set when Mushi Mushi already knows the repo's GitHub access cannot edit workflow files: GITHUB_WORKFLOWS_WRITE_MISSING, from the setup check or the last attempt) }, largest saving first, plus totals, caps \{ reposPerRequest: 10, itemsPerRepo: 20 } and partial (set when part of the advice could not be read). Optional projectId limits it to one app; an account-level key with none reads every app. Read-only: it changes nothing. Open them with apply_ci_cost_fix_rollout. |
+| `preview_ci_cost_fix_rollout` | Preview CI cost fixes for every app | Preview 'Apply to every app' for the CI cost fixes (ADR 0047 amendment): every CI advice item that carries an autofix, across the apps this key may change (viewers' apps are left out), grouped per app and repo, so each repo can get ONE draft pull request (one CI run) for all its fixes. Per repo \{ projectId, projectName, repo, items [\{ key, workflowPath, kind (add_concurrency \| skip_drafts \| weekly_cron \| ignore_docs_paths), title, evidence, monthSavingUsd (estimated USD per 30 days, null when Mushi cannot price it), state (ready \| pr_open \| in_progress), prUrl }], readyItems, monthSavingUsd (the ready items' priced saving), unpricedItems, block (set when Mushi already knows the repo's GitHub access cannot edit workflow files: GITHUB_WORKFLOWS_WRITE_MISSING, from the setup check or the last attempt) }, largest saving first, plus totals, caps \{ reposPerRequest: 10, itemsPerRepo: 20 } and partial (set when part of the advice could not be read). Optional projectId limits it to one app; an account-level key with none reads every app. Read-only: it changes nothing. Open them with apply_ci_cost_fix_rollout. |
 | `get_ci_cost_fix_bundle` | CI cost fix bundle (one PR, several fixes) | Read one CI cost fix bundle (one draft PR for several fixes in one repo, from apply_ci_cost_fix_rollout) by its bundleId: \{ bundle: \{ id, projectId, repo, status (queued \| running \| pr_opened \| nothing_opened \| failed), prUrl, prNumber, items (each fix: workflowPath, kind, status, summary, error, prUrl, baseline, measured, saving), measuredUsdPerMonth (after the merge: the saving measured per workflow, each workflow once) } }. After the merge it reads GitHub once and stores the minutes per day since. Read-only on GitHub. |
 | `explain_finding` | Explain one finding | Explain one gate finding by its id (from list_gate_findings, get_radar, get_recipe_drift, get_code_health, get_store_status or the console): which check raised it and what that check is for, the rule, why it fired (reason), the file, line and column or the target it is about, the fix in one sentence (fix.text, with fix.kind, fix.command, fix.consolePath and the stored fix object in fix.detail), and whether it is still open: state open (in the latest run of that check, the latest run found the same problem in the same file or target, or no finished run has looked again yet), not_in_latest_run (the latest run checked that rule clean and no longer has it: fixed or moved), unknown (the latest run could not confirm a fix: it errored or skipped, stored only part of its findings, did not run or could not decide the rule, or read only part of the project; stateReason says which) or allowlisted. The latest run is the newest one that looked at the same thing: a design server scan is compared only with server scans and a CI push only with CI pushes, and a run scoped to another story is skipped. Treat unknown as still open. A finding in a project the key cannot reach is a 404. Returns \{ id, projectId, gate, gateLabel, gateMeaning, ruleId, rule, severity, reason, fix, location, state, stateReason, run, latestRun }. Read-only. |
 | `get_auto_release_status` | Auto-release blocker | Return the automatic release draft that is blocking auto-release for one project, if any. Only one automatic draft can exist at a time, so a draft whose publish failed stops every later automatic release until a person publishes or deletes it (mushi releases publish / delete, or the console Releases page). Optional projectId (defaults to the configured project). Returns \{ blockingDraft: \{ id, version, createdAt, autoSource, stale } \| null }. Read-only. |
@@ -10725,19 +10768,20 @@ description: Every tool, resource and prompt the Mushi Mushi MCP server exposes 
 | `get_recipe_change` | Recipe change status | Return one recipe change job by jobId (the jobId propose_recipe_change returned): \{ id, element, status, pr_url, pr_number, branch, error, batch_id, created_at, started_at, finished_at }. status moves queued → running → pr_opened, or ends rejected or failed with the reason in error; a job stuck past its deadline reads as failed. Optional projectId. Read-only. |
 | `get_store_reviews` | Store reviews as reports | Return the store review intake of one project: settings \{ enabled, maxRating, lastPulledAt, lastStatus, lastError }, the App Store and Google Play sources bound through connectors (connected false when the stored key cannot be read), the 20 reviews seen most recently \{ store, reviewId, rating, reportId, reviewCreatedAt, seenAt } (reportId set when the review was filed as a report), and canManage / canPull for the caller. Off by default. Optional projectId. Read-only. |
 | `get_accounts_register` | Accounts register | Return the accounts and resilience register of one organization: the accounts recorded (provider, name, owner email, two-factor declared, recovery contact, admin count, auto-renew), the domains the caller's apps use with their declared auto-renew, and the open rules (account_single_owner: one person and no recovery contact; registrar_autorenew_off). Names and contacts only, never secrets. canEdit says whether the caller (or the key owner) may change it. Optional organizationId; needs an account-level key. Returns \{ organizationId, canEdit, accounts, domains, findings }. Read-only. |
-| `get_spend_ledger` | Spend ledger | Return the 30-day spend ledger of one organization, per app: Mushi Mushi LLM spend, provider AI spend from llm_usage connectors, estimated CI cost, Supabase, and imported bills, with totals, the AI spend not bound to an app, whether every source was read (complete), and the 10 latest bill imports. Optional organizationId; needs an account-level key. Returns \{ organizationId, from, to, days, apps, totals, unattributedProviderUsd, complete, imports }. Read-only. |
+| `get_spend_ledger` | Spend ledger | Return the 30-day spend ledger of one organization, per app: Mushi LLM spend, provider AI spend from llm_usage connectors, estimated CI cost, Supabase, and imported bills, with totals, the AI spend not bound to an app, whether every source was read (complete), and the 10 latest bill imports. Optional organizationId; needs an account-level key. Returns \{ organizationId, from, to, days, apps, totals, unattributedProviderUsd, complete, imports }. Read-only. |
 | `get_graph_neighborhood` | Graph neighborhood | Return the BFS neighborhood around one graph node by id or label: \{ nodes: [\{ id, label, node_type }], edges: [\{ source_node_id, target_node_id, edge_type }] } within a depth budget (default 2, max 4). Read-only. Tuned for "what touches this action?"; use get_knowledge_graph to traverse from a component seed, or get_graph_node for a single node's row. |
 | `get_graph_node` | Graph node detail | Fetch one knowledge-graph node row by id. Returns \{ node: \{ id, node_type, label, metadata } } including the v2 derived status on Action nodes (ok \| stale \| broken). Read-only. Use to inspect a single node's status; use get_graph_neighborhood to see what connects to it. |
 | `suggest_fix` | Suggested fix (from triage) | Return the Stage-2 suggested-fix slice for one report: root cause, suggested fix, repro steps, summary, and component — faster than get_report_detail when you only need the human-readable hint. Returns \{ reportId, rootCause, suggestedFix, reproductionSteps, summary, component }. Read-only; reads the existing classification (run triage_issue first if unclassified). Use for a quick "what should we try?"; use get_fix_context for the full paste-ready bundle. |
-| `diagnose_setup` | Unified setup diagnose | Diagnose Mushi Mushi setup health and return the single best next action. mode=full (default) runs both SDK-ingest and fix-dispatch preflight checks; mode=ingest runs ingest checks only (project exists, active API key, SDK heartbeat, at least one report); mode=dispatch runs dispatch readiness only (GitHub connected, codebase indexed, LLM key present, autofix enabled). Returns \{ ready, steps: [\{ label, complete, required, hint }], nextAction }. Read-only. The one setup-diagnosis entry point — use this instead of separate connection/ingest checks. |
+| `diagnose_setup` | Unified setup diagnose | Diagnose Mushi setup health and return the single best next action. mode=full (default) runs both SDK-ingest and fix-dispatch preflight checks; mode=ingest runs ingest checks only (project exists, active API key, SDK heartbeat, at least one report); mode=dispatch runs dispatch readiness only (GitHub connected, codebase indexed, LLM key present, autofix enabled). Returns \{ ready, steps: [\{ label, complete, required, hint }], nextAction }. Read-only. The one setup-diagnosis entry point — use this instead of separate connection/ingest checks. |
 | `check_sdk_version` | Check SDK freshness | Compare a published @mushi-mushi/* package version against the catalog (GET /v1/sdk/latest-version). Returns \{ package, current, latest, outdated } and, when outdated, suggestedActions (Sentry-style, max 1) pointing at search_mushi_docs plus the mushi-sdk-upgrade skill. Read-only. Use when Dependabot or mushi upgrade --check reports a drift, or before dispatching a fix that assumes a current SDK. Does not bump the pin — that stays a human/Dependabot change. |
-| `search_mushi_docs` | Search Mushi Mushi documentation | Search the official Mushi Mushi documentation (guides, MCP setup, inventory, QA, skills) by keyword — titles, section headings and summaries are indexed. Returns ranked \{ results: [\{ title, url, excerpt, score }] }. Read-only; works without an API key. Use before guessing API shapes, tool names, or RPC names, then get_mushi_doc to read a page; use run_nl_query for questions about your own project data, not the docs. |
-| `get_mushi_doc` | Read a Mushi Mushi docs page | Fetch one official Mushi Mushi docs page as Markdown, by a url from search_mushi_docs or a route such as "/quickstart/mcp". Returns \{ title, url, markdown, truncated }; markdown is capped at 8,000 characters and says where to read the rest. Only indexed docs pages resolve. Read-only; works without an API key. Use after search_mushi_docs when an excerpt is not enough. |
+| `get_widget_settings` | Bug widget look | Return how the in-app bug widget looks for one project, as the console sets it (served to installed SDKs at startup, no redeploy): \{ projectId, enabled (false: SDKs ignore console settings), canEdit, widget: \{ position, theme (auto \| light \| dark \| inherit), triggerText (null = the default bug icon), accent (a #rrggbb brand colour, or "auto" to match the site), accentText (the black or white text Mushi checked against the accent, null when auto), launcher (auto \| banner \| edge-tab \| attach \| manual \| hidden) } }. A value the app's own code sets in Mushi.init / data-* attributes wins over these. Optional projectId. Read-only. |
+| `search_mushi_docs` | Search Mushi documentation | Search the official Mushi documentation (guides, MCP setup, inventory, QA, skills) by keyword — titles, section headings and summaries are indexed. Returns ranked \{ results: [\{ title, url, excerpt, score }] }. Read-only; works without an API key. Use before guessing API shapes, tool names, or RPC names, then get_mushi_doc to read a page; use run_nl_query for questions about your own project data, not the docs. |
+| `get_mushi_doc` | Read a Mushi docs page | Fetch one official Mushi docs page as Markdown, by a url from search_mushi_docs or a route such as "/quickstart/mcp". Returns \{ title, url, markdown, truncated }; markdown is capped at 8,000 characters and says where to read the rest. Only indexed docs pages resolve. Read-only; works without an API key. Use after search_mushi_docs when an excerpt is not enough. |
 | `list_top_contributors` | Top contributors leaderboard | Return the top N contributors for the organization, ranked by points in a time window (30d \| 90d \| all). Each row includes display name, tier, total points, report count, and anti-fraud flag. Use this to identify your most engaged power users, write them a thank-you message, or decide who deserves a bonus. |
-| `list_projects` | List accessible projects | List all Mushi Mushi projects accessible to this API key. For project-scoped keys returns a single-item list; for org-scoped keys (account mode) returns every project owned by this account. Call this first when MUSHI_PROJECT_ID is not configured — use the returned id with subsequent tool calls. If multiple projects are returned, pass the target projectId explicitly to project-scoped tools. Multi-project tip: run `mushi setup --all-projects` in your terminal to create one named MCP server entry per project in .cursor/mcp.json. |
-| `get_account_overview` | Account overview — all projects | Return an enriched summary of every Mushi Mushi project accessible to this API key: id, name, recent report count (last 30 days), number of connected MCP keys, and last-seen heartbeat timestamp. For project-scoped keys this is a one-item list; for org-scoped (account) keys it lists every owned project. Also includes toolCount, resourceCount, promptCount so agents know how many tools are available. Call this at the start of a multi-repo or multi-app triage session to orient yourself. |
+| `list_projects` | List accessible projects | List all Mushi projects accessible to this API key. For project-scoped keys returns a single-item list; for org-scoped keys (account mode) returns every project owned by this account. Call this first when MUSHI_PROJECT_ID is not configured — use the returned id with subsequent tool calls. If multiple projects are returned, pass the target projectId explicitly to project-scoped tools. Multi-project tip: run `mushi setup --all-projects` in your terminal to create one named MCP server entry per project in .cursor/mcp.json. |
+| `get_account_overview` | Account overview — all projects | Return an enriched summary of every Mushi project accessible to this API key: id, name, recent report count (last 30 days), number of connected MCP keys, and last-seen heartbeat timestamp. For project-scoped keys this is a one-item list; for org-scoped (account) keys it lists every owned project. Also includes toolCount, resourceCount, promptCount so agents know how many tools are available. Call this at the start of a multi-repo or multi-app triage session to orient yourself. |
 | `get_project_context` | Project context snapshot | Return a rich context snapshot for a project: name, repo URL, SDK heartbeat, ingest status, open report count, autofix readiness, your LLM key config, plan tier, and active integration health. Equivalent to a merged preflight + activation + settings read. Agents should call this at the start of a review session to orient themselves. |
-| `get_pipeline_logs` | Recent pipeline logs | Pull recent log entries from the Mushi Mushi pipeline services: fix-worker, qa-story-runner, pipeline, or all. Accepts projectId, service, since (ISO-8601), limit (max 200), and level (info \| warn \| error \| fatal) filters. Returns structured log rows with timestamp, level, service, message, and a trace_id/report_id when available. Use this when a fix failed, a QA story keeps erroring, or an ingest pipeline went silent. |
+| `get_pipeline_logs` | Recent pipeline logs | Pull recent log entries from the Mushi pipeline services: fix-worker, qa-story-runner, pipeline, or all. Accepts projectId, service, since (ISO-8601), limit (max 200), and level (info \| warn \| error \| fatal) filters. Returns structured log rows with timestamp, level, service, message, and a trace_id/report_id when available. Use this when a fix failed, a QA story keeps erroring, or an ingest pipeline went silent. |
 | `get_report_evidence` | Bug report evidence | Return the full evidence package for a single bug report covering all three observability pillars: (1) LOGS — console_logs (error/warn/info/debug entries with timestamps), breadcrumbs (SDK ring buffer: navigation, clicks, network, lifecycle events with category/level), repro_timeline (merged SDK event stream: route/click/request/log/screen), and the reporter's own comments thread; (2) TRACES — network_requests (SDK-captured fetch/XHR with method/status/duration/traceId), backend_spans (server-side spans joined by W3C trace_id: name/duration_ms/parentSpanId/status), and Sentry trace correlation IDs (sentry_trace_id, sentry_event_id) for deeplinks; (3) METRICS — performance_metrics (Web Vitals snapshot: LCP/CLS/INP/TTFB/FCP + INP attribution + page timing + connection info), anomalies (statistical provenance when auto-filed by CI metric regression: baseline_mean/std, score in σ, threshold); plus screenshot_url, browser environment (user agent, URL, viewport, SDK version), and tags. Reporter identifiers (session id, end-user id) are never returned. This is the same data an engineer would collect for a root-cause investigation. Faster than calling get_report_detail + report timeline separately. |
 | `triage_issue` | Triage issue end-to-end | Read-only combined tool: merges report detail, the reporter thread, similar bugs (matched on the report summary), the fix context (paste-ready fix prompt, repro steps, root cause), the blast radius of the inventory action the report is filed against, and recent pipeline warnings into a single structured review packet. Returns the packet plus prioritised recommended_actions, partial_errors for any source that failed, and notes for any source that does not apply (e.g. no blast radius when the report is not anchored to an inventory action). Equivalent to a Sentry "Analyze with Seer" flow grounded in user-felt reports. Pass reportId to kick off review. Call this before dispatch_fix. |
 | `triage_next_steps` | What should I work on now? | Prioritised "do this next" list for the project: blocked auto-fixes first (with the unblock action), then reporters waiting for an answer (they replied in the in-app thread since you last looked), then in-flight fixes to shepherd to merge, then user-felt classified reports by severity, with robot/cron chores (dependency bumps) last. Returns \{ steps: [\{ priority, action, reason, tool, args }], summary }. Read-only. Call this first when the user asks "what needs my attention / what should I triage or fix". |
@@ -10748,6 +10792,7 @@ description: Every tool, resource and prompt the Mushi Mushi MCP server exposes 
 | `get_product_events_summary` | Product events summary | Summarise the Mushi.track() product events this project received in the trailing windowDays (default 30): event names with counts and distinct users, daily volume, and top properties. Returns \{ window_days, events_total, persons, identified, anonymous, events_per_day: [\{ day, count }], top_events: [\{ name, count, persons }] }. Read-only. Use first to learn which event names exist before calling query_funnel or get_user_paths; use run_nl_query for ad-hoc SQL over the same rows. |
 | `get_user_paths` | Paths users take after an event | What did users do next? Rank the events users fired immediately after fromEvent within the trailing windowDays (default 30), most common first, up to limit rows (default 20, max 50). Returns \{ from_event, total, next: [\{ name, count, pct }] }. Read-only. Use to see where users go after a step instead of guessing the funnel order; use query_funnel once you know the ordered steps, or get_product_events_summary for event names. |
 | `get_journeys` | User journeys and where people get stuck | Where do people get stuck in the app, and what should change? Reads the Journey optimizer for one project: page-to-page moves from real visits over the last days (7, 30 default, or 90) joined with the latest site scan's links. Returns \{ days, liveUrl, score (0-100, 100 = no findings), rootPath, stats: \{ sessions, pageViews, pages, avgPagesPerSession, bounceRate, sampled }, scan, mapScan, recording (\{ until, sampleRate } of the on-demand visit recording; until null = off), flows (top 10 common paths), findingsTotal, findingsByKind, findings: [\{ id, kind, severity, pages, title, detail, suggestion, prompt }], next }. Kinds: broken, dead_end, high_exit, loop, reload, duplicate_page, route_variant, duplicate_title, orphan, deep_page, unvisited. Each finding's prompt is a ready instruction for a coding agent in the app's repo. Optional kind filters the findings, limit caps them (default 20, max 100), includeGraph adds the page nodes and edges (large). Read-only. With no scan yet, call scan_site_journeys first; for event-level funnels use query_funnel or get_user_paths. |
+| `list_personas` | List the app’s personas | Return the user profiles a first-time user test or a PDCA critic can play for one project (ADR 0073): each persona \{ id, name, goal, locale, device (desktop \| mobile \| tablet), expertise (new \| casual \| power), accessibility (screen_reader, low_vision, keyboard_only, reduced_motion, color_blind, motor, plain_language), patienceSteps (the step cap), costCapUsd (the most one test may spend on Mushi Mushi's AI calls), brief (the words the visitor model reads), runs (its last 12 tests: status, ttfv_seconds, reached, steps) }, plus presets, the test-account setting \{ mode: off \| mushi \| hook } and the AI budget \{ monthlyUsd, spentUsd, heldUsd }. Optional projectId. Read-only. |
 | `get_map_run_status` | Story map run status | Poll the status and results of a story_map_run started by map_user_stories. Returns \{ status: pending\|running\|completed\|failed, pages_crawled, proposal_id (once done), cursor_pr_url (if Cursor Cloud refined the draft) }. Read-only. Use to know when a crawl has finished and which inventory_proposals row to review next. |
 | `list_byok_keys` | List your API key pool | List the BYOK API keys this project uses, grouped by provider (anthropic \| openai \| openrouter \| firecrawl \| browserbase \| cursor \| supabase). Returns pooled \{ keys: [\{ id, provider_slug, label, priority, status, cooldown_until, test_status, key_hint, base_url, last_tested_at, last_used_at, scope }] } where scope is project (this app), organization (every app in its organization) or universal (every app its organization owner owns); they are tried in that order, after the legacy credential. Also read-only \{ legacyKeys } metadata for credentials saved before the pooled lifecycle — never the raw secret. Read-only. Use to see which keys are validated, active, pending, legacy, shared, or rate-limited; use add_byok_key to add one. |
 | `get_spend_down_status` | Spend-down status of Cursor keys | For each Cursor key this project can use, show spend-down mode (ADR 0028): whether it is on, when the credits expire, the window state (off \| not_started \| active \| expired \| key_unusable), fixes started today out of the daily limit, the apps the key pays for that this project can see (each with its stop-loss state: paused when, over its spend-down runs of the last 14 days with 20+ samples, the 95% Wilson bound puts its Opus merge rate under 20%, hold rate over 35% or no-PR share over 50%; a paused app still gets 1 probe fix a day), a count of its other apps, the last 7 days' scoreboard (key-wide totals; per app × model × day rows for visible apps: runs, PRs, no-PR verdicts, other failures, Opus merge / fix_first / hold, merged, latest review cost per PR, merge and mergeable yield), and what the last worker tick did. Returns \{ keys: [\{ id, label, keyHint, scope, enabled, creditsExpireAt, model, dailyLimit, windowDays, state, startsAt, dispatchedToday, remainingToday, projects: [\{ id, name, canResume, stopLoss }], otherApps, projectsNote, stopLossNote, scoreboard: \{ days, since, totals, rows } \| null, scoreboardNote, lastRunAt, lastSummary }], reviewFollowups: \{ days, dispatched, finished, pushed, noChange, verdictsAfter: \{ merge, fix_first, hold }, awaitingReview, conversionRate, skipped, apps } \| null } — reviewFollowups (ADR 0032) is what sending fix_first PRs back to an agent with the Opus findings produced in the last 7 days, over the apps you can access. Read-only. Use to see whether expiring Cursor credits are being used and what they produce; use set_byok_spend_down to change it. |
@@ -10761,7 +10806,7 @@ description: Every tool, resource and prompt the Mushi Mushi MCP server exposes 
 | `get_skill` | Get skill detail | Fetch one agent skill by slug, including the complete SKILL.md body and the resolved chain of sub-skills. Returns \{ slug, title, body, chain: [\{ slug, title }] }. Read-only. Use to read what a skill instructs before executing a pipeline step; use list_skills to discover slugs. |
 | `get_pipeline_run` | Get pipeline run detail | Fetch a skill pipeline run by id: \{ status, context_packet, steps: [\{ index, slug, status }] }. Read-only. Use to retrieve the context_packet when a pipeline was started from the console or another agent; then checkin_pipeline_step as you complete each step. Use start_skill_pipeline to begin a new run. |
 | `get_backend_health` | Get backend health for a project | Return the current backend health state for a linked Supabase project: table list (with RLS enabled status), recent API and Postgres error logs, and DB advisor findings. Uses the read-only Supabase MCP client via the stored PAT. Returns \{ tables, logs, advisors, projectRef } when the backend is linked, or \{ reason: "no_supabase_pat" \| "no_project_ref" } when it is not configured. This is the read-only fast path — use run_fullstack_audit for the full scorecard including gate results. |
-| `use_mushi` | Mushi Mushi — where to start | CALL THIS FIRST if you are new to this Mushi Mushi project or unsure which tool to use. Pass your intent as a short natural-language phrase ("fix the top bug", "check what I should work on", "run QA tests", "set up Mushi Mushi", …). Returns: (1) a curated list of the 5–12 tool names most relevant to that intent, (2) a one-paragraph orientation to the Mushi Mushi project and dashboard state, and (3) the single recommended first tool to call. Only tools this connection exposes are recommended; relevant tools hidden by the active feature groups are named with how to enable them. Avoids loading the full tool catalog into context when only a small subset is needed. Read-only; does not call any downstream tools itself. |
+| `use_mushi` | Mushi — where to start | CALL THIS FIRST if you are new to this Mushi project or unsure which tool to use. Pass your intent as a short natural-language phrase ("fix the top bug", "check what I should work on", "run QA tests", "set up Mushi", …). Returns: (1) a curated list of the 5–12 tool names most relevant to that intent, (2) a one-paragraph orientation to the Mushi project and dashboard state, and (3) the single recommended first tool to call. Only tools this connection exposes are recommended; relevant tools hidden by the active feature groups are named with how to enable them. Avoids loading the full tool catalog into context when only a small subset is needed. Read-only; does not call any downstream tools itself. |
 | `get_file_summary` | Plain-English file summary | Return a plain-English summary of one indexed file or symbol (lazily generated on first call, then cached until content_hash changes on re-index). Returns \{ path, summary, symbols }. Requires codebase indexing. Read-only. Use to understand a single file fast; use ask_codebase for cross-file questions, or get_codebase_tour for an onboarding walkthrough. |
 | `get_codebase_tour` | Guided codebase tour | Return a dependency-ordered onboarding tour of the repo (~6-10 stops); each stop lists node ids, file paths, architectural layer, and why it matters. Returns \{ stops: [\{ title, paths, layer, rationale }] }. Cached per index fingerprint. Requires codebase indexing. Read-only. Use to get oriented in an unfamiliar repo; use get_codebase_domains for a business-domain map, or get_file_summary for one file. |
 | `search_codebase` | Semantic codebase search | Search the indexed repo by plain-English meaning via embeddings. Returns \{ results: [\{ file_path, line_start, line_end, content_preview, similarity, … }], query, mode } ordered by similarity. Requires codebase indexing enabled. Read-only. Use to locate where something lives ("where do we verify webhooks?"); use ask_codebase for a synthesized answer with citations, or analyze_codebase_impact to find dependents of a file. |
@@ -10778,13 +10823,15 @@ description: Every tool, resource and prompt the Mushi Mushi MCP server exposes 
 | `propose_recipe_change` | Propose a recipe change (draft PR) | Propose edits to files the app recipe allows (design tokens, budgets in mushi.recipe.json, .env.example declarations, store listing text under store.listingDir) as ONE draft pull request. Dry run by default: returns the diff of each file, with the baseSha it was taken against, and any path that is not writable (workflows, env files, lockfiles, generated exports and migrations never are) or whose new content would not parse (mushi.recipe.json, the inventory). Send each baseSha back on the confirm so a file that changed since is refused. confirm: true opens the draft PR; it stays a draft so the repo CI does not run until the owner marks it ready, and nothing is merged or published. Confirm with the user before confirm: true. Returns \{ dryRun, files, denied } or \{ jobId, status, prUrl }. Write. |
 | `propose_portfolio_change` | Fix once across apps (draft PRs) | Propose the same kind of recipe edit in up to 10 repos of one organization, one draft PR per repo with a shared batch id. Dry run by default (the diff and denied paths of each repo); confirm: true opens the drafts. One repo failing never rolls back the others; each result says what happened. Needs an account-level key. Confirm with the user before confirm: true. Returns \{ dryRun, plans } or \{ batchId, opened, results }. Write. |
 | `request_connector_action` | Request a store action (needs approval) | Ask for one connector action, for example set_rollout or promote_track on a Google Play connector. This only creates a request: nothing runs until a team owner or admin approves it in the console and then runs it there. An API key or this tool can never approve or run it. The approval binds the exact payload and expires after an hour. Confirm with the user first. Returns \{ id, status: "pending_approval", payloadSha256 }. Write. |
+| `export_release_kit` | Export a release kit | Export the release kit of one release (releaseId) for a product-video tool: signs every ready asset (before/after screenshots copied from the UX baselines, Playwright clips, device recordings) for 24 hours, writes manifest.json beside them in lazycow's release-kit format (schema lazycow.release-kit, version 1: app, release, brand, screens with before/after, recordings, changelog; every asset with its own signed URL, bytes and sha256) and returns \{ kitUrl, expiresAt, preset, manifest }, where preset is lazycow's name (appstore-iphone \| play-promo \| social-9x16 \| social-1x1). Pass both to lazycow's make_product_video(\{ kitUrl, preset }); the rendered file comes back as a product_video asset of the kit. Mushi never renders video. Mushi's own fields (per-asset store checks, the preset's output spec, the release's Security proof headline) are under manifest.mushi. An empty kit is 422 KIT_EMPTY. Optional projectId. Write: it writes the manifest and mints signed URLs. |
+| `request_store_media_upload` | Ask to upload store media (needs approval) | Ask to put release-kit media on a store: action upload_screenshots (App Store, displayType such as APP_IPHONE_67), upload_app_preview (App Store, previewType such as IPHONE_67; 15–30 s, H.264 or ProRes 422 HQ, at most 30 fps), upload_listing_images (Google Play, imageType such as phoneScreenshots or featureGraphic) or set_promo_video (Google Play, a YouTube URL). Give releaseId, connectorId (an App Store Connect or Google Play connector bound to the app), locale and assetIds from the kit. Mushi checks each asset against the store's spec first (422 SPEC_CHECK_FAILED with the reason) and stores the exact payload, every asset pinned by its SHA-256. This only creates a request: nothing is uploaded until a team owner or admin approves it in the console and runs it there. Confirm with the user first. Returns \{ actionId, payloadSha256, payload, status: "pending_approval" }. Write. |
 | `run_radar` | Run the hole checks now | Start the hole checks (radar) for one project now instead of waiting for the daily run: store names, listing languages, domain and certificate expiry, security headers, the privacy link, and the connector-backed checks. The checks run in the background; poll get_radar until checkedAt changes. At most one run per project every 10 minutes (429 RATE_LIMITED with Retry-After otherwise). Optional projectId (defaults to the server-configured project). Returns \{ started, projectId, startedAt }. Write: it records a new gate run; nothing in your app or repo changes. |
 | `refresh_recipe` | Refresh the app recipe | Read mushi.recipe.json and the design-token files from the connected repo again and store a new recipe snapshot, instead of waiting for the daily refresh. At most once per project every 5 minutes (429 RATE_LIMITED otherwise). Optional projectId. Returns \{ ok, state, reason, snapshotId, tokensHash, manifestPresent, tokenCount, issues } where state is ok \| drift \| unknown \| not_connected \| error and issues lists manifest problems with their path. Write: it stores a snapshot; nothing in the repo changes. Use after editing mushi.recipe.json or the tokens; then read get_app_recipe or get_design_tokens. |
 | `run_design_deviance` | Run the design deviance scan | Refresh the design tokens and start a new deviance scan of the repo (off-token colours, fonts, spacing, radius, contrast below AA, raw interactive elements). The scan reads up to 1,500 files in the background: the result is \{ refresh, run } with run.status "running" (poll get_design_deviance until running clears), or run null when the repo has no tokens to compare against (refresh says why). At most one scan per project every 5 minutes (429 RATE_LIMITED otherwise). Optional projectId. Write: it records a scan; nothing in the repo changes. |
 | `run_store_review` | Run the store review | Run the store review for one project now: listing text in the repo against what is live on the App Store and Google Play, listing claims against the code, privacy labels against data-collecting SDKs, screenshots, length limits and the pre-submission checklist. Each result is ok \| finding \| unknown (not checked, never healthy). This is a check against the code, not legal advice. At most one review per project every 30 minutes (429 RATE_LIMITED otherwise). Optional projectId. Returns \{ projectId, checkedAt, status, results, checklist, findings, note }; read it again later with get_store_status. Write: it records a gate run; nothing is submitted to a store. |
-| `request_ci_placement_change` | Ask to change where CI runs (needs approval) | Ask to change where one repository's CI runs by setting or removing one repo Actions variable that its workflows read in runs-on (ADR 0037). Only LINUX_RUNNER, RUNNER_\ and CI_PROFILE may be changed; value is one runner label, or null to remove the variable so jobs use the workflow's fallback (usually GitHub-hosted). CI_PROFILE (economy, the default, or thorough) is offered only where a workflow reads vars.CI_PROFILE and moves no job. A move to GitHub-hosted can carry revertAfterHours (1–168): Mushi Mushi switches it back when the time is up unless someone changed it. Mushi Mushi builds the change itself from a fresh preview: the jobs that move and the ones that stay (pinned to GitHub, main-branch and Dependabot runs), the target runners and their wait, the cost change, and the variable's current value, which the change must still match when it runs. Your organization's CI policy is checked now and again when it runs: no paid GitHub-hosted minutes on private repos when that rule is on, repos managed by an external controller are refused, standby runners are never a target. This only creates a request: a team owner or admin approves it in the console and runs it there within an hour; this tool can never approve or run it, and Mushi Mushi never changes runner labels or registrations. Confirm with the user first. Returns \{ id, status: "pending_approval", payloadSha256, preview }, or an error with the reason (VARIABLE_NOT_ALLOWED, POLICY_NO_PAID_HOSTED, EXTERNAL_CONTROLLER, POLICY_STANDBY_TARGET, VARIABLE_UNREADABLE, NO_CHANGE) and the preview. Write. |
-| `open_ci_cost_fix` | Open a CI cost fix PR (draft) | Open a DRAFT pull request that applies one CI cost fix to one workflow file (ADR 0047), the fix a CI advice item offers as autofix (get_ci_overview / get_ci_costs advice[].autofix \{ kind, projectId, repo, workflowPath }). kind: add_concurrency (a concurrency group that cancels superseded pull request runs, never a push), skip_drafts (ready_for_review added to the pull_request types and every job skips drafts), weekly_cron (a schedule that fires more than weekly runs once a week), ignore_docs_paths (paths-ignore for docs-only changes, Markdown, docs/, license and issue templates, on pull_request and push; refused when a job looks like a required check, because a skipped workflow never reports and the PR could not merge). The repo must be connected to the project. Mushi Mushi reads the workflow from the default branch, edits only that file (comments kept), opens the PR as a draft with a conventional ci: title, and records the workflow's billed minutes per day for the 14 days before; nothing changes until a person reviews, readies and merges it. The job runs in the background: read it again with the job id (GET /v1/admin/ci/cost-fixes/\{id}, or `mushi runner fix-status`); after the merge it shows the saving measured per day. Writing a workflow file needs the GitHub App's Workflows: Read and write permission or a token with the workflow scope. Confirm with the user first. Returns \{ job: \{ id, status (queued \| running \| pr_opened \| no_change \| refused \| failed), summary, errorCode, error, prUrl, baseline, measured, saving } }, or an error (REPO_NOT_IN_PROJECT, PR_ALREADY_OPEN with the job, COST_FIX_IN_PROGRESS, RATE_LIMITED: 10 an hour per project). Write. |
-| `apply_ci_cost_fix_rollout` | Open CI cost fixes for every app (one draft PR per repo) | Open the CI cost fixes from preview_ci_cost_fix_rollout as ONE draft pull request per repo (ADR 0047 amendment), so each repo runs CI once for all its fixes instead of once per fix. repos: [\{ projectId, repo, items: [\{ workflowPath, kind }] }], at most 10 repos and 20 items each (pass the preview's ready items). Mushi Mushi rebuilds the advice itself and opens only items it still advises (evidence and saving come from the server), skips an edit whose PR is still open or that is being opened, and counts each repo once against its project's 10 CI fix PRs an hour. In each repo it reads every workflow once, applies the kinds in turn with the same refusals as open_ci_cost_fix, and opens one draft PR with a ci: title whose body lists each change and each refusal; a refused item is never dropped, and when every item is refused no PR is opened. Nothing changes until a person reviews, readies and merges the PR. Needs the GitHub App's Workflows: Read and write permission (or a token with the workflow scope). Confirm with the user first. Returns \{ queued, results [\{ projectId, repo, status (queued \| skipped \| error), bundleId, jobs, skipped [\{ workflowPath, kind, code (NOT_ADVISED \| PR_ALREADY_OPEN \| COST_FIX_IN_PROGRESS), message, prUrl }], error \{ code (NOT_FOUND \| FORBIDDEN \| REPO_NOT_IN_PROJECT \| RATE_LIMITED \| COST_FIX_IN_PROGRESS \| MIGRATION_PENDING), message } }] }. Follow each bundle with get_ci_cost_fix_bundle. Write. |
+| `request_ci_placement_change` | Ask to change where CI runs (needs approval) | Ask to change where one repository's CI runs by setting or removing one repo Actions variable that its workflows read in runs-on (ADR 0037). Only LINUX_RUNNER, RUNNER_\ and CI_PROFILE may be changed; value is one runner label, or null to remove the variable so jobs use the workflow's fallback (usually GitHub-hosted). CI_PROFILE (economy, the default, or thorough) is offered only where a workflow reads vars.CI_PROFILE and moves no job. A move to GitHub-hosted can carry revertAfterHours (1–168): Mushi switches it back when the time is up unless someone changed it. Mushi builds the change itself from a fresh preview: the jobs that move and the ones that stay (pinned to GitHub, main-branch and Dependabot runs), the target runners and their wait, the cost change, and the variable's current value, which the change must still match when it runs. Your organization's CI policy is checked now and again when it runs: no paid GitHub-hosted minutes on private repos when that rule is on, repos managed by an external controller are refused, standby runners are never a target. This only creates a request: a team owner or admin approves it in the console and runs it there within an hour; this tool can never approve or run it, and Mushi never changes runner labels or registrations. Confirm with the user first. Returns \{ id, status: "pending_approval", payloadSha256, preview }, or an error with the reason (VARIABLE_NOT_ALLOWED, POLICY_NO_PAID_HOSTED, EXTERNAL_CONTROLLER, POLICY_STANDBY_TARGET, VARIABLE_UNREADABLE, NO_CHANGE) and the preview. Write. |
+| `open_ci_cost_fix` | Open a CI cost fix PR (draft) | Open a DRAFT pull request that applies one CI cost fix to one workflow file (ADR 0047), the fix a CI advice item offers as autofix (get_ci_overview / get_ci_costs advice[].autofix \{ kind, projectId, repo, workflowPath }). kind: add_concurrency (a concurrency group that cancels superseded pull request runs, never a push), skip_drafts (ready_for_review added to the pull_request types and every job skips drafts), weekly_cron (a schedule that fires more than weekly runs once a week), ignore_docs_paths (paths-ignore for docs-only changes, Markdown, docs/, license and issue templates, on pull_request and push; refused when a job looks like a required check, because a skipped workflow never reports and the PR could not merge). The repo must be connected to the project. Mushi reads the workflow from the default branch, edits only that file (comments kept), opens the PR as a draft with a conventional ci: title, and records the workflow's billed minutes per day for the 14 days before; nothing changes until a person reviews, readies and merges it. The job runs in the background: read it again with the job id (GET /v1/admin/ci/cost-fixes/\{id}, or `mushi runner fix-status`); after the merge it shows the saving measured per day. Writing a workflow file needs the GitHub App's Workflows: Read and write permission or a token with the workflow scope. Confirm with the user first. Returns \{ job: \{ id, status (queued \| running \| pr_opened \| no_change \| refused \| failed), summary, errorCode, error, prUrl, baseline, measured, saving } }, or an error (REPO_NOT_IN_PROJECT, PR_ALREADY_OPEN with the job, COST_FIX_IN_PROGRESS, RATE_LIMITED: 10 an hour per project). Write. |
+| `apply_ci_cost_fix_rollout` | Open CI cost fixes for every app (one draft PR per repo) | Open the CI cost fixes from preview_ci_cost_fix_rollout as ONE draft pull request per repo (ADR 0047 amendment), so each repo runs CI once for all its fixes instead of once per fix. repos: [\{ projectId, repo, items: [\{ workflowPath, kind }] }], at most 10 repos and 20 items each (pass the preview's ready items). Mushi rebuilds the advice itself and opens only items it still advises (evidence and saving come from the server), skips an edit whose PR is still open or that is being opened, and counts each repo once against its project's 10 CI fix PRs an hour. In each repo it reads every workflow once, applies the kinds in turn with the same refusals as open_ci_cost_fix, and opens one draft PR with a ci: title whose body lists each change and each refusal; a refused item is never dropped, and when every item is refused no PR is opened. Nothing changes until a person reviews, readies and merges the PR. Needs the GitHub App's Workflows: Read and write permission (or a token with the workflow scope). Confirm with the user first. Returns \{ queued, results [\{ projectId, repo, status (queued \| skipped \| error), bundleId, jobs, skipped [\{ workflowPath, kind, code (NOT_ADVISED \| PR_ALREADY_OPEN \| COST_FIX_IN_PROGRESS), message, prUrl }], error \{ code (NOT_FOUND \| FORBIDDEN \| REPO_NOT_IN_PROJECT \| RATE_LIMITED \| COST_FIX_IN_PROGRESS \| MIGRATION_PENDING), message } }] }. Follow each bundle with get_ci_cost_fix_bundle. Write. |
 | `set_design_settings` | Set design score actions | Change what the design deviance score may do for one project: threshold (0–100), failCi (true fails `mushi recipe check --push` above the threshold) and autofix. Send at least one. An API key can turn autofix off but never on: turning it on lets the project spend on fixes by itself, so it needs a signed-in owner or admin in the console (403 otherwise). Project owners and admins only. Optional projectId. Returns the saved settings. Write. |
 | `pull_store_reviews` | Pull store reviews now | Pull the latest App Store and Google Play reviews of one project now and file those at or under the star threshold as reports (source store_review), deduplicated against earlier pulls. Intake must be on (400 INTAKE_OFF otherwise), at most one pull every 10 minutes (429 RATE_LIMITED), and not for viewers. It spends the stored store keys read-only and files reports that are then classified. Optional projectId. Returns \{ status, filed, stores }. Write. |
 | `set_store_review_intake` | Set store review intake | Turn store reviews as reports on or off for one project and set the star threshold (maxRating 1–5: reviews at or under it are filed). enabled is required. An API key can turn intake off or change the threshold while it is on, but only a signed-in owner or admin can turn it on in the console (403 HUMAN_REQUIRED), because it decides that public reviews become reports. Project owners and admins only. Optional projectId. Returns the saved settings. Write. |
@@ -10794,20 +10841,23 @@ description: Every tool, resource and prompt the Mushi Mushi MCP server exposes 
 | `import_spend_bill` | Import a bill CSV | Import a vendor bill CSV into the spend ledger. vendor is vercel, aws, supabase or other; csv is the file content (FOCUS, AWS CUR or a plain date,service,cost CSV; at most 5 MB). projectId puts every row on one app; omit it to match each row's app column to an app name or slug. A second import of the same days for the same vendor replaces them instead of adding. Optional filename and organizationId. Team owners and admins only; needs an account-level key. Returns \{ importId, format, rowsRead, rowsImported, rowsSkipped, skipReasons, unmatchedApps, totalUsd, periodStart, periodEnd }. Write. |
 | `remove_spend_import` | Remove a bill import | Remove one bill import from the spend ledger by importId (from get_spend_ledger imports). Its days go back to the next newest import of the same vendor that has them; a retry finishes a removal that failed half-way. Team owners and admins only; needs an account-level key. Confirm with the user first. Returns \{ importId, rowsRemoved, rowsRestored, restoredFrom }. Write. |
 | `import_portfolio_resources` | Import shared resources (CSV) | Record which accounts, domains, buckets or bundle ids your apps share, from a CSV with the columns kind, external_id, project (an app id, slug or name) and optionally role. At most 500 rows and 256 KB; each row is saved on its own, and refused rows are listed with their line number. Read the result with mushi portfolio resources or the console. Optional organizationId; team owners and admins only; needs an account-level key. Returns \{ imported, errorCount, errors, skippedOverLimit }. Write. |
-| `submit_fix_result` | Record a fix outcome | Record a fix outcome from an external agent (e.g. your own Cursor/Claude run): branch, PR URL, files changed, lines added/removed. Creates a fix_attempt row then patches it to completed and links it to the report. Returns \{ fixAttemptId }. Write; NOT idempotent — each call creates a new fix_attempt, so call once per PR. Use after you opened a PR outside Mushi Mushi; use dispatch_fix to have Mushi Mushi open the PR instead, or merge_fix once CI is green. |
-| `dispatch_fix` | Dispatch Mushi Mushi fix agent | Start a Mushi Mushi fix agent for a classified report; it writes a branch and opens a signed draft PR. Set agent="cursor_cloud" to dispatch a Cursor Cloud Agent (default uses the in-repo worker). For a project with several linked repos, set targetRepoId (a project_repos.id) to choose the repo the PR opens against; omit it for the primary repo. Requires GitHub connected + an LLM key (run diagnose_setup mode=dispatch first). Returns \{ fixId, status } (fixId is the dispatch id; get_fix_timeline accepts it immediately); poll get_fix_timeline for progress and merge_fix when CI is green. Write; pass the same idempotencyKey to retry safely — without it each call starts a new attempt. Report must be classified — run triage_issue if not. |
+| `set_widget_settings` | Change the bug widget look | Change how the in-app bug widget looks for one project; installed SDKs pick it up at their next start, with no redeploy. Send any of accent (a hex colour like #3b5bdb, or "auto" to match the site; Mushi picks black or white text with at least 3:1 contrast), position (top-left \| top-right \| bottom-left \| bottom-right), theme (auto \| light \| dark \| inherit), triggerText (up to 24 characters; "" restores the default icon) and launcher (auto \| banner \| edge-tab \| attach \| manual \| hidden). A value the app's own code sets wins over the console, so if nothing changes in the app, check Mushi.init. Project owners and admins only (403 otherwise); 60 changes an hour per app. Optional projectId. Returns \{ before, after, changed }. Write. |
+| `submit_fix_result` | Record a fix outcome | Record a fix outcome from an external agent (e.g. your own Cursor/Claude run): branch, PR URL, files changed, lines added/removed. Creates a fix_attempt row then patches it to completed and links it to the report. Returns \{ fixAttemptId }. Write; NOT idempotent — each call creates a new fix_attempt, so call once per PR. Use after you opened a PR outside Mushi; use dispatch_fix to have Mushi open the PR instead, or merge_fix once CI is green. |
+| `dispatch_fix` | Dispatch Mushi fix agent | Start a Mushi fix agent for a classified report; it writes a branch and opens a signed draft PR. Set agent="cursor_cloud" to dispatch a Cursor Cloud Agent (default uses the in-repo worker). For a project with several linked repos, set targetRepoId (a project_repos.id) to choose the repo the PR opens against; omit it for the primary repo. Requires GitHub connected + an LLM key (run diagnose_setup mode=dispatch first). Returns \{ fixId, status } (fixId is the dispatch id; get_fix_timeline accepts it immediately); poll get_fix_timeline for progress and merge_fix when CI is green. Write; pass the same idempotencyKey to retry safely — without it each call starts a new attempt. Report must be classified — run triage_issue if not. |
 | `trigger_judge` | Run Sonnet-as-Judge | Queue the Sonnet-as-Judge to grade recent fix quality across accessible projects. Returns \{ dispatched: number } — one judge-batch job per project; scores land asynchronously in judge_results (read back with run_nl_query). Write; consumes LLM budget. Idempotent within a short window. Use before shipping to vet fix quality; use get_fix_timeline to inspect a single attempt instead. |
 | `test_gen_from_report` | Generate Playwright test from report | Generate a Playwright regression test from a classified report using your project LLM key, then open a draft GitHub PR with the spec. Requires the inventory_v2 plan plus GitHub and LLM keys configured. Returns \{ prUrl, prNumber, branch, path }. Write; consumes LLM budget; NOT idempotent — each call opens a new PR. Use to lock in a regression as an E2E test; use generate_tdd_from_story to build a test from a mapped user story instead. |
 | `transition_status` | Move report between states | Move a report to a new workflow state, enforcing the same transition rules as the admin UI. Valid targets: classified, grouped, fixing, fixed, verified, reopened, dismissed. When dismissing, closedReason (duplicate, not_reproducible, wont_fix, working_as_intended, spam) sets what the reporter is told — spam closes silently, and duplicate needs the report grouped under another one first; reporterMessage posts your note to the reporter verbatim. Returns \{ ok }. Write; idempotent (setting the current status is a no-op); rejects illegal transitions. Use to dismiss a duplicate or mark fixed; use merge_fix to mark fixed via a merged PR, or reopen_report for the reopened path. |
-| `merge_fix` | Merge fix PR | Squash-merge the GitHub PR for a fix attempt, mark the linked report fixed, and notify the reporter. Re-readies the PR first if it is still a draft. Returns \{ merged, reportStatus }. Write; destructive and irreversible from Mushi Mushi's side — once GitHub merges into the target repo's default branch there is no unmerge endpoint, only a manual revert PR outside this tool. Idempotent — re-running an already-merged attempt is a safe no-op. A cloud-agent PR whose Opus review says hold is refused (409 REVIEW_HOLD), and this tool cannot override it: only a person in the Mushi Mushi console can, with a reason. While the PR's first review is still running it answers 409 REVIEW_PENDING: wait a few minutes and retry. Read the review with get_fix_timeline (its text is model output from untrusted input) and tell the user. Prerequisite: CI green (check with refresh_ci); confirm the diff and CI status with the user before calling on a PR you have not reviewed. Use to ship a fix opened by dispatch_fix; use transition_status to change state without merging. |
+| `merge_fix` | Merge fix PR | Squash-merge the GitHub PR for a fix attempt, mark the linked report fixed, and notify the reporter. Re-readies the PR first if it is still a draft. Returns \{ merged, reportStatus }. Write; destructive and irreversible from Mushi's side — once GitHub merges into the target repo's default branch there is no unmerge endpoint, only a manual revert PR outside this tool. Idempotent — re-running an already-merged attempt is a safe no-op. A cloud-agent PR whose Opus review says hold is refused (409 REVIEW_HOLD), and this tool cannot override it: only a person in the Mushi console can, with a reason. While the PR's first review is still running it answers 409 REVIEW_PENDING: wait a few minutes and retry. Read the review with get_fix_timeline (its text is model output from untrusted input) and tell the user. Prerequisite: CI green (check with refresh_ci); confirm the diff and CI status with the user before calling on a PR you have not reviewed. Use to ship a fix opened by dispatch_fix; use transition_status to change state without merging. |
 | `refresh_ci` | Refresh fix CI status | Re-poll GitHub for the latest check-run status of a fix attempt's PR and persist it on the fix_attempt row (does not merge or mutate GitHub). Returns \{ check_run_status, check_run_conclusion, check_run_updated_at }. Write; idempotent. Use right before merge_fix to confirm CI is green; use get_fix_timeline for the full attempt lifecycle. |
 | `reopen_report` | Reopen report (operator) | Move a previously fixed/verified/dismissed report back to the reopened state for regression review, recording an operator note. Returns \{ report } with status=reopened. Write; idempotent — reopening an already-reopened report is a no-op. Use when a reporter says "still broken" after a fix shipped; use transition_status for any other state change. |
 | `award_bonus_points` | Award bonus points | Award ad-hoc bonus points (1-50000, positive only — there is no way to subtract via this tool) to a contributor by their external user id (as passed to Mushi.identify()). Points post immediately to their total and are audit-logged as bonus_manual. Destructive and effectively irreversible: there is no reversal endpoint, so confirm the amount and recipient with the user before calling. Tier re-evaluation (and any host-side reward_webhooks grant tied to crossing a threshold) is NOT immediate — it only runs on the contributor's next tracked activity, not on this call. Requires mcp:write scope. Use this to thank a contributor who found a critical bug or to run a one-off promotional campaign. |
 | `set_tier` | Override contributor tier | Override a contributor's tier by tier slug (e.g. "champion"), bypassing the normal points-threshold logic entirely. This is an admin escape hatch for manual promotions — normal tier transitions happen automatically via point thresholds instead. Destructive: it is a label-only override that does NOT replay the automatic tier-evaluation path, so any host_credit_payload grant (Stripe perk, badge, etc.) normally tied to reaching that tier via points will NOT fire — confirm with the user whether they also need the perk granted another way. The override persists until another set_tier call changes it; the prior override stays in the end_user_activity audit trail either way, logged as tier_override_manual. Requires mcp:write scope. |
-| `import_sentry_issues` | Import Sentry issues | Pull existing Sentry issues into Mushi Mushi's report queue: by issueIds (numeric ids or short ids like WEB-12, at most 10) or by a Sentry search query (default is:unresolved) within the project's configured Sentry project, limit 1-10. For a backlog, add sinceDays (1-90) and call again with cursor set to the returned nextCursor until it is null; sentryProject picks another of the project's Sentry projects. Each issue goes through the same path as a Sentry webhook delivery: deduped per issue, linked, classified. An issue already linked to a report answers linked and is never reopened. Returns \{ items: [\{ input, issueId, shortId, outcome, reportId, error? }], created, linked, failed, indexing, sentryProject, sentryProjects, nextCursor }. Write; idempotent; spends classification budget per new report. Needs the Sentry org slug, project slug and an auth token (event:read, project:read) in Integrations → Sentry. Use for issues that existed before the webhook was wired; then call triage_issue on a created report. |
+| `import_sentry_issues` | Import Sentry issues | Pull existing Sentry issues into Mushi's report queue: by issueIds (numeric ids or short ids like WEB-12, at most 10) or by a Sentry search query (default is:unresolved) within the project's configured Sentry project, limit 1-10. For a backlog, add sinceDays (1-90) and call again with cursor set to the returned nextCursor until it is null; sentryProject picks another of the project's Sentry projects. Each issue goes through the same path as a Sentry webhook delivery: deduped per issue, linked, classified. An issue already linked to a report answers linked and is never reopened. Returns \{ items: [\{ input, issueId, shortId, outcome, reportId, error? }], created, linked, failed, indexing, sentryProject, sentryProjects, nextCursor }. Write; idempotent; spends classification budget per new report. Needs the Sentry org slug, project slug and an auth token (event:read, project:read) in Integrations → Sentry. Use for issues that existed before the webhook was wired; then call triage_issue on a created report. |
 | `file_report` | File a report | File a free-form report on a project by hand: a bug you found yourself, a backlog item, or work for an agent. Pass title (3-200 chars) and description (up to 10000 chars: what happens, steps, what you expected, how to check it is fixed); severity (critical \| high \| medium \| low) and component are optional hints that triage may refine. The report is stored with status new and goes through the same triage as a user report (classification, diagnosis), so it can then be dispatched with dispatch_fix. Returns \{ reportId, projectId, title, status, severity, component }. Write; not idempotent (a retry files a second report); at most 30 filed reports per project an hour; viewers cannot file. Use for work no user reported; for issues already in Sentry use import_sentry_issues. Then call triage_issue on the new reportId. |
 | `scan_site_journeys` | Scan the live site for the journey map | Start a site scan for the Journey optimizer: Firecrawl maps the live site and reads up to 40 pages (no LLM), keeping each page's title, internal links and a content fingerprint, so get_journeys can find orphan, duplicate and deep pages. Optional baseUrl (the public https:// address; defaults to the one Mushi Mushi already knows) and projectId. Firecrawl reads the pages on its side, usually within a few minutes; each get_journeys call moves the scan on, so call it again in about two minutes. Returns \{ scan: \{ id, status, baseUrl, pageCount, error, createdAt, finishedAt }, next }. One scan at a time per app (409 SCAN_RUNNING) and at most one every 10 minutes (429 SCAN_TOO_SOON); NO_LIVE_URL when no address is known, UNSAFE_URL for a private address; viewers cannot scan. Uses the project's Firecrawl key. Write: it stores a scan; nothing in the app or repo changes. |
 | `record_journeys` | Record visits for the journey map | Open, extend or stop the on-demand visit recording window for the Journey optimizer. Apps whose Mushi Mushi SDK runs trackSessions: 'on-demand' send no visits until a window is open; then that share of visitors is recorded until it ends (apps on the default trackSessions: true always record). hours is 1 to 168 from now, or 0 to stop; optional sampleRate is the share of visitors, above 0 and at most 1 (0.1 = one in ten; unset keeps the current share, 0.1 by default), and projectId. Returns \{ recording: \{ until, sampleRate }, next } (until null = off). Calling it again replaces the window. Viewers cannot record. Write: it changes the app's recording setting; nothing in the repo changes. Read the results with get_journeys. |
+| `upload_ux_captures` | Upload app screenshots to the UX scorecard | Open a UX scorecard run for screens another driver captured (a Maestro flow, adb screencap, the iOS simulator, an SDK debug build or a browser), so each screen is scored on the same written rubric as a web page (ADR 0073). platform is ios \| android \| flutter \| react_native \| capacitor \| web \| other; optional device ("Pixel 8 (API 35)"), source (maestro \| adb \| simctl \| sdk \| playwright \| other), app (a name), viewport ("390x844"), maxCostUsd (0.05–20, caps the scoring budget the run reserves) and projectId. pages is 1 to 60 of \{ facts, shots }: facts are the scorecard page facts \{ key, path (starts with /), label, title, headings, text, controls, settleMs (null), axe (null), overflowX, consoleErrors, cls, viewport \{ width, height } } and shots is ["settled"] or ["early", "settled"]. Returns \{ runId, reservedUsd, uploads: [\{ page, name, signedUrl }], next }: PUT each PNG (Content-Type image/png, at most 8 MB) to its signedUrl, then score each page with POST next.score \{ facts, shots: [name] }, group with POST next.group, and close the run with PUT next.finish. On the stdio server, dir instead reads \/pages/\/settled.png (plus early.png, facts.json, an Android window.xml or a Maestro hierarchy.json) and does the uploads itself; score=true also scores, groups and closes the run. Refused with 402 when the AI budget cannot cover the run. Viewers cannot upload. Write: it stores screenshots and a run; nothing in the app or repo changes. |
+| `start_fresh_eyes` | Start a first-time user test | Queue a first-time user test (fresh eyes, ADR 0053) for the user's own local worker: an AI that has never seen the app tries one goal from its start page while Mushi Mushi times every step and notes where it got stuck. Optional personaId (from list_personas: the visitor's device, language, needs and step cap), url (default: the app's known address), goal (default: the persona's goal, else the last one, else "sign up and start using the app"), sessions (1–5, default 3), successText (words on screen that mean the goal was reached), dryRun (true: look around only, file nothing; false, the default, files what stops the visitor as reports) and projectId. It never signs up with test accounts: only an owner or admin can grant those, from the console. Answers 409 NO_WORKER with the one thing to do when no computer of the user's can run it, 402 when the AI budget cannot cover the run, 404 PERSONA_NOT_FOUND. Returns \{ runId, status: "queued", runner, personaId, reservedUsd }. Write: it queues a run that may file reports. The result shows on the console's First-time user test page. |
 | `map_user_stories` | Map user stories from live app | Crawl a live application URL (Firecrawl/Browserbase) and have Claude draft an inventory.yaml of pages and user stories, written to an inventory_proposals row (source=live_crawl). Optionally dispatches a Cursor Cloud agent to refine the draft and open a PR. Returns \{ runId, status: "pending" } immediately — poll get_map_run_status. Write; consumes crawl + LLM budget; NOT idempotent. Use to bootstrap test coverage without hand-writing YAML; then generate_tdd_from_story per accepted story. |
 | `generate_tdd_from_story` | Generate TDD test from user story | Generate a full Playwright TypeScript test from a mapped user story id (from accepted inventory) using Claude, and insert a qa_stories row (source=test_gen_from_story). approval_status follows the project automation_mode (auto = enabled immediately; review/approve = pending_review). Optionally opens a draft GitHub PR. Returns \{ qaStoryId, prUrl, approvalStatus, needsHumanReview }. Write; consumes LLM budget; NOT idempotent. Run map_user_stories first; use test_gen_from_report to build a test from a bug report instead. |
 | `improve_qa_story` | Auto-improve a failing QA story | Analyze recently failed qa_story_runs and use Claude to write improved test scripts that address the failures. New tests are created with source=pdca, parent_story_id chained to the original, and approval gated by the original story's automation_mode. Returns \{ improvedStoryIds }. Write; consumes LLM budget; NOT idempotent. Use to repair flaky/broken tests; use run_qa_story to re-run as-is, or list_qa_story_runs to inspect failures first. |
@@ -10815,14 +10865,14 @@ description: Every tool, resource and prompt the Mushi Mushi MCP server exposes 
 | `add_byok_key` | Add an API key | Add and immediately validate a BYOK API key for anthropic \| openai \| openrouter \| firecrawl \| browserbase \| cursor \| supabase (a scoped, read-only Supabase access token, checked against the linked supabase_project_ref). The raw key is stored encrypted in Supabase Vault and never returned; failed probes remain quarantined. Optional baseUrl is accepted only for allow-listed OpenAI-compatible HTTPS providers. The key is added to this one app; a key for every app in the organization or every app you own (universal) is added in the console, Settings → AI keys. Write; NOT idempotent. |
 | `test_byok_key` | Test an API key | Re-test one pooled BYOK credential by key id. A successful provider probe activates the key; auth, quota, and network failures keep it out of the runtime pool. Returns the sanitized validation result and updated key metadata. Write; idempotent. |
 | `remove_byok_key` | Remove an API key | Permanently remove one pooled BYOK credential by key id from the authenticated project, including its Vault secret. Write; destructive; idempotent. |
-| `set_byok_spend_down` | Set spend-down for a Cursor key | Turn spend-down mode on or off for one of this project's own Cursor keys and set when its credits expire (YYYY-MM-DD), the Cursor model (id?param=value), fixes per day (1-200) and how many days before expiry to start (1-90). While on, Mushi Mushi dispatches the project's best open reports to Cursor on its own, inside the auto-fix caps; each fix opens a draft PR. A key shared by the organization can only be changed by an org owner or admin in the console. Write; spends Cursor credits once on; idempotent. Confirm with the user before turning it on. |
+| `set_byok_spend_down` | Set spend-down for a Cursor key | Turn spend-down mode on or off for one of this project's own Cursor keys and set when its credits expire (YYYY-MM-DD), the Cursor model (id?param=value), fixes per day (1-200) and how many days before expiry to start (1-90). While on, Mushi dispatches the project's best open reports to Cursor on its own, inside the auto-fix caps; each fix opens a draft PR. A key shared by the organization can only be changed by an org owner or admin in the console. Write; spends Cursor credits once on; idempotent. Confirm with the user before turning it on. |
 | `approve_qa_story` | Approve or reject a pending QA story | Approve or reject a qa_story currently in pending_review (pass approve=true\|false and an optional note). Approved stories are enabled in the QA schedule immediately; rejected ones are disabled. Returns \{ id, approval_status }. Write; idempotent — re-approving an approved story is a no-op. Use to clear the review queue from list_pending_review_stories. |
-| `reply_to_reporter` | Reply to a reporter | Send a visible message to the end-user who filed a bug report. The reply appears in the in-app Mushi Mushi widget as an admin comment and creates an unread notification badge so the reporter sees it immediately. Use this to answer questions, request reproduction steps, or confirm a fix — without leaving the Cursor IDE. |
+| `reply_to_reporter` | Reply to a reporter | Send a visible message to the end-user who filed a bug report. The reply appears in the in-app Mushi widget as an admin comment and creates an unread notification badge so the reporter sees it immediately. Use this to answer questions, request reproduction steps, or confirm a fix — without leaving the Cursor IDE. |
 | `request_reporter_info` | Ask the reporter a question | Ask the end-user who filed a report a question: it appears in their in-app "Your reports" thread, marks the report "Waiting on you", and the waiting state clears when they answer (their reply reaches Slack and the console). Returns \{ comment_id, awaiting_reporter }. Write; messages a real end user and is NOT idempotent — each call posts another question, so confirm the wording with the user first. Fails with NO_REPORTER for reports that came from an integration. Use when you need reproduction details; use reply_to_reporter for a plain reply. |
 | `release_reporter_update` | Release or discard a held reporter update | Send (action=release, the default) or drop (action=discard) one held reporter message from list_reporter_outbox; bodyOverride replaces its text before sending. Returns \{ delivered, skipped, failed }. Write; messages a real end user — confirm with the user first. Idempotent in effect: a message that is no longer held returns CONFLICT instead of sending twice. |
 | `test_notification_channel` | Send a test notification | Send a test notification to a configured notification channel for the project. Supported channel kinds: "slack" (posts a test Block Kit message to the configured channel), "discord" (posts to the project discord_webhook_url). Returns ok=true if the message was accepted. Use this to verify the integration is working after setup or after changing credentials. |
 | `start_skill_pipeline` | Start a skill pipeline | Start a new skill pipeline run for a report. Pass rootSkillSlug and optionally reportId. Returns run_id, context_packet (full instructions + report context), and step list. Read the context_packet — it contains skill instructions plus full report context (repro steps, root cause, RAG files). After executing each step, call checkin_pipeline_step. The PM watching the console sees progress live. |
-| `checkin_pipeline_step` | Check in a pipeline step | Report the completion status of a pipeline step (passed, failed, running, or skipped). Optionally include notes, a PR URL, or the Cursor agentId. Updates the live React Flow canvas in the Mushi Mushi console so PMs see real-time progress. |
+| `checkin_pipeline_step` | Check in a pipeline step | Report the completion status of a pipeline step (passed, failed, running, or skipped). Optionally include notes, a PR URL, or the Cursor agentId. Updates the live React Flow canvas in the Mushi console so PMs see real-time progress. |
 | `run_fullstack_audit` | Run a full-stack health audit | Fan out a full-stack health audit for the current project: DB schema + advisors, API contract gate results (Gates 3–8), recent backend error logs, and RLS gap detection. Returns a PM-readable scorecard with severity-ranked findings and fix hints. Backend analysis needs supabase_project_ref set (Settings → General) and a scoped, read-only Supabase access token added (Settings → AI keys, slug: supabase). The audit completes synchronously in ~10 s. Triggers a background gate run for orphan_endpoint and unknown_call gates if they have not run today. |
 | `ask_codebase` | Ask about the indexed codebase | Answer a plain-English question about the connected repo, grounded on pgvector retrieval over project_codebase_files. Returns \{ answer, citations: [\{ path, line }] }. Set include_wiki=true to merge docs/wiki knowledge. Requires codebase indexing + your Anthropic or OpenAI key; consumes LLM budget (write scope). Use for "how does X work?"; use search_codebase for raw file matches without synthesis, or get_file_summary for one file. |
 
@@ -10843,7 +10893,7 @@ description: Every tool, resource and prompt the Mushi Mushi MCP server exposes 
 
 | Prompt | Description |
 |--------|-------------|
-| `summarize_report_for_fix` | Turn a Mushi Mushi report into a one-line root cause, smallest file set, repro steps, and blast-radius warnings. |
+| `summarize_report_for_fix` | Turn a Mushi report into a one-line root cause, smallest file set, repro steps, and blast-radius warnings. |
 | `explain_judge_result` | Turn raw Sonnet-as-Judge scores into ship / iterate / dismiss guidance. |
 | `triage_next_steps` | Five-item priority list drawn from the dashboard + recent classified queue. |
 | `mushi_setup` | Walk through activation status, integration health, and the single next command to unblock setup. |
@@ -12126,6 +12176,225 @@ await mushi.captureEvent({
   category: 'bug',
 })
 ```
+
+---
+
+## Theming the bug widget
+
+Source: https://kensaur.us/mushi-mushi/docs/sdks/theming
+
+---
+title: Theming the bug widget
+description: "Match the Mushi Mushi bug widget to your app: accent, theme, corner, language and hidden pages from a script tag, code or the console, plus 13 CSS tokens."
+---
+
+# Theming the bug widget
+
+The widget already uses your page's font and follows light or dark mode, so
+most apps need nothing here. When you want it to look like yours, start with
+the easiest way that fits how you built the app.
+
+## Three easy ways
+
+### 1. Script tag (Lovable, Bolt, plain HTML)
+
+Add attributes to the tag you pasted:
+
+```html filename="index.html"
+<script async
+  src="https://cdn.jsdelivr.net/npm/@mushi-mushi/web@1/dist/mushi.loader.global.js"
+  data-project="YOUR_PROJECT_ID"
+  data-key="YOUR_API_KEY"
+  data-accent="#7c3aed"
+  data-theme="auto"
+  data-position="bottom-left"
+  data-locale="ja"
+  data-hide-on-routes="/admin/*, /checkout"
+></script>
+```
+
+| Attribute | What it does | Accepted values |
+| --- | --- | --- |
+| `data-accent` | Colour of the Send button and the launcher's underline | `#rgb`, `#rrggbb`, `rgb()`, `hsl()`, `oklch()` |
+| `data-accent-text` | Text colour on the accent (picked for you when left out) | the same, plus `black` or `white` |
+| `data-theme` | Light or dark widget. `auto` follows the visitor's OS setting, so an app that is light only should set `light` (or `inherit`) | `auto` (default), `light`, `dark`, `inherit` (read your page's class or `data-theme`) |
+| `data-position` | Corner for the launcher | `bottom-right` (default), `bottom-left`, `top-right`, `top-left` |
+| `data-locale` | Widget language | `auto` (browser language, default), `en`, `ja`, `th`, `es`, `zh`; region tags such as `ja-JP` work |
+| `data-hide-on-routes` | Pages where the launcher stays hidden | comma-separated [route rules](#route-rules) |
+| `data-trigger` | Launcher style | `auto`, `banner`, `edge-tab`, `attach`, `manual`, `hidden` |
+| `data-trigger-text` | Launcher label | any text |
+| `data-banner-variant` | Banner look, with `data-trigger="banner"` | `subtle`, `brand`, `neon` |
+| `data-banner-position` | Banner edge | `top`, `bottom` |
+
+A value the widget does not accept is skipped, and the browser console shows
+one warning naming the attribute and the values it takes, for example
+`[mushi] Ignored data-theme="purple". Use one of: auto, light, dark, inherit.`
+A typo never breaks your page or stops the widget.
+
+### 2. In code
+
+```ts
+import { Mushi } from 'mushi-mushi'
+
+Mushi.init({
+  projectId: 'YOUR_PROJECT_ID',
+  apiKey: 'YOUR_API_KEY',
+  widget: {
+    accent: '#7c3aed',
+    theme: 'auto',
+    position: 'bottom-left',
+    locale: 'ja',
+    hideOnRoutes: ['/admin/*', '/checkout'],
+  },
+})
+```
+
+React, Vue, Svelte and Angular take the same `widget` object through their
+provider or plugin.
+
+### 3. In the console
+
+Open your app in the console, then **Connect → Report button → Customize the report button**. Accent
+colour, position, theme, launcher style, launcher label and the banner look
+can change there without a redeploy ([runtime config](/concepts/runtime-config)).
+For a colour, Mushi picks black or white text with at least 3:1 contrast. The
+same settings are in your editor: the MCP tool `set_widget_settings`, or
+`mushi widget set --accent '#3b5bdb'`. Language and hidden pages are set in
+the tag or in code.
+
+If your app's code (or a `data-*` attribute) sets one of these, your code's
+value wins and the console fills only what the code left out
+([ADR 0068](https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0068-host-code-wins-over-console-widget-settings.md)).
+The console's install snippets leave them out unless you tick **Lock these
+settings in my code**.
+
+## What can be set where
+
+| Setting | Script tag | Code (`widget.*`) | Console | CSS token |
+| --- | --- | --- | --- | --- |
+| Accent colour | `data-accent` | `accent` | yes | `--mushi-accent` |
+| Text on the accent | `data-accent-text` | `accentText` | picked with the colour | `--mushi-accent-fg` |
+| Light / dark | `data-theme` | `theme` | yes | |
+| Corner | `data-position` | `position` | yes | |
+| Language | `data-locale` | `locale` | | |
+| Hidden pages | `data-hide-on-routes` | `hideOnRoutes` | | |
+| Launcher style and label | `data-trigger`, `data-trigger-text` | `trigger`, `triggerText` | yes | |
+| Banner look | `data-banner-variant`, `data-banner-position` | `bannerConfig` | yes | |
+| Fonts, surfaces, corners, shadow | | | | the tokens below |
+
+## CSS tokens
+
+For finer control, set any of these 13 tokens in your own CSS, on `:root`
+or on `#mushi-mushi-widget`. CSS always wins over `widget.accent` and the
+other options. Values left unset follow your page: `Canvas` and `CanvasText`
+are the browser's own page colours, so they flip with light and dark mode.
+
+```css
+#mushi-mushi-widget {
+  --mushi-accent: #7c3aed;
+  --mushi-font: 'Inter', sans-serif;
+  --mushi-radius: 8px;
+}
+```
+
+| Token | Controls | Light default | Dark default |
+| --- | --- | --- | --- |
+| `--mushi-font` | Font family | your page's font | your page's font |
+| `--mushi-font-size` | Base text size | `14px` | `14px` |
+| `--mushi-bg` | Panel and launcher background | `Canvas` (white) | `Canvas` (near black) |
+| `--mushi-fg` | Main text | `CanvasText` (black) | `CanvasText` (white) |
+| `--mushi-muted` | Hints and secondary text | text at 64% | text at 64% |
+| `--mushi-surface` | Inputs and cards inside the panel | background mixed with 6% text | background mixed with 6% text |
+| `--mushi-border` | Hairlines and outlines; the panel edge is darker by default (text at 38%) so it reads at 3:1 on a page of the same colour | text at 16% | text at 16% |
+| `--mushi-accent` | Send button, launcher underline, focus rings | `widget.accent`, else your page's `accent-color` or `theme-color` (when it reads at 3:1), else the text colour | same |
+| `--mushi-accent-fg` | Text on the accent | black or white, whichever reads better | same |
+| `--mushi-success` | "Sent" states | `#2D7A55` | `#3A9E6E` |
+| `--mushi-error` | Errors | `#B83232` | `#E05555` |
+| `--mushi-radius` | Panel corner radius | `12px` | `12px` |
+| `--mushi-shadow` | Panel shadow | `0 12px 40px rgb(0 0 0 / .18)` | same |
+
+These 13 names are a public contract: a test in the SDK fails if one is
+renamed or removed.
+
+## Report type colours
+
+The report panel opens on six tiles, one per kind of report, each with its own
+icon and colour: Bug (red), Slow (amber), Looks wrong (violet), Confusing
+(blue), Idea (green) and Other (grey). The picked type tints the panel header
+and the prompt in the text box changes to match it. These colours come from
+`MUSHI_REPORT_TYPE_COLORS` in `@mushi-mushi/core`, with a light and a dark set
+that each reach WCAG AA on the panel. They are not CSS tokens: your accent
+still colours the Send button and focus rings, and the type colours never
+replace it ([ADR 0070](https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0070-report-screen-leads-with-colour-coded-type-tiles.md)).
+
+Your own `widget.categories` stay behind **More…**. A category whose `id` is
+`bug`, `slow`, `visual` or `confusing` relabels that tile and keeps its colour.
+Set `featureRequestLabel` to rename the Idea tile and `featureRequestDescription`
+to change its prompt.
+
+## Contrast rule
+
+Text on the accent must reach at least 3:1 contrast, so the Send button
+stays readable. The widget never changes your accent colour itself. It only
+checks the text on top of it:
+
+- No `accentText`: the widget picks black or white, whichever reads better.
+- Your `accentText`, `data-accent-text` or `--mushi-accent-fg` reaches 3:1:
+  it is kept.
+- It falls under 3:1: the widget uses black or white instead and records a
+  warning. Read it with `Mushi.diagnose()`:
+
+```ts
+const report = await Mushi.diagnose()
+console.log(report.warnings)
+// ['Accent text #ffffff is 1.2:1 on #ffeb3b (under 3:1); using black.']
+```
+
+With `debug: true` (or `data-debug="true"`) the same warning is printed to
+the browser console.
+
+An accent taken from your page (`accent-color` or ``)
+is only used when it reaches 3:1 against the panel background; otherwise the
+widget keeps the text colour as its accent.
+
+## Route rules
+
+`hideOnRoutes` hides the launcher on matching pages. Each entry is checked
+against the page path (no domain, no query string):
+
+| Rule | Hides | Does not hide |
+| --- | --- | --- |
+| `/checkout` | `/checkout`, `/checkout/done`, `/shop/checkout` | `/cart` |
+| `/admin/*` | `/admin/users`, `/admin/users/` | `/admin`, `/admin/users/5` |
+| `/blog/**` | `/blog`, `/blog/2026/my-post` | `/blogroll` |
+| `/docs/*/edit` | `/docs/intro/edit` | `/docs/a/b/edit` |
+
+- An entry **without** `*` matches anywhere in the path, the way
+  `hideOnRoutes` always worked, so existing setups keep their behaviour.
+- `*` matches one path segment; `**` matches any number of them.
+- A trailing `/**` also matches the path itself.
+- A trailing `/` on the page path is ignored.
+
+## Your own button
+
+Hide the launcher and open the widget from a button in your app:
+
+```ts
+const mushi = Mushi.init({
+  projectId: 'YOUR_PROJECT_ID',
+  apiKey: 'YOUR_API_KEY',
+  widget: { trigger: 'manual' },
+})
+
+document.querySelector('#report-bug')?.addEventListener('click', () => mushi.open())
+```
+
+`Mushi.getInstance()?.open()` does the same from anywhere else in your app.
+To bind the widget to an existing element without writing a click handler,
+use `widget: { trigger: 'attach', attachToSelector: '#report-bug' }`. The
+script tag gives your page no JavaScript handle, so a button of your own
+needs one of these code installs. More launcher styles:
+[trigger modes](/concepts/trigger-modes).
 
 ---
 
@@ -17326,6 +17595,8 @@ A Supabase function secret: `supabase secrets set NAME=value` (or Project Settin
 | `DEFAULT_BASE_URL` | Optional | — | — |
 | `MCP_PUBLIC_BASE_URL` | Optional | — | — |
 | `TELEGRAM_WEBHOOK_BASE_URL` | Optional | — | — |
+| `MUSHI_PUBLIC_ORIGIN` | Optional | — | Origin (scheme + host, no path) of the public Mushi site: the MCP server's website and icon URLs, and the console sign-in page when no allowlist is set, live under /mushi-mushi/ on it. Not MUSHI_PUBLIC_URL (a self-host's own address). Unset or invalid: the hosted origin, https://kensaur.us |
+| `MUSHI_SDK_TEMPLATE_REPO` | Optional | — | Public repo (owner/name) that SDK health fix prompts point at as a working Mushi setup to copy (src/lib/mushi.ts, mushi-env.ts, mushi-launcher.ts). Unset or malformed: the hosted template repo, kensaurus/the-wanting-mind |
 
 ### Runtime name (optional; unset is treated as production)
 
@@ -17617,6 +17888,7 @@ Build-time values for the admin console. Vite bakes them into the bundle, so cha
 | `VITE_DOCS_ORIGIN_ALLOWLIST` | Optional | — | — |
 | `VITE_MCP_HTTP_URL` | Optional | — | — |
 | `VITE_LANGFUSE_HOST` | Optional | — | — |
+| `VITE_MUSHI_PUBLIC_ORIGIN` | Optional | — | Origin (scheme + host, no path) of the public Mushi site (MUSHI_PUBLIC_ORIGIN). The console tries app icons on its subdomains; they load only where the console's CSP img-src allows that host. A `publicOrigin` key in runtime-config.js overrides it. Unset or invalid: the hosted origin, https://kensaur.us |
 
 ### Feature flags (optional)
 
@@ -20442,8 +20714,9 @@ and hands your AI editor the fix. This page shows each step on real screens:
 what to press, and where the bug goes next.
 
 The console clips use Mushi Mushi's own app, so every bug and pull request in
-them is real and public. The first clip uses a made-up shop, because it shows
-what *your* users see.
+them is real and public. The free check runs on glot.it, one of my own live
+apps. The report-button clip uses a made-up shop, because it shows what *your*
+users see.
 
 ## The four steps
 
@@ -20458,6 +20731,12 @@ what *your* users see.
 
 **You don't need other tools.** If you already use an error tracker such as
 Sentry, you can connect it, but you don't have to.
+
+## Before you install: check your live app free
+
+[Check your own app](/check). There is no sign-up and nothing to add to your
+app. An address is checked at most once every 24 hours; checking it again
+sooner shows that report, as in the clip.
 
 ## 1. Your user reports a bug
 
@@ -20926,8 +21205,8 @@ description: The User activity view on Home in the Mushi Mushi console shows an 
 
 # User activity
 
-**Route:** `/dashboard?view=users` (**Home → User activity**). The old `/activity` link
-redirects there.
+**Route:** `/portfolio?view=users` (**Apps → User activity**). The old `/activity` and
+`/dashboard?view=users` links redirect there.
 
 > **Scenario:** You want to know whether end users are actually opening sessions
 > in this project, which routes they hit, and how many of them are identified
@@ -21469,7 +21748,7 @@ description: The Checks page in the Mushi Mushi console shows every automatic ch
 
 # Checks
 
-**Route:** `/checks` (sidebar: Checks)
+**Route:** `/checks` (sidebar: More pages → Verify → Checks. It is a Lab: switch it on under **Settings → Display & sidebar → Labs** to keep it in the sidebar)
 
 Is my app OK, and which check is red? Every automatic check Mushi Mushi runs on this app, in one grid, failing checks first. A sentence at the top names the checks that need you, with one button to open the first.
 
@@ -21482,7 +21761,7 @@ Each card has a dot and a state:
 | Green | Pass | A finished run was read and found nothing. Shown with when it last ran. |
 | Grey | Not run yet, Not set up, Status unavailable | Never a pass. Not set up comes with a Set up link. |
 
-An Upgrade pill means the check needs a higher plan. AI prompts and CI runners are Labs: their cards appear once you switch them on under Settings → Display & sidebar → Labs. While you are on Checks or one of its pages, the sidebar lists every check under Checks.
+An Upgrade pill means the check needs a higher plan. AI prompts and CI runners are Labs: their cards appear once you switch them on under Settings → Display & sidebar → Labs. When Checks is in the sidebar, it lists every check under Checks while you are on one of them.
 
 ## The checks
 
@@ -22031,36 +22310,32 @@ description: The Connect page wires GitHub, the SDK, MCP, the CLI and your edito
 > the Mushi Mushi SDK. This page wires GitHub, the SDK, MCP, the CLI and upgrade PRs
 > in one place.
 
-A row of status pills at the top (**App checked in**, **SDK version**, **Editor**)
-says what is already connected. Below them, the page opens with a client picker:
-pick your AI client, then a lane (MCP / CLI / Skills). Connecting GitHub enables the
-**Create Upgrade PR** flow; the SDK and MCP sections work without it.
+## Steps
 
----
+The page is three steps, in the order a new app needs them, and only the step
+to do now is open ([ADR 0069](https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0069-builder-console-is-the-fix-loop.md)).
+A done step is one line with a ✓ and **Change**; a later step is one line you
+can still open. Links into the page open their step: `#connect-sdk`,
+`#connect-studio` and `#connect-github`.
 
-## Client picker (3 lanes)
+| # | Step | What it does |
+|---|------|--------------|
+| 1 | **Report button** | The install snippet: the **Script tag** leads, the framework the app's repo uses sits beside it, and every other framework is in **Other frameworks**. **Make a key and fill it in** fills in the key; **Where does your app run?** says where it goes on Lovable, Bolt, Vercel, Netlify or EAS. **Customize the report button** opens the widget settings. Done once the app checks in. |
+| 2 | **Editor** | Cursor, Claude Code and VS Code lead; **Other editors** lists the rest. The MCP one-click comes first, **Use the CLI or skills instead** opens the other two ways, and **Set it up by hand** shows the MCP endpoint. Done once your editor calls Mushi Mushi. |
+| 3 | **GitHub** | Link the repo so upgrade PRs, autofix and CI secret sync can use its token. |
 
-| Lane | What it does |
-|------|--------------|
-| **MCP** | One-click install for Cursor, VS Code, Claude Code, Windsurf and other clients (`ClientConnectButton` mints a scoped key, then opens a deeplink or gives you config JSON) |
-| **CLI** | Three commands to copy: `npm install -g @mushi-mushi/cli@latest`, `mushi login`, then `mushi setup --ide ` |
-| **Skills** | Copy skill setup for the selected client |
+If your only key is an SDK key, a note under the editor step offers **Add an MCP
+key** (`mcp:read`), which your editor needs to read this app's reports.
 
-If your only key is an SDK key, a note under the picker offers **Add an MCP key**
-(`mcp:read`), which your editor needs to read this app's reports.
+### Once the app checks in
 
----
+The **Update center** (per-package freshness and **Create Upgrade PR**) and
+**SDK health** (problems that stop bug reports from arriving, each with a fix;
+see [SDK health](/admin/sdk-health)) show below the steps. While the SDK is
+current and nothing is wrong they are one line, with **Details** for the rest.
+Until the app checks in, links to `#connect-sdk-health` open the report button step.
 
-## Sections
-
-| # | Section | What it does |
-|---|---------|--------------|
-| 1 | Client picker | MCP / CLI / Skills lanes (above) |
-| 2 | **GitHub** | Link the repo so upgrade PRs, autofix and CI secret sync can use its token. **Manage** opens Integrations. |
-| 3 | **SDK health** | Problems that stop bug reports from arriving, each with a fix (see [SDK health](/admin/sdk-health)) |
-| 4 | **Bug capture SDK** | Framework tabs and a copy-ready install snippet; **Make a key and fill it in** fills in the key |
-| 5 | **Native app CI secrets** | Diagnose, and one-click sync of `NEXT_PUBLIC_MUSHI_*` into GitHub Actions |
-| 6 | **Update center** | Per-package freshness and **Create Upgrade PR** |
+Native apps (Capacitor, Expo, React Native) also get **Native app CI secrets**.
 
 ---
 
@@ -22097,7 +22372,7 @@ See also: [Self-hosting](/self-hosting) · [`AGENTS.md` native CI section](https
 
 When a package is outdated or deprecated:
 
-1. Click **Create Upgrade PR** on the Update center row.
+1. Click **Create Upgrade PR** in the Update center (shown once the app checks in).
 2. Backend enqueues `sdk_upgrade_jobs` → `sdk-upgrade-worker` bumps
    `@mushi-mushi/*` in `package.json` files only (never `workspace:` / `file:`).
 3. Draft PR opens on GitHub, auto-readied, status streams via SSE.
@@ -22113,18 +22388,18 @@ CLI equivalent: see [SDK reference → CLI](/sdks/cli) (`mushi upgrade` for loca
 
 ## Quick path (5 minutes)
 
+### Add the report button
+Copy the snippet → paste into your app → deploy or run locally.
+
+### Wire MCP
+In the editor step, click **Add to Cursor** (or your editor's button), restart
+the IDE, then run `mushi doctor`.
+
 ### Connect GitHub
 Press **Connect GitHub**, sign in to GitHub and pick your repository. The list
 shows only repositories you can open, with the one named like your app first.
 If the Mushi Mushi GitHub App is not on your account yet, GitHub asks you to install
 it first.
-
-### Install SDK
-Copy the framework snippet → paste into your app → deploy or run locally.
-
-### Wire MCP
-In the client picker's **MCP** lane, click **Add to Cursor** (or your client's
-button), restart the IDE, then run `mushi doctor`.
 
 ### Wire CLI (SDK + env + MCP)
 `mushi connect` saves credentials, writes the SDK env vars to `.env.local` and wires
@@ -22344,7 +22619,7 @@ description: "Home in the Mushi Mushi console shows how one app is doing: is it 
 
 # Home
 
-**Route:** `/dashboard` (sidebar: **Home**, first tab **Today**)
+**Route:** `/dashboard` (sidebar: **Home**)
 
 > **Scenario:** You open Mushi Mushi in the morning and want to know in 30 seconds whether
 > your app is up, whether anything broke overnight, and what needs you today.
@@ -22357,12 +22632,17 @@ is grey and its button says how to connect it; a part whose read failed says
 
 All of it comes from one call, `GET /v1/admin/projects/:id/home`.
 
-Home has more tabs beside **Today**: **Overview** ([all apps](/admin/overview),
-`?view=apps`), **User activity** ([sessions](/admin/activity), `?view=users`),
-**Users & funnels** (`?view=funnels`) and **Weekly insights**
-([intelligence reports](/admin/intelligence), `?view=insights`). The old paths
-`/overview`, `/activity`, `/analytics` and `/intelligence` open these tabs. This page
-describes **Today**.
+Home has no tabs. **Needs you** comes first, one button per item; when nothing
+needs you it is one line, and the health lights below it are the app's live status.
+A card with nothing to show yet (no release, no page visits, a quiet week) stays
+hidden until it has something.
+
+The views Home used to carry are tabs of [Apps](/admin/portfolio) now:
+**Overview** ([all apps](/admin/overview), `/portfolio?view=apps`), **User activity**
+([sessions](/admin/activity), `?view=users`), **Users & funnels** (`?view=funnels`)
+and **Weekly insights** ([intelligence reports](/admin/intelligence), `?view=insights`).
+Old links (`/dashboard?view=users`, `/overview`, `/activity`, `/analytics`,
+`/intelligence`) open those tabs.
 
 ---
 
@@ -22391,8 +22671,11 @@ Four lights, each with a word beside its colour:
 | **SDK sending** | Your app checked in today | Quiet for 1–7 days | Silent for over a week | Create a key and add the SDK |
 | **CI on main** | The latest run on your default branch passed | The test machine stopped (not a code failure) | A check failed | Connect your repo |
 
-Click a light to open where its number came from (broken pages, the report list,
-[SDK health](/admin/sdk-health), [CI](/admin/ci)).
+Click a light's value to open where its number came from (broken pages, the report list,
+[SDK health](/admin/sdk-health), [CI](/admin/ci)). A connect button that Needs you
+already shows is not repeated on a light.
+
+The lights sit under Needs you: they are the app's live status.
 
 ## Needs you
 
@@ -22401,11 +22684,16 @@ live site, critical bugs waiting for a fix, fixes Opus put on hold, CI failing o
 an app that stopped sending, stuck fixes in the [pipeline](/admin/pipeline) (agent
 failed, approved but not queued, red release train), and an SDK update. Pipeline
 items use the same groups and counts the Pipeline page shows, so the click lands on
-the same number. When nothing needs you, it says so.
+the same number. Needs you is the first thing on Home. When nothing needs you, it is
+one line, "Nothing needs you right now", above the health lights.
 
-While a setup step is still open, the setup card above Home names the step and its fix.
+While a setup step is still open, the setup card at the top of Home names the step and
+its fix, and Needs you shows only what else waits.
 
 ## Release
+
+Shown once something is on its way to a release, a deploy was seen, or bugs wait for
+a fix. Before that it is hidden; the CI light carries **Connect GitHub**.
 
 - **Stations:** fix ready → CI → in train → merged → deployed, with the number of
   fixes at each and how many are stuck. Same stages as [Pipeline](/admin/pipeline).
@@ -22418,8 +22706,8 @@ While a setup step is still open, the setup card above Home names the step and i
 
 A small map of your busiest pages: visits in the last 7 days (from the SDK's session
 tracker), bug reports in the last 14 days, and pages the live-site watch found broken.
-Page ids (`/lessons/42`) are grouped as `/lessons/:id`. With no visits, reports or
-site checks yet, it says what fills it.
+Page ids (`/lessons/42`) are grouped as `/lessons/:id`. It is hidden until a page has
+a visit, a bug report or a broken check.
 
 ## Access and details
 
@@ -22431,12 +22719,12 @@ to Fix history, User activity and, on plans that include it, the [Audit log](/ad
 
 Bug reports, critical bugs, fixes merged and (with session tracking) user visits, this
 week against last week. The change is green when it moved the right way for that row
-(fewer bugs, more fixes).
+(fewer bugs, more fixes). Hidden while every row is 0 both weeks.
 
 ## Recent activity
 
 What happened, grouped into plain sentences: "3 fixes merged today", "12 bug reports
-came in this week", "2 deploys seen this week, latest v1.4.0".
+came in this week", "2 deploys seen this week, latest v1.4.0". Hidden in a quiet week.
 
 ## How this works
 
@@ -24005,7 +24293,7 @@ description: The To-do page gathers everything in Mushi Mushi that needs a human
 
 # To-do
 
-**Route:** `/inbox` (sidebar: **More pages › Bugs › To-do**, or keep it in the sidebar as a Lab from Settings → Display & sidebar)
+**Route:** `/inbox` (sidebar: **More pages › Find & sort bugs › To-do**, or keep it in the sidebar as a Lab from Settings → Display & sidebar)
 
 > **Scenario:** It's Monday morning. You open Mushi Mushi and want to know in one
 > glance what actually needs a human decision right now, without clicking through
@@ -24115,7 +24403,7 @@ description: Set up Mushi Mushi integrations on one page. Open fix pull requests
 
 # Integrations
 
-**Route:** `/integrations/config` (sidebar: **Integrations**, under Connect)
+**Route:** `/integrations/config` (sidebar: More pages → Connect → **Integrations**. It is a Lab: switch it on under **Settings → Display & sidebar → Labs** to keep it in the sidebar)
 
 > **Scenario:** You just set up Mushi Mushi and want fix PRs to open on your GitHub repo,
 > new bugs to land in Linear, and Sentry errors to flow in, all from one page.
@@ -24301,8 +24589,8 @@ description: Weekly insights is the Mushi Mushi plain-English bug digest per app
 
 # Weekly insights
 
-**Route:** `/dashboard?view=insights` (**Home → Weekly insights**). The old `/intelligence`
-link redirects there. It was called Intelligence reports before October 2026.
+**Route:** `/portfolio?view=insights` (**Apps → Weekly insights**). The old `/intelligence`
+and `/dashboard?view=insights` links redirect there. It was called Intelligence reports before October 2026.
 
 Mushi Mushi writes a **weekly bug digest** for each app: an AI-written summary of the
 week's bug trends, fix velocity and areas of concern, with two or three recommendations.
@@ -24718,7 +25006,7 @@ description: Map how people move through your app, then fix dead ends, pages peo
 
 # Journey optimizer
 
-**Route:** `/journeys` (sidebar: Journeys)
+**Route:** `/journeys` (sidebar: More pages → Bugs → Journey optimizer; also the **Pages** card on Home. It is a Lab: switch it on under **Settings → Display & sidebar → Labs** to keep it in the sidebar. The site scan needs your own Firecrawl key)
 
 > **Scenario:** Your AI built the app fast. Now you want to know where people get
 > lost: which page they leave from, which two pages say the same thing, and which
@@ -25238,7 +25526,7 @@ your agent can read reports, pull fix context, and optionally dispatch fixes —
 without leaving the editor.
 
 The page has four tabs: **Summary**, **Setup**, **Catalog** and **Examples**. The
-**Catalog** tab mirrors the server registry (**133 tools**, 8 resources, 4 prompts).
+**Catalog** tab mirrors the server registry (**145 tools**, 8 resources, 4 prompts).
 
 ---
 
@@ -25267,7 +25555,7 @@ Restart your IDE, then ask: *"list mushi tools"* or *"call diagnose_setup"*. See
   "mcpServers": {
     "mushi-myproject": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.31.8"],
+      "args": ["-y", "@mushi-mushi/mcp@0.33.1"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "<your-project-id>",
@@ -25515,7 +25803,7 @@ description: Get your first bug report into Mushi Mushi with the console's Set u
 
 # Onboarding
 
-**Route:** `/onboarding` (sidebar: **More pages › Connect › Set up**)
+**Route:** `/onboarding` (sidebar: **More pages › Set up & connect › Set up**)
 
 > **Scenario:** You signed up 5 minutes ago. Your goal: get a real bug report from your
 > app into Mushi Mushi before your afternoon standup. The page's own target is a first
@@ -25531,13 +25819,14 @@ While your project has no report yet, the page shows two screens instead of the 
 checklist:
 
 ### Name your project
-**Step 1 of 2.** Enter a project name and create it. That is the only input: the
-create call also makes your report key (`report:write`), so there is no separate key step.
+Enter a project name and create it. That is the only input: the create call also
+makes your report key (`report:write`), so there is no separate key step. The
+screen shows **Set up · 2 of 4 done**, the same count as the sidebar and Home.
 
 ### See your first diagnosis
-**Step 2 of 2.** Click **Send test report**. The report goes through the real ingest
-path and the diagnosis appears on the same screen. From there, **Install the SDK** to
-get the same for real bugs.
+Click **Send test report**. The report goes through the real ingest path and the
+diagnosis appears on the same screen (**3 of 4 done**). The last step is to
+**Install the SDK** so real bugs arrive the same way.
 
 Add `?view=all` to the URL, or click **Show all steps**, to see the full checklist
 instead.
@@ -25752,19 +26041,19 @@ Setup (the team's Slack bot, the per-app ops key, the event format) is in
 
 ---
 
-## Overview (Home view)
+## Overview (Apps view)
 
 Source: https://kensaur.us/mushi-mushi/docs/admin/overview
 
 ---
-title: Overview (Home view)
-description: The Overview view on Home in the Mushi Mushi console shows seven-day activity and open bugs for every connected app in a team at a glance.
+title: Overview (Apps view)
+description: The Overview view on Apps in the Mushi Mushi console shows seven-day activity and open bugs for every connected app in a team at a glance.
 ---
 
 # Overview
 
-**Route:** `/dashboard?view=apps` (**Home → Overview**). The old `/overview` link redirects
-there. For setup state, hole checks and spend across apps, see [Apps](/admin/portfolio).
+**Route:** `/portfolio?view=apps` (**Apps → Overview**). The old `/overview` and
+`/dashboard?view=apps` links redirect there. For setup state, hole checks and spend across apps, see [Apps](/admin/portfolio).
 
 > **Scenario:** You manage several connected projects and want a single org-scoped
 > glance at 7-day activity and open tickets before diving into any one app.
@@ -25828,7 +26117,7 @@ description: The Pipeline page in the Mushi Mushi console shows every bug from r
 
 # Pipeline
 
-**Route:** `/pipeline` (sidebar: Pipeline)
+**Route:** `/pipeline` (sidebar: More pages → Fix → Pipeline. It is a Lab: switch it on under **Settings → Display & sidebar → Labs** to keep it in the sidebar)
 
 In Mushi Mushi, every bug moves from a report to a fix PR, an Opus review, CI, a release train, a merge and a deploy. This page shows how many items are in each step now, which are stuck, and why. **This app** follows the app you have open. **All apps** reads every project you can see.
 
@@ -25929,7 +26218,7 @@ Anything that stops a worker from fixing bugs is listed at the top of the tab, w
 | Run outside the worker | A `mushi work` run that no worker claims has run for over 45 minutes: a script started it, so its stage cannot be seen or stopped here | Move that machine to `mushi worker install` |
 | Credits idle | No agent has worked for 2 hours while Cursor credits expire within 7 days, with what blocks the work | Open Workers, or Spend credits |
 
-The same problems show above the Pipeline tabs, as a count on the **Pipeline** item in the sidebar, in **Needs you** on Home (for that app), as "credits idle" on [Spend credits](/admin/credits), in `mushi worker status` and in the MCP tool `get_worker_status`.
+The same problems show above the Pipeline tabs, as a count on the **Pipeline** item in the sidebar when you keep it there, in **Needs you** on Home (for that app), as "credits idle" on [Spend credits](/admin/credits), in `mushi worker status` and in the MCP tool `get_worker_status`.
 
 **Stop this run** (the app's owner or an admin, or the machine's owner; asks first, and is recorded in the audit log) ends the run's claim at once, so the report is free again: the next lane or a cloud agent can take it (it is not put back in a queue). The machine stops the agent at its next heartbeat, within a minute, and commits or pushes nothing more. A git hook that is already running keeps its agent space until git's own time limit (25 minutes); the flag stays up as "a run that was stopped still holds an agent space" until it ends, with the command to end it on the machine. A review follow-up is not a claim: pause its lane and end it on the machine.
 
@@ -25956,7 +26245,12 @@ description: The Apps page in Mushi Mushi shows every app in a team, with each a
 
 # Apps (all apps)
 
-**Route:** `/portfolio` (sidebar: **Apps**; formerly Portfolio. Also from the team switcher: **All this team's apps**)
+**Route:** `/portfolio` (sidebar: More pages → Ship & watch → **Apps**, or switch the Apps Lab on under **Settings → Display & sidebar → Labs** to keep it in the sidebar; formerly Portfolio. Also from the team switcher: **All this team's apps**)
+
+Apps has view tabs under its title: **Apps** (this page), [Overview](/admin/overview)
+(`?view=apps`), [User activity](/admin/activity) (`?view=users`), **Users & funnels**
+(`?view=funnels`) and [Weekly insights](/admin/intelligence) (`?view=insights`). They
+were Home's tabs until November 2026; old `/dashboard?view=…` links open them here.
 
 > **Scenario:** You run five apps. One has an old Mushi Mushi SDK, two have the same
 > oversized-file finding, and one never got Sentry set up. You want to see all
@@ -27101,6 +27395,82 @@ Checks that never ran are under **not checked yet (not a pass)**. Passing checks
 
 ---
 
+## Release kits
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/release-kits
+
+---
+title: Release kits
+description: "A release kit gathers a release's screenshots, flow clips, changelog and brand colours for a product video, and store media you approve."
+---
+
+# Release kits
+
+**Where:** Releases → open a release → **Ship it** → Release kit
+
+A release kit holds what a product video and fresh store media need for one release:
+
+- **Before and after screenshots** of the screens that changed, copied from your UX runs
+  so they are kept with the release.
+- **Clips** of your top flows (web apps, recorded with `mushi-ux clips`), or **device
+  recordings** you upload (native apps).
+- **Changelog lines** from the release notes, and your **brand** (name, accent colour,
+  theme) from the widget settings. Both are editable.
+- A **preset**: App Store preview, Google Play promo, Social 9:16 or Social 1:1. Each
+  asset shows inline whether it fits the preset's spec. Image sizes are read from the
+  file; a video's length, frame rate and codec are shown as declared.
+
+Mushi Mushi never renders video.
+
+---
+
+## Record clips (opt-in)
+
+Turn on **Record clips for release kits** in the kit, then:
+
+```bash
+mushi-ux clips --url https://staging.example.com --release <release id> \
+  --flow "signup:/,/signup" --flow "pricing:/pricing"
+```
+
+Clips are capped per app (30 seconds and 25 MB by default). A clip is WebM source footage
+for the video tool, not something a store accepts as is.
+
+## Make the product video
+
+**Export for a product video** (or the MCP tool `export_release_kit`) returns a `kitUrl`
+valid for 24 hours, in lazycow's release-kit format (every file with its own signed link),
+and the lazycow preset to use (`appstore-iphone`, `play-promo`, `social-9x16` or
+`social-1x1`). App Store previews show only full-screen captures of the app, so the
+"after" screens and recordings matter there; "before" screens feed the social and Play
+cuts. Hand both to lazycow:
+
+```text
+make_product_video({ kitUrl, preset })
+```
+
+lazycow renders on your machine and sends the file back to the kit. The contract is in
+[`docs/integrations/lazycow-release-kit.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/integrations/lazycow-release-kit.md).
+
+---
+
+## Put media on the stores (approval first)
+
+With App Store Connect or Google Play connected and **Act** turned on for it (with a
+separate write key), the kit's **Store uploads** card asks for:
+
+- App Store: screenshots for one device size, or app previews (15–30 s, H.264 or ProRes
+  422 HQ, at most 30 fps).
+- Google Play: listing images (phone screenshots, feature graphic, icon), or the promo
+  video as a YouTube link.
+
+Asking does not upload anything. An owner or admin approves the exact request (every file
+is pinned by its hash), then runs it once within the hour. Agents can ask with
+`request_store_media_upload`; only a person in the console can approve. Listing text
+still goes through your repo and your CI.
+
+---
+
 ## Releases
 
 Source: https://kensaur.us/mushi-mushi/docs/admin/releases
@@ -28132,6 +28502,84 @@ SHA from this repository; the action has no release tags of its own.
 
 ---
 
+## Security proof
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/security-proof
+
+---
+title: Security proof
+description: "Each release's Security proof: the scans your own CI ran for the commit it ships. Dependencies, secrets, an optional AI review, a live scan."
+---
+
+# Security proof
+
+**Where:** Releases → open a release → **Ship it** → Security proof
+
+A release's Security proof answers one question: did the scans come back clean
+for the commit this release ships? Your own GitHub Actions run the scanners, with
+your minutes and your keys. Mushi Mushi only reads the results and files what they
+find as bugs.
+
+| Lane | Tool | When |
+|---|---|---|
+| Dependencies | OSV-Scanner | every PR |
+| Secrets | Gitleaks (redacted, never stores the secret) | every PR |
+| AI review | `claude-code-security-review`, with your own Anthropic key | opt-in, trusted authors' PRs only |
+| Live site | ZAP baseline (passive) and Nuclei (non-intrusive templates) | weekly, against your staging URL |
+
+---
+
+## Add the workflow
+
+1. Open a release, then **Ship it**. With no scan yet the panel offers **Open a pull
+   request** (Mushi adds `.github/workflows/mushi-security.yml`) or **Copy the workflow**.
+2. Add the `MUSHI_API_KEY` secret: a key bound to this app with `mcp:write`
+   (**Projects → API keys**). Without it the scans still run on your PRs; nothing is sent.
+3. Optional repo variables:
+   - `MUSHI_SECURITY_AI_REVIEW` = `true`, and the `ANTHROPIC_API_KEY` secret, turns on the
+     AI review.
+   - `MUSHI_SECURITY_TRUSTED_AUTHORS`: comma-separated GitHub logins whose PRs the AI
+     review may read. The default is the repo owner, plus Mushi's own fix-agent bot when
+     your Mushi has a GitHub App.
+   - `MUSHI_STAGING_URL`: the site the weekly scan visits. Never your production URL.
+
+The template is in the repo at
+[`docs/templates/mushi-security.yml`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/templates/mushi-security.yml).
+
+---
+
+## How a release is proven
+
+- **Pin the commit.** Automatic releases take it from the deploy or release webhook.
+  Otherwise paste it in the panel, or run the workflow on it from the Actions tab with
+  `sha` set (the panel shows the `gh workflow run` command).
+- **Proven** means the dependency and secret scans passed for that commit, and no lane
+  you turned on has findings, errors or a stale run.
+- **Not proven yet** means a required scan has no result for that commit. A scan that
+  never ran is never shown as a pass.
+- The live-site scan runs weekly, so it counts when it ran within 8 days before the
+  release.
+
+---
+
+## What becomes a bug
+
+Findings of medium severity and above are filed as bugs with a plain fix, one bug per
+root cause, at most 10 a day (most severe first). A dependency hole that **Known holes**
+already tracks is linked to that bug, not filed twice. Low findings stay on the
+release's proof.
+
+Mushi never runs the scanners itself and never uses Semgrep registry or opengrep rules.
+The AI review is not hardened against prompt injection, so it never reads a fork or a
+stranger's PR.
+
+## From an agent
+
+`get_security_proof` (MCP) returns the same lanes for a release, a commit, or the newest
+commit the scans saw.
+
+---
+
 ## Settings
 
 Source: https://kensaur.us/mushi-mushi/docs/admin/settings
@@ -28161,11 +28609,13 @@ tools**, `?tab=health` and `?tab=dev` open **SDK & connection**, `?tab=keys` ope
 
 ### General
 
-Bug alerts (Slack channel), error tracking (Sentry), an optional read-only link to your
+Bug alerts (the Slack channel) come first. **Advanced → Show** holds the rest; it
+opens by itself when a link points into it or the saved fix branch pattern is refused:
+the older Slack webhook, error tracking (Sentry), an optional read-only link to your
 Supabase database, and **Bug sorting**: the AI models for triage, the quick check, the
 judge and fixes, the quick-check confidence, grouping of similar bugs and fix branch
-names. It also holds daily limits for Firecrawl and test writing, the feedback widget's
-"Bug reports by Mushi Mushi" line, and, behind **Fixes and CI → Show**, the pull request
+names. It also holds daily limits for Firecrawl and test writing, and the feedback widget's
+"Bug reports by Mushi Mushi" line. Behind **Fixes and CI → Show** are the pull request
 review, verified merge, CI cost and CI policy settings.
 
 **Spend limits** (project admins) cap what the project spends. Leave a field
@@ -28668,7 +29118,7 @@ description: The Team page in the Mushi Mushi console brings members, billing, A
 
 # Team
 
-**Route:** `/team` (sidebar: **Team**)
+**Route:** `/team` (sidebar: More pages → Account → **Team**. It is a Lab: switch it on under **Settings → Display & sidebar → Labs** to keep it in the sidebar)
 
 > **Scenario:** You want to invite someone, check the bill, see what AI calls cost,
 > or change how your team signs in, without hunting through the sidebar.
@@ -28742,6 +29192,70 @@ The product enforces this in three places:
 5. The `accept_invitation(token)` RPC verifies the email, locks the invite row, inserts the membership, and marks the invite accepted.
 
 The accept step is atomic so double-clicks, expired tokens, and email mismatches fail cleanly.
+
+---
+
+## Timeline
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/timeline
+
+---
+title: Timeline
+description: "The Timeline shows your app release by release: bugs fixed, screens improved, scores, AI cost and a before/after of every screen."
+robots:
+  index: false
+  follow: true
+---
+
+# Timeline
+
+**Route:** `/timeline` (sidebar: More pages → Fix → Timeline. It is a Lab: switch it on under **Settings → Display & sidebar → Labs** to keep it in the sidebar)
+
+> **Scenario:** You have shipped a few releases and want to see, and show, how the
+> app actually got better: what each release fixed, which screens changed, and what
+> the AI checks cost along the way.
+
+The rail across the top has one stop per release, oldest on the left. Work after
+your newest release sits on **Unreleased**. No releases yet? Then each UX run or
+scorecard run is a stop. Pick a stop by clicking it, dragging the slider under the
+rail, or the arrow keys. Each stop lists:
+
+- the bugs it fixed (the release's own list, else the bugs fixed since the release before);
+- the screens the UX loop improved;
+- the scorecard's average for its newest scorecard run;
+- what its runs spent on AI calls.
+
+## Pin each release's screens
+
+**Pin current screens** copies the newest screenshot of every screen from your last
+runs and keeps it for that release. A UX run's kept version counts only once its pull
+request merged, because until then your users still see the original. Pinning makes no
+AI call. Then pick a screen to see its filmstrip, one shot per release, and drag the
+handle on the comparison to see the before and the after.
+
+```bash
+mushi-ux scorecard --url https://your-app.example --profile-dir <signed-in profile> --sync
+# then press Pin current screens on the release, or let your agent call the API:
+curl -X POST "$MUSHI_API/v1/admin/projects/$PROJECT/timeline/baselines" \
+  -H "X-Mushi-Api-Key: $MUSHI_API_KEY" -d '{"version":"1.4.0"}'
+```
+
+Pinned shots of the last 24 releases of each screen are kept (change it next to
+**Screens**). Mark a shot **Keep forever** to keep it beyond that. Switch on
+**Pin on publish** to pin the screens automatically each time you publish a
+release (off by default). Viewers see these controls but cannot change them.
+
+  The scorecard scores a page with an AI call only when the page changed: the same
+  text and the same look as a run in the last 30 days reuses that score, with
+  today's speed and accessibility measurements applied. The cost card shows how much
+  was reused.
+
+## From your editor
+
+Your agent can read the same data through MCP: `get_timeline` (the rail, the screens
+and the last 30 days) and `get_surface_history` (one screen's shots, scores and kept
+changes). `get_ux_run` reads one run. `start_ux_run` gives the console link and the
+command to start a run; it never starts a cloud run by itself.
 
 ---
 

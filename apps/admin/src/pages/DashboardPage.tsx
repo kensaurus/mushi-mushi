@@ -1,8 +1,11 @@
 /**
  * FILE: apps/admin/src/pages/DashboardPage.tsx
- * PURPOSE: Home → Today: what the app's owner wants to know on opening it.
- *          Is the app up, erroring, slow? What needs me? What is shipping
- *          and what is waiting? Which pages hurt? Who can reach it?
+ * PURPOSE: Home: one list of next actions (ADR 0069). What needs me comes
+ *          first, one button each; then whether the app is up, erroring or
+ *          slow; then what is shipping, which pages hurt and who can reach
+ *          it, each card only once it has something to show. No view tabs:
+ *          the views Home used to carry live under Apps (/portfolio), and
+ *          `/dashboard?view=<id>` redirects there.
  *
  *          One call (GET /v1/admin/projects/:id/home) feeds every section;
  *          a section whose read failed says so on its own, and one that is
@@ -11,7 +14,7 @@
  */
 
 import { useCallback, useMemo } from 'react'
-import { Navigate, useNavigate } from 'react-router-dom'
+import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { usePageData } from '../lib/usePageData'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePublishPageContext } from '../lib/pageContext'
@@ -20,6 +23,8 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useToast } from '../lib/toast'
 import { useMilestoneCelebration } from '../lib/useMilestoneCelebration'
 import { useEntitlements } from '../lib/useEntitlements'
+import { useAuth } from '../lib/auth'
+import { firstMergedFixMilestone, firstMergedFixSignal } from '../components/dashboard/firstMergedFix'
 import { Confetti } from '../components/Confetti'
 import { EmptySectionMessage, FreshnessPill, RefreshIconButton } from '../components/ui'
 import { PageLoadError } from '../components/PageLoadError'
@@ -32,6 +37,7 @@ import { QuotaBanner } from '../components/dashboard/QuotaBanner'
 import { AppCard, AppCardSkeleton } from '../components/home/AppCard'
 import { HealthStrip, HealthStripSkeleton } from '../components/home/HealthStrip'
 import { NeedsYouCard, NeedsYouSkeleton } from '../components/home/NeedsYouCard'
+import { needsYouWithoutSetupStep } from '../lib/homeSetupFocus'
 import { ReleaseCard, ReleaseSkeleton } from '../components/home/ReleaseCard'
 import { SitemapCard, SitemapSkeleton } from '../components/home/SitemapCard'
 import { WeekCard, WeekSkeleton } from '../components/home/WeekCard'
@@ -39,11 +45,23 @@ import { ActivityCard, ActivitySkeleton } from '../components/home/ActivityCard'
 import { AccessCard, AccessSkeleton } from '../components/home/AccessCard'
 import { HowThisWorks } from '../components/home/HowThisWorks'
 import type { ProjectHome } from '../lib/projectHome'
-import { dedupeHomeSections } from '../lib/homeView'
+import { ctaTarget, dedupeHomeSections, healthWithoutRepeatedConnects, homeCardsWithContent } from '../lib/homeView'
+import { homeViewRedirect } from '../lib/pageHubs'
 import { usePageCopy } from '../lib/copy'
 import { IconDashboard } from '../components/icons'
+import type { PageFlowLink } from '../lib/pageLinks'
+
+/** No "Related:" row on a new app's Home: To-do, Bugs and Fixes are in the sidebar (ADR 0069). */
+const NO_RELATED_LINKS: PageFlowLink[] = []
 
 export function DashboardPage() {
+  const { search } = useLocation()
+  const moved = homeViewRedirect(search)
+  if (moved) return <Navigate to={moved} replace />
+  return <HomeToday />
+}
+
+function HomeToday() {
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   const { data, loading, error, isValidating, lastFetchedAt, reload } = usePageData<ProjectHome>(
@@ -53,6 +71,7 @@ export function DashboardPage() {
   const toast = useToast()
   const navigate = useNavigate()
   const copy = usePageCopy('/dashboard')
+  const { user } = useAuth()
 
   // A report or fix on this app changes Home. One /home read is several
   // seconds of queries, and a busy pipeline writes fix events every few
@@ -63,16 +82,21 @@ export function DashboardPage() {
     { debounceMs: 5000, maxWaitMs: 15_000, projectId: activeProjectId, enabled: !loading && !error && !!data },
   )
 
-  // The first merged fix is the proof the loop closed on this app.
+  // The first merged fix is the proof the loop closed. Only while the
+  // account's merges across its apps total exactly 1, once per account
+  // (components/dashboard/firstMergedFix.ts).
   const onFirstMergedFix = useCallback(() => {
     toast.success('Your first auto-fix was merged 🎉', 'Mushi Mushi fixed a bug end to end. Want to see the merged PR?', {
       label: 'View merged fixes',
       onClick: () => navigate('/fixes'),
     })
   }, [toast, navigate])
-  const { triggerKey: confettiKey } = useMilestoneCelebration('first-merged-fix', setup.activeProject?.merged_fix_count ?? null, {
-    onFire: onFirstMergedFix,
-  })
+  const firstFixMilestone = firstMergedFixMilestone(user?.id)
+  const { triggerKey: confettiKey } = useMilestoneCelebration(
+    firstFixMilestone ?? 'first-merged-fix',
+    firstFixMilestone ? firstMergedFixSignal(setup.data?.projects) : null,
+    { onFire: onFirstMergedFix },
+  )
 
   // One place per fact: a connect button or a count two sections both carried is kept once.
   const shown = useMemo(() => (data ? dedupeHomeSections(data) : null), [data])
@@ -112,22 +136,23 @@ export function DashboardPage() {
   // information), so the checklist is the one place.
   const openStep = setupIncomplete ? (project?.steps.find((s) => s.required && !s.complete) ?? null) : null
 
-  const needsRow =
-    data && activeProjectId ? (
-      // Needs you takes the full width; beside the taller Release card a
-      // one-line Needs you left ~100 px of empty card (round-3 sweep
-      // 2026-11-19). Release moved into the stacked columns below.
-      <div data-testid="home-needs-row">
-        <NeedsYouCard
-          section={data.needsYou}
-          fixFirst={data.fixFirst}
-          partial={data.partial}
-          hasReports={!!project && project.report_count > 0}
-          // One "do this next" on the page: the setup step wins while it is open.
-          primaryElsewhere={Boolean(openStep && project)}
-        />
-      </div>
-    ) : null
+  // The checklist owns the report-button step while it is open: Needs you and the health lights
+  // drop their copies of it, and the release / pages / week cards (all empty on a new app) wait
+  // until setup is done (fresh-account walk, 2026-11-24).
+  const sdkStepOpen = openStep?.id === 'sdk_installed'
+  const needsYou = data && sdkStepOpen ? needsYouWithoutSetupStep(data.needsYou) : data?.needsYou
+  const hasRootCauses = data?.fixFirst?.status === 'ok' && (data.fixFirst.data ?? []).length > 0
+  // While a setup step is open it is what needs you: an empty Needs you says nothing more.
+  const needsRowEmpty = !!openStep && !hasRootCauses && needsYou?.status === 'ok' && (needsYou.data ?? []).length === 0
+  // A light's connect button that Needs you (or another light) already carries is dropped.
+  const health = data && needsYou ? healthWithoutRepeatedConnects(data.health, needsYou.status === 'ok' ? (needsYou.data ?? []) : []) : null
+  const cards = data ? homeCardsWithContent(shown ?? data) : null
+  const showLeft = !openStep && !!cards && (cards.release || cards.sitemap || cards.week)
+  // While setup is open or the app has no data yet, Home drops what repeats the sidebar or the
+  // header: the Related row, the empty logs links, the checklist's second refresh (ADR 0069).
+  const hasFixes = (project?.fix_count ?? 0) > 0
+  const hasVisits = (data?.week.data ?? []).some((w) => w.id === 'sessions' && w.thisWeek + w.lastWeek > 0)
+  const sparse = !!openStep || !project || (project.report_count === 0 && !hasFixes)
 
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-dashboard">
@@ -150,9 +175,18 @@ export function DashboardPage() {
           ]
         }
         helpHowToUse={copy?.help?.howToUse ?? 'Every number opens the list it counts. Grey lights are not connected yet; their button says how to connect them.'}
+        helpRelatedLinks={sparse ? NO_RELATED_LINKS : undefined}
       >
         <FreshnessPill at={lastFetchedAt} isValidating={isValidating} channel={channelState} />
-        <RefreshIconButton onClick={() => void reload()} loading={isValidating} label="Refresh Home" />
+        {/* One refresh for the page: it re-reads the setup steps as well as Home. */}
+        <RefreshIconButton
+          onClick={() => {
+            setup.reload()
+            void reload()
+          }}
+          loading={isValidating}
+          label="Refresh Home"
+        />
       </PageHeaderBar>
 
       <PagePosture
@@ -176,9 +210,12 @@ export function DashboardPage() {
         ]}
       />
 
-      {/* The setup steps, with Fix it on the SDK step. */}
-      {openStep && project && (
-        <SetupChecklist project={project} mode="banner" onRefresh={setup.reload} adminEndpointHost={setup.data?.admin_endpoint_host} />
+      {/* The setup steps, with Fix it on the SDK step. Once the report button checks in, the
+          first-report card above sends the test report in place and links the full guide: the
+          checklist under it repeated "Send test report" for the same step (ADR 0069). */}
+      {openStep && project && !showFirstReportHero && (
+        // No refresh icon of its own: the page header's Refresh Home re-reads the steps too.
+        <SetupChecklist project={project} mode="banner" adminEndpointHost={setup.data?.admin_endpoint_host} />
       )}
 
       {error && !data ? (
@@ -189,32 +226,48 @@ export function DashboardPage() {
         <HomeSkeleton />
       ) : (
         <>
-          {/* Problems first: while something needs the owner, that row leads,
-              above the green health lights (fresh-eyes sweep 2026-11-18). */}
-          {homeNeedsFirst(data) && needsRow}
+          {/* Needs you leads (ADR 0069), one button per item; nothing to do is one calm line. */}
+          {needsYou && !needsRowEmpty && (
+            <div data-testid="home-needs-row">
+              <NeedsYouCard
+                section={needsYou}
+                fixFirst={data.fixFirst}
+                partial={data.partial}
+                hasReports={!!project && project.report_count > 0}
+                // One "do this next" on the page: the setup step wins while it is open.
+                primaryElsewhere={Boolean(openStep && project)}
+              />
+            </div>
+          )}
           <div className="grid items-start gap-3 lg:grid-cols-12 [&>*]:min-w-0">
             <div className="lg:col-span-5">
               <AppCard section={data.app} projectId={activeProjectId} canEdit={ent.canEditProject} onRefreshed={() => void reload()} />
             </div>
             <div className="lg:col-span-7">
-              <HealthStrip section={data.health} />
+              <HealthStrip section={health ?? data.health} hideSetupConnect={sdkStepOpen} />
             </div>
           </div>
 
-          {!homeNeedsFirst(data) && needsRow}
-
           {/* Two stacked columns, not rows of pairs: a short card beside a
-              tall one (Pages beside Access) left 100-200 px of empty space
-              (round-3 sweep 2026-11-19). */}
-          <div className="grid items-start gap-3 lg:grid-cols-2 [&>*]:min-w-0" data-testid="home-columns">
+              tall one left 100-200 px of empty space (round-3 sweep
+              2026-11-19). A card with nothing to show is not drawn. */}
+          <div className={`grid items-start gap-3 [&>*]:min-w-0 ${showLeft ? 'lg:grid-cols-2' : ''}`} data-testid="home-columns">
+            {showLeft && cards && (
+              <div className="flex flex-col gap-3">
+                {cards.release && <ReleaseCard section={data.release} projectId={activeProjectId} />}
+                {cards.sitemap && <SitemapCard section={(shown ?? data).sitemap} />}
+                {cards.week && <WeekCard section={data.week} />}
+              </div>
+            )}
             <div className="flex flex-col gap-3">
-              <ReleaseCard section={data.release} projectId={activeProjectId} />
-              <SitemapCard section={(shown ?? data).sitemap} />
-              <WeekCard section={data.week} />
-            </div>
-            <div className="flex flex-col gap-3">
-              <AccessCard section={data.access} auditLog={ent.has('audit_log')} />
-              <ActivityCard section={(shown ?? data).activity} />
+              <AccessCard
+                section={data.access}
+                auditLog={ent.has('audit_log')}
+                showFixHistory={hasFixes || !sparse}
+                showUserActivity={hasVisits || !sparse}
+                sdkLinkElsewhere={(needsYou?.data ?? []).some((n) => ctaTarget(n.action.to) === '/connect')}
+              />
+              {cards?.activity && <ActivityCard section={(shown ?? data).activity} />}
             </div>
           </div>
 
@@ -225,20 +278,10 @@ export function DashboardPage() {
   )
 }
 
-/**
- * @internal Exported for tests.
- * Something on this app waits on the owner (a Needs you item or a root cause
- * to fix first), so that row goes above the health lights.
- */
-export function homeNeedsFirst(data: Pick<ProjectHome, 'needsYou' | 'fixFirst'>): boolean {
-  const needs = data.needsYou.status === 'ok' ? (data.needsYou.data ?? []).length : 0
-  const causes = data.fixFirst?.status === 'ok' ? (data.fixFirst.data ?? []).length : 0
-  return needs + causes > 0
-}
-
 function HomeSkeleton() {
   return (
     <div className="space-y-3" aria-busy="true" aria-label="Loading Home">
+      <NeedsYouSkeleton />
       <div className="grid gap-3 lg:grid-cols-12 [&>*]:min-w-0">
         <div className="lg:col-span-5">
           <AppCardSkeleton />
@@ -248,16 +291,15 @@ function HomeSkeleton() {
         </div>
       </div>
       <div className="grid gap-3 lg:grid-cols-2 [&>*]:min-w-0">
-        <NeedsYouSkeleton />
-        <ReleaseSkeleton />
-      </div>
-      <div className="grid gap-3 lg:grid-cols-2 [&>*]:min-w-0">
-        <SitemapSkeleton />
-        <AccessSkeleton />
-      </div>
-      <div className="grid gap-3 lg:grid-cols-2 [&>*]:min-w-0">
-        <WeekSkeleton />
-        <ActivitySkeleton />
+        <div className="space-y-3">
+          <ReleaseSkeleton />
+          <SitemapSkeleton />
+          <WeekSkeleton />
+        </div>
+        <div className="space-y-3">
+          <AccessSkeleton />
+          <ActivitySkeleton />
+        </div>
       </div>
     </div>
   )

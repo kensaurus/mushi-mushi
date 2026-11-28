@@ -171,6 +171,8 @@ page uses the same ones. The CI runners page (`/ci`) is the reference build.
 | Problems that need the user | `AlertCards` | Worst first: severity shape, the app, the problem, one big number, one action |
 | A run state | `StatusMark`, `StatusPill`, `RunBar` | running, passed, failed, waiting, slow, idle or cancelled, each with its own colour and glyph; running also pulses |
 | A severity with no run state | `StatusGlyph` | ▲ critical, ◆ serious, ● ok, ■ info, ○ off |
+| A bug's severity as words | `SeverityPill` | ▲ Critical, ◆ High, ● Medium, ○ Low in the severity tone |
+| A count | `CountBadge` | Sidebar and tab counts: a tone chip, 99+ cap |
 | Rows × columns of numbers | `HeatGrid` | Each cell graded on its column's scale, with the number inside and a legend |
 | A duration, share or progress | `BarCell`, `ThresholdBar` | A bar beside the number; the number stays as text |
 | An age | `AgeCell`, `StuckAgeBar` | Darker as it gets older, split into 0–3 d, 3–7 d, 7–30 d and 30 d+ |
@@ -182,10 +184,23 @@ page uses the same ones. The CI runners page (`/ci`) is the reference build.
 
 Rules:
 
-- **Red means a failure, nothing else (2026-11-18).** On the light console `--color-brand`
-  is ink, so primary buttons, links, active tabs and crumbs are near-black. Selection (a
-  selected segment, an on switch, an unread dot) uses the violet `accent`. Vermillion stays
-  the docs, marketing and widget colour. A red element that is not a failure is a bug.
+- **Red means a failure, or the action that fixes one (2026-11-18, amended 2026-11-27,
+  [ADR 0071](./adr/0071-chips-have-an-edge-and-actions-take-an-intent-colour.md)).** On the
+  light console `--color-brand` is ink, so primary buttons, links, active tabs and crumbs are
+  near-black. Selection (a selected segment, an on switch, an unread dot) uses the violet
+  `accent`, as an edge, not a wash. Vermillion stays the docs, marketing and widget colour.
+  The Fix action is the Critical red (`Btn intent="fix"`); any other red element is a bug.
+- **No bare tinted text (2026-11-27).** Words on a flat tint with no edge read as a
+  highlighter, not a component. A chip, tag, count or banner comes from the tone scale
+  (`CHIP_TONE` in `lib/chipTone.ts`: fill + `*-foreground` ink + `inset-ring
+  inset-ring-<tone>-edge`) through `Badge`, `SeverityPill`, `CountBadge`, `StatusPill` or `Callout`.
+  Don't write `bg-ok-muted text-ok-foreground`, `bg-warn/15 text-warn` or a grey
+  `bg-surface-overlay` chip by hand, and don't append `border` to a recipe.
+  `pnpm check:tinted-text` fails on it.
+- **Actions take an intent, not a colour (2026-11-27).** Row and inline actions pass
+  `intent` to `Btn` (or `btnClassName({ intent })`): `fix` red, `triage` amber with dark
+  ink, `primary` brand, `neutral` ghost, `destructive` red confirm. The hues are the
+  severity hues, so a Critical chip and its Fix button match (`lib/actionIntent.ts`).
 - **Colour never works alone.** Every status has a shape or glyph too, so it
   reads without colour vision. Motion stops under `prefers-reduced-motion`.
 - **Say a state once.** If a mark shows it, no sentence repeats it. Group

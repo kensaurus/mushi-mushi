@@ -87,7 +87,7 @@ The SDK adds the report button to your app and sends reports to Mushi Mushi.
 
 **Do this:**
 
-1. Open **Connect → Bug capture SDK**. Pick your framework tab and copy the
+1. Open **Connect → Report button**. Pick your framework and copy the
    snippet. **Make a key and fill it in** puts your key into the snippet.
 2. Put the project ID and key in environment variables, not in code:
    - Vite (React, Vue, Svelte): `VITE_MUSHI_PROJECT_ID` and `VITE_MUSHI_API_KEY`
@@ -274,7 +274,7 @@ events. If no deploy has been seen in 14 days, it says so. See
 **Privacy and data:**
 
 - **Screenshots.** Reporters see a preview of the screenshot and can remove it
-  before they send. Under **Connect → Bug capture SDK**, keep **Privacy caption
+  before they send. Under **Connect → Report button → Customize the report button**, keep **Privacy caption
   on screenshot preview** on, or write your own text.
 - **Retention.** Reports older than your plan's window are deleted daily: Free
   30 days, Builder 90, Studio 180, Enterprise custom.

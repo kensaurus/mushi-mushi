@@ -12,6 +12,8 @@ import { describe, expect, it } from 'vitest'
 import {
   accountGrantUsable,
   canUseTestAccount,
+  testAccountMode,
+  testAccountUnavailable,
   defaultStartUrl,
   freshEyesClaimTarget,
   freshEyesRunner,
@@ -33,7 +35,14 @@ const GLOT = '1a000000-0000-4000-8000-000000000000'
 describe('parseFreshEyesRequest', () => {
   it('takes a start page, a goal and the closed options', () => {
     const r = parseFreshEyesRequest({ url: 'https://glot.it/', goal: '  sign up   and pick a language ', sessions: 2, successText: 'Your lessons', dryRun: true })
-    expect(r).toEqual({ ok: true, value: { url: 'https://glot.it/', goal: 'sign up and pick a language', sessions: 2, successText: 'Your lessons', dryRun: true, withAccount: false } })
+    expect(r).toEqual({ ok: true, value: { url: 'https://glot.it/', goal: 'sign up and pick a language', sessions: 2, successText: 'Your lessons', dryRun: true, withAccount: false, personaId: null } })
+  })
+
+  it('takes a persona id, as a uuid only', () => {
+    const r = parseFreshEyesRequest({ url: 'https://glot.it', goal: 'x', personaId: '5A000000-0000-4000-8000-000000000001' })
+    expect(r.ok && r.value.personaId).toBe('5a000000-0000-4000-8000-000000000001')
+    const bad = parseFreshEyesRequest({ url: 'https://glot.it', goal: 'x', personaId: 'japanese' })
+    expect(!bad.ok && bad.message).toContain('personas')
   })
 
   it('defaults to 3 visitors and filing what stops them', () => {
@@ -80,13 +89,30 @@ describe('defaultStartUrl', () => {
   })
 })
 
-describe('canUseTestAccount', () => {
-  it("is an operator's console session on Mushi's own project only", () => {
-    expect(canUseTestAccount({ isOperator: true, authMethod: 'jwt', projectId: SELF, selfProjectId: SELF })).toBe(true)
-    expect(canUseTestAccount({ isOperator: true, authMethod: 'jwt', projectId: GLOT, selfProjectId: SELF })).toBe(false)
-    expect(canUseTestAccount({ isOperator: false, authMethod: 'jwt', projectId: SELF, selfProjectId: SELF })).toBe(false)
-    expect(canUseTestAccount({ isOperator: true, authMethod: 'apiKey', projectId: SELF, selfProjectId: SELF })).toBe(false)
-    expect(canUseTestAccount({ isOperator: true, authMethod: 'jwt', projectId: SELF, selfProjectId: undefined })).toBe(false)
+describe('canUseTestAccount (ADR 0073: a per-project opt-in)', () => {
+  const admin = { role: 'admin', isOperator: false, authMethod: 'jwt' }
+  it('is off until the app opts in, for everyone, operators included', () => {
+    expect(canUseTestAccount({ ...admin, mode: 'off' })).toBe(false)
+    expect(canUseTestAccount({ ...admin, mode: 'off', isOperator: true, role: 'owner' })).toBe(false)
+    expect(testAccountUnavailable({ ...admin, mode: 'off' })).toContain('off for this app')
+  })
+  it("with the app's own hook: any app's owner or admin, from the console", () => {
+    expect(canUseTestAccount({ ...admin, mode: 'hook' })).toBe(true)
+    expect(canUseTestAccount({ ...admin, mode: 'hook', role: 'owner' })).toBe(true)
+    expect(canUseTestAccount({ ...admin, mode: 'hook', role: 'member' })).toBe(false)
+    expect(canUseTestAccount({ ...admin, mode: 'hook', role: 'viewer' })).toBe(false)
+    expect(canUseTestAccount({ ...admin, mode: 'hook', authMethod: 'apiKey' })).toBe(false)
+    expect(testAccountUnavailable({ ...admin, mode: 'hook', authMethod: 'apiKey' })).toContain('never through an API key')
+  })
+  it("in Mushi's own sign-in: an operator who is also the app's owner or admin", () => {
+    expect(canUseTestAccount({ ...admin, mode: 'mushi' })).toBe(false)
+    expect(canUseTestAccount({ ...admin, mode: 'mushi', isOperator: true })).toBe(true)
+    expect(canUseTestAccount({ ...admin, mode: 'mushi', isOperator: true, role: 'member' })).toBe(false)
+  })
+  it('reads an unknown setting as off', () => {
+    expect(testAccountMode('everything')).toBe('off')
+    expect(testAccountMode(null)).toBe('off')
+    expect(testAccountMode('hook')).toBe('hook')
   })
 })
 
@@ -128,18 +154,20 @@ describe('freshEyesRunner', () => {
 })
 
 describe('accountGrantUsable', () => {
-  const row = { account_granted_by: OP, account_grant_until: '2026-10-28T10:00:00Z', project_id: SELF }
-  const ctx = { hostOwnerId: OP, isOperator: (id: string) => id === OP, selfProjectId: SELF, now: NOW }
+  const row = { account_granted_by: OP, account_grant_until: '2026-10-28T10:00:00Z' }
+  const ctx = { hostOwnerId: OP, mode: 'mushi' as const, isOperator: (id: string) => id === OP, now: NOW }
 
-  it("lets the operator's own computer mint, on Mushi, inside the grant", () => {
+  it("lets the granting person's own computer make accounts inside the grant, while the app has them on", () => {
     expect(accountGrantUsable(row, ctx)).toBe(true)
+    // An app's own hook needs no operator.
+    expect(accountGrantUsable(row, { ...ctx, mode: 'hook', isOperator: () => false })).toBe(true)
   })
 
-  it('refuses another person’s computer, an expired grant, a non-operator and another app', () => {
+  it('refuses another person’s computer, an expired grant, a non-operator for Mushi accounts, an app that turned them off, and no grant', () => {
     expect(accountGrantUsable(row, { ...ctx, hostOwnerId: 'someone-else' })).toBe(false)
     expect(accountGrantUsable({ ...row, account_grant_until: '2026-10-28T08:00:00Z' }, ctx)).toBe(false)
     expect(accountGrantUsable(row, { ...ctx, isOperator: () => false })).toBe(false)
-    expect(accountGrantUsable({ ...row, project_id: GLOT }, ctx)).toBe(false)
+    expect(accountGrantUsable(row, { ...ctx, mode: 'off' })).toBe(false)
     expect(accountGrantUsable({ ...row, account_granted_by: null }, ctx)).toBe(false)
   })
 })
@@ -151,6 +179,13 @@ describe('the claim and its end', () => {
       [],
     )
     expect(t).toEqual({ runId: '20261028-090000-abcd', url: 'https://glot.it/', goal: 'learn', sessions: 2, successText: null, dryRun: true, accounts: [] })
+  })
+
+  it('carries a persona only when one is given', () => {
+    const row = { id: 'u1', local_run_id: '20261028-090000-abcd', project_id: GLOT, start_url: 'https://glot.it/', goal: 'learn', sessions_requested: 1, success_text: null, dry_run: true, started_at: '', account_granted_by: null, account_grant_until: null }
+    const persona = { id: 'p1', name: 'Japanese visitor', brief: 'You are "Japanese visitor".', locale: 'ja-JP', device: 'mobile' as const, needs: [], steps: 30 }
+    expect(freshEyesClaimTarget(row, [], persona)).toMatchObject({ persona })
+    expect(freshEyesClaimTarget(row, [])).not.toHaveProperty('persona')
   })
 
   it('leaves a run the CLI finished alone, and says why one ended early', () => {

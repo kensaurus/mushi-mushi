@@ -46,6 +46,8 @@ import { CostStatusBanner } from '../components/cost/CostStatusBanner'
 import { CostStageGuide } from '../components/cost/CostStageGuide'
 import { CostSnapshotStrip } from '../components/cost/CostSnapshotStrip'
 import { CostReadout } from '../components/cost/CostReadout'
+import { CostUnpricedPanel } from '../components/cost/CostUnpricedPanel'
+import { CostVendorCheck } from '../components/cost/CostVendorCheck'
 import {
   EMPTY_COST_STATS,
   type CostStats,
@@ -290,9 +292,9 @@ export function CostPage() {
         {!ux.hideOverviewChrome && (
           <>
             {stats.totalCalls > 0 ? (
-              <Badge tone="okSubtle">Telemetry on</Badge>
+              <Badge tone="ok">Telemetry on</Badge>
             ) : (
-              <Badge tone="warnSubtle">No calls yet</Badge>
+              <Badge tone="warn">No calls yet</Badge>
             )}
           </>
         )}
@@ -349,6 +351,8 @@ export function CostPage() {
       >
         {active === 'overview' && (
           <div className="space-y-4">
+            <CostUnpricedPanel stats={stats} projectId={activeProjectId} onPriced={reloadAll} />
+            <CostVendorCheck projectId={activeProjectId} />
             <CostReadout
               stats={stats}
               projectId={activeProjectId}
@@ -394,6 +398,8 @@ export function CostPage() {
         )}
 
         {active === 'breakdown' && (
+          <div className="space-y-4">
+          <CostUnpricedPanel stats={stats} projectId={activeProjectId} onPriced={reloadAll} />
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Card className="p-4">
               <h3 className="mb-3 text-xs font-semibold text-fg">By operation</h3>
@@ -456,6 +462,7 @@ export function CostPage() {
                 </ResponsiveTable>
               )}
             </Card>
+          </div>
           </div>
         )}
 

@@ -51,4 +51,20 @@ describe('InflightDispatches', () => {
     const statuses = [...container.querySelectorAll('[data-testid="status-pill"]')].map((p) => p.getAttribute('data-status'))
     expect(statuses).toEqual(['running', 'failed', 'slow'])
   })
+
+  it('splits running from stopped for /fixes (running above the list, stopped inside Automation)', async () => {
+    const dispatches = [job('a', 'r1', 'running'), job('b', 'r2', 'failed')]
+    const draw = async (show: 'active' | 'stopped') => {
+      await act(async () => {
+        root.render(createElement(MemoryRouter, null, createElement(InflightDispatches, { dispatches, show })))
+      })
+      return container.textContent ?? ''
+    }
+    const active = await draw('active')
+    expect(active).toContain('Fix requests running')
+    expect(active).not.toContain('stopped without a pull request')
+    const stopped = await draw('stopped')
+    expect(stopped).toContain('1 fix request stopped without a pull request')
+    expect(stopped).not.toContain('Fix requests running')
+  })
 })

@@ -24,7 +24,7 @@ import { jwtAuth } from '../../_shared/auth.ts'
 import { log } from '../../_shared/logger.ts'
 import { fetchPullRequestFiles, parseGithubRepoUrl, resolveProjectGithubToken } from '../../_shared/github.ts'
 import { ciJobsForHeads } from '../../_shared/review-followup-db.ts'
-import { ciHeadState } from '../../_shared/review-followup.ts'
+import { ciHeadStateWithChecks } from '../../_shared/review-followup.ts'
 import { createTtlCache, SETUP_GAPS_CACHE_MS } from '../../_shared/setup-gaps.ts'
 import {
   batchSettingsFrom,
@@ -165,9 +165,12 @@ export async function readReleaseBatch(db: Db, projectIds: string[], deps: Relea
     ...openTrains.flatMap((t) => [t.head_sha ?? '', ...trainMembers(t.members).map((m) => m.headSha ?? '')]),
   ].filter(Boolean)
   const ciByHead = new Map<string, HeadCi>()
+  // The PR's GitHub check summary settles a draft-stop-only "pending" the
+  // collector never caught up on (ciHeadStateWithChecks).
+  const checksByHead = new Map(attemptRows.filter((a) => a.commit_sha).map((a) => [a.commit_sha as string, a.check_run_conclusion]))
   try {
     for (const [head, rows] of await ciJobsForHeads(db as never, projectIds, heads)) {
-      const s = ciHeadState(rows)
+      const s = ciHeadStateWithChecks(rows, checksByHead.get(head))
       ciByHead.set(head, { state: s.state, failing: s.state === 'base_failing' ? s.onBase : s.failing.map((f) => f.name) })
     }
   } catch (err) {

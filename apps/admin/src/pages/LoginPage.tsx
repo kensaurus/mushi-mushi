@@ -12,6 +12,7 @@ import { Input, SelectField, Btn, Tooltip, HelpBanner } from '../components/ui'
 import { isCloudMode, RESOLVED_SUPABASE_URL } from '../lib/env'
 import { nextPathFromLoginState } from '../lib/authRedirect'
 import { signupLandingPath } from '../lib/firstRun'
+import { adoptLinkedAppScope } from '../lib/projectScope'
 import {
   classifyAuthError as classifyAuthErrorText,
   emailFormatProblem,
@@ -96,9 +97,9 @@ export function LoginPage() {
 
   const supabaseHost = getSupabaseHost()
   // Fresh signups land on the wizard (first action = send a test report);
-  // returning users go to the dashboard. An explicit `?next=` / router
-  // state still wins for both.
-  const defaultNextPath = track === 'tester' ? '/tester' : mode === 'signup' ? '/onboarding' : '/reports'
+  // returning users go to Home (/dashboard), as `/` does. An explicit
+  // `?next=` / router state still wins for both.
+  const defaultNextPath = track === 'tester' ? '/tester' : mode === 'signup' ? '/onboarding' : '/dashboard'
   const requestedNextPath = nextPathFromLoginState(location.state, searchParams.get('next'), defaultNextPath)
   // A sign-up confirms its email and returns here: a generic landing (Bugs,
   // Home) becomes setup, an invite or deep link is kept (lib/firstRun.ts).
@@ -125,7 +126,12 @@ export function LoginPage() {
     setPasskeyAvailable(canUsePasskeys())
   }, [])
 
-  if (session) return <Navigate to={nextPath} replace />
+  if (session) {
+    // A deep link that waited for sign-in (`next=/reports?project=<id>`) names
+    // one app: open that app, not the stored All apps choice.
+    adoptLinkedAppScope(new URL(nextPath, 'https://console.invalid').search)
+    return <Navigate to={nextPath} replace />
+  }
 
   const switchMode = (next: FormMode) => {
     setMode(next)
@@ -276,7 +282,7 @@ export function LoginPage() {
         {success === 'signup-confirm' && (
           <div className="bg-surface border border-edge rounded-md p-5 space-y-3">
             <div className="flex items-center justify-center">
-              <span className={`inline-flex items-center justify-center w-10 h-10 rounded-full ${CHIP_TONE.okSubtle}`}>
+              <span className={`inline-flex items-center justify-center w-10 h-10 rounded-full ${CHIP_TONE.ok}`}>
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                 </svg>
@@ -315,7 +321,7 @@ export function LoginPage() {
         {success === 'reset-sent' && (
           <div className="bg-surface border border-edge rounded-md p-5 space-y-3">
             <div className="flex items-center justify-center">
-              <span className={`inline-flex items-center justify-center w-10 h-10 rounded-full ${CHIP_TONE.okSubtle}`}>
+              <span className={`inline-flex items-center justify-center w-10 h-10 rounded-full ${CHIP_TONE.ok}`}>
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
@@ -342,7 +348,7 @@ export function LoginPage() {
           <div className="overflow-hidden bg-surface border border-brand/30 rounded-md p-5 space-y-4 shadow-raised">
             <div className="relative flex items-center justify-center">
               <span className="absolute h-16 w-16 rounded-full bg-brand/15 blur-xl" aria-hidden="true" />
-              <span className={`relative inline-flex h-11 w-11 items-center justify-center rounded-full ${CHIP_TONE.brandSubtle}`}>
+              <span className={`relative inline-flex h-11 w-11 items-center justify-center rounded-full ${CHIP_TONE.brand}`}>
                 @
               </span>
             </div>
@@ -484,6 +490,7 @@ export function LoginPage() {
                 size="sm"
                 onClick={handlePasskeySignIn}
                 disabled={loading || !passkeyAvailable}
+                // mushi-mushi-allowlist: Btn ghost supplies the border width
                 className="group w-full justify-between rounded-md border-brand/30 bg-brand/10 px-3 py-2.5 text-left text-xs text-fg hover:border-brand/60 hover:bg-brand/15"
               >
                 <span>

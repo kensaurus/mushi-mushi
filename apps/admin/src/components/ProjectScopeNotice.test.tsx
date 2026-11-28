@@ -58,7 +58,7 @@ afterEach(() => {
 
 async function render(url: string) {
   await act(async () => {
-    root.render(createElement(MemoryRouter, { initialEntries: [url] }, createElement(ProjectScopeNotice), createElement(OneAppPage)))
+    root.render(createElement(MemoryRouter, { key: url, initialEntries: [url] }, createElement(ProjectScopeNotice), createElement(OneAppPage)))
   })
 }
 
@@ -110,14 +110,23 @@ describe('ProjectScopeNotice', () => {
     await render(`/portfolio?project=${PROJECT_A}&apps=all`)
     expect(notice()).toBeNull()
   })
+
+  // ADR 0069: Home's one-app views moved under Apps, an every-app page; they still show one app.
+  it('names the app on the Apps views that show one app', async () => {
+    await render(`/portfolio?view=users&project=${PROJECT_A}&apps=all`)
+    expect(notice()).not.toBeNull()
+    await render(`/portfolio?view=apps&project=${PROJECT_A}&apps=all`)
+    expect(notice()).toBeNull()
+  })
 })
 
 describe('isAllAppsHubView', () => {
-  it('treats Home Overview and Growth as all-apps views, every other view as one app', () => {
-    expect(isAllAppsHubView('/dashboard', '?view=apps')).toBe(true)
-    expect(isAllAppsHubView('/dashboard', '?view=growth')).toBe(true)
-    expect(isAllAppsHubView('/dashboard', '?view=today')).toBe(false)
-    expect(isAllAppsHubView('/dashboard', '')).toBe(false)
+  it('treats Apps Overview and Growth as all-apps views, every other view as one app', () => {
+    expect(isAllAppsHubView('/portfolio', '?view=apps')).toBe(true)
+    expect(isAllAppsHubView('/portfolio', '?view=growth')).toBe(true)
+    expect(isAllAppsHubView('/portfolio', '?view=users')).toBe(false)
+    expect(isAllAppsHubView('/portfolio', '')).toBe(false)
+    expect(isAllAppsHubView('/dashboard', '?view=apps')).toBe(false)
     expect(isAllAppsHubView('/reports', '?view=apps')).toBe(false)
   })
 })

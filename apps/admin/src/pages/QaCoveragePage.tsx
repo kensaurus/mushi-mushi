@@ -586,7 +586,7 @@ function StoryDrawer({
             </span>
           )}
           {!story.enabled && (
-            <span className="text-3xs text-fg-faint bg-surface-overlay px-1.5 py-px rounded-sm">
+            <span className={`text-3xs ${CHIP_TONE.neutral} px-1.5 py-px rounded-sm`}>
               disabled
             </span>
           )}
@@ -1131,7 +1131,7 @@ export function QaCoveragePage() {
         <div className="flex items-center gap-2">
           <IconQaCoverage className="h-4 w-4 text-warn" />
           <span className="text-sm font-semibold text-fg">Generated tests to review</span>
-          <span className={`text-2xs ${CHIP_TONE.warnSubtle} px-1.5 py-0.5 rounded-full`}>{pendingReview.length}</span>
+          <span className={`text-2xs ${CHIP_TONE.warn} px-1.5 py-0.5 rounded-full`}>{pendingReview.length}</span>
         </div>
         <p className="text-2xs text-fg-muted">
           Mushi Mushi wrote these tests from your user stories or from a failing test. Approve to add one to the schedule, or reject to turn it off.

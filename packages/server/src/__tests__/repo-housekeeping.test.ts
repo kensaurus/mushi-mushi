@@ -138,7 +138,7 @@ describe('prCandidates', () => {
     expect(r.candidates[0].reason).toMatch(/newer fix for the same report is open as #6/)
   })
 
-  it('lists a PR whose latest Opus review said hold about its current head, not an older one', () => {
+  it('lists a PR whose latest AI review said hold about its current head, not an older one', () => {
     const f = facts({ openPulls: [open(5)] })
     const reviews = [
       { fixAttemptId: 'f5', verdict: 'merge', headSha: A, summary: null, at: '2026-10-02T00:00:00Z' },

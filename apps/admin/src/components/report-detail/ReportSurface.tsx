@@ -69,11 +69,11 @@ type ChipTone = 'neutral' | 'ok' | 'warn' | 'danger' | 'info' | 'brand'
 
 const SIGNAL_CHIP_TONE: Record<ChipTone, string> = {
   neutral: CHIP_TONE.neutral,
-  ok:      CHIP_TONE.okSubtle,
-  warn:    CHIP_TONE.warnSubtle,
-  danger:  CHIP_TONE.dangerSubtle,
-  info:    CHIP_TONE.infoSubtle,
-  brand:   CHIP_TONE.brandSubtle,
+  ok:      CHIP_TONE.ok,
+  warn:    CHIP_TONE.warn,
+  danger:  CHIP_TONE.danger,
+  info:    CHIP_TONE.info,
+  brand:   CHIP_TONE.brand,
 }
 
 interface SignalChipProps {
@@ -106,7 +106,7 @@ interface InlineProofProps {
 export function InlineProof({ children, className = '' }: InlineProofProps) {
   return (
     <span
-      className={`inline-block max-w-full rounded bg-surface-overlay px-1.5 py-0.5 text-2xs font-medium text-fg-muted shrink-0 ${className}`}
+      className={`inline-block max-w-full rounded ${CHIP_TONE.neutral} px-1.5 py-0.5 text-2xs font-medium shrink-0 ${className}`}
     >
       {children}
     </span>
@@ -123,10 +123,10 @@ type PillTone = 'neutral' | 'brand' | 'ok' | 'danger' | 'warn'
 
 const PILL_TONE: Record<PillTone, string> = {
   neutral: `${CHIP_TONE.neutral} hover:bg-surface-raised hover:text-fg`,
-  brand:   `${CHIP_TONE.brandSubtle} hover:bg-brand-subtle`,
-  ok:      `${CHIP_TONE.okSubtle} hover:bg-ok-muted/30`,
-  danger:  `${CHIP_TONE.dangerSubtle} hover:bg-danger-muted/30`,
-  warn:    `${CHIP_TONE.warnSubtle} hover:bg-warn-muted/30`,
+  brand:   `${CHIP_TONE.brand} hover:bg-brand-subtle`,
+  ok:      `${CHIP_TONE.ok} hover:bg-ok-muted/30`,
+  danger:  `${CHIP_TONE.danger} hover:bg-danger-muted/30`,
+  warn:    `${CHIP_TONE.warn} hover:bg-warn-muted/30`,
 }
 
 export interface ActionPillProps {

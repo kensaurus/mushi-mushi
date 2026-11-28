@@ -6,6 +6,7 @@
  *          one that is not connected says how to connect it.
  */
 
+import { isSdkSetupHref } from '../../lib/homeSetupFocus'
 import { Link } from 'react-router-dom'
 import { Btn, Card, PanelHeader, RelativeTime, Skeleton } from '../ui'
 import { LIGHT_WORD, type HealthSignal, type HomeSection } from '../../lib/projectHome'
@@ -14,15 +15,22 @@ import { healthDisplayTone } from '../../lib/homeView'
 import { HomeSectionBody } from './HomeSectionBody'
 import { homeConnectHref } from '../../lib/homeConnectHref'
 
-export function HealthStrip({ section }: { section: HomeSection<HealthSignal[]> }) {
+export function HealthStrip({
+  section,
+  hideSetupConnect = false,
+}: {
+  section: HomeSection<HealthSignal[]>
+  /** The setup checklist shows the report-button step: tiles keep their status, not a second button for it. */
+  hideSetupConnect?: boolean
+}) {
   return (
     <section aria-label="App health" data-testid="home-health" className="min-w-0">
       <HomeSectionBody section={section} what="the app's health" notConnectedText="No health signals yet.">
         {(signals) => (
           <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 [&>*]:min-w-0">
-            {signals.map((s) => (
-              <li key={s.id}>
-                <HealthTile signal={s} />
+            {signals.map((s, i) => (
+              <li key={s.id} className={healthTileSpansRow(signals.length, i) ? 'sm:col-span-2' : undefined}>
+                <HealthTile signal={hideSetupConnect && isSdkSetupHref(s.connect?.to) ? { ...s, connect: null } : s} />
               </li>
             ))}
           </ul>
@@ -30,6 +38,34 @@ export function HealthStrip({ section }: { section: HomeSection<HealthSignal[]> 
       </HomeSectionBody>
     </section>
   )
+}
+
+/**
+ * @internal Exported for tests.
+ * Two columns from `sm` up: with an odd count (five lights once the
+ * first-time setup light exists) the last tile left an empty cell beside it
+ * (UX review 2026-11-22). The last tile of an odd count takes the full row;
+ * one column on phones never has a hole.
+ */
+export function healthTileSpansRow(count: number, index: number): boolean {
+  return count > 1 && count % 2 === 1 && index === count - 1
+}
+
+/**
+ * What each light's time is: "Up · yesterday" read as if the site was up
+ * yesterday, when it was the last check (UX review 2026-11-22).
+ */
+const AT_LABEL: Record<string, string> = {
+  site: 'Checked',
+  errors: 'Last report',
+  sdk: 'Last check-in',
+  ci: 'Last run',
+  setup: 'Last test',
+}
+
+/** @internal Exported for tests. */
+export function healthAtLabel(id: string): string {
+  return AT_LABEL[id] ?? 'Updated'
 }
 
 /**
@@ -68,14 +104,8 @@ function HealthTile({ signal: server }: { signal: HealthSignal }) {
   const tone = healthDisplayTone(s)
   return (
     <Card className="flex h-full min-w-0 flex-col gap-1 p-3" data-testid={`home-health-${s.id}`}>
-      <PanelHeader
-        className="mb-1"
-        title={
-          <Link to={s.href} className="hover:text-fg">
-            {s.label}
-          </Link>
-        }
-      />
+      {/* One link per light, on its value: the label linked to the same page, two controls for one place (ADR 0069). */}
+      <PanelHeader className="mb-1" title={s.label} />
       {/* The state is the value's mark and colour: a "Good" pill beside
           "Passing" said it twice (round-2 sweep 2026-11-18). The word stays
           for screen readers on the mark. */}
@@ -92,7 +122,7 @@ function HealthTile({ signal: server }: { signal: HealthSignal }) {
       <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-1">
         {s.at ? (
           <span className="text-2xs text-fg-faint">
-            <RelativeTime value={s.at} />
+            {healthAtLabel(s.id)} <RelativeTime value={s.at} />
           </span>
         ) : (
           <span />

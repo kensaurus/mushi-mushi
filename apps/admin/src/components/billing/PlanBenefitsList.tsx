@@ -8,7 +8,7 @@
  */
 
 import { InlineProof } from '../report-detail/ReportSurface'
-import { seatEntitlementLabel } from '../../lib/billingView'
+import { seatEntitlementLabel, upgradeHintText, type UpgradePlanHint } from '../../lib/billingView'
 
 interface FeatureFlags {
   sso?: boolean
@@ -26,6 +26,8 @@ interface FeatureFlags {
 interface Props {
   planId: string
   planName: string
+  /** Shown to a free plan as the next step; omitted when there is none. */
+  upgradePlan?: UpgradePlanHint | null
   flags: FeatureFlags
   retentionDays: number
   seatLimit: number | null
@@ -40,7 +42,7 @@ interface Entitlement {
   meta?: string
 }
 
-export function PlanBenefitsList({ planId, planName, flags, retentionDays, seatLimit, seatLimitKnown = false }: Props) {
+export function PlanBenefitsList({ planId, planName, upgradePlan, flags, retentionDays, seatLimit, seatLimitKnown = false }: Props) {
   const entitlements: Entitlement[] = [
     {
       label: 'Report retention',
@@ -115,10 +117,10 @@ export function PlanBenefitsList({ planId, planName, flags, retentionDays, seatL
           </li>
         ))}
       </ul>
-      {(planId === 'hobby' || planId === 'free_cloud') && (
+      {(planId === 'hobby' || planId === 'free_cloud') && upgradePlan && (
         <InlineProof className="mt-2">
-          Get 1,000 diagnoses a month, 90 days of history, an audit log and email support on{' '}
-          <span className="text-brand">Builder · $29/mo</span>.
+          {upgradeHintText(upgradePlan)}{' '}
+          <span className="text-brand">{upgradePlan.display_name} · ${Number(upgradePlan.monthly_price_usd)}/mo</span>.
         </InlineProof>
       )}
     </section>

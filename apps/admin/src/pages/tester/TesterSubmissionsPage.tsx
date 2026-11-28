@@ -14,7 +14,6 @@ import { TESTER_API_OPTS, normalizeListItems } from '../../lib/tester-page-data'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
 import { Btn, Badge } from '../../components/ui'
-import { CHIP_TONE } from '../../lib/chipTone'
 
 interface TesterSubmission {
   id: string
@@ -127,7 +126,7 @@ export function TesterSubmissionsPage() {
         description="Track submissions and file new bug reports for apps you've joined."
         meta={
           pendingCount > 0 ? (
-            <Badge className={CHIP_TONE.warnSubtle}>
+            <Badge tone="warn">
               {pendingCount} pending review
             </Badge>
           ) : undefined

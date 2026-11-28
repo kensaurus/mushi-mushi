@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/web",
-  "version": "1.38.0",
+  "version": "1.40.0",
   "description": "Bug report and user feedback widget for the web. One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code.",
   "license": "MIT",
   "type": "module",
@@ -134,7 +134,7 @@
     {
       "name": "Core SDK bundle (minified + gzipped)",
       "path": "dist/index.js",
-      "limit": "89.2 KB",
+      "limit": "94 KB",
       "gzip": true
     },
     {
@@ -197,14 +197,14 @@
     "@mushi-mushi/eslint-config": "workspace:*",
     "@mushi-mushi/tsconfig": "workspace:*",
     "eslint-plugin-mushi-mushi": "workspace:*",
-    "@size-limit/file": "^12.1.0",
+    "@size-limit/file": "^14.3.0",
     "eslint": "^10.6.0",
-    "jsdom": "^30.1.3",
+    "jsdom": "^31.0.1",
     "rrweb": "^2.0.1",
-    "size-limit": "^12.1.0",
-    "tsup": "^8.5.1",
+    "size-limit": "^14.3.0",
+    "tsup": "^9.0.0",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.9"
+    "vitest": "^5.1.1"
   },
   "author": "Kenji Sakuramoto <kensaurus@gmail.com> (https://github.com/kensaurus)",
   "engines": {

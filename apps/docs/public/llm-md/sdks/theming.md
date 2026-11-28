@@ -1,0 +1,216 @@
+# Theming the bug widget
+
+Source: https://kensaur.us/mushi-mushi/docs/sdks/theming
+
+---
+title: Theming the bug widget
+description: "Match the Mushi Mushi bug widget to your app: accent, theme, corner, language and hidden pages from a script tag, code or the console, plus 13 CSS tokens."
+---
+
+# Theming the bug widget
+
+The widget already uses your page's font and follows light or dark mode, so
+most apps need nothing here. When you want it to look like yours, start with
+the easiest way that fits how you built the app.
+
+## Three easy ways
+
+### 1. Script tag (Lovable, Bolt, plain HTML)
+
+Add attributes to the tag you pasted:
+
+```html filename="index.html"
+<script async
+  src="https://cdn.jsdelivr.net/npm/@mushi-mushi/web@1/dist/mushi.loader.global.js"
+  data-project="YOUR_PROJECT_ID"
+  data-key="YOUR_API_KEY"
+  data-accent="#7c3aed"
+  data-theme="auto"
+  data-position="bottom-left"
+  data-locale="ja"
+  data-hide-on-routes="/admin/*, /checkout"
+></script>
+```
+
+| Attribute | What it does | Accepted values |
+| --- | --- | --- |
+| `data-accent` | Colour of the Send button and the launcher's underline | `#rgb`, `#rrggbb`, `rgb()`, `hsl()`, `oklch()` |
+| `data-accent-text` | Text colour on the accent (picked for you when left out) | the same, plus `black` or `white` |
+| `data-theme` | Light or dark widget. `auto` follows the visitor's OS setting, so an app that is light only should set `light` (or `inherit`) | `auto` (default), `light`, `dark`, `inherit` (read your page's class or `data-theme`) |
+| `data-position` | Corner for the launcher | `bottom-right` (default), `bottom-left`, `top-right`, `top-left` |
+| `data-locale` | Widget language | `auto` (browser language, default), `en`, `ja`, `th`, `es`, `zh`; region tags such as `ja-JP` work |
+| `data-hide-on-routes` | Pages where the launcher stays hidden | comma-separated [route rules](#route-rules) |
+| `data-trigger` | Launcher style | `auto`, `banner`, `edge-tab`, `attach`, `manual`, `hidden` |
+| `data-trigger-text` | Launcher label | any text |
+| `data-banner-variant` | Banner look, with `data-trigger="banner"` | `subtle`, `brand`, `neon` |
+| `data-banner-position` | Banner edge | `top`, `bottom` |
+
+A value the widget does not accept is skipped, and the browser console shows
+one warning naming the attribute and the values it takes, for example
+`[mushi] Ignored data-theme="purple". Use one of: auto, light, dark, inherit.`
+A typo never breaks your page or stops the widget.
+
+### 2. In code
+
+```ts
+import { Mushi } from 'mushi-mushi'
+
+Mushi.init({
+  projectId: 'YOUR_PROJECT_ID',
+  apiKey: 'YOUR_API_KEY',
+  widget: {
+    accent: '#7c3aed',
+    theme: 'auto',
+    position: 'bottom-left',
+    locale: 'ja',
+    hideOnRoutes: ['/admin/*', '/checkout'],
+  },
+})
+```
+
+React, Vue, Svelte and Angular take the same `widget` object through their
+provider or plugin.
+
+### 3. In the console
+
+Open your app in the console, then **Connect → Report button → Customize the report button**. Accent
+colour, position, theme, launcher style, launcher label and the banner look
+can change there without a redeploy ([runtime config](/concepts/runtime-config)).
+For a colour, Mushi picks black or white text with at least 3:1 contrast. The
+same settings are in your editor: the MCP tool `set_widget_settings`, or
+`mushi widget set --accent '#3b5bdb'`. Language and hidden pages are set in
+the tag or in code.
+
+If your app's code (or a `data-*` attribute) sets one of these, your code's
+value wins and the console fills only what the code left out
+([ADR 0068](https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0068-host-code-wins-over-console-widget-settings.md)).
+The console's install snippets leave them out unless you tick **Lock these
+settings in my code**.
+
+## What can be set where
+
+| Setting | Script tag | Code (`widget.*`) | Console | CSS token |
+| --- | --- | --- | --- | --- |
+| Accent colour | `data-accent` | `accent` | yes | `--mushi-accent` |
+| Text on the accent | `data-accent-text` | `accentText` | picked with the colour | `--mushi-accent-fg` |
+| Light / dark | `data-theme` | `theme` | yes | |
+| Corner | `data-position` | `position` | yes | |
+| Language | `data-locale` | `locale` | | |
+| Hidden pages | `data-hide-on-routes` | `hideOnRoutes` | | |
+| Launcher style and label | `data-trigger`, `data-trigger-text` | `trigger`, `triggerText` | yes | |
+| Banner look | `data-banner-variant`, `data-banner-position` | `bannerConfig` | yes | |
+| Fonts, surfaces, corners, shadow | | | | the tokens below |
+
+## CSS tokens
+
+For finer control, set any of these 13 tokens in your own CSS, on `:root`
+or on `#mushi-mushi-widget`. CSS always wins over `widget.accent` and the
+other options. Values left unset follow your page: `Canvas` and `CanvasText`
+are the browser's own page colours, so they flip with light and dark mode.
+
+```css
+#mushi-mushi-widget {
+  --mushi-accent: #7c3aed;
+  --mushi-font: 'Inter', sans-serif;
+  --mushi-radius: 8px;
+}
+```
+
+| Token | Controls | Light default | Dark default |
+| --- | --- | --- | --- |
+| `--mushi-font` | Font family | your page's font | your page's font |
+| `--mushi-font-size` | Base text size | `14px` | `14px` |
+| `--mushi-bg` | Panel and launcher background | `Canvas` (white) | `Canvas` (near black) |
+| `--mushi-fg` | Main text | `CanvasText` (black) | `CanvasText` (white) |
+| `--mushi-muted` | Hints and secondary text | text at 64% | text at 64% |
+| `--mushi-surface` | Inputs and cards inside the panel | background mixed with 6% text | background mixed with 6% text |
+| `--mushi-border` | Hairlines and outlines; the panel edge is darker by default (text at 38%) so it reads at 3:1 on a page of the same colour | text at 16% | text at 16% |
+| `--mushi-accent` | Send button, launcher underline, focus rings | `widget.accent`, else your page's `accent-color` or `theme-color` (when it reads at 3:1), else the text colour | same |
+| `--mushi-accent-fg` | Text on the accent | black or white, whichever reads better | same |
+| `--mushi-success` | "Sent" states | `#2D7A55` | `#3A9E6E` |
+| `--mushi-error` | Errors | `#B83232` | `#E05555` |
+| `--mushi-radius` | Panel corner radius | `12px` | `12px` |
+| `--mushi-shadow` | Panel shadow | `0 12px 40px rgb(0 0 0 / .18)` | same |
+
+These 13 names are a public contract: a test in the SDK fails if one is
+renamed or removed.
+
+## Report type colours
+
+The report panel opens on six tiles, one per kind of report, each with its own
+icon and colour: Bug (red), Slow (amber), Looks wrong (violet), Confusing
+(blue), Idea (green) and Other (grey). The picked type tints the panel header
+and the prompt in the text box changes to match it. These colours come from
+`MUSHI_REPORT_TYPE_COLORS` in `@mushi-mushi/core`, with a light and a dark set
+that each reach WCAG AA on the panel. They are not CSS tokens: your accent
+still colours the Send button and focus rings, and the type colours never
+replace it ([ADR 0070](https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0070-report-screen-leads-with-colour-coded-type-tiles.md)).
+
+Your own `widget.categories` stay behind **More…**. A category whose `id` is
+`bug`, `slow`, `visual` or `confusing` relabels that tile and keeps its colour.
+Set `featureRequestLabel` to rename the Idea tile and `featureRequestDescription`
+to change its prompt.
+
+## Contrast rule
+
+Text on the accent must reach at least 3:1 contrast, so the Send button
+stays readable. The widget never changes your accent colour itself. It only
+checks the text on top of it:
+
+- No `accentText`: the widget picks black or white, whichever reads better.
+- Your `accentText`, `data-accent-text` or `--mushi-accent-fg` reaches 3:1:
+  it is kept.
+- It falls under 3:1: the widget uses black or white instead and records a
+  warning. Read it with `Mushi.diagnose()`:
+
+```ts
+const report = await Mushi.diagnose()
+console.log(report.warnings)
+// ['Accent text #ffffff is 1.2:1 on #ffeb3b (under 3:1); using black.']
+```
+
+With `debug: true` (or `data-debug="true"`) the same warning is printed to
+the browser console.
+
+An accent taken from your page (`accent-color` or ``)
+is only used when it reaches 3:1 against the panel background; otherwise the
+widget keeps the text colour as its accent.
+
+## Route rules
+
+`hideOnRoutes` hides the launcher on matching pages. Each entry is checked
+against the page path (no domain, no query string):
+
+| Rule | Hides | Does not hide |
+| --- | --- | --- |
+| `/checkout` | `/checkout`, `/checkout/done`, `/shop/checkout` | `/cart` |
+| `/admin/*` | `/admin/users`, `/admin/users/` | `/admin`, `/admin/users/5` |
+| `/blog/**` | `/blog`, `/blog/2026/my-post` | `/blogroll` |
+| `/docs/*/edit` | `/docs/intro/edit` | `/docs/a/b/edit` |
+
+- An entry **without** `*` matches anywhere in the path, the way
+  `hideOnRoutes` always worked, so existing setups keep their behaviour.
+- `*` matches one path segment; `**` matches any number of them.
+- A trailing `/**` also matches the path itself.
+- A trailing `/` on the page path is ignored.
+
+## Your own button
+
+Hide the launcher and open the widget from a button in your app:
+
+```ts
+const mushi = Mushi.init({
+  projectId: 'YOUR_PROJECT_ID',
+  apiKey: 'YOUR_API_KEY',
+  widget: { trigger: 'manual' },
+})
+
+document.querySelector('#report-bug')?.addEventListener('click', () => mushi.open())
+```
+
+`Mushi.getInstance()?.open()` does the same from anywhere else in your app.
+To bind the widget to an existing element without writing a click handler,
+use `widget: { trigger: 'attach', attachToSelector: '#report-bug' }`. The
+script tag gives your page no JavaScript handle, so a button of your own
+needs one of these code installs. More launcher styles:
+[trigger modes](/concepts/trigger-modes).

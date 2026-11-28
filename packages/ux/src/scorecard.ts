@@ -31,6 +31,7 @@ import { gotoPatiently, openSession, surfaceUrl, type BrowserSession } from './c
 import { askApi, askClaudeCode, askCursor } from './checker.js'
 import { discover } from './discover.js'
 import type { AllowRule } from './guard.js'
+import { dHash } from './image.js'
 import { isFrameworkNoise, runProbes } from './probes.js'
 import { routesFromSource, trimTrailingSlashes } from './routes.js'
 import {
@@ -284,6 +285,17 @@ async function uploadShots(cfg: SyncConfig, runId: string, folder: string, key: 
   return names
 }
 
+/** The settled screenshot's 64-bit perceptual hash, or null when there is none or it cannot be read. */
+function settledShotHash(folder: string): string | null {
+  const file = join(folder, 'settled.png')
+  if (!existsSync(file)) return null
+  try {
+    return dHash(readFileSync(file))
+  } catch {
+    return null
+  }
+}
+
 /** Score on the server through the `ux-scorecard` platform route (the app's own key first). */
 export function serverScorer(cfg: SyncConfig, runId: string): Scorer {
   const uploaded = new Map<string, string[]>()
@@ -293,9 +305,11 @@ export function serverScorer(cfg: SyncConfig, runId: string): Scorer {
     async score(facts, folder, ctx) {
       const shots = await uploadShots(cfg, runId, folder, facts.key)
       uploaded.set(facts.key, shots)
+      // ADR 0072: the server reuses an earlier score when this hash and the page's text are unchanged.
+      const shotHash = settledShotHash(folder)
       const r = await api(cfg, `/v1/admin/projects/${cfg.projectId}/ux-scorecard/${runId}/score`, {
         method: 'POST',
-        body: JSON.stringify({ facts, shots, app: ctx.app, about: ctx.about, other_pages: ctx.otherPages }),
+        body: JSON.stringify({ facts, shots, app: ctx.app, about: ctx.about, other_pages: ctx.otherPages, ...(shotHash ? { shot_hash: shotHash } : {}) }),
       })
       if (!r.ok) return { error: apiError(r) }
       const score = (r.body as { data?: { score?: UxPageScore } } | null)?.data?.score

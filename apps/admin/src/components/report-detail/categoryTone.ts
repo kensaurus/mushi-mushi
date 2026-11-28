@@ -18,5 +18,5 @@ export const CATEGORY_NEUTRAL = CHIP_TONE.neutral
  */
 export function confidenceChipTone(confidence: number | null | undefined): string {
   if (confidence == null || confidence >= 0.65) return CHIP_TONE.neutral
-  return CHIP_TONE.warnSubtle
+  return CHIP_TONE.warn
 }

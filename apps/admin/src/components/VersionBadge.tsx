@@ -27,6 +27,7 @@ import {
 } from 'react'
 import type { useWhatsNew } from './WhatsNew'
 import { Badge } from './ui'
+import { usePublishedVersion } from '../lib/publishedVersion'
 import {
   IconDashboard,
   IconGauge,
@@ -62,35 +63,35 @@ interface AccentTheme {
 
 const ACCENT_THEMES: Record<AccentTone, AccentTheme> = {
   info: {
-    chip: CHIP_TONE.infoSubtle,
+    chip: CHIP_TONE.info,
     header: 'bg-info/10 border-info/25',
     rail: 'border-l-info/55',
     text: 'text-info-foreground',
     pill: 'sdk',
   },
   warn: {
-    chip: CHIP_TONE.warnSubtle,
+    chip: CHIP_TONE.warn,
     header: 'bg-warn/10 border-warn/25',
     rail: 'border-l-warn/55',
     text: 'text-warn-foreground',
     pill: 'tool',
   },
   ok: {
-    chip: CHIP_TONE.okSubtle,
+    chip: CHIP_TONE.ok,
     header: 'bg-ok/10 border-ok/25',
     rail: 'border-l-ok/55',
     text: 'text-ok-foreground',
     pill: 'runtime',
   },
   brand: {
-    chip: CHIP_TONE.brandSubtle,
+    chip: CHIP_TONE.brand,
     header: 'bg-brand/10 border-brand/25',
     rail: 'border-l-brand/55',
     text: 'text-brand',
     pill: 'neutral',
   },
   accent: {
-    chip: CHIP_TONE.accentSubtle,
+    chip: CHIP_TONE.accent,
     header: 'bg-accent/10 border-accent/25',
     rail: 'border-l-accent/55',
     text: 'text-accent-foreground',
@@ -150,9 +151,9 @@ const PIPELINE_LINKS: PipelineLink[] = [
 ]
 
 const TONE_BADGE: Record<'feature' | 'fix' | 'breaking' | 'note', string> = {
-  feature:  CHIP_TONE.brandSubtle,
-  fix:      CHIP_TONE.okSubtle,
-  breaking: CHIP_TONE.dangerSubtle,
+  feature:  CHIP_TONE.brand,
+  fix:      CHIP_TONE.ok,
+  breaking: CHIP_TONE.danger,
   note:     CHIP_TONE.neutral,
 }
 const TONE_LABEL: Record<'feature' | 'fix' | 'breaking' | 'note', string> = {
@@ -181,15 +182,15 @@ function VersionPill({
 }) {
   const toneClass =
     tone === 'sdk'
-      ? CHIP_TONE.infoSubtle
+      ? CHIP_TONE.info
       : tone === 'admin'
-        ? CHIP_TONE.accentSubtle
+        ? CHIP_TONE.accent
         : tone === 'tool'
-          ? CHIP_TONE.warnSubtle
+          ? CHIP_TONE.warn
           : tone === 'plugin'
-            ? CHIP_TONE.accentSubtle
+            ? CHIP_TONE.accent
             : tone === 'runtime'
-              ? CHIP_TONE.okSubtle
+              ? CHIP_TONE.ok
               : 'border-edge/70 bg-surface-overlay text-fg-secondary'
   return (
     <span
@@ -275,6 +276,8 @@ function ChangelogHighlightRow({
 
 export function VersionBadge({ whatsNew }: VersionBadgeProps) {
   const [open, setOpen] = useState(false)
+  // The build constant goes stale after each npm release; the catalog doesn't.
+  const latestWeb = usePublishedVersion('@mushi-mushi/web', __SDK_WEB_VERSION__)
   // Hover opens the popover before the click lands, so a plain toggle closed
   // it again and the chip seemed to open nothing. A click right after a
   // hover-open keeps it open.
@@ -359,8 +362,8 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
         // This is the latest published web SDK, not the active project's
         // install (an RN project read it as its own version). The project's
         // installed SDK lives on Connect.
-        aria-label={`Versions — latest web SDK release ${__SDK_WEB_VERSION__}, Admin console ${__APP_VERSION__}${whatsNew.hasUnread ? ', new updates available' : ''}`}
-        title={`Latest @mushi-mushi/web release ${__SDK_WEB_VERSION__} · Admin app ${__APP_VERSION__} · ${__BUILD_SHA__}. Your project's installed SDK is on Connect.`}
+        aria-label={`Versions — latest web SDK release ${latestWeb}, Admin console ${__APP_VERSION__}${whatsNew.hasUnread ? ', new updates available' : ''}`}
+        title={`Latest @mushi-mushi/web release ${latestWeb} · Admin app ${__APP_VERSION__} · ${__BUILD_SHA__}. Your project's installed SDK is on Connect.`}
         className={`group relative inline-flex min-w-0 max-w-full items-center gap-1.5 h-6 px-2 rounded-sm hover:bg-surface-overlay motion-safe:transition-[transform,opacity] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
           open ? 'bg-surface-overlay' : ''
         }`}
@@ -372,7 +375,7 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
           title="@mushi-mushi/web (browser SDK on npm)"
         >
           <span className={SDK_LABEL}>Latest </span>
-          <span className={SDK_VER}>{__SDK_WEB_VERSION__}</span>
+          <span className={SDK_VER}>{latestWeb}</span>
         </span>
         <span
           aria-hidden
@@ -385,7 +388,7 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
           className="hidden lg:inline font-mono text-2xs leading-none"
           title="@mushi-mushi/web"
         >
-          <span className={SDK_VER}>{__SDK_WEB_VERSION__}</span>
+          <span className={SDK_VER}>{latestWeb}</span>
         </span>
         {/* The admin build number is a diagnostic, not a glance-value: it cost
             ~90px of permanent header width next to the SDK version embedders
@@ -471,7 +474,7 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
             <div className="mt-2 space-y-2 text-2xs max-h-[13.5rem] overflow-y-auto overscroll-contain pr-0.5">
               <PackageGroup id="SDK">
                 <PackageRow name="@mushi-mushi/core"    version={__SDK_CORE_VERSION__}  hint="Core runtime"          npmName="@mushi-mushi/core" />
-                <PackageRow name="web"                  version={__SDK_WEB_VERSION__}   hint="Browser widget (Shadow DOM)" npmName="@mushi-mushi/web" />
+                <PackageRow name="web"                  version={latestWeb}   hint="Browser widget (Shadow DOM)" npmName="@mushi-mushi/web" />
                 <PackageRow name="react"                version={__SDK_REACT_VERSION__} hint="React bindings"         npmName="@mushi-mushi/react" />
                 <PackageRow name="vue"                  version={__SDK_VUE_VERSION__}   hint="Vue bindings"           npmName="@mushi-mushi/vue" />
                 <PackageRow name="svelte"               version={__SDK_SVELTE_VERSION__} hint="Svelte bindings"       npmName="@mushi-mushi/svelte" />
@@ -512,7 +515,7 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
               theme={ACCENT_THEMES.brand}
               trailing={
                 whatsNew.hasUnread ? (
-                  <span className={`inline-flex items-center rounded-full px-1.5 py-px text-2xs font-medium shrink-0 ${CHIP_TONE.brandSubtle}`}>
+                  <span className={`inline-flex items-center rounded-full px-1.5 py-px text-2xs font-medium shrink-0 ${CHIP_TONE.brand}`}>
                     Unread
                   </span>
                 ) : undefined

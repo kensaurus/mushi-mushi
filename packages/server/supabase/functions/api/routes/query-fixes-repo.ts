@@ -32,7 +32,6 @@ import { withIdempotency } from '../../_shared/idempotency.ts';
 import { getAvailableTags } from '../../_shared/ontology.ts';
 import { executeNaturalLanguageQuery } from '../../_shared/nl-query.ts';
 import { getPlan, listPlans } from '../../_shared/plans.ts';
-import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
 import {
   finalizeFixMerge,
@@ -657,6 +656,16 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     // never surfaces in-flight or completed fixes by their change text.
     const search = c.req.query('q')?.trim();
     const queryLimit = Math.min(Number(c.req.query('limit')) || 50, 200);
+    // One app's attempts. /fixes shows one app, but read the newest 200
+    // attempts of every app, so its "PR open" and its list mixed apps
+    // ("PR open 0" while that app had open fix PRs; journey walk 2026-11-28).
+    // An app the caller cannot open returns nothing rather than an error.
+    const projectIdParam = c.req.query('project_id')?.trim();
+    if (projectIdParam && !/^[0-9a-f-]{36}$/i.test(projectIdParam)) {
+      return c.json({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'project_id must be a project id' } }, 400);
+    }
+    const listProjectIds = projectIdParam ? projectIds.filter((id) => id === projectIdParam) : projectIds;
+    if (listProjectIds.length === 0) return c.json({ ok: true, data: { fixes: [], total: 0 } });
     // One report's attempts (the report page's progress panel). Without it
     // the panel searched the 50 newest fixes client-side and showed nothing
     // for a report whose fix was older.
@@ -676,7 +685,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
         'id, report_id, project_id, agent, branch, pr_url, pr_number, commit_sha, status, files_changed, lines_changed, summary, rationale, review_passed, review_reasoning, started_at, completed_at, created_at, langfuse_trace_id, llm_model, llm_input_tokens, llm_output_tokens, check_run_status, check_run_conclusion, ci_infra, check_run_updated_at, pr_state, merged_at, error, spec_validation_warnings, inventory_action_node_id, failure_category, cursor_agent_id, cursor_artifacts, claude_workflow_run_url',
         { count: 'exact' },
       )
-      .in('project_id', projectIds)
+      .in('project_id', listProjectIds)
       .order('started_at', { ascending: false })
       .range(queryOffset, queryOffset + queryLimit - 1);
 
@@ -1137,7 +1146,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
   // ---------------------------------------------------------------------------
   // Re-run the agent PR review — POST /v1/admin/fixes/:id/review (ADR 0030)
   //
-  // Queues a fresh Opus review of the attempt's PR and asks agent-pr-review to
+  // Queues a fresh AI review of the attempt's PR and asks agent-pr-review to
   // run it now. The last completed verdict stays in force until the new
   // review completes: a re-run never clears a hold. Billed to the project's
   // Anthropic key, so viewers cannot start one, a review already queued or
@@ -1205,7 +1214,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
           ok: false,
           error: {
             code: 'RERUN_NEEDS_CONSOLE',
-            message: 'The Opus review says hold for this commit. Only a person can ask for it again: open the fix in the Mushi console. New commits are reviewed automatically.',
+            message: 'The AI review says hold for this commit. Only a person can ask for it again: open the fix in the Mushi console. New commits are reviewed automatically.',
           },
         },
         403,
@@ -1350,7 +1359,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       ? await repoQuery.eq('id', fix.repo_id).maybeSingle()
       : await repoQuery.eq('project_id', fix.project_id).eq('is_primary', true).limit(1).maybeSingle();
     const baseBranch = (repoRow?.default_branch as string | null | undefined) ?? null;
-    // ADR 0030: the Opus review verdict (or "not reviewed") rides on the timeline.
+    // ADR 0030: the AI review verdict (or "not reviewed") rides on the timeline.
     // fix_attempts.commit_sha follows the PR head on push (webhooks-github-indexer),
     // so a verdict about an older commit shows as stale here.
     // ADR 0035: the merge gates for the current head, the automatic-merge
@@ -1902,7 +1911,7 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
     }
 
     // ADR 0030: once a PR is attached, its link is fixed. Retargeting or
-    // clearing pr_url / commit_sha would unlink the fix from its Opus review
+    // clearing pr_url / commit_sha would unlink the fix from its AI review
     // and slip a held PR past the merge gate. Setting them while unset (an
     // external agent reporting its PR, submit_fix_result) still works.
     if ('pr_url' in updates || 'commit_sha' in updates) {

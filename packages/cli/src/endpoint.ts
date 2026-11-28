@@ -20,15 +20,39 @@ export const CLOUD_API_ENDPOINT =
   'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api'
 
 /**
+ * Default MUSHI_PUBLIC_ORIGIN: the origin (scheme + host, no path) of the
+ * public Mushi site. The marketing site, console, docs and hosted MCP live
+ * under `/mushi-mushi/` on it.
+ */
+const DEFAULT_PUBLIC_ORIGIN = 'https://kensaur.us'
+
+/**
+ * MUSHI_PUBLIC_ORIGIN, reduced to an http(s) origin. Unset or invalid → the
+ * hosted default, so nothing changes unless an operator sets it.
+ */
+export function resolvePublicOrigin(raw: string | undefined = process.env.MUSHI_PUBLIC_ORIGIN): string {
+  const v = raw?.trim()
+  if (v) {
+    try {
+      const u = new URL(v)
+      if (u.protocol === 'https:' || u.protocol === 'http:') return u.origin
+    } catch {
+      // not a URL — fall back to the default
+    }
+  }
+  return DEFAULT_PUBLIC_ORIGIN
+}
+
+/**
  * Mushi Cloud's hosted MCP URL for OAuth sign-in — mirrors `hostedMcp` in
  * `@mushi-mushi/brand` MUSHI_CANONICAL_URLS. Not the sibling
  * `…supabase.co/functions/v1/mcp`: a client starting sign-in without the 401
  * hint (Claude Code's `/mcp` → Authenticate, `claude mcp login`) looks for
  * OAuth metadata at the host root, which on supabase.co is Supabase's gateway,
  * so discovery falls through to `POST /register` → 404 "requested path is
- * invalid". kensaur.us serves those root paths.
+ * invalid". The public origin (MUSHI_PUBLIC_ORIGIN) serves those root paths.
  */
-export const CLOUD_MCP_OAUTH_URL = 'https://kensaur.us/mushi-mushi/hosted-mcp/'
+export const CLOUD_MCP_OAUTH_URL = `${resolvePublicOrigin()}/mushi-mushi/hosted-mcp/`
 
 /**
  * First non-blank candidate, trimmed. Use instead of `??` when chaining

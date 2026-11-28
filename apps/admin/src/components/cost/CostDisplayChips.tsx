@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { Tooltip } from '../ui'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 export function ModelChip({
   model,
@@ -23,7 +24,7 @@ export function ModelChip({
     >
       <Link
         to="/health"
-        className={`inline-block truncate rounded-sm bg-surface-overlay/70 px-1.5 py-px font-mono text-2xs leading-snug text-fg-secondary hover:text-brand transition-opacity ${maxWidthClass}`}
+        className={`inline-block truncate rounded-sm ${CHIP_TONE.neutral} px-1.5 py-px font-mono text-2xs leading-snug hover:text-brand transition-opacity ${maxWidthClass}`}
       >
         {model}
       </Link>

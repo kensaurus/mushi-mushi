@@ -210,7 +210,7 @@ export function BudgetForecastCard({ projectId, series, fmtSpend }: Props) {
         <div
           role="alert"
           className={`mb-3 flex items-start gap-2 rounded-md px-3 py-2 text-2xs ${
-            isOverBudget100 ? CHIP_TONE.dangerSubtle : CHIP_TONE.warnSubtle
+            isOverBudget100 ? CHIP_TONE.danger : CHIP_TONE.warn
           }`}
         >
           <span aria-hidden="true">{isOverBudget100 ? '🚨' : '⚠️'}</span>

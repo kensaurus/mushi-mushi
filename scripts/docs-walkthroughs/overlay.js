@@ -39,9 +39,11 @@
   #wt-card .k { display: inline-block; font-size: 15px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: ${ACCENT}; margin-bottom: 14px; }
   #wt-card .h { font-size: 46px; font-weight: 800; letter-spacing: -.02em; line-height: 1.12; }
   #wt-card .s { margin-top: 16px; font-size: 22px; color: #d6d7de; line-height: 1.45; }
+  #wt-badge { position: fixed; right: 22px; top: 22px; padding: 6px 14px; border-radius: 999px; background: rgba(14,14,18,.88); border: 1px solid rgba(255,255,255,.16); color: #fff; font-size: 15px; font-weight: 700; letter-spacing: .02em; opacity: 0; transition: opacity 240ms ease; }
+  #wt-badge.on { opacity: 1; }
   `
 
-  let root, cursor, ring, caption, card
+  let root, cursor, ring, caption, card, badge
   const pos = { x: -60, y: -60 }
 
   function mount() {
@@ -55,6 +57,7 @@
       <div id="wt-card"><div class="box"><div class="k"></div><div class="h"></div><div class="s"></div></div></div>
       <div id="wt-ring"></div>
       <div id="wt-caption"><div class="n"></div><div><div class="t"></div><div class="d"></div></div></div>
+      <div id="wt-badge"></div>
       <svg id="wt-cursor" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 2.5l15 9.2-6.6 1.5 3.9 7.3-3 1.6-3.9-7.4L4.6 19z" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/></svg>`
     document.documentElement.appendChild(style)
     document.documentElement.appendChild(root)
@@ -62,6 +65,7 @@
     ring = root.querySelector('#wt-ring')
     caption = root.querySelector('#wt-caption')
     card = root.querySelector('#wt-card')
+    badge = root.querySelector('#wt-badge')
     place()
   }
 
@@ -153,6 +157,13 @@
     card.classList.add('on')
   }
 
+  /** A small corner label, e.g. "Sped up 6×" while the recorder fast-forwards a wait. */
+  function showBadge(text) {
+    mount()
+    badge.textContent = text || ''
+    badge.classList.toggle('on', !!text)
+  }
+
   /** Zoom <body> so the viewport point (cx, cy) sits in the middle, clamped to the page edges. */
   function zoom(scale, cx, cy, ms = 750) {
     const b = document.body
@@ -226,7 +237,7 @@
     return out.join('\n')
   }
 
-  window.__wt = { mount, moveTo, jump, click, ring: showRing, caption: showCaption, card: showCard, zoom, pos, visibleText }
+  window.__wt = { mount, moveTo, jump, click, ring: showRing, caption: showCaption, card: showCard, badge: showBadge, zoom, pos, visibleText }
   if (document.readyState !== 'loading') mount()
   else document.addEventListener('DOMContentLoaded', mount)
 })()

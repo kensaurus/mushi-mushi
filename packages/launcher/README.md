@@ -10,7 +10,7 @@ One place to improve your AI-built app. Mushi Mushi finds what breaks, where peo
 npx mushi-mushi
 ```
 
-Run it in your app's folder. No terminal? [Use Lovable or Bolt instead](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt).
+Run it in your app's folder. No terminal? [Use Lovable or Bolt instead](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt). Not ready to install? [Check your live app free](#check-your-live-app-free) first.
 
 [![npm](https://img.shields.io/npm/v/mushi-mushi?color=cb3837&label=mushi-mushi)](https://www.npmjs.com/package/mushi-mushi)
 [![npm downloads](https://img.shields.io/npm/dm/mushi-mushi?color=cb3837&label=downloads)](https://www.npmjs.com/package/mushi-mushi)
@@ -29,12 +29,22 @@ Run it in your app's folder. No terminal? [Use Lovable or Bolt instead](https://
 
 ## What happens next
 
+<img src="https://raw.githubusercontent.com/kensaurus/mushi-mushi/master/docs/media/walkthroughs/install-wizard.gif" alt="Setup in a terminal: npx mushi-mushi --dry-run finds React and lists what a real run does (install one package, write two settings to .env.local, send a test report) without changing anything; then the report button appears in the corner of a demo shop and opens its feedback form" width="800" />
+
 1. **You sign in through your browser.** The command opens a page. You approve it, and Mushi Mushi makes your free project and key. There is nothing to copy.
 2. **It installs Mushi Mushi and shows you a few lines of code.** Add them to your app (or ask your AI editor to). They show a small report button.
 3. **Your users tap the button when something is wrong.** They write one sentence. Mushi Mushi adds a screenshot and what the app was doing.
 4. **You get the cause in plain English, and a fix your AI editor can apply.** Open the report in the [console](https://kensaur.us/mushi-mushi/admin), or ask your editor for it.
 
-The setup adds `mushi-mushi` to your `package.json` and writes your two settings to `.env.local`. It doesn't change your app's code (for a plain JavaScript app it offers to, and asks first). It warns you if `.env.local` is not in `.gitignore`.
+The setup adds `mushi-mushi` to your `package.json` and writes your two settings to `.env.local`. It doesn't change your app's code (for a plain JavaScript app it offers to, and asks first). It warns you if `.env.local` is not in `.gitignore`. To see this list for your own app first, run `npx mushi-mushi --dry-run`: it changes nothing.
+
+## Check your live app free
+
+Before you install anything, type your live address on the [Mushi Mushi home page](https://kensaur.us/mushi-mushi/) and press **Check my app**. In about 30 seconds you get what is broken for a first visitor, why it matters, and a prompt to paste into Lovable, Bolt or your AI editor. No sign-up.
+
+<a href="https://kensaur.us/mushi-mushi/docs/check">
+  <img src="https://raw.githubusercontent.com/kensaurus/mushi-mushi/master/docs/media/walkthroughs/free-check.gif" alt="The free check in 30 seconds: an address is typed into 'Check your live app free' on the Mushi Mushi home page, Check my app is pressed, and the report lists what to fix soon, why it matters, and a prompt to paste into Lovable, Bolt or an AI editor" width="800" />
+</a>
 
 ## What it does
 

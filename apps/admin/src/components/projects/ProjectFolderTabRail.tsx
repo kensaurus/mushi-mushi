@@ -11,13 +11,12 @@ import { Badge } from '../ui'
 import { SignalChip } from '../report-detail/ReportSurface'
 import { trendLabel } from './project-models'
 import { ProjectFavicon } from '../ProjectFavicon'
-import { sdkOriginFromApiKeys } from '../../lib/resolveProjectDomain'
+import { FAVICON_SHARED_HOSTS, sdkOriginFromApiKeys } from '../../lib/resolveProjectDomain'
 import {
   bottleneckHumanHeadline,
 } from '../../lib/pdcaBottleneck'
 import type { PdcaStageId } from '../../lib/pdca'
 import type { SdkStatus } from '../SdkVersionBadge'
-import { CHIP_TONE } from '../../lib/chipTone'
 import {
   HEARTBEAT_HINT,
   HEARTBEAT_LABEL,
@@ -117,6 +116,7 @@ function faviconSource(project: ProjectFolderTabItem) {
     project_slug: project.slug,
     sdk_origin: sdkOriginFromApiKeys(project.api_keys),
     repo_url: project.primary_repo?.repo_url ?? null,
+    shared_hosts: FAVICON_SHARED_HOSTS,
   }
 }
 
@@ -154,7 +154,7 @@ function ProjectMetaRow({ project }: { project: ProjectFolderTabItem }) {
         </span>
       ) : null}
       {critical > 0 ? (
-        <Badge className={`${CHIP_TONE.dangerSubtle} text-3xs px-1 py-0`}>
+        <Badge tone="danger" className="text-3xs px-1 py-0">
           {critical} critical
         </Badge>
       ) : null}

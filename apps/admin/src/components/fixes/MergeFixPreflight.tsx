@@ -3,7 +3,7 @@
  * Confirm popover for merging a Mushi draft PR from the console.
  * Mirrors DispatchFixPreflight — user stays in control, nothing auto-merges.
  *
- * Shows the Opus review of the PR (ADR 0030) before the merge button: a
+ * Shows the AI review of the PR (ADR 0030) before the merge button: a
  * "fix first" lists its findings, a "hold" needs "Merge anyway" ticked
  * (the server refuses a hold without `override: true`), and a PR with no
  * review says "Not reviewed".
@@ -170,7 +170,7 @@ export function MergeFixPreflight({
         className={
           compact
             ? 'text-ok hover:text-ok font-medium underline-offset-2 hover:underline disabled:opacity-50 text-xs'
-            : `inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-sm hover:bg-ok-muted/40 disabled:opacity-50 disabled:cursor-wait ${CHIP_TONE.okSubtle}`
+            : `inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-sm hover:bg-ok-muted/40 disabled:opacity-50 disabled:cursor-wait ${CHIP_TONE.ok}`
         }
       >
         {merging ? 'Merging…' : compact ? 'Merge in console' : 'Merge PR in console →'}
@@ -216,19 +216,19 @@ export function MergeFixPreflight({
               <FixGateChecklist fixId={fixId} />
             ) : (
               <p className="text-2xs text-fg-muted" data-testid="fix-gate-local">
-                Merge checks: a fix from your own lane is checked by its Opus review above and its CI. The extra gates run on cloud agents&apos; pull requests.
+                Merge checks: a fix from your own lane is checked by its AI review above and its CI. The extra gates run on cloud agents&apos; pull requests.
               </p>
             )}
           </div>
 
           {reviewPending && (
-            <p className={`mt-2 rounded-sm px-2 py-1.5 text-2xs ${CHIP_TONE.warnSubtle}`}>
-              The Opus review is still running. Merging now skips it; wait a few minutes to see what it finds.
+            <p className={`mt-2 rounded-sm px-2 py-1.5 text-2xs ${CHIP_TONE.warn}`}>
+              The AI review is still running. Merging now skips it; wait a few minutes to see what it finds.
             </p>
           )}
 
           {reviewBlocksMerge(review) && (
-            <div className={`mt-2 rounded-sm px-2 py-1.5 text-2xs ${CHIP_TONE.dangerSubtle}`}>
+            <div className={`mt-2 rounded-sm px-2 py-1.5 text-2xs ${CHIP_TONE.danger}`}>
               <p className="mb-1">
                 The review says hold: Mushi Mushi will not merge this until you override it. Fix the findings and re-run the
                 review, or merge anyway if you have checked them yourself.
@@ -310,7 +310,7 @@ export function MergeFixPreflight({
           </ul>
 
           {error && (
-            <p className={`mt-2 rounded-sm px-2 py-1 text-2xs ${CHIP_TONE.dangerSubtle}`}>
+            <p className={`mt-2 rounded-sm px-2 py-1 text-2xs ${CHIP_TONE.danger}`}>
               {error}
             </p>
           )}

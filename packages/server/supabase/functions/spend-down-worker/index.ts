@@ -242,7 +242,7 @@ async function candidatesFor(db: SupabaseClient, projectId: string, now: Date): 
   )
 }
 
-/** Reports among these attempts whose newest PR the Opus review held (reportsToRetryAfterHold). */
+/** Reports among these attempts whose newest PR the AI review held (reportsToRetryAfterHold). */
 async function heldRetries(db: SupabaseClient, attempts: Array<{ id: string; report_id: string; created_at: string }>, now: Date): Promise<Set<string>> {
   if (!attempts.length) return new Set()
   const { data, error } = await db

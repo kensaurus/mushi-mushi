@@ -1,6 +1,16 @@
-import { useEffect, useState } from 'react'
+/**
+ * FILE: apps/admin/src/components/report-detail/ReportTriageBar.tsx
+ * PURPOSE: Status, severity, category, repo, "Not a code bug", sync and
+ *          Dispatch fix for one report.
+ *
+ * ADR 0069 (2026-11-24): the bar is secondary. "Copy fix prompt" in the fix
+ * card is the page's one primary action, so Dispatch fix is a small ghost
+ * button here, and the page hides it (`showDispatch`) until GitHub is
+ * connected; the collapsed "let Mushi Mushi dispatch the fix" card says how
+ * to get there. With no code location, "Not a code bug" still leads (BL-061).
+ */
+import { useEffect, useId, useState } from 'react'
 import { useInRouterContext } from 'react-router-dom'
-import { Card } from '../../components/ui'
 import { SelectField, Btn } from '../ui'
 import { STATUS_LABELS, SEVERITY_LABELS, CATEGORY_LABELS } from '../../lib/tokens'
 import { IconArrowRight, IconExternalLink } from '../icons'
@@ -16,6 +26,8 @@ import { closeReasonSentryNotice, closeReasonsFor } from '../../lib/closeReasons
 import { humanizeFixError } from '../../lib/humanizeFixError'
 import { trackAdHoc } from '../../lib/track'
 import { NO_CODE_LOCATION_REASON } from '../../lib/reportCodeLocation'
+import type { DispatchGate } from './useConfirmedDispatch'
+import { DispatchSetupLine } from './DispatchSetupLine'
 
 // One option per label: 'resolved' is the legacy spelling of 'fixed' (both
 // read "Fixed"), so listing both showed "Fixed" twice. A legacy row selects
@@ -45,8 +57,9 @@ interface ReportTriageBarProps {
   dispatchState: DispatchState
   /** Opens the page's dispatch confirm (useConfirmedDispatch().request). */
   onRequestDispatch: () => void
-  /** The page's dispatch gate (dispatchBlock()); disables the button. */
-  dispatchBlock: { blocked: boolean; reason: string | null }
+  /** The page's dispatch gate (dispatchBlock()); disables the button. With
+   *  `setup`, the steps left show under the button as links. */
+  dispatchBlock: DispatchGate
   isDispatchBusy: boolean
   /** The project's linked repos and the one the fix goes to. The Repo
    *  select shows only when there is more than one. */
@@ -54,6 +67,9 @@ interface ReportTriageBarProps {
   /** reportHasCodeLocation(report). When false, "Not a code bug" leads and
    *  Dispatch becomes the secondary "Dispatch anyway" (BL-061). */
   hasCodeLocation?: boolean
+  /** False until GitHub is connected: Autofix cannot open a PR, so Dispatch
+   *  is left out (ADR 0069). A dispatch already under way still shows. */
+  showDispatch?: boolean
 }
 
 const PROVIDER_LABEL: Record<string, string> = {
@@ -74,6 +90,7 @@ export function ReportTriageBar({
   isDispatchBusy,
   repoChoice,
   hasCodeLocation = true,
+  showDispatch = true,
 }: ReportTriageBarProps) {
   const inRouter = useInRouterContext()
   const [showSaved, setShowSaved] = useState(false)
@@ -101,6 +118,8 @@ export function ReportTriageBar({
   // One gate for every dispatch control on the page (dispatchBlock()).
   const dispatchDisabled = dispatchBlock.blocked
   const dispatchBlockReason = dispatchBlock.reason ?? undefined
+  const dispatchSetup = dispatchBlock.blocked ? dispatchBlock.setup ?? null : null
+  const dispatchSetupId = useId()
   // A failed dispatch says why in plain words. Only offer "retry" when a
   // retry can help: a report with nothing to fix stops the same way again.
   const failure = dispatchState.status === 'failed' ? humanizeFixError(dispatchState.error) : null
@@ -119,6 +138,9 @@ export function ReportTriageBar({
     dispatchState.status === 'completed_no_pr' ? 'Finished without a PR' :
     dispatchState.status === 'skipped' ? 'Skipped — see reason' :
     retryHelps ? 'Failed — retry' : 'Dispatch again'
+
+  // A dispatch that already started (or ended) belongs on screen whatever the gate says.
+  const dispatchVisible = showDispatch || dispatchState.status !== 'idle'
 
   const syncToIntegrations = async () => {
     if (destinations.length === 0) {
@@ -154,7 +176,8 @@ export function ReportTriageBar({
   }
 
   return (
-    <Card  className="mb-3 flex flex-wrap items-end gap-3 p-3">
+    // Secondary: a plain bordered row, not a raised card (ADR 0069).
+    <div role="group" aria-label="Triage" className="mb-3 flex flex-wrap items-end gap-3 rounded-md border border-edge-subtle px-3 py-2" data-testid="report-triage-bar">
       <SelectField
         label="Status"
         value={selectableStatus(report.status)}
@@ -295,7 +318,7 @@ export function ReportTriageBar({
             {repoChoice.repos.map((r) => (
               <option key={r.id} value={r.id}>
                 {shortRepoName(r.repo_url)}
-                {r.is_primary ? ' (primary)' : ''}
+                {r.id === repoChoice.suggestedRepoId ? ' (matches this build)' : r.is_primary ? ' (primary)' : ''}
               </option>
             ))}
           </SelectField>
@@ -319,18 +342,33 @@ export function ReportTriageBar({
             Not a code bug
           </Btn>
         )}
+        {dispatchVisible && (
         <div className="flex flex-col items-end gap-1">
-          <Btn
-            variant={hasCodeLocation ? 'primary' : 'ghost'}
-            size={hasCodeLocation ? 'md' : 'sm'}
-            onClick={onRequestDispatch}
-            disabled={dispatchDisabled}
-            loading={isDispatchBusy && dispatchState.status !== 'completed' && dispatchState.status !== 'failed'}
-            leadingIcon={<IconArrowRight />}
-            title={dispatchBlockReason}
-          >
-            {dispatchLabel}
-          </Btn>
+          {/* A disabled Btn takes no pointer events, so its own title never
+              showed; the wrapper carries the hover text (feedback 2026-11-22). */}
+          <span className="inline-flex" title={dispatchDisabled ? dispatchBlockReason : undefined} data-testid="report-dispatch-wrap">
+            {/* Secondary: Copy fix prompt is the page's one primary (ADR 0069). */}
+            <Btn
+              variant="ghost"
+              size="sm"
+              onClick={onRequestDispatch}
+              disabled={dispatchDisabled}
+              loading={isDispatchBusy && dispatchState.status !== 'completed' && dispatchState.status !== 'failed'}
+              leadingIcon={<IconArrowRight />}
+              title={dispatchBlockReason}
+              aria-describedby={dispatchSetup ? dispatchSetupId : undefined}
+            >
+              {dispatchLabel}
+            </Btn>
+          </span>
+          {dispatchSetup ? (
+            <DispatchSetupLine
+              setup={dispatchSetup}
+              id={dispatchSetupId}
+              className="max-w-xs text-right"
+              data-testid="report-dispatch-setup"
+            />
+          ) : null}
           {dispatchState.status === 'completed' && dispatchState.prUrl && (
             <a
               href={dispatchState.prUrl}
@@ -343,7 +381,7 @@ export function ReportTriageBar({
           )}
           {dispatchState.status === 'failed' && dispatchState.error && (
             <span
-              className={`rounded-sm px-2 py-1 text-2xs max-w-xs text-right ${CHIP_TONE.dangerSubtle}`}
+              className={`rounded-sm px-2 py-1 text-2xs max-w-xs text-right ${CHIP_TONE.danger}`}
               title={failure?.raw ?? dispatchState.error}
             >
               {failure ? (
@@ -357,15 +395,16 @@ export function ReportTriageBar({
           )}
           {(dispatchState.status === 'skipped' || dispatchState.status === 'completed_no_pr') &&
             dispatchState.error && (
-              <span className={`rounded-sm px-2 py-1 text-2xs max-w-xs text-right ${CHIP_TONE.warnSubtle}`}>
+              <span className={`rounded-sm px-2 py-1 text-2xs max-w-xs text-right ${CHIP_TONE.warn}`}>
                 {dispatchState.error}
               </span>
             )}
         </div>
+        )}
       </div>
       {!hasCodeLocation && (
         <p className="basis-full text-right text-xs text-fg-muted">{NO_CODE_LOCATION_REASON}</p>
       )}
-    </Card>
+    </div>
   )
 }

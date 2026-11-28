@@ -1,21 +1,18 @@
 /**
  * FILE: apps/admin/src/components/connect/ConnectStatusPills.tsx
- * PURPOSE: The top of Connect (console journeys 2026-10-27): "Is my SDK
- *          talking to Mushi, is it current, and is my editor connected?"
- *          Three pills instead of seven tiles:
+ * PURPOSE: The status Connect shows for each thing it connects (console
+ *          journeys 2026-10-27): "Is my SDK talking to Mushi, is it current,
+ *          and is my editor connected?"
  *
  *            SDK heartbeat   when the app last checked in (SDK keys only)
  *            SDK version     the version seen, with an upgrade badge when behind
  *            Editor          how many editor connections have called Mushi
  *
- *          Each pill links to the section that fixes it. When the SDK is
- *          behind, "Upgrade the SDK" (to the Update center's upgrade PR) is the
- *          page's one primary action.
+ *          These were three pills over the page. Since ADR 0069 Connect is one
+ *          step at a time and each step row carries its own line from here,
+ *          so the pills no longer render on their own.
  */
 
-import { Link } from 'react-router-dom'
-import { Btn } from '../ui'
-import { StatusMark, StatusPill, type RunStatus } from '../signal/StatusMark'
 import { SDK_HEALTH_ANCHOR } from '../../lib/sdkHealth'
 import { relativeTime } from '../../lib/setupGuideSteps'
 import { sdkFreshness } from '../../lib/heartbeat'
@@ -44,13 +41,11 @@ interface ConnectPillsInput {
   now?: number
 }
 
-/** @internal Exported for tests. */
 export function sdkIsBehind(input: Pick<ConnectPillsInput, 'sdkVersion' | 'sdkLatestVersion' | 'sdkStatus'>): boolean {
   if (input.sdkStatus === 'outdated' || input.sdkStatus === 'deprecated') return true
   return Boolean(input.sdkVersion && input.sdkLatestVersion && input.sdkVersion !== input.sdkLatestVersion)
 }
 
-/** @internal Exported for tests. */
 export function connectPills(input: ConnectPillsInput): ConnectPill[] {
   const now = input.now ?? Date.now()
   const freshness = sdkFreshness(input.sdkLastSeenAt, now)
@@ -62,7 +57,7 @@ export function connectPills(input: ConnectPillsInput): ConnectPill[] {
     {
       id: 'heartbeat',
       label: 'App checked in',
-      value: heard ? `Heard ${heard}` : 'Not heard yet',
+      value: heard ?? 'Not yet',
       // Quiet (1 h – 7 d) is grey; only a week of silence warns (2026-11-18).
       tone: freshness === 'healthy' ? 'ok' : freshness === 'cold' ? 'warn' : 'neutral',
       href: `#${SDK_HEALTH_ANCHOR}`,
@@ -86,55 +81,4 @@ export function connectPills(input: ConnectPillsInput): ConnectPill[] {
       href: '#connect-studio',
     },
   ]
-}
-
-/** Each pill's mark (2026-11-18): ✓ fine, ⧗ behind or stale, ○ not seen yet. */
-const PILL_STATUS: Record<PillTone, RunStatus> = { ok: 'passed', warn: 'slow', neutral: 'idle' }
-
-function jump(hash: string) {
-  document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
-
-export function ConnectStatusPills(props: ConnectPillsInput & { loading?: boolean }) {
-  if (props.loading) {
-    return (
-      <p className="text-xs text-fg-muted" aria-busy="true" data-testid="connect-status-pills">
-        Checking your SDK and editor…
-      </p>
-    )
-  }
-  const pills = connectPills(props)
-  const behind = sdkIsBehind(props)
-  return (
-    <section aria-label="Connection status" className="flex min-w-0 flex-wrap items-center gap-2" data-testid="connect-status-pills">
-      <ul className="flex min-w-0 flex-1 flex-wrap gap-2">
-        {pills.map((p) => (
-          <li key={p.id} className="min-w-0">
-            <Link
-              to={p.href}
-              onClick={(e) => {
-                e.preventDefault()
-                jump(p.href)
-              }}
-              data-pill={p.id}
-              data-tone={p.tone}
-              className="inline-flex min-w-0 max-w-full items-center gap-2 rounded-full border border-edge-subtle bg-surface-raised px-3 py-1.5 text-xs hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
-            >
-              <StatusMark status={PILL_STATUS[p.tone]} />
-              <span className="shrink-0 text-fg-muted">{p.label}</span>
-              <span className="min-w-0 truncate font-medium text-fg">{p.value}</span>
-              {p.badge ? (
-                <StatusPill status="slow" label={p.badge} className="shrink-0" />
-              ) : null}
-            </Link>
-          </li>
-        ))}
-      </ul>
-      {behind ? (
-        <Btn size="sm" variant="primary" onClick={() => jump('#connect-update')}>
-          Upgrade the SDK
-        </Btn>
-      ) : null}
-    </section>
-  )
 }

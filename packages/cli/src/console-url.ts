@@ -6,12 +6,14 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { loadConfig } from './config.js'
+import { resolvePublicOrigin } from './endpoint.js'
 
 /**
- * Canonical hosted admin console (VITE_BASE_PATH=/mushi-mushi/admin/).
+ * Canonical hosted admin console (VITE_BASE_PATH=/mushi-mushi/admin/) on the
+ * public origin (MUSHI_PUBLIC_ORIGIN; MUSHI_CONSOLE_URL still wins below).
  * @internal Exported for tests only.
  */
-export const HOSTED_CONSOLE_BASE = 'https://kensaur.us/mushi-mushi/admin'
+export const HOSTED_CONSOLE_BASE = `${resolvePublicOrigin()}/mushi-mushi/admin`
 
 const LOCAL_ADMIN_URL = 'http://localhost:6464'
 const LOCAL_PROBE_MS = 800

@@ -31,6 +31,8 @@ const MUSHI_CHECK_SOURCES: ReadonlySet<string> = new Set([
   'site_audit',
   'site_watch',
   'security_advisory',
+  // The host's own CI scan (mushi-security.yml, ADR 0074).
+  'security_scan',
   'fresh_eyes',
   'code_audit',
   'ux_scorecard',

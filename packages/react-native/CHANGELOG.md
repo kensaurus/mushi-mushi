@@ -1,5 +1,22 @@
 # @mushi-mushi/react-native
 
+## 0.26.1
+
+### Patch Changes
+
+- 0c06725: Dependency updates. `@mushi-mushi/mcp` now accepts `@sentry/node` 10 or 11 as its optional peer. On 11 it sends the same data as before: no user info, cookies, headers, request bodies or tool inputs and outputs. `@mushi-mushi/ux` moves to `@anthropic-ai/sdk` 1.x, and `@mushi-mushi/cli` to `@napi-rs/keyring` 2. `@mushi-mushi/react-native` builds and type-checks against React Native 0.88; its floating button no longer casts its animated style. The Svelte and Vue starter templates now use Vite 8 and TypeScript 6.
+
+## 0.26.0
+
+### Minor Changes
+
+- 333a425: - **The console's colour and corner reach React Native apps.** The SDK now reads your project's widget settings once at start and applies the colour (with readable text on it) and the bottom corner you chose in the console, without a new app build. What you set in code still wins (ADR 0068), and `runtimeConfig: false` turns this off. The console's trigger and minimum-length defaults are not applied, so an app that never asked for shake-to-report won't get it.
+
+### Patch Changes
+
+- Updated dependencies [48f44f6]
+  - @mushi-mushi/web@1.39.1
+
 ## 0.25.0
 
 ### Minor Changes

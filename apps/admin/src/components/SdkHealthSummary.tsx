@@ -28,7 +28,7 @@
  *                            most common cause: env vars missing in CI build
  *                            so the SDK is tree-shaken out of the bundle
  *                            (verified during the 2026-05-07 audit on
- *                            kensaur.us/glot-it: zero "mushi" references in
+ *                            a live app: zero "mushi" references in
  *                            the deployed HTML)
  *   - `no-key`             — no active keys at all → user hasn't generated one
  *
@@ -54,9 +54,9 @@ import { useSendTestReport } from '../lib/useSendTestReport'
 import type { SetupStep } from '../lib/useSetupStatus'
 import {
   formatEnvVarPair,
-  mushiEnvVarsForProjectSlug,
-  isExpoReporterProject,
-  expoReporterGithubRepo,
+  isExpoEnv,
+  isMushiSelfProject,
+  mushiEnvVarsForProject,
   type ProjectMushiEnvVars,
 } from '../lib/projectMushiEnv'
 import { sdkPlatformHintFromUserAgent, sdkOriginKind } from '../lib/sdkClientPlatform'
@@ -83,6 +83,7 @@ export interface SdkHealthSummaryProps {
   projectId: string
   projectName: string
   /** Project slug drives stack-accurate env-var names in diagnostics. */
+  /** Unused since ADR 0072: env names come from the stack, never the app's name. */
   projectSlug?: string | null
   apiKeys: SdkHealthApiKey[]
   /** Most recent report's `created_at`, used to differentiate
@@ -166,7 +167,7 @@ const SDK_START_ADVICE =
 export function diagnoseKey(
   k: SdkHealthApiKey,
   adminHost: string | null,
-  env: ProjectMushiEnvVars = mushiEnvVarsForProjectSlug(null),
+  env: ProjectMushiEnvVars = mushiEnvVarsForProject(),
 ): KeyDiagnostic {
   if (!k.is_active) {
     return {
@@ -239,7 +240,7 @@ export function activeSdkKeys<T extends Pick<SdkHealthApiKey, 'is_active' | 'sco
 export function summarizeCardStatus(
   apiKeys: SdkHealthApiKey[],
   adminHost: string | null,
-  env: ProjectMushiEnvVars = mushiEnvVarsForProjectSlug(null),
+  env: ProjectMushiEnvVars = mushiEnvVarsForProject(),
 ): CardStatus {
   const active = activeSdkKeys(apiKeys)
   if (active.length === 0) return 'no-key'
@@ -280,13 +281,13 @@ const SDK_CARD_CHIP_LABEL: Record<CardStatus, string> = {
 const STATUS_TONE: Record<CardStatus, { dot: string; chip: string; headline: string; subtitle: string }> = {
   healthy: {
     dot: 'bg-ok',
-    chip: CHIP_TONE.okSubtle,
+    chip: CHIP_TONE.ok,
     headline: 'Feedback widget is connected',
     subtitle: 'Your app is checking in — new bug reports should appear within seconds.',
   },
   'endpoint-mismatch': {
     dot: 'bg-danger',
-    chip: CHIP_TONE.dangerSubtle,
+    chip: CHIP_TONE.danger,
     headline: 'SDK is pointed at the wrong backend',
     subtitle: 'Reports may be landing somewhere else. Fix your API endpoint env var and rebuild.',
   },
@@ -299,14 +300,14 @@ const STATUS_TONE: Record<CardStatus, { dot: string; chip: string; headline: str
   },
   cold: {
     dot: 'bg-warn',
-    chip: CHIP_TONE.warnSubtle,
+    chip: CHIP_TONE.warn,
     headline: 'No app activity in 7+ days',
     subtitle: 'The SDK may have been removed from a recent deploy, or the API key was rotated.',
   },
   // Not installed yet is the next setup step, not a failure: no red for a new app.
   never: {
     dot: 'bg-info',
-    chip: CHIP_TONE.infoSubtle,
+    chip: CHIP_TONE.info,
     headline: 'SDK not connected yet',
     subtitle: 'Your API key exists but your app has never used it — usually missing env vars in the build.',
   },
@@ -584,19 +585,18 @@ function SdkKeyTableRow({
 
 function buildPlaybook(
   env: ProjectMushiEnvVars,
-  projectSlug?: string | null,
 ): Record<CardStatus, { title: string; checks: string[]; cta: string | null }> {
   const envPair = formatEnvVarPair(env)
   const envWhere = env.envFileHint ?? 'your CI/build env'
   const endpointVar = env.endpointVar ?? 'your Mushi Mushi API endpoint env var'
   const isExpo = env.projectIdVar.startsWith('EXPO_PUBLIC_')
-  const ghRepo = expoReporterGithubRepo(projectSlug) ?? 'your-repo'
+  const ghRepo = 'your-repo'
   const neverChecks =
     isExpo
       ? [
           `Local dev: add ${envPair} to ${envWhere}. Without both, mushiConfig is null and the feedback band never renders.`,
           env.ciVars
-            ? `CI / store builds: set GitHub repo ${env.ciVars.projectId.ghKind} ${env.ciVars.projectId.name}, ${env.ciVars.apiKey.ghKind} ${env.ciVars.apiKey.name}${env.ciVars.endpoint ? `, and ${env.ciVars.endpoint.name}` : ''} on ${ghRepo}. See Connect → Setup Copilot or run scripts/setup-yen-yen-reporter-secrets.mjs.`
+            ? `CI / store builds: set GitHub repo ${env.ciVars.projectId.ghKind} ${env.ciVars.projectId.name}, ${env.ciVars.apiKey.ghKind} ${env.ciVars.apiKey.name}${env.ciVars.endpoint ? `, and ${env.ciVars.endpoint.name}` : ''} on ${ghRepo}. See Connect → Setup Copilot.`
             : `CI / store builds: mirror ${envPair} into your release workflow env — Expo cannot read secrets at runtime.`,
           'Rebuild required: EXPO_PUBLIC_* is compile-time. OTA updates cannot fix a store build that shipped without keys — trigger release-mobile for Android + iOS.',
           'Reporter vs ingest: EXPO_PUBLIC_MUSHI_API_KEY powers the in-app band. MUSHI_INGEST_KEY is Code Health metrics only — it does not enable the band.',
@@ -663,7 +663,6 @@ function buildPlaybook(
 export function SdkHealthSummary({
   projectId,
   projectName,
-  projectSlug,
   apiKeys,
   lastReportAt,
   adminHost,
@@ -678,7 +677,7 @@ export function SdkHealthSummary({
   // Diagnostic accordion auto-opens when the status is anything OTHER than
   // healthy — i.e. we expand it precisely when the user has come here to
   // troubleshoot. They can still collapse it if they just want the summary.
-  const envVars = mushiEnvVarsForProjectSlug(projectSlug)
+  const envVars = mushiEnvVarsForProject({ isSelf: isMushiSelfProject(projectId) })
   const status = summarizeCardStatus(apiKeys, adminHost, envVars)
   const [open, setOpen] = useState(status !== 'healthy' && status !== 'no-key')
   const [showTechnical, setShowTechnical] = useState(
@@ -697,7 +696,7 @@ export function SdkHealthSummary({
   }, [status])
 
   const tone = STATUS_TONE[status]
-  const playbook = buildPlaybook(envVars, projectSlug)[status]
+  const playbook = buildPlaybook(envVars)[status]
   const activeKeys = activeSdkKeys(apiKeys)
   const freshest = freshestHeartbeatKey(activeKeys)
   // Editor, CI and ops keys are left out on purpose (not the app's SDK); say
@@ -886,10 +885,10 @@ export function SdkHealthSummary({
           <span aria-hidden="true" className="ml-1.5">{open ? '▴' : '▾'}</span>
         </Btn>
         <Link
-          to={isExpoReporterProject(projectSlug) ? '/onboarding?tab=diagnose' : '/onboarding'}
+          to={isExpoEnv(envVars) ? '/onboarding?tab=diagnose' : '/onboarding'}
           className="text-2xs text-fg-muted hover:text-fg underline-offset-2 hover:underline ml-auto"
         >
-          {isExpoReporterProject(projectSlug) ? 'Setup Copilot →' : 'Setup guide →'}
+          {isExpoEnv(envVars) ? 'Setup Copilot →' : 'Setup guide →'}
         </Link>
       </div>
 
@@ -1025,7 +1024,7 @@ export function SdkConnectivityEmptyState({
   return (
     <Card className="p-5 space-y-4 border-dashed">
       <div className="flex items-center gap-2 text-2xs font-mono text-fg-secondary font-semibold">
-        <Badge tone="infoSubtle">Connectivity check</Badge>
+        <Badge tone="info">Connectivity check</Badge>
         <span>{headline}</span>
       </div>
       <SdkHealthSummary

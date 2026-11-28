@@ -140,7 +140,10 @@ export function ConnectionGrid({
   // gets an alert card with its own Fix, so the sentence only names them.
   const tally = connectionTally(tiles)
   const gap = alertChannelGap(tiles, alertEventsOn)
-  const gapText = `No alert channel: ${alertEventsOn ?? 0} alert ${alertEventsOn === 1 ? 'event goes' : 'events go'} nowhere`
+  // The switches below draw OFF while no channel exists (2026-11-19), so "8 alert
+  // events go nowhere" above eight OFF switches read as a contradiction
+  // (2026-11-24). Say what is missing; the saved count stays as the metric.
+  const gapText = "No alert channel: alerts can't be sent yet"
   const showTally = broken.length === 0 && !gap && tally.working + tally.unchecked > 0
   // Nothing broken: the counts as marks, not a sentence. The status row's own
   // dot is the first mark (green when something works), so the tally never
@@ -171,7 +174,7 @@ export function ConnectionGrid({
     label: 'No channel',
     title: gapText,
     detail: 'Slack, Discord and Teams are all not connected. One channel is enough.',
-    metric: { value: String(alertEventsOn ?? 0), unit: 'events on' },
+    metric: { value: String(alertEventsOn ?? 0), unit: alertEventsOn === 1 ? 'event waiting' : 'events waiting' },
     action: { label: 'Connect Slack', onClick: () => onConnect('slack') },
   }
   const alerts: SignalAlert[] = [
@@ -353,7 +356,9 @@ function ConnectionTile({
           <StatusPill status={status} label={word} className="max-w-full truncate" />
         </span>
         {tile.lastAt && tile.lastLabel && state !== 'not_connected' ? (
-          <span className="truncate text-3xs text-fg-secondary">
+          // Wraps instead of truncating: a 160px tile cut "Last import 14 minutes ago" to
+          // "Last import …" and hid the one fact the line is for (2026-11-24).
+          <span className="line-clamp-2 text-3xs leading-snug text-fg-secondary">
             {tile.lastLabel} <RelativeTime value={tile.lastAt} />
           </span>
         ) : null}

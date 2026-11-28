@@ -124,6 +124,8 @@ describe('onboardingNavBadge', () => {
       sdkHostMismatch: false,
     })
     expect(badge?.count).toBe(2)
+    // Same words as Home and the first-run screens, so the counts read as one checklist.
+    expect(badge?.label).toBe('Set up · 2 of 4 done')
   })
 })
 
@@ -339,6 +341,16 @@ describe('settingsNavBadge', () => {
     const badge = settingsNavBadge(slice({ byokKeysFailing: 1, byokKeysNeedingAction: 3 }))
     expect(badge?.count).toBe(3)
     expect(settingsNavBadge(slice({ byokKeysFailing: 0, byokKeysNeedingAction: 0 }))).toBeNull()
+  })
+
+  // 2026-11-24: "2 AI keys need you" in amber beside a page that said
+  // "2 keys to tidy up — Nothing is broken".
+  it('draws tidy-up only (replaced keys, second copies) as a grey count, not an alert', () => {
+    expect(settingsNavBadge(slice({ byokKeysNeedingAction: 2 }))).toMatchObject({
+      mode: 'inventory',
+      count: 2,
+      label: '2 old AI keys to tidy up; nothing is broken',
+    })
   })
 
   it('asks for attention when a key expires soon, like the Settings banner', () => {

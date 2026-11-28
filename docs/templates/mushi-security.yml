@@ -1,0 +1,203 @@
+# Mushi security proof. Save as .github/workflows/mushi-security.yml on your default branch.
+# Your CI runs the scanners with your minutes and your keys; Mushi only reads
+# the results (SARIF / JSON) and shows each release's Security proof: the scans
+# that came back green for the commit it ships.
+#
+#   every PR       OSV-Scanner (known holes in your lockfiles) + Gitleaks (secrets)
+#   opt-in, PRs    claude-code-security-review, on your own and Mushi's fix
+#                  agents' PRs only (it is not hardened against prompt injection)
+#   weekly         ZAP baseline + Nuclei against your staging URL
+#   on demand      Actions → Mushi security proof → Run workflow, with the
+#                  release commit as `sha`, proves one release
+#
+# Secrets:   MUSHI_API_KEY (a key with mcp:write; without it the scans still
+#            run, nothing is sent), ANTHROPIC_API_KEY (only for the AI review).
+# Variables: MUSHI_SECURITY_AI_REVIEW = true      turns the AI review on
+#            MUSHI_SECURITY_TRUSTED_AUTHORS        comma-separated logins whose PRs
+#                                                  the AI review may read (default:
+#                                                  the repo owner). Add your fix
+#                                                  agents' bot logins here.
+#            MUSHI_STAGING_URL                     the site the weekly scan visits
+#            LINUX_RUNNER                          optional self-hosted runner label
+# Docs: https://kensaur.us/mushi-mushi/docs/admin/security-proof
+name: Mushi security proof
+
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Commit to prove (empty = the branch tip)
+        required: false
+        default: ''
+      dast:
+        description: Also scan the staging site now
+        type: boolean
+        default: false
+  schedule:
+    # Weekly, Monday 03:17 UTC: the live-site scan only.
+    - cron: '17 3 * * 1'
+
+permissions:
+  contents: read
+
+# PR pushes cancel the run they replace; a scheduled or manual run is never cancelled.
+concurrency:
+  group: mushi-security-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  MUSHI_API_ENDPOINT: ${{ vars.MUSHI_API_ENDPOINT || 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api' }}
+
+jobs:
+  scan:
+    name: Dependencies and secrets
+    if: github.event_name != 'schedule'
+    runs-on: ${{ (github.actor != 'dependabot[bot]' && vars.LINUX_RUNNER) || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    env:
+      MUSHI_API_KEY: ${{ secrets.MUSHI_API_KEY }}
+      SHA: ${{ inputs.sha || github.event.pull_request.head.sha || github.sha }}
+      REF: ${{ github.head_ref || github.ref_name }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      EVENT: ${{ github.event_name }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+        with:
+          ref: ${{ env.SHA }}
+          persist-credentials: false
+      - name: OSV-Scanner
+        id: osv
+        run: |
+          set +e
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/src" -w /src \
+            ghcr.io/google/osv-scanner:v2.7.1 scan source --recursive --format sarif --output /src/osv.sarif /src
+          echo "rc=$?" >> "$GITHUB_OUTPUT"
+      - name: Gitleaks
+        id: gitleaks
+        run: |
+          set +e
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/repo" \
+            ghcr.io/gitleaks/gitleaks:v8.30.1 dir /repo --redact --no-banner --exit-code 0 \
+            --report-format sarif --report-path /repo/gitleaks.sarif
+          echo "rc=$?" >> "$GITHUB_OUTPUT"
+      - name: Send results to Mushi
+        if: always() && env.MUSHI_API_KEY != ''
+        env:
+          OSV_RC: ${{ steps.osv.outputs.rc }}
+          GITLEAKS_RC: ${{ steps.gitleaks.outputs.rc }}
+        run: |
+          post() { # tool file rc
+            local status='' reason=''
+            if [ ! -s "$2" ]; then
+              # osv-scanner exits 128 when the repo has no lockfile it can read.
+              if [ "$1" = osv-scanner ] && [ "$3" = 128 ]; then status=skipped; reason='No lockfile found'; else status=error; reason="exit $3, no report"; fi
+              printf '{}' > "$2"
+            fi
+            jq -n --arg tool "$1" --arg sha "$SHA" --arg ref "$REF" --arg event "$EVENT" --arg pr "$PR_NUMBER" \
+              --arg url "$RUN_URL" --arg status "$status" --arg reason "$reason" --slurpfile report "$2" \
+              '{tool:$tool, commit_sha:$sha, ref:$ref, event:$event, pr_number:(if $pr == "" then null else ($pr|tonumber) end),
+                run_url:$url, status:(if $status == "" then null else $status end), skip_reason:(if $reason == "" then null else $reason end),
+                report:$report[0]}' |
+              curl -sS --fail-with-body --max-time 60 -X POST "$MUSHI_API_ENDPOINT/v1/security/results" \
+                -H "X-Mushi-Api-Key: $MUSHI_API_KEY" -H 'Content-Type: application/json' --data-binary @- ||
+              echo "::warning::Mushi did not take the $1 result"
+            echo
+          }
+          post osv-scanner osv.sarif "$OSV_RC"
+          post gitleaks gitleaks.sarif "$GITLEAKS_RC"
+
+  ai-review:
+    name: AI security review (trusted authors)
+    # Same-repo PRs from a trusted author only, never pull_request_target:
+    # the review reads the diff, and the diff can carry a prompt injection.
+    if: >-
+      github.event_name == 'pull_request' &&
+      vars.MUSHI_SECURITY_AI_REVIEW == 'true' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      contains(format(',{0},', vars.MUSHI_SECURITY_TRUSTED_AUTHORS || github.repository_owner), format(',{0},', github.event.pull_request.user.login))
+    runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      MUSHI_API_KEY: ${{ secrets.MUSHI_API_KEY }}
+      SHA: ${{ github.event.pull_request.head.sha }}
+      REF: ${{ github.head_ref }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+        with:
+          ref: ${{ env.SHA }}
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: anthropics/claude-code-security-review@0c6a49f1fa56a1d472575da86a94dbc1edb78eda  # main, 2026-02-11
+        id: review
+        continue-on-error: true
+        with:
+          claude-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          comment-pr: true
+          upload-results: false
+      - name: Send results to Mushi
+        if: always() && env.MUSHI_API_KEY != ''
+        run: |
+          file=$(find "$(dirname "$RUNNER_WORKSPACE")/_actions/anthropics/claude-code-security-review" -name claudecode-results.json 2>/dev/null | head -n 1)
+          status=''
+          if [ -z "$file" ] || [ ! -s "$file" ]; then status=error; file=$(mktemp); printf '{}' > "$file"; fi
+          jq -n --arg sha "$SHA" --arg ref "$REF" --arg pr "$PR_NUMBER" --arg url "$RUN_URL" --arg status "$status" --slurpfile report "$file" \
+            '{tool:"claude-code-security-review", commit_sha:$sha, ref:$ref, event:"pull_request", pr_number:($pr|tonumber),
+              run_url:$url, status:(if $status == "" then null else $status end), report:$report[0]}' |
+            curl -sS --fail-with-body --max-time 60 -X POST "$MUSHI_API_ENDPOINT/v1/security/results" \
+              -H "X-Mushi-Api-Key: $MUSHI_API_KEY" -H 'Content-Type: application/json' --data-binary @- ||
+            echo "::warning::Mushi did not take the AI review result"
+
+  dast:
+    name: Live-site scan (weekly)
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.dast)
+    runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    env:
+      MUSHI_API_KEY: ${{ secrets.MUSHI_API_KEY }}
+      STAGING_URL: ${{ vars.MUSHI_STAGING_URL }}
+      EVENT: ${{ github.event_name }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: ZAP baseline (passive, no attacks)
+        if: env.STAGING_URL != ''
+        run: |
+          mkdir -p zap && chmod 777 zap
+          docker run --rm -v "$PWD/zap:/zap/wrk:rw" ghcr.io/zaproxy/zaproxy:2.17.0 \
+            zap-baseline.py -t "$STAGING_URL" -J zap.json -I -m 3 || true
+      - name: Nuclei (non-intrusive templates, rate-limited)
+        if: env.STAGING_URL != ''
+        run: |
+          mkdir -p nuclei
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD/nuclei:/out" projectdiscovery/nuclei:v3.11.1 \
+            -u "$STAGING_URL" -jsonl -o /out/nuclei.jsonl -severity low,medium,high,critical \
+            -etags intrusive,dos,fuzz,bruteforce -rl 10 -c 5 -timeout 10 -duc -silent || true
+      - name: Send results to Mushi
+        if: always() && env.MUSHI_API_KEY != ''
+        run: |
+          post() { # tool file format(json|raw)
+            local status='' reason='' arg='--slurpfile'
+            if [ -z "$STAGING_URL" ]; then status=skipped; reason='MUSHI_STAGING_URL is not set'; fi
+            if [ -z "$status" ] && [ ! -e "$2" ]; then status=error; reason='no report'; fi
+            # Nuclei writes no file when it finds nothing: that is a clean run.
+            if [ "$1" = nuclei ] && [ "$status" = error ]; then status=''; reason=''; : > "$2"; fi
+            [ -e "$2" ] || printf '{}' > "$2"
+            [ "$3" = raw ] && arg='--rawfile'
+            jq -n --arg tool "$1" --arg event "$EVENT" --arg url "$RUN_URL" --arg target "$STAGING_URL" \
+              --arg status "$status" --arg reason "$reason" "$arg" report "$2" \
+              '{tool:$tool, event:$event, run_url:$url, target_url:(if $target == "" then null else $target end),
+                status:(if $status == "" then null else $status end), skip_reason:(if $reason == "" then null else $reason end),
+                report:(if ($report|type) == "array" then $report[0] else $report end)}' |
+              curl -sS --fail-with-body --max-time 60 -X POST "$MUSHI_API_ENDPOINT/v1/security/results" \
+                -H "X-Mushi-Api-Key: $MUSHI_API_KEY" -H 'Content-Type: application/json' --data-binary @- ||
+              echo "::warning::Mushi did not take the $1 result"
+            echo
+          }
+          post zap-baseline zap/zap.json json
+          post nuclei nuclei/nuclei.jsonl raw

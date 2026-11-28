@@ -12,7 +12,9 @@
  */
 import { readdirSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { setLlmPriceSource } from '../../supabase/functions/_shared/llm-cost.ts'
+import { fixturePriceSource } from './fixtures/price-book.ts'
 
 vi.mock('../../supabase/functions/_shared/logger.ts', () => {
   const noop = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {}, child: () => noop }
@@ -159,6 +161,10 @@ describe('buildLlmUsageRecord', () => {
 })
 
 describe('recordLlmUsage never throws', () => {
+  // Costs come from the shared price book; a fixture book stands in for the bridge.
+  beforeEach(() => setLlmPriceSource(fixturePriceSource()))
+  afterEach(() => setLlmPriceSource(null))
+
   it('resolves an error when Deno is not defined (logLlmInvocation reads Deno.env synchronously)', async () => {
     const { db, rows } = captureDb()
     // No Deno global here: the call must not throw into the caller.
@@ -213,6 +219,9 @@ describe('recordLlmUsage never throws', () => {
       output_tokens: 0,
       key_source: 'byok',
       cost_usd: 2,
+      price_source: 'catalog:openrouter',
+      price_tier: 'base',
+      unpriced_reason: null,
     })
   })
 
@@ -227,6 +236,13 @@ describe('recordLlmUsage never throws', () => {
       skipHostedBilling: true,
     }, { result: { usage: { prompt_tokens: 1_000_000 } }, usage: { outputTokens: 0 } })
     expect(rows[0]).toMatchObject({ used_model: 'text-embedding-3-small', input_tokens: 1_000_000, cost_usd: 0.02 })
+  })
+
+  it('records an unknown model as unpriced with the reason, never $0', async () => {
+    vi.stubGlobal('Deno', { env: { get: () => undefined } })
+    const { db, rows } = captureDb()
+    await recordLlmUsage(db as never, { functionName: 'f', model: 'gpt-made-up-9' }, { result: { usage: { promptTokens: 10, completionTokens: 10 } } })
+    expect(rows[0]).toMatchObject({ cost_usd: null, price_source: null, unpriced_reason: expect.stringMatching(/no price in force/) })
   })
 })
 

@@ -880,8 +880,10 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     }
     if (!automaticScreenshotWanted()) return false;
     log.debug('Capturing screenshot for review before send', { mode: activeConfig.capture?.screenshot });
+    const session = panelSession;
     const shot = await takeScreenshotWithoutChrome().catch(() => null);
-    if (!shot) return false;
+    // Closed while it was being taken: the reporter never saw it, so drop it.
+    if (!shot || session !== panelSession) return false;
     pendingScreenshot = shot;
     widget.setScreenshotAttached(true);
     widget.setScreenshotPreview(shot);
@@ -894,6 +896,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     .catch(() => null);
 
   widget = new MushiWidget(bootstrapConfig.widget, {
+    onWarning: (message) => log.warn(message),
     onSubmit: async ({ category, userCategory, description, intent }) => {
       log.info('Report submitted', { category, userCategory, intent });
       // Only a submit from a proactive prompt resets the dismissal streak; a
@@ -914,6 +917,9 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     onOpen: () => {
       log.debug('Widget opened');
       panelSession++;
+      // The panel opens with no screenshot shown, so none may be pending:
+      // anything left here was never seen by this reporter.
+      pendingScreenshot = null;
       screenshotDeclined = false;
       captureOnOpen();
       // Idempotent safety-net: the buffer already records continuously from
@@ -963,14 +969,18 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       if (screenshotCaptureInFlight) return;
       log.debug('Taking screenshot');
       widget.setScreenshotCapturing(true);
+      const session = panelSession;
+      let shot: string | null = null;
       try {
-        pendingScreenshot = await takeScreenshotWithoutChrome();
+        shot = await takeScreenshotWithoutChrome();
       } catch (err) {
         log.warn('Screenshot capture threw', {
           error: err instanceof Error ? err.message : String(err),
         });
-        pendingScreenshot = null;
       }
+      // Closed while it was being taken: never attach it to a later report.
+      if (session !== panelSession) return;
+      pendingScreenshot = shot;
       widget.setScreenshotAttached(pendingScreenshot !== null);
       widget.setScreenshotPreview(pendingScreenshot);
       // Keeps a reason the capture module already reported (taint, timeout…).
@@ -994,6 +1004,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
           widget.setScreenshotCapturing(true);
           const host = document.getElementById('mushi-mushi-widget');
           if (host) host.style.visibility = 'hidden';
+          const session = panelSession;
           const p = activeConfig.privacy;
           import('./capture/display-capture')
             .then(
@@ -1011,6 +1022,8 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
               },
             )
             .then((dataUrl) => {
+              // Closed while the tab was being shared: drop the frame.
+              if (session !== panelSession) return;
               pendingScreenshot = dataUrl;
               widget.setScreenshotAttached(true);
               widget.setScreenshotPreview(dataUrl);
@@ -1035,6 +1048,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       // Re-entrancy guard: a second "Mark up" click while the editor is
       // already mounted would stack a second canvas + toolbar on top.
       if (container.childElementCount > 0) return;
+      const openSession = panelSession;
       let session: AnnotationSession;
       try {
         const { createScreenshotAnnotation } = await import('./capture/screenshot-annotation');
@@ -1053,7 +1067,8 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       const toolbar = document.createElement('div');
       toolbar.className = 'mushi-annotate-toolbar';
       const finish = (commit: boolean) => {
-        if (commit) {
+        // A Done from a panel that was closed meanwhile belongs to no report.
+        if (commit && openSession === panelSession) {
           pendingScreenshot = session.getDataUrl();
           widget.setScreenshotAttached(true);
           // Keep the visible preview in sync with the annotated image so the
@@ -2444,6 +2459,7 @@ async function runDiagnostics(options: {
     widgetHostBounds: { width: number; height: number } | null;
     widgetSuppressed: boolean;
     bannerRendered: boolean;
+    warnings?: string[];
   };
 }): Promise<MushiDiagnosticsResult> {
   const endpoint = await probeApiEndpoint(options.apiEndpoint);
@@ -2461,6 +2477,7 @@ async function runDiagnostics(options: {
     widgetHostBounds: options.widgetDiagnostics?.widgetHostBounds ?? null,
     widgetSuppressed: options.widgetDiagnostics?.widgetSuppressed ?? false,
     bannerRendered: options.widgetDiagnostics?.bannerRendered ?? false,
+    warnings: options.widgetDiagnostics?.warnings ?? [],
   };
 }
 

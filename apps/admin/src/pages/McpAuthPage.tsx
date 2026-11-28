@@ -333,7 +333,7 @@ export function McpAuthPage() {
                 <span className="mt-0.5 text-ok" aria-hidden="true">✓</span>
                 <span>
                   {SCOPE_DESCRIPTIONS[scope] ?? scope}
-                  <code className="ml-1.5 rounded bg-surface-overlay px-1 py-0.5 font-mono text-2xs text-fg-muted">{scope}</code>
+                  <code className={`ml-1.5 rounded ${CHIP_TONE.neutral} px-1 py-0.5 font-mono text-2xs`}>{scope}</code>
                 </span>
               </li>
             ))}
@@ -383,7 +383,7 @@ export function McpAuthPage() {
             {access === 'account' && (
               <ul className="mt-3 flex flex-wrap gap-1.5" aria-label="Projects included">
                 {visible.map((p) => (
-                  <li key={p.id} className="rounded bg-surface-overlay px-2 py-0.5 text-2xs text-fg-secondary">
+                  <li key={p.id} className={`rounded ${CHIP_TONE.neutral} px-2 py-0.5 text-2xs`}>
                     {p.name}
                     {p.role ? <span className="ml-1 text-fg-faint">· {p.role}</span> : null}
                   </li>
@@ -428,12 +428,12 @@ export function McpAuthPage() {
             )}
           </fieldset>
         ) : projectsLoadFailed ? (
-          <p className={`mb-4 rounded-lg px-4 py-3 text-sm ${CHIP_TONE.dangerSubtle}`}>
+          <p className={`mb-4 rounded-lg px-4 py-3 text-sm ${CHIP_TONE.danger}`}>
             Could not load your projects. Check your connection, reload this page, and pick a project. The
             request stays open for 10 minutes.
           </p>
         ) : (
-          <p className={`mb-4 rounded-lg px-4 py-3 text-sm ${CHIP_TONE.dangerSubtle}`}>
+          <p className={`mb-4 rounded-lg px-4 py-3 text-sm ${CHIP_TONE.danger}`}>
             No projects found. Create a project in the console first, then retry the connection from your MCP client.
           </p>
         )}

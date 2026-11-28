@@ -310,7 +310,9 @@ export function buildFixPrompt(report: PromptReport, options: FixPromptOptions =
       '## Why it broke',
       view.kind === 'pending'
         ? 'Not diagnosed yet. Reproduce it first, then read the evidence below.'
-        : 'No root cause in the diagnosis. Reproduce it first, then read the evidence below.',
+        : view.kind === 'no_model'
+          ? 'No AI diagnosis: this report was filed already sorted. The report text says what is wrong; check it in the code, then read the evidence below.'
+          : 'No root cause in the diagnosis. Reproduce it first, then read the evidence below.',
     )
   }
   if (d?.suggestedFix) diagnosis.push('', '## Suggested fix', d.suggestedFix)

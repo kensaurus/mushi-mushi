@@ -35,7 +35,8 @@ export function releaseIsEmpty(r: Pick<HomeRelease, 'stations' | 'train'>): bool
 export function ReleaseCard({ section, projectId }: { section: HomeSection<HomeRelease>; projectId: string }) {
   const pipelineHref = `/pipeline?project=${encodeURIComponent(projectId)}`
   return (
-    <Section title="Release" id="home-release" action={<Link to={pipelineHref} className="text-xs text-link">Pipeline →</Link>}>
+    // No header link: every station already opens the same list (ADR 0069, one button per place).
+    <Section title="Release" id="home-release">
       <HomeSectionBody section={section} what="the release" notConnectedText="Connect your GitHub repo to see fixes move toward a release.">
         {(r) => (
           <div className="space-y-4">

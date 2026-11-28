@@ -44,7 +44,7 @@ Building in Lovable or Bolt with no terminal? A script tag works too: [Mushi Mus
 | **Privacy** | A built-in PII scrubber, selector masking for screenshots, and opt-in session replay. |
 | **Stays out of the way** | Zero-size host with `pointer-events: none`, keyboard-first, respects reduced motion. |
 | **Runtime config** | Change the widget from the console without a deploy. Values you set in code win. |
-| **Size** | CI caps the core bundle at 89.2 KB gzipped (105 KB uncompressed). Screenshot capture, screenshot markup and the Your reports views load only when used. |
+| **Size** | CI caps the core bundle at 94 KB gzipped (105 KB uncompressed). Screenshot capture, screenshot markup and the Your reports views load only when used. |
 
 ## Recipes
 
@@ -121,10 +121,18 @@ const mushi = Mushi.init({ /* ... */ });
 mushi.setScreen({ name: 'Chat', route: '/chat', feature: 'roleplay' });
 ```
 
-**Match your brand.** The widget uses your page's font and light/dark colors. Override any token in CSS ([all tokens](https://github.com/kensaurus/mushi-mushi/blob/master/packages/web/src/styles.ts)):
+**Match your brand.** The widget uses your page's font and light/dark colors. Set the accent, theme, corner, language and hidden pages in the console; text on the accent is kept readable for you ([theming guide](https://kensaur.us/mushi-mushi/docs/sdks/theming), with all 13 CSS tokens). Your code needs only the app's identity:
 
-```css
-#mushi-mushi-widget { --mushi-accent: #b8860b; --mushi-accent-fg: #000; --mushi-font: Georgia, serif; }
+```ts
+Mushi.init({ projectId: 'proj_xxx', apiKey: 'mushi_xxx' });
+```
+
+Look and position come from the console; set them in code only to lock them (your code's value wins).
+
+**Lock in code.** A value set here, or on the script tag (`data-accent="#7c3aed"`), wins over the console, which can then no longer change it ([runtime config](https://kensaur.us/mushi-mushi/docs/concepts/runtime-config)):
+
+```ts
+Mushi.init({ projectId: 'proj_xxx', apiKey: 'mushi_xxx', widget: { accent: '#7c3aed', position: 'bottom-left' } });
 ```
 
 Screenshots cannot capture cross-origin iframes or tainted `<canvas>` elements, and strict CSP can block them. Playwright and jsdom helpers live in `@mushi-mushi/web/test-utils`, which production bundles never load.

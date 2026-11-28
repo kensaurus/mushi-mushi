@@ -3,7 +3,7 @@
 /**
  * review-followup — Supabase Edge Function (verify_jwt = false, internal)
  *
- * The review follow-up loop (ADR 0032). When the Opus review of a cloud
+ * The review follow-up loop (ADR 0032). When the AI review of a cloud
  * agent's PR (ADR 0030) says "fix_first" on the PR's current head, Mushi
  * starts one NEW Cursor agent on that PR with the review's findings; the
  * push is then reviewed again. When the review says "merge" but CI on that
@@ -763,7 +763,7 @@ export async function dispatchOne(db: SupabaseClient, row: FollowupRow, deps: Fo
     label: isCiRepair ? 'CI repair dispatched' : 'Follow-up dispatched',
     detail: isCiRepair
       ? `${sentCount} failing check(s) sent to Cursor to make CI green without weakening tests${model ? ` (${model})` : ''}: ${ciChecks.join(', ').slice(0, 300)}.`
-      : `${sentCount} Opus finding(s) sent to Cursor${model ? ` (${model}${escalated ? ', last round on the escalation model' : ''})` : ''}${droppedCount > 0 ? `; ${droppedCount} left out by the safety screen` : ''}.`,
+      : `${sentCount} AI review finding(s) sent to Cursor${model ? ` (${model}${escalated ? ', last round on the escalation model' : ''})` : ''}${droppedCount > 0 ? `; ${droppedCount} left out by the safety screen` : ''}.`,
     dedupe: `followup-dispatched:${row.id}`,
     payload: { agentId: created.agentId, runId: created.runId, model, ...(escalated ? { escalated: true } : {}), keyId: key.keyId, headSha: row.head_sha_before, kind: isCiRepair ? 'ci_repair' : 'findings', ...(isCiRepair ? { checks: ciChecks } : {}) },
     at: nowIso,
@@ -939,7 +939,7 @@ export async function pollOne(db: SupabaseClient, row: FollowupRow, deps: Follow
     await followupEvent(db, row, {
       status: 'ok',
       label: 'Follow-up pushed',
-      detail: `New commit ${String(headAfter).slice(0, 7)} on the pull request; Opus reviews it again.`,
+      detail: `New commit ${String(headAfter).slice(0, 7)} on the pull request; AI reviews it again.`,
       dedupe: `followup-pushed:${row.id}`,
       payload: { headBefore: row.head_sha_before, headAfter, runStatus: status, cancelled },
       at: nowIso,

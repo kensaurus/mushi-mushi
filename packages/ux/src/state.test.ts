@@ -3,7 +3,7 @@ import { mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { loadState, newRunId, saveState, type RunState } from './state.js'
+import { addJudgeUsage, loadState, newRunId, saveState, type RunState } from './state.js'
 
 let dir = ''
 afterEach(() => {
@@ -37,5 +37,16 @@ describe('run state', () => {
     expect(loadState(dir)).toBeNull()
     saveState(dir, { version: 2 } as unknown as RunState)
     expect(() => loadState(dir)).toThrow(/Unsupported run state version 2/)
+  })
+})
+
+describe('addJudgeUsage (ADR 0072)', () => {
+  it('counts model calls and reused verdicts, and adds up the tokens', () => {
+    const state: { judgeUsage?: RunState['judgeUsage'] } = {}
+    addJudgeUsage(state, 'claude-opus-5-5', { usage: { input_tokens: 100, output_tokens: 20, cache_read_input_tokens: 50, cache_creation_input_tokens: 10 } })
+    addJudgeUsage(state, 'claude-opus-5-5', { reused: 'cache' })
+    addJudgeUsage(state, 'claude-opus-5-5', { reused: 'unchanged' })
+    addJudgeUsage(state, 'claude-opus-5-5', { error: 'Rate limited by the Anthropic API.' })
+    expect(state.judgeUsage).toEqual({ model: 'claude-opus-5-5', judged: 2, reused: 2, input_tokens: 100, output_tokens: 20, cache_read_input_tokens: 50, cache_creation_input_tokens: 10 })
   })
 })

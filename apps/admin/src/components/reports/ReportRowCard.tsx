@@ -8,16 +8,23 @@
  *
  *          No outer card: rows are list items divided by a rule inside the
  *          table's frame, with the same severity stripe on the left edge.
+ *
+ *          Touch (console UX pass 2026-11-22): the checkbox and the row's one
+ *          action are 44px targets, and the action sits on its own line with
+ *          the age and a low-confidence chip, so the status line keeps its
+ *          words ("Classified", "2 of 4").
  */
 
 import { memo } from 'react'
 import { Link } from 'react-router-dom'
+import { Btn } from '../ui'
 import { StatusStepper } from './StatusStepper'
 import { ReportRowMeta } from './ReportRowSummaryMeta'
 import { ReportSourceTag } from './ReportSourceTag'
 import { DispatchFixPreflight } from './DispatchFixPreflight'
-import { TableSeverityCell } from './ReportMetricCells'
+import { LowConfidenceChip, TableSeverityCell } from './ReportMetricCells'
 import { closedRowAction } from './reportRowAction'
+import { reportRowIntent } from '../../lib/actionIntent'
 import { variantChip } from './reportDisplayRows'
 import { DISPATCH_ELIGIBLE_STATUSES, formatRelative, severityStripeClass, type ReportRow } from './types'
 import { reportSourceKind, showsSeverity } from '../../lib/reportSourceKind'
@@ -55,20 +62,23 @@ function ReportRowCardInner({ row, isSelected, dispatchBusy = false, variantCoun
       className="relative cursor-pointer py-2 pl-3 pr-2 hover:bg-surface-overlay/60"
       data-testid={`report-card-${row.id}`}
       onClick={(e) => {
-        if ((e.target as HTMLElement).closest('button, input, a')) return
+        if ((e.target as HTMLElement).closest('button, input, a, label')) return
         onOpen()
       }}
     >
       <span aria-hidden className={`absolute inset-y-0 left-0 w-1 ${severityStripeClass(row.severity)}`} />
       <div className="flex min-w-0 items-start gap-2">
-        <input
-          type="checkbox"
-          checked={isSelected}
-          onChange={onToggleSelect}
-          onClick={(e) => e.stopPropagation()}
-          aria-label={isSelected ? 'Deselect report' : 'Select report'}
-          className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-brand"
-        />
+        {/* A 44px tap area around the small box; the row opens on any other tap. */}
+        <label className="-my-2.5 -ml-3 inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center">
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={onToggleSelect}
+            onClick={(e) => e.stopPropagation()}
+            aria-label={isSelected ? 'Deselect report' : 'Select report'}
+            className="h-4 w-4 accent-brand"
+          />
+        </label>
         <div className="min-w-0 flex-1 space-y-1">
           {/* Three lines on a phone: two cut titles mid-phrase ("projects-to-…",
               "relationship wa…", round-3 sweep 2026-11-19). */}
@@ -82,18 +92,21 @@ function ReportRowCardInner({ row, isSelected, dispatchBusy = false, variantCoun
             ) : null}
           </Link>
           <ReportRowMeta row={row} />
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 items-end gap-2">
             <div className="min-w-0 flex-1">
               <StatusStepper size="table" status={row.status} severity={row.severity} className="w-full" />
             </div>
-            <div className="w-14 shrink-0">
+            <div className="w-16 shrink-0">
               <TableSeverityCell severity={showsSeverity(reportSourceKind(row)) ? row.severity : null} />
             </div>
+          </div>
+          <div className="flex min-w-0 items-center gap-2">
             <span className="shrink-0 whitespace-nowrap text-2xs tabular-nums text-fg-muted">{formatRelative(row.created_at)}</span>
-            <span className="inline-flex shrink-0">
+            <LowConfidenceChip confidence={row.confidence} />
+            <span className="ml-auto inline-flex shrink-0">
               {canDispatch ? (
                 <DispatchFixPreflight
-                  variant="table"
+                  variant="card"
                   busy={dispatchBusy}
                   severity={row.severity}
                   blastRadius={blastRadius}
@@ -105,15 +118,14 @@ function ReportRowCardInner({ row, isSelected, dispatchBusy = false, variantCoun
                   repoUrl={dispatchScopeNote ? null : (preflight?.repoUrl ?? null)}
                 />
               ) : (
-                <Link
+                <Btn
                   to={detailPath}
+                  intent={reportRowIntent(row.status)}
                   onClick={(e) => e.stopPropagation()}
-                  className={`inline-flex h-5 items-center whitespace-nowrap rounded-sm px-1.5 text-3xs font-medium leading-none ${
-                    closedAction ? closedAction.className : 'bg-brand text-brand-fg hover:bg-brand-hover'
-                  }`}
+                  className="min-h-11 whitespace-nowrap"
                 >
                   {closedAction ? closedAction.label : 'Triage →'}
-                </Link>
+                </Btn>
               )}
             </span>
           </div>

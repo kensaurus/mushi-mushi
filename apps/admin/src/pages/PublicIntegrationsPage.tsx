@@ -38,10 +38,11 @@ import {
   type MarketingLinkProps,
   type MarketingTheme,
 } from '@mushi-mushi/marketing-ui'
+import { SUPPORT_EMAIL } from '../lib/supportContact'
 
 const DOCS_BASE = PUBLIC_DOCS_BASE
 const REPO_BASE = PUBLIC_REPO_BASE
-const CONTACT_EMAIL = 'kensaurus@gmail.com'
+const CONTACT_EMAIL = SUPPORT_EMAIL
 
 // ─── Link adapter ─────────────────────────────────────────────────────────
 

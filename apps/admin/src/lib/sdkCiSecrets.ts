@@ -7,7 +7,7 @@
  *  - sdkCiStatusLabel(): human-readable label + severity for a diagnostic status
  */
 
-import { formatEnvVarPair, mushiEnvVarsForProjectSlug, type ProjectMushiEnvVars } from './projectMushiEnv'
+import { formatEnvVarPair, mushiEnvVarsForProject, type ProjectMushiEnvVars } from './projectMushiEnv'
 
 // ---------------------------------------------------------------------------
 // API response types (mirror packages/server/.../project-ci-secrets.ts)
@@ -80,13 +80,14 @@ export interface SdkCiStatusMeta {
 export function sdkCiStatusMeta(
   status: SdkDiagnosticStatus,
   hasGithubToken: boolean,
-  slug?: string | null,
+  /** Unused since ADR 0072 (names come from the stack, never the app's name); kept for call sites. */
+  _slug?: string | null,
   extras?: Partial<Pick<SdkDiagnosticsResult, 'nativeEverSeen' | 'launcherMode'>> & {
-    /** Names already resolved from the repo stack. Beats the slug guess. */
+    /** Names already resolved from the repo stack; default: the NEXT_PUBLIC_ names. */
     env?: ProjectMushiEnvVars
   },
 ): SdkCiStatusMeta {
-  const env = extras?.env ?? mushiEnvVarsForProjectSlug(slug)
+  const env = extras?.env ?? mushiEnvVarsForProject()
   const envPair = formatEnvVarPair(env)
   const envWhere = 'GitHub Actions'
   const nativeEverSeen = extras?.nativeEverSeen ?? false

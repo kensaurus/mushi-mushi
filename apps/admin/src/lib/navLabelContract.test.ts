@@ -10,7 +10,7 @@
  *          of in a screenshot review.
  *
  *          Resolution: registry path → <Route path element={<X/>}> in App.tsx
- *          → X's import → page file. Hub pages (/dashboard, /health, /team)
+ *          → X's import → page file. Hub pages (/portfolio, /health, /team)
  *          render a PageHubView; their heading is the first view's page.
  */
 
@@ -18,7 +18,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { NAV_REGISTRY } from './navRegistry'
-import { HEALTH_HUB, HOME_HUB, TEAM_HUB, type PageHub } from './pageHubs'
+import { APPS_HUB, HEALTH_HUB, TEAM_HUB, type PageHub } from './pageHubs'
 
 const srcRoot = resolve(__dirname, '..')
 const read = (rel: string): string => readFileSync(resolve(srcRoot, rel), 'utf8')
@@ -37,7 +37,7 @@ const SKIPPED: ReadonlyArray<{ path: string; reason: string }> = [
 ]
 
 /** Hub constants by the name a page passes as `hub={…}`. */
-const PAGE_HUBS: Record<string, PageHub> = { HOME_HUB, HEALTH_HUB, TEAM_HUB }
+const PAGE_HUBS: Record<string, PageHub> = { APPS_HUB, HEALTH_HUB, TEAM_HUB }
 
 // ── App.tsx: route → component → page file ─────────────────────────────────
 

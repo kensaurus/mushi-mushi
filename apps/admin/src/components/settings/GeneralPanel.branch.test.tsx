@@ -96,12 +96,49 @@ describe('GeneralPanel with a legacy branch pattern', () => {
     container.remove()
   })
 
-  async function render(): Promise<void> {
+  async function render(entry = '/settings'): Promise<void> {
     await act(async () => {
-      root.render(createElement(MemoryRouter, null, createElement(GeneralPanel)))
+      root.render(createElement(MemoryRouter, { initialEntries: [entry] }, createElement(GeneralPanel)))
       await flush()
     })
   }
+
+  const advancedToggle = () => container.querySelector<HTMLButtonElement>('[data-testid="settings-advanced-toggle"]')!
+
+  async function openAdvanced(): Promise<void> {
+    if (advancedToggle().getAttribute('aria-expanded') === 'true') return
+    await act(async () => {
+      advancedToggle().click()
+      await flush()
+    })
+  }
+
+  // ADR 0069: General leads with bug alerts; the rest waits in one closed group.
+  it('keeps Sentry, Supabase, bug sorting, limits and the widget in a closed Advanced group', async () => {
+    mocks.settings = { fix_branch_template: DEFAULT }
+    await render()
+    expect(advancedToggle().getAttribute('aria-expanded')).toBe('false')
+    for (const id of ['slack-webhook', 'error-tracking', 'supabase', 'bug-sorting', 'daily-limits', 'widget']) {
+      expect(container.querySelector(`#${id}`), id).toBeNull()
+    }
+    expect(container.querySelector('#slack')).not.toBeNull()
+    await openAdvanced()
+    for (const id of ['slack-webhook', 'error-tracking', 'supabase', 'bug-sorting', 'daily-limits', 'widget']) {
+      expect(container.querySelector(`#${id}`), id).not.toBeNull()
+    }
+  })
+
+  it('opens Advanced when a link points into it', async () => {
+    mocks.settings = { fix_branch_template: DEFAULT }
+    await render('/settings#error-tracking')
+    expect(advancedToggle().getAttribute('aria-expanded')).toBe('true')
+    expect(container.querySelector('#error-tracking')).not.toBeNull()
+  })
+
+  it('opens Advanced by itself when the saved branch pattern is refused', async () => {
+    await render()
+    expect(advancedToggle().getAttribute('aria-expanded')).toBe('true')
+  })
 
   it('marks the branch field invalid on load, with the message under it', async () => {
     await render()
@@ -142,6 +179,7 @@ describe('GeneralPanel with a legacy branch pattern', () => {
   it('still blocks Save when the user types a refused pattern', async () => {
     mocks.settings = { fix_branch_template: DEFAULT }
     await render()
+    await openAdvanced()
     const branch = Array.from(container.querySelectorAll<HTMLInputElement>('input')).find((i) => i.value === DEFAULT)!
     await act(async () => {
       typeInto(branch, 'oops/{shortId}')

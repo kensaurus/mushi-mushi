@@ -588,7 +588,7 @@ export function ProjectsPage() {
   }
 
   if (loading)
-    return <TableSkeleton rows={4} columns={4} showFilters={false} label="Loading projects" />
+    return <TableSkeleton rows={4} columns={4} showFilters={false} label="Loading apps" />
   if (error) return <PageLoadError error={error} resource="projects" onRetry={reloadAll} />
 
   // A just-made app reads "Setting up", like the banner (lib/newApps.ts).
@@ -625,11 +625,11 @@ export function ProjectsPage() {
           <Badge
             className={
               bannerSeverity === 'warn'
-                ? CHIP_TONE.warnSubtle
+                ? CHIP_TONE.warn
                 : bannerSeverity === 'brand'
                   ? 'bg-chrome text-fg-secondary'
                   : bannerSeverity === 'info'
-                    ? CHIP_TONE.infoSubtle
+                    ? CHIP_TONE.info
                     : 'bg-surface-overlay text-fg-muted'
             }
           >

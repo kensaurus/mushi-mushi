@@ -75,14 +75,20 @@ export function detectByokKeyInvalid(
     last_error: string | null
   }>,
 ): RadarFinding[] {
+  // A rejected key next to a working key of the same provider was replaced:
+  // Settings → AI keys shows it as "Replaced, nothing is broken". Reporting it
+  // as an error put a red "A connected key stopped working" on all 9 apps
+  // (2026-11-24) while every AI call ran fine on the newer key.
+  const replaced = (provider: string) => keys.some((o) => o.provider_slug === provider && o.status === 'active')
   return keys
     .filter((k) => k.status === 'auth_failed')
     .map((k) => ({
       rule_id: 'byok_key_invalid' as const,
-      severity: 'error' as const,
-      message:
-        `Your ${k.provider_slug} key "${k.label || k.key_hint || 'unnamed'}" is rejected by ${k.provider_slug}. ` +
-        'Mushi Mushi skips it, so calls fall back to another key or fail. Replace it in Settings → AI keys.',
+      severity: replaced(k.provider_slug) ? ('info' as const) : ('error' as const),
+      message: replaced(k.provider_slug)
+        ? `Your old ${k.provider_slug} key "${k.label || k.key_hint || 'unnamed'}" is rejected by ${k.provider_slug}, but another ${k.provider_slug} key works, so nothing is broken. Remove the old one in Settings → AI keys.`
+        : `Your ${k.provider_slug} key "${k.label || k.key_hint || 'unnamed'}" is rejected by ${k.provider_slug}. ` +
+          'Mushi Mushi skips it, so calls fall back to another key or fail. Replace it in Settings → AI keys.',
       suggested_fix: {
         kind: 'console',
         path: '/settings?tab=byok',

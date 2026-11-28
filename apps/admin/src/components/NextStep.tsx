@@ -32,10 +32,10 @@ import { Btn, Card, EmptyState, ResultChip } from './ui'
 import { trackAdHoc } from '../lib/track'
 
 const TONE_STYLE: Record<NbaTone, { ring: string; bg: string; chip: string; label: string }> = {
-  plan: { ring: 'border-info/40', bg: 'bg-info-muted/15', chip: CHIP_TONE.infoSubtle, label: 'Plan' },
-  do: { ring: 'border-brand/30', bg: 'bg-brand/5', chip: CHIP_TONE.brandSubtle, label: 'Do' },
-  check: { ring: 'border-info/40', bg: 'bg-info-muted/15', chip: CHIP_TONE.infoSubtle, label: 'Check' },
-  act: { ring: 'border-ok/40', bg: 'bg-ok-muted/15', chip: CHIP_TONE.okSubtle, label: 'Ship' },
+  plan: { ring: 'border-info/40', bg: 'bg-info-muted/15', chip: CHIP_TONE.info, label: 'Plan' },
+  do: { ring: 'border-brand/30', bg: 'bg-brand/5', chip: CHIP_TONE.brand, label: 'Do' },
+  check: { ring: 'border-info/40', bg: 'bg-info-muted/15', chip: CHIP_TONE.info, label: 'Check' },
+  act: { ring: 'border-ok/40', bg: 'bg-ok-muted/15', chip: CHIP_TONE.ok, label: 'Ship' },
   idle: { ring: 'border-edge', bg: 'bg-surface-raised/40', chip: CHIP_TONE.neutral, label: 'All clear' },
 }
 

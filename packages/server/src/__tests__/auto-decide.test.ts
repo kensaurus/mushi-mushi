@@ -114,7 +114,7 @@ describe('ownCi and the close comment', () => {
   })
 
   it('says why, links the review and how to undo it', () => {
-    const text = closeComment({ do: 'close_redo', reason: 'Opus says this pull request does not fix the report.' }, 'https://github.com/o/r/pull/1#issuecomment-9')
+    const text = closeComment({ do: 'close_redo', reason: 'The AI review says this pull request does not fix the report.' }, 'https://github.com/o/r/pull/1#issuecomment-9')
     expect(text).toContain('Decide for me')
     expect(text).toContain('does not fix the report')
     expect(text).toContain('#issuecomment-9')

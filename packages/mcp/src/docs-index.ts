@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 246 pages, generated from llms.txt. @internal Exported for tests. */
+/** 250 pages, generated from llms.txt. @internal Exported for tests. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — one place to improve your AI-built app",
@@ -147,7 +147,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/connect",
     markdown: "admin/connect.md",
     keywords: ["admin", "connect"],
-    headings: ["Client picker (3 lanes)", "Sections", "Native app CI secrets", "SDK upgrade PR", "Quick path (5 minutes)", "Connect GitHub", "Install SDK", "Wire MCP"],
+    headings: ["Steps", "Once the app checks in", "Native app CI secrets", "SDK upgrade PR", "Quick path (5 minutes)", "Add the report button", "Wire MCP", "Connect GitHub"],
     excerpt: "The Connect page wires GitHub, the SDK, MCP, the CLI and your editor to a Mushi Mushi project, and shows when your installed SDK is out of date.",
   },
   {
@@ -421,13 +421,13 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "The Ops page in Mushi Mushi shows every app's payments, releases and alerts in one feed, which app is not reporting, and what is still open.",
   },
   {
-    title: "Overview (Home view)",
+    title: "Overview (Apps view)",
     url: docUrl("/admin/overview"),
     route: "/admin/overview",
     markdown: "admin/overview.md",
-    keywords: ["admin", "overview", "home", "view"],
+    keywords: ["admin", "overview", "apps", "view"],
     headings: ["What you see", "Data source", "Related"],
-    excerpt: "The Overview view on Home in the Mushi Mushi console shows seven-day activity and open bugs for every connected app in a team at a glance.",
+    excerpt: "The Overview view on Apps in the Mushi Mushi console shows seven-day activity and open bugs for every connected app in a team at a glance.",
   },
   {
     title: "Pipeline",
@@ -520,6 +520,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "The App blueprint page in the Mushi Mushi console shows what this app is built from, the state of each part, and the draft pull request a change opens.",
   },
   {
+    title: "Release kits",
+    url: docUrl("/admin/release-kits"),
+    route: "/admin/release-kits",
+    markdown: "admin/release-kits.md",
+    keywords: ["admin", "release-kits", "release", "kits"],
+    headings: ["Record clips (opt-in)", "Make the product video", "Put media on the stores (approval first)"],
+    excerpt: "A release kit gathers a release's screenshots, flow clips, changelog and brand colours for a product video, and store media you approve.",
+  },
+  {
     title: "Releases",
     url: docUrl("/admin/releases"),
     route: "/admin/releases",
@@ -583,6 +592,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "Add one workflow to your repo so Mushi Mushi's SDK upgrade PRs arrive with a refreshed lockfile and pass npm ci or pnpm install --frozen-lockfile.",
   },
   {
+    title: "Security proof",
+    url: docUrl("/admin/security-proof"),
+    route: "/admin/security-proof",
+    markdown: "admin/security-proof.md",
+    keywords: ["admin", "security-proof", "security", "proof"],
+    headings: ["Add the workflow", "How a release is proven", "What becomes a bug", "From an agent"],
+    excerpt: "Each release's Security proof: the scans your own CI ran for the commit it ships. Dependencies, secrets, an optional AI review, a live scan.",
+  },
+  {
     title: "Settings",
     url: docUrl("/admin/settings"),
     route: "/admin/settings",
@@ -644,6 +662,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["admin", "teams", "members"],
     headings: ["Plans", "Roles", "Invitation Flow"],
     excerpt: "How teams work in Mushi Mushi. Organizations own projects, billing, invitations and the member roster, and project access comes from membership.",
+  },
+  {
+    title: "Timeline",
+    url: docUrl("/admin/timeline"),
+    route: "/admin/timeline",
+    markdown: "admin/timeline.md",
+    keywords: ["admin", "timeline"],
+    headings: ["Pin each release's screens", "From your editor"],
+    excerpt: "The Timeline shows your app release by release: bugs fixed, screens improved, scores, AI cost and a before/after of every screen.",
   },
   {
     title: "All users",
@@ -1047,7 +1074,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/how-it-works",
     markdown: "how-it-works.md",
     keywords: ["how-it-works", "works", "shown", "real", "screens"],
-    headings: ["The four steps", "1. Your user reports a bug", "2. From the report to a merged fix", "What it fixes about bug tracking today", "For developers", "How a bug moves", "Connect your AI editor", "Watch every fix ship"],
+    headings: ["The four steps", "Before you install: check your live app free", "1. Your user reports a bug", "2. From the report to a merged fix", "What it fixes about bug tracking today", "For developers", "How a bug moves", "Connect your AI editor"],
     excerpt: "Watch a bug go from a user's report to a fix: what you do at each step, what Mushi Mushi does, and the real screens from report button to fix prompt.",
   },
   {
@@ -1949,6 +1976,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["sdks", "svelte", "mushi-mushi/svelte"],
     headings: ["API surface", "Setup", "Submitting a report"],
     excerpt: "Reference for mushi-mushi/svelte, the Mushi Mushi Svelte SDK. initMushi, getMushi and the SvelteKit handleError helpers that send browser errors to your queue.",
+  },
+  {
+    title: "Theming the bug widget",
+    url: docUrl("/sdks/theming"),
+    route: "/sdks/theming",
+    markdown: "sdks/theming.md",
+    keywords: ["sdks", "theming", "bug", "widget"],
+    headings: ["Three easy ways", "1. Script tag (Lovable, Bolt, plain HTML)", "2. In code", "3. In the console", "What can be set where", "CSS tokens", "Report type colours", "Contrast rule"],
+    excerpt: "Match the Mushi Mushi bug widget to your app: accent, theme, corner, language and hidden pages from a script tag, code or the console, plus 13 CSS tokens.",
   },
   {
     title: "@mushi-mushi/ux",

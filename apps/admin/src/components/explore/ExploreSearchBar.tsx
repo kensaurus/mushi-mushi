@@ -205,7 +205,7 @@ export function ExploreSearchBar({ projectId, onHighlight, onSelectHit, seedQuer
       </div>
 
       {error && (
-        <div className={`text-2xs rounded-sm border px-3 py-2 ${CHIP_TONE.dangerSubtle}`}>
+        <div className={`text-2xs rounded-sm px-3 py-2 ${CHIP_TONE.danger}`}>
           {error}
         </div>
       )}

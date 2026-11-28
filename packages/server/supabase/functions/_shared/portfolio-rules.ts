@@ -556,9 +556,9 @@ export function crossPromoChecks(
         message: `${names(projects, [l.fromProjectId])}: ${label} has no campaign tag, so installs from it cannot be told apart from the rest.`,
         evidence: { url: l.url },
         suggestedFix: isAppleHost(parsed.hostname)
-          ? 'Add a campaign token, for example `?ct=from-glot` (App Store Connect → App Analytics → Campaigns).'
+          ? 'Add a campaign token, for example `?ct=from-my-other-app` (App Store Connect → App Analytics → Campaigns).'
           : parsed.hostname === 'play.google.com'
-            ? 'Add `&referrer=utm_source%3Dglot%26utm_campaign%3Dmore-apps` so Play Console attributes the install.'
+            ? 'Add `&referrer=utm_source%3Dmy-other-app%26utm_campaign%3Dmore-apps` so Play Console attributes the install.'
             : 'Add `utm_source` and `utm_campaign` to the link.',
       })
     }

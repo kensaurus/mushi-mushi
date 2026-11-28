@@ -9,8 +9,12 @@
  *                                                        (find UX bugs on signed-in screens, file reports)
  *   mushi-ux scorecard --url https://app.example.com/admin/ --profile-dir ~/.playwright-cli-profiles/app --file
  *                                                        (score every page 1-10 on a written rubric, file the root causes)
+ *   mushi-ux upload ./captures --platform android --device "Pixel 8"
+ *                                                        (score screenshots a native driver made on the same rubric)
  *   mushi-ux fresh-eyes --url https://example.com --goal "get my first bug explained"
  *                                                        (a first-time visitor: time the path, file what stops them)
+ *   mushi-ux clips --url https://example.com --release <id> --flow "signup:/,/signup"
+ *                                                        (record short flow clips into a release kit; opt-in, capped)
  *   mushi-ux run --dev "pnpm dev --port {port}" --agent claude-code
  *   mushi-ux ui                                          (studio: pick agent, model, skill; watch runs)
  *   mushi-ux open <runId>                                (dashboard for a past run)
@@ -29,6 +33,7 @@ import { chromium } from 'playwright'
 import { AGENTS, type AgentName } from './agents.js'
 import { AUDIT_FILE_CAP, auditHome, fileFindings, runAudit, writePending, type ReviewVia } from './audit.js'
 import { openSession } from './capture.js'
+import { CLIP_LIMITS, DEFAULT_CLIP_VIEWPORT, effectiveClipCaps, fetchClipCaps, parseFlow, recordClips, uploadClips, type ClipFlow } from './clips.js'
 import { startDashboard, startStudio, type LaunchInput } from './dashboard.js'
 import { discover } from './discover.js'
 import { isSafeSelector } from './ignore.js'
@@ -38,6 +43,7 @@ import { hasSuccessCheck, presetFor, runFreshEyes, type SuccessCheck } from './f
 import { fileFreshEyesFindings, mintTestAccount, syncFreshEyes, writeTimeline } from './fresh-eyes-report.js'
 import { literalPattern, parseStdinRequest, readStdin, stepsFor, syncsToConsole } from './fresh-eyes-request.js'
 import { runTerminalSetup } from './fresh-eyes-terminal.js'
+import { loadPresets } from './fresh-eyes-presets.js'
 import { DEFAULT_JUDGE_MODEL } from './judge.js'
 import {
   DEFAULT_SCORECARD_MODEL,
@@ -53,6 +59,7 @@ import {
   type ScoreVia,
 } from './scorecard.js'
 import { topCauses } from './scorecard-rubric.js'
+import { UPLOAD_PLATFORMS, UPLOAD_SOURCES, uploadCaptures, type UploadPlatform, type UploadSource } from './upload.js'
 import { cachedProfile, parseChannel } from './profile.js'
 import { agentAccount, studioOptions } from './launcher.js'
 import { listModels } from './models.js'
@@ -519,6 +526,130 @@ program
     },
   )
 
+const collectFlow = (v: string, prev: ClipFlow[]) => {
+  try {
+    return [...prev, parseFlow(v)]
+  } catch (err) {
+    throw new InvalidArgumentError((err as Error).message)
+  }
+}
+
+program
+  .command('clips')
+  .description(`Record short clips of your top flows (Playwright video, read-only) and upload them into a release kit for a product video. Opt-in per app, at most ${CLIP_LIMITS.maxFlows} flows, capped in length and size.`)
+  .requiredOption('--url <url>', 'The app to record, e.g. https://staging.example.com')
+  .option('--release <id>', 'The release whose kit gets the clips (needs MUSHI_API_KEY / MUSHI_PROJECT_ID)')
+  .option('--flow <name:/a,/b>', 'A flow: a name and the screens it visits in order (repeatable)', collectFlow, [])
+  .option('--viewport <WxH>', `Recording size (default ${DEFAULT_CLIP_VIEWPORT.width}x${DEFAULT_CLIP_VIEWPORT.height}, a phone)`)
+  .option('--max-seconds <n>', `Longest clip per flow (${CLIP_LIMITS.minSeconds}-${CLIP_LIMITS.maxSeconds})`, String(CLIP_LIMITS.defaultSeconds))
+  .option('--max-mb <n>', "Largest clip kept, in MB (at most 100; the app's kit may cap it lower)", '25')
+  .option('--profile-dir <dir>', 'A cached, signed-in browser profile to record signed in')
+  .option('--channel <name>', 'Browser build for --profile-dir: chrome (default) or chromium', parseChannel)
+  .option('--allow <rule>', 'Allow a non-GET request that only reads (repeatable)', collect, [])
+  .option('--out <dir>', 'Where the clips are written', join(process.cwd(), '.mushi-ux', 'clips'))
+  .option('--no-upload', 'Record only; do not upload')
+  .action(
+    async (o: { url: string; release?: string; flow: ClipFlow[]; viewport?: string; maxSeconds: string; maxMb: string; profileDir?: string; channel?: string; allow: string[]; out: string; upload: boolean }) => {
+      if (!o.flow.length) throw new InvalidArgumentError('Name at least one flow, e.g. --flow "signup:/,/signup"')
+      let viewport: { width: number; height: number } = DEFAULT_CLIP_VIEWPORT
+      if (o.viewport) {
+        const m = /^([0-9]{3,4})x([0-9]{3,4})$/.exec(o.viewport)
+        if (!m) throw new InvalidArgumentError(`--viewport must look like 390x844, not ${o.viewport}`)
+        viewport = { width: Number(m[1]), height: Number(m[2]) }
+      }
+      const cfg = o.upload ? syncConfigFromEnv() : null
+      for (const k of ['MUSHI_API_KEY', 'MUSHI_PROJECT_ID', 'MUSHI_API_ENDPOINT']) delete process.env[k]
+      if (o.upload && (!cfg || !o.release)) {
+        console.warn(!cfg ? 'No MUSHI_API_KEY / MUSHI_PROJECT_ID: recording only. Set them (mushi login) and pass --release <id> to upload.' : "No --release: recording only. Pass --release <id> to upload into that release's kit.")
+      }
+      // Read the app's caps first, so nothing is recorded that the server would refuse on upload.
+      let caps = { maxSeconds: Number(o.maxSeconds), maxBytes: Number(o.maxMb) * 1024 * 1024 }
+      if (cfg && o.release) {
+        const eff = effectiveClipCaps(caps, await fetchClipCaps(cfg, o.release))
+        for (const n of eff.notes) console.log(n)
+        if (eff.blocked) {
+          console.warn(eff.blocked)
+          process.exitCode = 1
+          return
+        }
+        caps = { maxSeconds: eff.maxSeconds, maxBytes: eff.maxBytes }
+      }
+      const cached = cachedProfile(o)
+      const result = await recordClips({
+        baseUrl: o.url,
+        flows: o.flow,
+        outDir: o.out,
+        viewport,
+        maxSeconds: caps.maxSeconds,
+        maxBytes: caps.maxBytes,
+        allow: o.allow,
+        ...(cached ? { profileDir: cached.profileDir, channel: cached.channel } : {}),
+        log: (m) => console.log(m),
+      })
+      for (const n of result.notes) console.log(n)
+      for (const s of result.skipped) console.warn(`Dropped "${s.name}": ${s.reason}`)
+      if (result.guard.blocked.length) console.log(`${result.guard.blocked.length} write request(s) were blocked while recording (read-only).`)
+      console.log(`\n${result.clips.length} clip(s) in ${o.out}`)
+      if (!cfg || !o.release || !result.clips.length) return
+      const up = await uploadClips(cfg, o.release, result.clips)
+      for (const f of up.failed) console.warn(`Not uploaded "${f.name}": ${f.reason}`)
+      console.log(`${up.uploaded.length} clip(s) in the release kit: ${consoleBaseUrl()}/releases`)
+    },
+  )
+
+program
+  .command('upload <dir>')
+  .description('Score screenshots any driver made (Maestro, adb, the iOS simulator, an SDK debug build) on the UX scorecard: <dir>/pages/<screen>/settled.png, plus facts.json, window.xml or hierarchy.json (ADR 0073).')
+  .addOption(new Option('--platform <name>', 'What the screens are from').choices([...UPLOAD_PLATFORMS]).makeOptionMandatory())
+  .option('--device <name>', 'The device or simulator, e.g. "Pixel 8 (API 35)"')
+  .addOption(new Option('--source <driver>', 'The driver that captured them').choices([...UPLOAD_SOURCES]))
+  .option('--app <name>', 'What to call the app in the prompts and the run')
+  .option('--about <text>', 'One line on what the app is and who uses it')
+  .option('--scale <n>', 'Pixels per point of the device (e.g. 3 for most phones), so the viewport is in points; default 1 (pixels)')
+  .option('--viewport <WxH>', 'The run viewport (default: the first screen)')
+  .option('--max-cost <usd>', 'The most this run may spend on server scoring')
+  .option('--no-score', 'Only upload; score later')
+  .option('--file', 'File the top root causes as reports (one per cause, at most 5 a run)')
+  .option('--dry-run', 'With --file: show what would be filed, file nothing')
+  .action(
+    async (dir: string, o: { platform: UploadPlatform; device?: string; source?: UploadSource; app?: string; about?: string; scale?: string; viewport?: string; maxCost?: string; score: boolean; file?: boolean; dryRun?: boolean }) => {
+      const cfg = syncConfigFromEnv()
+      for (const k of ['MUSHI_API_KEY', 'MUSHI_PROJECT_ID', 'MUSHI_API_ENDPOINT']) delete process.env[k]
+      if (!cfg) throw new Error('upload needs MUSHI_API_KEY and MUSHI_PROJECT_ID (run mushi login, or `mushi ux upload`, which passes your login).')
+      const num = (raw: string | undefined, name: string) => {
+        if (raw === undefined) return undefined
+        const n = Number(raw)
+        if (!Number.isFinite(n) || n <= 0) throw new InvalidArgumentError(`${name} must be a positive number, not ${raw}`)
+        return n
+      }
+      const r = await uploadCaptures(cfg, {
+        dir,
+        platform: o.platform,
+        device: o.device,
+        source: o.source,
+        app: o.app,
+        about: o.about,
+        scale: num(o.scale, '--scale'),
+        viewport: o.viewport,
+        maxCostUsd: num(o.maxCost, '--max-cost'),
+        score: o.score,
+        file: o.file,
+        dryRun: o.dryRun,
+        onProgress: (m) => process.stderr.write(`  ${m}\n`),
+      })
+      console.log(
+        `\nRun ${r.runId}: ${r.uploaded} screenshot(s) of ${r.pages} screen(s)` +
+          (r.reservedUsd != null ? `, up to $${r.reservedUsd.toFixed(2)} of AI budget held for scoring` : '') +
+          (o.score ? `; ${r.scored} scored${r.mean != null ? `, average ${r.mean}/10` : ''}, ${r.causes.length} root cause(s).` : '. Not scored (--no-score).'),
+      )
+      for (const e of r.errors) console.warn(`  ${e}`)
+      for (const f of r.filed?.filed ?? []) console.log(`Filed ${f.reportId}: ${f.title}`)
+      for (const w of r.filed?.wouldFile ?? []) console.log(`Would file: ${w.title} (${w.pages} page(s), ${w.patternKey})`)
+      console.log(`On the console: ${r.consoleUrl}`)
+      if (r.errors.length && r.scored === 0 && o.score) process.exitCode = 1
+    },
+  )
+
 program
   .command('explore')
   .description('Let a model use the signed-in app like a careless user, read-only; file only the errors that happen again when its steps are replayed.')
@@ -598,7 +729,7 @@ program
   .option('--success-text <regex>', 'The goal is reached when this text is visible')
   .option('--success-selector <css>', 'The goal is reached when this element is visible')
   .option('--success-api <url>', 'The goal is reached when a GET here (with the session cookies) answers with data')
-  .option('--mint-account', 'Mushi only: mint a synthetic account per session through the console (operator key; deleted after 24 h)')
+  .option('--mint-account', 'Testing this Mushi instance itself: mint a synthetic console account per session (operator key only, checked by the server; deleted after 24 h)')
   .option('--terminal', 'Run the CLI setup step itself when a screen asks for a terminal (scaffold a sample, run the setup, send a report)')
   .option('--setup-command <cmd>', 'With --terminal: the setup command; {projectId} and {apiKey} are filled in')
   .option('--allow <rule>', 'Allow a non-GET request that only reads (repeatable)', collect, [])
@@ -635,7 +766,8 @@ program
       const goal = req?.goal ?? o.goal
       if (!url || !goal) throw new Error('--url and --goal are required (or --request-stdin).')
       const dryRun = req ? req.dryRun : !!o.dryRun
-      const preset = presetFor(url)
+      // The app's own preset from this machine's presets file (ADR 0073); no app is built in.
+      const preset = presetFor(url, loadPresets())
       const given: SuccessCheck = req
         ? { text: req.successText ? literalPattern(req.successText) : undefined }
         : { url: o.successUrl, text: o.successText, selector: o.successSelector, api: o.successApi }
@@ -659,13 +791,15 @@ program
         goal,
         success,
         sessions,
-        steps: stepsFor(o.steps, !dryRun && (givenAccounts.length > 0 || !!o.mintAccount || !!appAccount)),
+        steps: stepsFor(o.steps, !dryRun && (givenAccounts.length > 0 || !!o.mintAccount || !!appAccount), req?.persona?.steps),
         model: o.model,
         appHosts: [...(preset?.appHosts ?? []), ...o.appHost],
         allow: o.allow,
         dryRun,
         outDir: o.out,
         runId: req?.runId,
+        // The console's persona (ADR 0073): its brief, device, language and needs.
+        persona: req?.persona ?? undefined,
         identity: givenAccounts.length
           ? async (session) => givenAccounts[session - 1] ?? null
           : o.mintAccount && cfg
@@ -673,8 +807,8 @@ program
             : appAccount
               ? async () => appAccount
               : undefined,
-        // Mushi's own path has a CLI step; a queued run with test accounts takes it too.
-        terminal: o.terminal || (req && preset && givenAccounts.length) ? (v) => runTerminalSetup({ ...v, setupCommand: o.setupCommand }) : undefined,
+        // An app whose preset says its setup has a CLI step: a queued run with test accounts takes it too.
+        terminal: o.terminal || (req && preset?.terminal && givenAccounts.length) ? (v) => runTerminalSetup({ ...v, setupCommand: o.setupCommand }) : undefined,
         onProgress: (m) => process.stderr.write(`  ${m}\n`),
       })
       const timeline = writeTimeline(result)

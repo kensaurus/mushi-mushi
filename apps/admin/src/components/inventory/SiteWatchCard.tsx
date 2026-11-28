@@ -212,7 +212,7 @@ export function SiteWatchCard({ projectId }: { projectId: string }) {
       {state.error && <p className="text-2xs text-danger">Couldn't load the watch: {state.error}</p>}
 
       {data && !data.firecrawlReady && (
-        <p className={`rounded-md ${CHIP_TONE.infoSubtle} px-3 py-2 text-2xs`}>
+        <p className={`rounded-md ${CHIP_TONE.info} px-3 py-2 text-2xs`}>
           Needs a Firecrawl key.{' '}
           <Link to="/settings?tab=byok" className="underline">
             Add one in Settings → AI keys

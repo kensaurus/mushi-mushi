@@ -15,6 +15,7 @@ import {
   routePathname,
   type ReportLayer,
 } from './reportRowAttribution'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 /** Derives deterministic tag chips from already-present report fields.
  *  - page: route / URL path where the bug was felt
@@ -52,7 +53,7 @@ export function ReportTagChips({ row, className = '' }: { row: ReportRow; classN
           <Link
             to={`/activity?route=${encodeURIComponent(pagePath)}`}
             onClick={(e) => e.stopPropagation()}
-            className="inline-flex shrink-0 items-center gap-0.5 rounded-sm bg-surface-overlay px-1 py-px text-2xs font-mono text-fg-muted hover:text-brand transition-opacity max-w-40 truncate"
+            className={`inline-flex shrink-0 items-center gap-0.5 rounded-sm ${CHIP_TONE.neutral} px-1 py-px text-2xs font-mono hover:text-brand transition-opacity max-w-40 truncate`}
           >
             📄 {pagePath}
           </Link>
@@ -65,7 +66,7 @@ export function ReportTagChips({ row, className = '' }: { row: ReportRow; classN
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
-            className="inline-flex shrink-0 items-center gap-0.5 rounded-sm bg-surface-overlay px-1 py-px text-2xs text-fg-muted hover:text-brand transition-opacity"
+            className={`inline-flex shrink-0 items-center gap-0.5 rounded-sm ${CHIP_TONE.neutral} px-1 py-px text-2xs hover:text-brand transition-opacity`}
           >
             📷 screenshot
           </a>
@@ -73,7 +74,7 @@ export function ReportTagChips({ row, className = '' }: { row: ReportRow; classN
       )}
       {hasScreenshot && !screenshotUrl && (
         <Tooltip portal content="Screenshot attached">
-          <span className="inline-flex shrink-0 items-center gap-0.5 rounded-sm bg-surface-overlay px-1 py-px text-2xs text-fg-muted cursor-help">
+          <span className={`inline-flex shrink-0 items-center gap-0.5 rounded-sm ${CHIP_TONE.neutral} px-1 py-px text-2xs cursor-help`}>
             📷 screenshot
           </span>
         </Tooltip>
@@ -202,7 +203,7 @@ export function ReportRowMeta({ row }: Props) {
       )}
       {traceShort && (
         <Tooltip portal content={`Sentry trace: ${row.sentry_trace_id}`}>
-          <span className="inline-flex shrink-0 items-center gap-0.5 rounded-sm bg-info-muted/40 px-1 py-px text-2xs font-mono text-info-foreground cursor-help">
+          <span className={`inline-flex shrink-0 items-center gap-0.5 rounded-sm ${CHIP_TONE.info} px-1 py-px text-2xs font-mono cursor-help`}>
             <IconBolt className="size-2.5" />
             {traceShort}
           </span>
@@ -215,7 +216,7 @@ export function ReportRowMeta({ row }: Props) {
 function MetaChip({
   children,
   tooltip,
-  tone = 'bg-surface-overlay text-fg-muted border-edge-subtle',
+  tone = CHIP_TONE.neutral,
 }: {
   children: ReactNode
   tooltip: string

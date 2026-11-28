@@ -20,60 +20,45 @@ describe('faviconUrlCandidates', () => {
 });
 
 describe('resolveProjectFaviconDomains', () => {
-  it('prefers repo TLD over SDK parent host', () => {
+  it('prefers the repo TLD over an SDK origin mounted under a path', () => {
     expect(
       resolveProjectFaviconDomains({
         project_id: '1',
-        project_name: 'glot.it',
-        project_slug: 'glot-it',
-        sdk_origin: 'https://kensaur.us/glot-it/',
-        repo_url: 'https://github.com/kensaurus/glot.it',
+        project_name: 'Lingo',
+        project_slug: 'lingo',
+        sdk_origin: 'https://apps.example.com/lingo/',
+        repo_url: 'https://github.com/acme/lingo.app',
       }),
-    ).toEqual(['glot.it']);
+    ).toEqual(['lingo.app']);
   });
 
-  it('uses slug hint for solo-boss-cloud', () => {
-    expect(
-      resolveProjectFaviconDomains({
-        project_id: '2',
-        project_name: 'solo boss',
-        project_slug: 'solo-boss-cloud',
-        sdk_origin: 'https://kensaur.us/',
-      }),
-    ).toEqual(['solo-boss.kensaur.us']);
-  });
-
-  it('resolves Cooler Heads and Tsumagoi from slug hints', () => {
-    expect(
-      resolveProjectFaviconDomains({
-        project_id: 'httg',
-        project_name: 'Cooler Heads',
-        project_slug: 'how-to-talk-to-girls',
-        sdk_origin: 'https://kensaur.us/',
-      }),
-    ).toEqual(['talk.kensaur.us']);
-    expect(
-      resolveProjectFaviconDomains({
-        project_id: 'tsu',
-        project_name: 'Tsumagoi',
-        project_slug: 'tsumagoi',
-      }),
-    ).toEqual(['tsumagoi.kensaur.us']);
-  });
-
-  it('skips kensaur.us for yen-yen native app — no domain, initials fallback', () => {
+  it('skips a host the app shares under a path: initials instead of the parent site icon', () => {
     expect(
       resolveProjectFaviconDomains({
         project_id: '3',
-        project_name: 'yen-yen',
-        project_slug: 'yen-yen',
-        sdk_origin: 'https://kensaur.us/yen-yen/',
-        repo_url: 'https://github.com/kensaurus/yen-yen',
+        project_name: 'Coins',
+        project_slug: 'coins',
+        sdk_origin: 'https://apps.example.com/coins/',
+        repo_url: 'https://github.com/acme/coins',
       }),
     ).toEqual([]);
   });
 
-  it('includes non-parent SDK origin when no slug/repo hint', () => {
+  it('skips a configured shared host, with or without www', () => {
+    const base = { project_id: '5', project_name: 'Board', project_slug: 'board', shared_hosts: ['apps.example.com'] };
+    expect(resolveProjectFaviconDomains({ ...base, sdk_origin: 'https://apps.example.com' })).toEqual([]);
+    expect(resolveProjectFaviconDomains({ ...base, sdk_origin: 'https://www.apps.example.com' })).toEqual([]);
+    expect(resolveProjectFaviconDomains({ ...base, sdk_origin: 'https://board.example.com' })).toEqual(['board.example.com']);
+  });
+
+  it('never special-cases a slug: two projects with the same data resolve the same', () => {
+    const data = { project_id: 'x', project_name: 'X', sdk_origin: 'https://x.example.com' };
+    expect(resolveProjectFaviconDomains({ ...data, project_slug: 'mushi-mushi' })).toEqual(
+      resolveProjectFaviconDomains({ ...data, project_slug: 'anything-else' }),
+    );
+  });
+
+  it('includes a root SDK origin when no repo hint', () => {
     expect(
       resolveProjectFaviconDomains({
         project_id: '4',
@@ -90,53 +75,36 @@ describe('resolveProjectDomain', () => {
     expect(
       resolveProjectDomain({
         project_id: '2',
-        project_name: 'glot.it',
-        project_slug: 'glot-it',
+        project_name: 'Lingo',
+        project_slug: 'lingo',
         sdk_origin: 'http://localhost:3000',
-        repo_url: 'https://github.com/kensaurus/glot.it',
+        repo_url: 'https://github.com/acme/lingo.app',
       }),
-    ).toBe('glot.it');
+    ).toBe('lingo.app');
   });
 });
 
 describe('projectFaviconUrlCandidates', () => {
-  it('prefers verified slug icon URL before domain paths', () => {
-    const urls = projectFaviconUrlCandidates({
-      project_id: '1',
-      project_name: 'mushi',
-      project_slug: 'mushi-mushi',
-    });
-    expect(urls[0]).toBe('https://kensaur.us/mushi-mushi/admin/favicon.svg');
-    expect(new Set(urls).size).toBe(urls.length);
+  it('uses the app icon (projects.icon_url) alone when set', () => {
+    expect(
+      projectFaviconUrlCandidates({ project_id: '1', project_name: 'A', project_slug: 'a', icon_url: 'https://cdn.example.com/a.png', sdk_origin: 'https://a.example.com' }),
+    ).toEqual(['https://cdn.example.com/a.png']);
   });
 
-  it('dedupes URLs across domains', () => {
+  it('lists first-party paths per domain, deduped', () => {
     const urls = projectFaviconUrlCandidates({
       project_id: '2',
-      project_name: 'solo boss',
-      project_slug: 'solo-boss-cloud',
+      project_name: 'Board',
+      project_slug: 'board',
+      sdk_origin: 'https://board.example.com',
+      repo_url: 'https://github.com/acme/board.example.com',
     });
-    expect(urls[0]).toBe('https://solo-boss.kensaur.us/favicon.svg');
+    expect(urls[0]).toBe('https://board.example.com/favicon.svg');
     expect(new Set(urls).size).toBe(urls.length);
   });
 
-  it('uses kensaur.us proxy for glot.it when TLD blocks hotlinking', () => {
-    const urls = projectFaviconUrlCandidates({
-      project_id: '3',
-      project_name: 'glot.it',
-      project_slug: 'glot-it',
-    });
-    expect(urls[0]).toBe('https://kensaur.us/glot-it/apple-touch-icon.png');
-  });
-
-  it('uses slug icon for the-wanting-mind on the shared parent host', () => {
-    const urls = projectFaviconUrlCandidates({
-      project_id: 'twm',
-      project_name: 'The Wanting Mind',
-      project_slug: 'the-wanting-mind',
-      sdk_origin: 'https://kensaur.us/the-wanting-mind/',
-    });
-    expect(urls[0]).toBe('https://kensaur.us/the-wanting-mind/pwa-512x512.png');
+  it('has nothing to try for an app mounted under a shared host path', () => {
+    expect(projectFaviconUrlCandidates({ project_id: '3', project_name: 'C', project_slug: 'c', sdk_origin: 'https://apps.example.com/c/' })).toEqual([]);
   });
 });
 

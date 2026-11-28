@@ -122,10 +122,75 @@ describe('mergeRuntimeConfig — brandFooter (MIT config beats remote)', () => {
     expect(afterFetch.widget?.brandFooter).toBe(false);
   });
 
-  it('still lets other runtime widget keys override the host', () => {
+  it('keeps host values for the other widget keys too (ADR 0068)', () => {
     const host: MushiConfig = { ...BASE, widget: { ...BASE.widget, brandFooter: false, triggerText: 'Host' } };
     const merged = mergeRuntimeConfig(host, { widget: { brandFooter: true, triggerText: 'Remote' } });
     expect(merged.widget?.brandFooter).toBe(false);
-    expect(merged.widget?.triggerText).toBe('Remote');
+    expect(merged.widget?.triggerText).toBe('Host');
+  });
+});
+
+// ADR 0068 (owner decision, 2026-11-22): one rule for every appearance key.
+// Code wins; the console fills what code left unset; then the default.
+describe('mergeRuntimeConfig — explicit code wins for every appearance key', () => {
+  const NO_WIDGET: MushiConfig = { projectId: BASE.projectId, apiKey: BASE.apiKey };
+  const CASES: ReadonlyArray<{ key: string; host: unknown; runtime: unknown }> = [
+    { key: 'position', host: 'top-left', runtime: 'bottom-left' },
+    { key: 'theme', host: 'light', runtime: 'dark' },
+    { key: 'triggerText', host: 'Feedback', runtime: 'Report a bug' },
+    { key: 'accent', host: '#e03c2c', runtime: '#3b5bdb' },
+    { key: 'screenshotSensitiveHint', host: false, runtime: 'Hide card numbers' },
+    { key: 'attachToSelector', host: '#help', runtime: '#report' },
+  ];
+
+  for (const { key, host, runtime } of CASES) {
+    it(`${key}: host set + console set → host`, () => {
+      const hostCfg = { ...NO_WIDGET, widget: { [key]: host } } as MushiConfig;
+      const merged = mergeRuntimeConfig(hostCfg, { widget: { [key]: runtime } } as MushiRuntimeSdkConfig, hostCfg);
+      expect((merged.widget as Record<string, unknown>)[key]).toEqual(host);
+    });
+
+    it(`${key}: host unset + console set → console`, () => {
+      const merged = mergeRuntimeConfig(NO_WIDGET, { widget: { [key]: runtime } } as MushiRuntimeSdkConfig, NO_WIDGET);
+      expect((merged.widget as Record<string, unknown>)[key]).toEqual(runtime);
+    });
+
+    it(`${key}: neither → the SDK default (unset)`, () => {
+      const merged = mergeRuntimeConfig(NO_WIDGET, { widget: {} }, NO_WIDGET);
+      expect((merged.widget as Record<string, unknown>)[key]).toBeUndefined();
+    });
+  }
+
+  it('a cached console value never counts as a host value on the next merge', () => {
+    const cached = mergeRuntimeConfig(NO_WIDGET, { widget: { theme: 'dark', accent: '#3b5bdb' } }, NO_WIDGET);
+    const fresh = mergeRuntimeConfig(cached, { widget: { theme: 'light', accent: '#0ca678' } }, NO_WIDGET);
+    expect(fresh.widget?.theme).toBe('light');
+    expect(fresh.widget?.accent).toBe('#0ca678');
+  });
+
+  it('accentText follows the accent that wins', () => {
+    const hostAccent = { ...NO_WIDGET, widget: { accent: '#e03c2c' } } as MushiConfig;
+    const kept = mergeRuntimeConfig(hostAccent, { widget: { accent: '#fde047', accentText: '#000000' } }, hostAccent);
+    expect(kept.widget?.accent).toBe('#e03c2c');
+    expect(kept.widget?.accentText).toBeUndefined();
+
+    const hostInkOnly = { ...NO_WIDGET, widget: { accentText: '#ffffff' } } as MushiConfig;
+    const paired = mergeRuntimeConfig(hostInkOnly, { widget: { accent: '#fde047', accentText: '#000000' } }, hostInkOnly);
+    expect(paired.widget?.accent).toBe('#fde047');
+    expect(paired.widget?.accentText).toBe('#000000');
+  });
+
+  it('banner fields: each host bannerConfig field wins, the console fills the rest', () => {
+    const host = { ...NO_WIDGET, widget: { trigger: 'banner', bannerConfig: { variant: 'subtle' } } } as MushiConfig;
+    const merged = mergeRuntimeConfig(
+      host,
+      { widget: { bannerVariant: 'neon', bannerPosition: 'bottom', bannerMessage: 'Beta' } } as MushiRuntimeSdkConfig,
+      host,
+    );
+    expect(merged.widget?.bannerConfig).toMatchObject({ variant: 'subtle', position: 'bottom', message: 'Beta' });
+
+    const unset = mergeRuntimeConfig(NO_WIDGET, { widget: { bannerVariant: 'neon' } } as MushiRuntimeSdkConfig, NO_WIDGET);
+    expect(unset.widget?.bannerConfig?.variant).toBe('neon');
+    expect(mergeRuntimeConfig(NO_WIDGET, { widget: {} }, NO_WIDGET).widget?.bannerConfig).toBeUndefined();
   });
 });

@@ -30,6 +30,7 @@ import { expectedHead, saveSkillFiles } from './resume.js'
 import { appEnv, run, type RunResult } from './proc.js'
 import type { ResolvedSkill } from './skills.js'
 import {
+  addJudgeUsage,
   loadState,
   newRunId,
   runDir,
@@ -952,8 +953,12 @@ async function runLoop(opts: LoopOptions, runId: string, dir: string): Promise<R
         if (s.judge?.length) continue
         const verdicts = []
         for (const vp of VIEWPORTS) {
-          const v = await judgeSurface(s, vp.name, { dir, repoRoot: wtPath, designFiles, model })
-          if (v) verdicts.push(v)
+          // ADR 0072: pairs reviewed before (any run of this repo) are reused from .mushi/ux/judge-cache.
+          const v = await judgeSurface(s, vp.name, { dir, repoRoot: wtPath, designFiles, model, cacheDir: join(dirname(dir), 'judge-cache') })
+          if (v) {
+            verdicts.push(v)
+            addJudgeUsage(state, model, v)
+          }
         }
         s.judge = verdicts
         const errors = verdicts.filter((v) => v.error)

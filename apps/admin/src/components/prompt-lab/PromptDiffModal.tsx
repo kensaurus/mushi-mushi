@@ -63,9 +63,9 @@ export function PromptDiffModal({ prompt, parent, onClose }: PromptDiffModalProp
               key={idx}
               className={
                 l.kind === 'add'
-                  ? CHIP_TONE.okSubtle
+                  ? CHIP_TONE.ok
                   : l.kind === 'del'
-                    ? CHIP_TONE.dangerSubtle
+                    ? CHIP_TONE.danger
                     : 'text-fg-muted'
               }
             >

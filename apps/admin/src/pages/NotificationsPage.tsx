@@ -52,7 +52,7 @@ import {
   type NotificationTabId,
   type ReporterNotification,
 } from '../components/notifications/types'
-import { CHIP_TONE, HEADER_BADGE_TONE } from '../lib/chipTone'
+import { CHIP_TONE } from '../lib/chipTone'
 import { PageLoadError } from '../components/PageLoadError'
 
 const TABS: Array<{ id: NotificationTabId; label: string; description: string }> = [
@@ -305,12 +305,12 @@ export function NotificationsPage() {
             <Badge
               className={
                 bannerSeverity === 'ok'
-                  ? CHIP_TONE.okSubtle
+                  ? CHIP_TONE.ok
                   : bannerSeverity === 'warn'
-                    ? CHIP_TONE.warnSubtle
+                    ? CHIP_TONE.warn
                     : bannerSeverity === 'brand'
-                      ? HEADER_BADGE_TONE.brand
-                      : HEADER_BADGE_TONE.neutral
+                      ? CHIP_TONE.neutral
+                      : CHIP_TONE.neutral
               }
             >
               {headerBadge}
@@ -563,7 +563,7 @@ export function NotificationsPage() {
                 <h3 className="text-sm font-semibold text-fg">Messages by type</h3>
                 <div className="flex flex-wrap gap-2">
                   {Object.entries(stats.byType).map(([t, count]) => (
-                    <Badge key={t} className={TYPE_BADGE[t] ?? HEADER_BADGE_TONE.neutral}>
+                    <Badge key={t} className={TYPE_BADGE[t] ?? CHIP_TONE.neutral}>
                       {t}: {count}
                     </Badge>
                   ))}

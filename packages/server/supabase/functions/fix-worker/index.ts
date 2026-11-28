@@ -25,10 +25,10 @@
  *      project_settings.github_repo_url).
  *   7. Creates a draft PR via direct GitHub REST API. It stays a draft, so
  *      the host's CI does not run (ADR 0047): agent-pr-review marks it ready
- *      once the Opus review says "merge" on its head (or, when no review can
+ *      once the AI review says "merge" on its head (or, when no review can
  *      run, when the model's own check passed). Nothing auto-merges here.
  *   8. Updates fix_attempts and fix_dispatch_jobs with the result, and
- *      queues the Opus review (ADR 0030).
+ *      queues the AI review (ADR 0030).
  *
  * Security:
  *   - JWT-verified at the edge (verify_jwt=false because the dispatch
@@ -135,7 +135,7 @@ import { FIX_EFFORT, FIX_FALLBACK } from '../_shared/models.ts';
 import { fixModelFor } from '../_shared/project-models.ts';
 import { claudeGenerateObject } from '../_shared/claude-messages.ts';
 import { getPromptForStage } from '../_shared/prompt-ab.ts'
-import { budgetSnapshot, checkAutofixBudget, dispatchTrigger, isSiblingDispatch } from '../_shared/autofix-budget.ts';
+import { budgetSnapshot, checkAutofixBudget, dispatchTrigger, fixCostReserve, isSiblingDispatch } from '../_shared/autofix-budget.ts';
 import { logLlmInvocation } from '../_shared/telemetry.ts';
 import { siblingDispatchRow } from '../_shared/sibling-dispatch.ts';
 import { dispatchPluginEventDetached } from '../_shared/plugins.ts';
@@ -490,6 +490,9 @@ Deno.serve(
       // 30-day spend is stamped on the dispatch row so the timeline shows it.
       // A failed budget read throws into the catch below (attempt + job fail
       // with the reason) instead of being read as "$0 spent".
+      // The estimate is the p95 of what fix attempts actually cost over 30
+      // days (floor $0.25 until 20 attempts), not a fixed guess.
+      const reserve = await fixCostReserve(db);
       const budget = await checkAutofixBudget(db, dispatch.project_id, {
         autofix_max_spend_usd: (settings?.autofix_max_spend_usd as number | null) ?? null,
         autofix_max_dispatches_per_day: (settings?.autofix_max_dispatches_per_day as number | null) ?? null,
@@ -497,7 +500,7 @@ Deno.serve(
           (settings?.autofix_approval_cost_threshold_usd as number | null) ?? null,
       }, {
         severity: report.severity as string | null,
-        estimatedCostUsd: 0.25,
+        estimatedCostUsd: reserve.usd,
         trigger: dispatchTrigger(dispatch.dispatch_metadata),
         excludeDispatchId: dispatch.id,
       });
@@ -507,7 +510,7 @@ Deno.serve(
           .update({
             dispatch_metadata: {
               ...((dispatch.dispatch_metadata as Record<string, unknown> | null) ?? {}),
-              autofix_budget: budgetSnapshot(budget),
+              autofix_budget: { ...budgetSnapshot(budget), estimated_cost_usd: reserve.usd, estimate_source: reserve.source, estimate_samples: reserve.samples },
             },
           })
           .eq('id', dispatch.id);
@@ -539,6 +542,7 @@ Deno.serve(
         ((dispatch.dispatch_metadata as Record<string, unknown> | null) ?? {}).approved === true;
       if (budget.requiresApproval && !dispatchApproved) {
         const approvalReason =
+          budget.approvalReason ??
           'Estimated dispatch cost exceeds approval threshold — approve in console before PR creation.';
         // Close the fix_attempt too — leaving it 'running' orphaned it
         // forever and the dispatch route's ALREADY_DISPATCHED guard then
@@ -1369,7 +1373,7 @@ ${
           body: buildPrBody({ ...fix, files: prFiles }, dispatch.report_id),
           files: prFiles,
           labels: fixReviewPassed(fix) ? ['mushi-autofix'] : ['mushi-autofix', 'needs-review'],
-          // Always a draft: host CI runs only once the Opus review says
+          // Always a draft: host CI runs only once the AI review says
           // "merge" (agent-pr-review readies it; ADR 0047). A fix the model
           // flagged stays a draft even then: CI and merge wait for a person.
           markReady: false,
@@ -1417,7 +1421,7 @@ ${
         prUrl,
       });
       if (!reviewQueued.queued) {
-        log.warn('Opus review not queued for the fix PR (non-fatal)', { fixAttemptId, err: reviewQueued.error });
+        log.warn('AI review not queued for the fix PR (non-fatal)', { fixAttemptId, err: reviewQueued.error });
       }
 
       await db
@@ -2237,7 +2241,7 @@ async function dispatchToCloudAgent(
 }
 
 /**
- * What earlier attempts on this report did (their Opus reviews, or why the
+ * What earlier attempts on this report did (their AI reviews, or why the
  * agent stopped), so a re-dispatch does not repeat a rejected theory.
  * Best-effort: a read failure dispatches without it.
  */

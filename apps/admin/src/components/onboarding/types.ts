@@ -45,7 +45,7 @@ export const EMPTY_ONBOARDING_STATS: OnboardingStats = {
   optionalTotal: 4,
   setupDone: false,
   nextStepId: 'project_created',
-  nextStepLabel: 'Create your first project',
+  nextStepLabel: 'Name your app',
   sdkInstalled: false,
   sdkHostMismatch: false,
   adminEndpointHost: null,

@@ -24,6 +24,9 @@ import {
 } from '../shared.ts'
 import type { Variables } from '../types.ts'
 import { PDCA_DEFAULT_MODEL, pdcaModelError } from '../../_shared/pdca-models.ts'
+// A project persona id (ADR 0073); checked here with a regex so `api` does not bundle _shared/personas.ts.
+const PERSONA_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const isPersonaId = (raw: unknown): raw is string => typeof raw === 'string' && PERSONA_ID_RE.test(raw)
 import { unwrapUpstreamError } from '../../_shared/upstream-error.ts'
 
 const app = new Hono<{ Variables: Variables }>()
@@ -320,6 +323,25 @@ function pdcaRoutes() {
       )
     }
 
+    // The user the critic judges for (a project persona, ADR 0073), on top of its rubric persona.
+    const userPersona = (body as { user_persona_id?: unknown }).user_persona_id
+    let projectPersonaId: string | null = null
+    if (userPersona != null && userPersona !== '') {
+      if (!isPersonaId(userPersona)) {
+        return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: "user_persona_id must be the id of one of this app's personas." } }, 400)
+      }
+      const { data: up, error: upErr } = await db()
+        .from('project_personas')
+        .select('id')
+        .eq('id', userPersona)
+        .eq('project_id', projectId)
+        .is('archived_at', null)
+        .maybeSingle()
+      if (upErr) return c.json({ ok: false, error: { code: 'DB_ERROR', message: upErr.message } }, 500)
+      if (!up) return c.json({ ok: false, error: { code: 'PERSONA_NOT_FOUND', message: 'That persona is not one of this app’s. Pick another.' } }, 404)
+      projectPersonaId = (up as { id: string }).id
+    }
+
     const { data, error } = await db()
       .from('pdca_runs')
       .insert({
@@ -330,6 +352,7 @@ function pdcaRoutes() {
         primary_model: typeof primary_model === 'string' && primary_model.trim() ? primary_model.trim() : PDCA_DEFAULT_MODEL,
         judge_model: typeof judge_model === 'string' && judge_model.trim() ? judge_model.trim() : PDCA_DEFAULT_MODEL,
         persona: personaSlug,
+        ...(projectPersonaId ? { project_persona_id: projectPersonaId } : {}),
         target_score: target_score ?? 0.7,
       })
       .select()

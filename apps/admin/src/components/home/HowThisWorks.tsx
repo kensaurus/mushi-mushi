@@ -3,16 +3,18 @@
  * PURPOSE: What Mushi does with a bug, in four plain steps, behind a small
  *          "How this works" disclosure. Open by default only on a new app
  *          that has no reports yet; everyone else opens it when they want it.
+ *          Plain steps, no links: each step's page is already in the sidebar,
+ *          and four links here made a new app's Home a page of buttons (ADR 0069).
  */
 
-import { Link } from 'react-router-dom'
 import { DisclosurePanel } from '../ui'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 const STEPS = [
-  { title: 'A bug comes in', body: 'A user reports it from your app, or Mushi Mushi spots it on your live site or in your monitoring.', to: '/reports', link: 'Bug reports' },
-  { title: 'Mushi Mushi explains it', body: 'You get a plain-English diagnosis: what broke, where, and how bad it is.', to: '/reports?status=open', link: 'Open bugs' },
-  { title: 'An AI agent drafts the fix', body: 'A coding agent opens a pull request; a second model reviews it before anything merges.', to: '/fixes', link: 'Fixes' },
-  { title: 'You ship it', body: 'Approved fixes ride a release train to your main branch, and Mushi Mushi checks the deploy went live.', to: '/pipeline', link: 'Pipeline' },
+  { title: 'A bug comes in', body: 'A user reports it from your app, or Mushi Mushi spots it on your live site or in your monitoring.' },
+  { title: 'Mushi Mushi explains it', body: 'You get a plain-English diagnosis: what broke, where, and how bad it is.' },
+  { title: 'An AI agent drafts the fix', body: 'A coding agent opens a pull request; a second model reviews it before anything merges.' },
+  { title: 'You ship it', body: 'You merge the fix, and Mushi Mushi checks the deploy went live.' },
 ] as const
 
 export function HowThisWorks({ defaultOpen }: { defaultOpen: boolean }) {
@@ -23,13 +25,10 @@ export function HowThisWorks({ defaultOpen }: { defaultOpen: boolean }) {
           {STEPS.map((s, i) => (
             <li key={s.title} className="min-w-0">
               <p className="text-xs font-semibold text-fg">
-                <span className="mr-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-brand-subtle text-2xs text-brand-foreground">{i + 1}</span>
+                <span className={`mr-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full ${CHIP_TONE.brand} text-2xs`}>{i + 1}</span>
                 {s.title}
               </p>
               <p className="mt-1 text-xs leading-relaxed text-fg-muted">{s.body}</p>
-              <Link to={s.to} className="mt-1 inline-block text-2xs text-link hover:underline">
-                {s.link} →
-              </Link>
             </li>
           ))}
         </ol>

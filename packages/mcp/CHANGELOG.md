@@ -1,5 +1,72 @@
 # @mushi-mushi/mcp
 
+## 0.33.1
+
+### Patch Changes
+
+- 0c06725: Dependency updates. `@mushi-mushi/mcp` now accepts `@sentry/node` 10 or 11 as its optional peer. On 11 it sends the same data as before: no user info, cookies, headers, request bodies or tool inputs and outputs. `@mushi-mushi/ux` moves to `@anthropic-ai/sdk` 1.x, and `@mushi-mushi/cli` to `@napi-rs/keyring` 2. `@mushi-mushi/react-native` builds and type-checks against React Native 0.88; its floating button no longer casts its animated style. The Svelte and Vue starter templates now use Vite 8 and TypeScript 6.
+
+## 0.33.0
+
+### Minor Changes
+
+- ec62b78: Three tools for the release stage: `get_security_proof` (the scans your own CI ran for a release's commit), `export_release_kit` (a signed kit of screenshots and clips for a product-video tool) and `request_store_media_upload` (ask to put new screenshots, app previews or listing images on the App Store or Google Play; a person approves each upload in the console first).
+- ec62b78: Phone apps get the same UX scorecard as web pages, and first-time user tests can play a persona (ADR 0073).
+
+  - `mushi-ux upload <dir> --platform android|ios|…` sends the screenshots any driver made (a Maestro flow, `adb exec-out screencap`, `xcrun simctl io booted screenshot`, an SDK debug build) and scores each screen on the written rubric. It reads an Android `uiautomator` dump or a `maestro hierarchy` next to a screenshot for the screen's words and buttons. Templates are in `docs/templates/ux-native/`.
+  - `mushi-ux fresh-eyes` plays the persona a queued test carries: its device (viewport, touch), language, 150% zoom for low vision, reduced motion, and its patience as the step cap. The local worker forwards the persona (it now says it can, `fresh_eyes_persona`).
+  - `--mint-account` sends the app it is for; the server makes accounts in Mushi's own sign-in only for an app that opted in.
+  - New MCP tools: `upload_ux_captures`, `list_personas` and `start_fresh_eyes`.
+
+- ec62b78: The UX tools now spend fewer tokens and show what each run cost (Plan 025, ADR 0072).
+
+  `@mushi-mushi/ux`: `mushi-ux scorecard` sends a perceptual hash of each page's settled screenshot. When a page's text and look are unchanged from a run in the last 30 days, the server reuses that page's score instead of making a model call, with today's speed and accessibility measurements applied. The UX loop's final review makes no call when a kept version looks the same as the original, and reuses its verdict for an identical pair of screenshots (cached in `.mushi/ux/judge-cache/`). `mushi ux run --sync` now sends the review's token counts, so the console can show the run's cost. `MUSHI_UX_SKILLS_REPO` overrides the default skills repo.
+
+  `@mushi-mushi/mcp`: four new read-only tools. `get_timeline` returns the app release by release: bugs fixed, screens improved, scorecard average and AI cost per release. `get_surface_history` returns one screen's pinned screenshots, scores and kept changes. `get_ux_run` reads one UX run. `start_ux_run` returns the console link and the local command to start a run; it never starts a cloud run itself. Examples in the tool descriptions no longer name the maintainer's own apps, and `MUSHI_PUBLIC_ORIGIN` sets the public site origin (default unchanged).
+
+  `@mushi-mushi/core`: favicon lookup no longer carries a per-app table. It uses the app's icon, repo and SDK origin, skips an SDK origin served under a path of a shared host, and takes `shared_hosts` from the caller.
+
+  `@mushi-mushi/cli`: `MUSHI_PUBLIC_ORIGIN` sets the public site origin used for the hosted console and the MCP sign-in link (default unchanged).
+
+### Patch Changes
+
+- Updated dependencies [ec62b78]
+  - @mushi-mushi/core@1.40.1
+
+## 0.32.2
+
+### Patch Changes
+
+- 7b51ddb: The report panel is now graphical (ADR 0070). Reporters pick what the report is about from six colour-coded tiles with icons (Bug, Slow, Looks wrong, Confusing, Idea, Other), and the picked type tints the panel header and sets a matching prompt in the text box ("What did you do, and what happened?" for a bug). The length check is a small ring under the text box that counts down; Send is never greyed out, and pressing it too early turns the ring red and puts the cursor back in the text box. Screenshot and "point at it" are icon buttons, and an attached screenshot shows as a thumbnail. The beta notice is a "Beta" chip in the header that opens on tap, the privacy note is one line with a lock, and the success view draws a check with "Got it" and the reply-time chip. The panel edge is darker by default so a light panel stays visible on a light page (WCAG 1.4.11); `--mushi-border` still overrides it.
+
+  `@mushi-mushi/core` adds `MUSHI_REPORT_TYPE_COLORS` and `MUSHI_REPORT_TYPE_WASH`, the tile colours for light and dark mode (every pair is tested for WCAG AA). The web bundle budget goes from 89.8 KB to 94 KB gzipped: the tiles' CSS, the icons and the per-type prompts in five languages add 4.1 KB.
+
+  New optional locale keys (`panel.privacyShort`, `typeQuestion`, `prompts`, `charsLeft`, `ready`, `delivered`); a custom locale without them falls back to English. The Japanese panel title is now 「フィードバック」, short enough for one line.
+
+  `@mushi-mushi/mcp`: the docs index is regenerated for the updated theming page and ADR 0070.
+
+- Updated dependencies [7b51ddb]
+  - @mushi-mushi/core@1.40.0
+
+## 0.32.1
+
+### Patch Changes
+
+- 446a218: The docs search (`search_mushi_docs`) knows the simplified console: Home has no view tabs (its views live under Apps), Connect is three steps, Fixes keeps release machinery in one Automation section, and a bug report leads with Copy fix prompt.
+
+## 0.32.0
+
+### Minor Changes
+
+- ef79529: - **Change the bug widget's look from your editor.** The MCP tools `get_widget_settings` and `set_widget_settings` read and change the widget's colour, corner, theme, trigger text and launcher for one app; the write returns what it was, what it is now and which settings changed. Installed SDKs pick the change up at their next start, with no redeploy. Project owners and admins only.
+  - **`mushi widget show` and `mushi widget set`** do the same from the terminal, for example `mushi widget set --accent '#3b5bdb' --position bottom-left --theme dark --trigger-text 'Report a bug'`. `--accent auto` goes back to matching your site; a bad colour, corner or theme is refused before anything is sent. A value your app's code sets wins over these settings.
+
+### Patch Changes
+
+- facd8c1: - **`search_mushi_docs` finds the new Theming page** — the widget's colour, language and route attributes for the script tag, the `--mushi-*` design tokens and the contrast rule.
+- Updated dependencies [facd8c1]
+  - @mushi-mushi/core@1.39.0
+
 ## 0.31.8
 
 ### Patch Changes

@@ -1,10 +1,60 @@
 # @mushi-mushi/web
 
+## 1.40.0
+
+### Minor Changes
+
+- 7b51ddb: The report panel is now graphical (ADR 0070). Reporters pick what the report is about from six colour-coded tiles with icons (Bug, Slow, Looks wrong, Confusing, Idea, Other), and the picked type tints the panel header and sets a matching prompt in the text box ("What did you do, and what happened?" for a bug). The length check is a small ring under the text box that counts down; Send is never greyed out, and pressing it too early turns the ring red and puts the cursor back in the text box. Screenshot and "point at it" are icon buttons, and an attached screenshot shows as a thumbnail. The beta notice is a "Beta" chip in the header that opens on tap, the privacy note is one line with a lock, and the success view draws a check with "Got it" and the reply-time chip. The panel edge is darker by default so a light panel stays visible on a light page (WCAG 1.4.11); `--mushi-border` still overrides it.
+
+  `@mushi-mushi/core` adds `MUSHI_REPORT_TYPE_COLORS` and `MUSHI_REPORT_TYPE_WASH`, the tile colours for light and dark mode (every pair is tested for WCAG AA). The web bundle budget goes from 89.8 KB to 94 KB gzipped: the tiles' CSS, the icons and the per-type prompts in five languages add 4.1 KB.
+
+  New optional locale keys (`panel.privacyShort`, `typeQuestion`, `prompts`, `charsLeft`, `ready`, `delivered`); a custom locale without them falls back to English. The Japanese panel title is now 「フィードバック」, short enough for one line.
+
+  `@mushi-mushi/mcp`: the docs index is regenerated for the updated theming page and ADR 0070.
+
+### Patch Changes
+
+- Updated dependencies [7b51ddb]
+  - @mushi-mushi/core@1.40.0
+
+## 1.39.2
+
+### Patch Changes
+
+- b2573c9: Reopening the report panel right after sending now starts a fresh report. Before, closing and reopening within half a second of Send jumped the new panel to the previous report's "sent" receipt and cleared what the reporter had typed.
+
+## 1.39.1
+
+### Patch Changes
+
+- 48f44f6: - **The README's brand example no longer locks the look in code.** It sets only the app's identity (project id and key), says that look and position come from the console and that a value set in code wins (ADR 0068), and shows locking the accent and corner in code as a separate example.
+
+## 1.39.0
+
+### Minor Changes
+
+- ef79529: - **Your code now wins over the console for the widget's look.** If `Mushi.init({ widget: … })` (or a `data-*` attribute on the script tag) sets `position`, `theme`, `triggerText`, `accent`, a banner field or any other widget option, that value is used even when the console sets the same option; the console fills only what your code leaves out (ADR 0068). Before, the console won for position, theme, trigger text and the banner fields. **To let the console decide an option, remove it from your code.**
+  - **The console can set the widget's brand colour.** A colour saved in the console (or with `mushi widget set --accent`, or the MCP tool `set_widget_settings`) arrives as `widget.accent` with a black or white `widget.accentText` that Mushi checked for contrast; the two always apply together. Auto (no colour) keeps matching your site as before.
+- facd8c1: - **More settings on the script tag** — `data-accent`, `data-accent-text`, `data-locale` and `data-hide-on-routes` (comma-separated), so Lovable, Bolt and plain HTML sites can brand the widget without code.
+  - **Script tag typos no longer slip through** — every attribute is checked. A value the widget does not take is skipped with one console warning naming the attribute and the values it accepts; it never throws or breaks the page.
+  - **Route rules take simple globs** — `hideOnRoutes: ['/admin/*', '/blog/**']`. An entry without `*` still matches anywhere in the path, exactly as before.
+  - **Text on your accent stays readable** — when `accentText`, `data-accent-text` or a CSS `--mushi-accent-fg` is under 3:1 contrast on the accent, the widget uses black or white instead and says so in `Mushi.diagnose().warnings` (and in the console with `debug: true`). Your accent colour itself is never changed. A CSS `--mushi-accent` now also gets matching text colour instead of the panel background.
+  - **oklch and lab accents are measured correctly** for these contrast checks.
+  - `MushiDiagnosticsResult` gains an optional `warnings` list (core).
+  - New docs page: [Theming the bug widget](https://kensaur.us/mushi-mushi/docs/sdks/theming), with all 13 `--mushi-*` CSS tokens, now guarded by a test.
+  - The core web bundle budget moves from 89.2 KB to 89.8 KB gzipped for these checks (the script tag parser only ships in the script tag file).
+
+### Patch Changes
+
+- bdaa2dd: - **Closing the panel mid-screenshot sends nothing.** Thanks to [PeepSo](https://peepso.com), whose question led to these tests. With a host `screenshotProvider` the panel stays on screen while it captures, so the reporter can close it before the capture returns. The late screenshot then went out unseen with their next report, and a Send pressed in the closed panel could still post whatever they had started typing after reopening it. Every report now opens with no screenshot attached, a capture that lands after its panel closed (automatic, button, tab share or Mark up) is thrown away, and a Send from a closed panel stops there.
+- Updated dependencies [facd8c1]
+  - @mushi-mushi/core@1.39.0
+
 ## 1.38.0
 
 ### Minor Changes
 
-- c98879e: - **A screenshot is never sent without the reporter seeing it.** With `capture.screenshot: 'on-report'`, pressing Send took the screenshot and sent it in the same moment, so the reporter never saw it. Send now takes it, shows it with Mark up and Remove and the line "Check the screenshot below, then press Send again", and the second Send sends it.
+- c98879e: - **A screenshot is never sent without the reporter seeing it.** With `capture.screenshot: 'on-report'`, pressing Send took the screenshot and sent it in the same moment, so the reporter never saw it. Send now takes it, shows it with Mark up and Remove and the line "Check the screenshot below, then press Send again", and the second Send sends it. Thanks to [PeepSo](https://peepso.com) for flagging this.
   - **A removed screenshot stays removed.** With `'auto'` or `'on-report'`, pressing Remove and then Send took a new screenshot and sent it. Remove now holds until that report is sent or closed.
   - **The selected element's text follows the privacy rules.** Pointing at an element sent up to 200 characters of its text unscrubbed, even inside `data-private`. Text from inside (or around) a redacted, masked or blocked area is now left out, and the rest goes through the PII scrubber.
 

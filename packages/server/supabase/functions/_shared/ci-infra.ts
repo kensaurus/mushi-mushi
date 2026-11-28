@@ -7,7 +7,7 @@
  *
  * REGRESSION (2026-10-21, glot.it): the self-hosted runner
  * kensaurus-local-glot-1 was OOM-killed mid-build. GitHub cancelled the job
- * and Mushi called it "CI failed" everywhere: the console, the Opus review
+ * and Mushi called it "CI failed" everywhere: the console, the AI review
  * (which held the merge) and a follow-up agent sent to fix CI that never
  * ran. No job field says why a job was cancelled; the check run's
  * annotation does ("lost communication with the server").

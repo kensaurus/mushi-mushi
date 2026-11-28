@@ -83,19 +83,19 @@ function SchemaPanel({ view }: { view: SchemaView }) {
             <ul className="space-y-1 text-xs">
               {diff.added.map((t) => (
                 <li key={`a-${t}`} className="flex flex-wrap items-center gap-1.5">
-                  <Badge tone="okSubtle">added</Badge>
+                  <Badge tone="ok">added</Badge>
                   <span className="font-mono text-fg wrap-break-word">{t}</span>
                 </li>
               ))}
               {diff.removed.map((t) => (
                 <li key={`r-${t}`} className="flex flex-wrap items-center gap-1.5">
-                  <Badge tone="dangerSubtle">removed</Badge>
+                  <Badge tone="danger">removed</Badge>
                   <span className="font-mono text-fg wrap-break-word">{t}</span>
                 </li>
               ))}
               {diff.changed.map((c) => (
                 <li key={`c-${c.name}`} className="flex flex-wrap items-center gap-1.5">
-                  <Badge tone="warnSubtle">changed</Badge>
+                  <Badge tone="warn">changed</Badge>
                   <span className="font-mono text-fg wrap-break-word">{c.name}</span>
                   <span className="text-fg-secondary">
                     {[
@@ -127,7 +127,7 @@ function SchemaPanel({ view }: { view: SchemaView }) {
                 <span className="font-mono wrap-break-word">{t.schema && t.schema !== 'public' ? `${t.schema}.` : ''}{t.name}</span>
               </DataTableCell>
               <DataTableCell>
-                {t.rls === null ? <span className="text-fg-faint">—</span> : <Badge tone={t.rls ? 'okSubtle' : 'dangerSubtle'}>{t.rls ? 'on' : 'off'}</Badge>}
+                {t.rls === null ? <span className="text-fg-faint">—</span> : <Badge tone={t.rls ? 'ok' : 'danger'}>{t.rls ? 'on' : 'off'}</Badge>}
               </DataTableCell>
               <DataTableCell>
                 <span className="tabular-nums">{t.columns ?? '—'}</span>
@@ -146,9 +146,9 @@ function SchemaPanel({ view }: { view: SchemaView }) {
 // ── ci ───────────────────────────────────────────────────────────────────────
 
 function conclusionTone(c: string | null, status: string | null): BadgeTone {
-  if (c === 'success') return 'okSubtle'
-  if (c === 'failure' || c === 'timed_out' || c === 'startup_failure') return 'dangerSubtle'
-  if (!c && status !== 'completed') return 'infoSubtle'
+  if (c === 'success') return 'ok'
+  if (c === 'failure' || c === 'timed_out' || c === 'startup_failure') return 'danger'
+  if (!c && status !== 'completed') return 'info'
   return 'neutral'
 }
 
@@ -213,9 +213,9 @@ function CiPanel({ view }: { view: CiView }) {
 // ── deploy ───────────────────────────────────────────────────────────────────
 
 const DEPLOY_STATUS: Record<DeployTargetStatus, { label: string; tone: BadgeTone }> = {
-  live: { label: 'Live', tone: 'okSubtle' },
-  behind: { label: 'Behind', tone: 'warnSubtle' },
-  probe_failed: { label: 'Check failed', tone: 'dangerSubtle' },
+  live: { label: 'Live', tone: 'ok' },
+  behind: { label: 'Behind', tone: 'warn' },
+  probe_failed: { label: 'Check failed', tone: 'danger' },
   unobserved: { label: 'Not observed', tone: 'neutral' },
   not_comparable: { label: 'Cannot compare', tone: 'neutral' },
 }
@@ -280,10 +280,10 @@ function DeployPanel({ view }: { view: DeployView }) {
 // ── env ──────────────────────────────────────────────────────────────────────
 
 const ENV_CELL: Record<EnvCell, { label: string; tone: BadgeTone | null }> = {
-  present: { label: 'Set', tone: 'okSubtle' },
-  missing: { label: 'Missing', tone: 'dangerSubtle' },
-  extra: { label: 'Set, not declared', tone: 'infoSubtle' },
-  not_checked: { label: 'Not checked', tone: 'warnSubtle' },
+  present: { label: 'Set', tone: 'ok' },
+  missing: { label: 'Missing', tone: 'danger' },
+  extra: { label: 'Set, not declared', tone: 'info' },
+  not_checked: { label: 'Not checked', tone: 'warn' },
   not_required: { label: '—', tone: null },
 }
 

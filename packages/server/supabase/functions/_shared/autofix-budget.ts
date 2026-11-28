@@ -45,9 +45,13 @@ export interface AutofixBudgetCheck {
   allowed: boolean
   reason?: string
   requiresApproval?: boolean
+  /** Why approval is needed, when it is. */
+  approvalReason?: string
   trigger: DispatchTrigger
-  /** fix-worker LLM spend over the last 30 days (always computed). */
+  /** Priced fix-worker LLM spend over the last 30 days (always computed). */
   spendUsd30d: number
+  /** fix-worker calls in those 30 days the price catalog could not price (not in spendUsd30d). */
+  unpricedCalls30d: number
   /**
    * Prior automatic dispatches today (UTC), not counting skipped ones or the
    * one being checked, plus the review follow-ups dispatched today (ADR 0032).
@@ -126,10 +130,15 @@ export async function checkAutofixBudget(
     throw new AutofixBudgetUnavailableError('review follow-ups today', followupErr.message)
   }
 
-  const spendUsd30d = (spendRes.data ?? []).reduce(
-    (s: number, r: { cost_usd: unknown }) => s + (Number(r.cost_usd) || 0),
-    0,
-  )
+  // Priced spend. An unpriced row (cost_usd NULL: no catalog price) adds no
+  // dollars and is counted in unpricedCalls30d instead of reading as $0.
+  let spendUsd30d = 0
+  let unpricedCalls30d = 0
+  for (const r of (spendRes.data ?? []) as Array<{ cost_usd: unknown }>) {
+    const n = r.cost_usd == null ? Number.NaN : Number(r.cost_usd)
+    if (Number.isFinite(n)) spendUsd30d += n
+    else unpricedCalls30d += 1
+  }
   // Prior AUTOMATIC dispatches today (UTC). Skipped ones never ran, a
   // person's manual dispatches are not what the cap bounds, and the dispatch
   // being checked is not "prior". Sibling fan-out jobs are automatic rows of
@@ -146,6 +155,7 @@ export async function checkAutofixBudget(
   const base = {
     trigger: opts.trigger,
     spendUsd30d,
+    unpricedCalls30d,
     dispatchesToday,
     maxSpendUsd: maxSpend,
     maxDispatchesPerDay: maxDaily,
@@ -156,15 +166,25 @@ export async function checkAutofixBudget(
   // high-severity fixes and applies to every dispatch, manual or not.
   const est = opts.estimatedCostUsd ?? 0
   const sev = (opts.severity ?? '').toLowerCase()
-  const requiresApproval =
+  const overThreshold =
     approvalThreshold != null &&
     est >= approvalThreshold &&
     (sev === 'high' || sev === 'critical')
+  // The spend cap cannot be checked while fix-worker calls are unpriced (no
+  // catalog price): an automatic dispatch then waits for a person instead of
+  // reading the unpriced spend as $0.
+  const unpricedUnderCap = opts.trigger === 'automatic' && maxSpend != null && unpricedCalls30d > 0
+  const requiresApproval = overThreshold || unpricedUnderCap
+  const approvalReason = overThreshold
+    ? 'Estimated dispatch cost exceeds approval threshold — approve in console before PR creation.'
+    : unpricedUnderCap
+      ? `The auto-fix spend cap cannot be checked: ${unpricedCalls30d} fix-worker call${unpricedCalls30d === 1 ? '' : 's'} in 30 days ${unpricedCalls30d === 1 ? 'has' : 'have'} no price yet. Approve in console, or add the price on AI spend.`
+      : undefined
 
   // A human asked for this fix: the spend and daily caps bound only the
   // dispatches Mushi starts on its own.
   if (opts.trigger === 'manual') {
-    return { ...base, allowed: true, requiresApproval }
+    return { ...base, allowed: true, requiresApproval, approvalReason }
   }
 
   if (spendReached) {
@@ -182,7 +202,65 @@ export async function checkAutofixBudget(
     }
   }
 
-  return { ...base, allowed: true, requiresApproval }
+  return { ...base, allowed: true, requiresApproval, approvalReason }
+}
+
+/** Fewer priced fix attempts than this in 30 days: the reserve stays at its floor. */
+const FIX_RESERVE_MIN_SAMPLES = 20
+/** The reserve before there is enough history, the value the fix-worker used to hard-code. */
+export const FIX_RESERVE_FLOOR_USD = 0.25
+
+/**
+ * The estimated cost of one fix dispatch, compared against the owner's
+ * approval threshold: the p95 of what fix attempts actually cost over the
+ * last 30 days (all projects, priced rows only). One attempt is the
+ * fix-worker spend on one report; a retried report counts once with its
+ * retries summed, which errs high. Until there are FIX_RESERVE_MIN_SAMPLES
+ * attempts the floor applies. Pure.
+ */
+export function fixReserveFromRows(
+  rows: Array<{ report_id: string | null; cost_usd: unknown }>,
+): { usd: number; samples: number; source: 'p95' | 'floor' } {
+  const perAttempt = new Map<string, number>()
+  for (const r of rows) {
+    if (!r.report_id || r.cost_usd == null) continue
+    const n = Number(r.cost_usd)
+    if (!Number.isFinite(n)) continue
+    perAttempt.set(r.report_id, (perAttempt.get(r.report_id) ?? 0) + n)
+  }
+  const costs = [...perAttempt.values()].sort((a, b) => a - b)
+  if (costs.length < FIX_RESERVE_MIN_SAMPLES) {
+    return { usd: FIX_RESERVE_FLOOR_USD, samples: costs.length, source: 'floor' }
+  }
+  // Nearest-rank p95.
+  const idx = Math.min(costs.length - 1, Math.ceil(0.95 * costs.length) - 1)
+  return { usd: Math.round(costs[idx]! * 10_000) / 10_000, samples: costs.length, source: 'p95' }
+}
+
+const RESERVE_TTL_MS = 10 * 60_000
+let reserveCache: { at: number; value: ReturnType<typeof fixReserveFromRows> } | null = null
+
+/**
+ * fixReserveFromRows over the last 30 days of fix-worker calls, cached per
+ * isolate for 10 minutes. A failed read falls back to the floor (the
+ * estimate only decides whether a high-severity fix asks for approval).
+ */
+export async function fixCostReserve(
+  db: SupabaseClient,
+  now: Date = new Date(),
+): Promise<ReturnType<typeof fixReserveFromRows>> {
+  if (reserveCache && now.getTime() - reserveCache.at < RESERVE_TTL_MS) return reserveCache.value
+  const { data, error } = await db
+    .from('llm_invocations')
+    .select('report_id, cost_usd')
+    .eq('function_name', 'fix-worker')
+    .gte('created_at', new Date(now.getTime() - 30 * 86_400_000).toISOString())
+    .not('cost_usd', 'is', null)
+    .limit(5000)
+  if (error) return { usd: FIX_RESERVE_FLOOR_USD, samples: 0, source: 'floor' }
+  const value = fixReserveFromRows((data ?? []) as Array<{ report_id: string | null; cost_usd: unknown }>)
+  reserveCache = { at: now.getTime(), value }
+  return value
 }
 
 /** Snapshot stored on the dispatch row so the fix timeline can show it. */
@@ -190,6 +268,7 @@ export function budgetSnapshot(check: AutofixBudgetCheck): Record<string, unknow
   return {
     trigger: check.trigger,
     spend_usd_30d: Math.round(check.spendUsd30d * 10_000) / 10_000,
+    unpriced_calls_30d: check.unpricedCalls30d,
     dispatches_today: check.dispatchesToday,
     max_spend_usd: check.maxSpendUsd,
     max_dispatches_per_day: check.maxDispatchesPerDay,

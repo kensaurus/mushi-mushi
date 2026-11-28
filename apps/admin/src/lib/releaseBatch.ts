@@ -86,10 +86,10 @@ export const CI_WORDS: Record<MemberCi, { label: string; tone: Tone }> = {
 export function verdictWords(m: Pick<BatchMember, 'verdict' | 'verdictAtHead'>): { label: string; tone: Tone } {
   if (!m.verdict) return { label: 'Not reviewed yet', tone: 'neutral' }
   const v = m.verdict.replace(/_/g, ' ')
-  if (!m.verdictAtHead) return { label: `Opus: ${v} (older commit)`, tone: 'warn' }
-  if (m.verdict === 'merge') return { label: 'Opus: merge', tone: 'ok' }
-  if (m.verdict === 'hold') return { label: 'Opus: hold', tone: 'danger' }
-  return { label: `Opus: ${v}`, tone: 'warn' }
+  if (!m.verdictAtHead) return { label: `AI review: ${v} (older commit)`, tone: 'warn' }
+  if (m.verdict === 'merge') return { label: 'AI review: merge', tone: 'ok' }
+  if (m.verdict === 'hold') return { label: 'AI review: hold', tone: 'danger' }
+  return { label: `AI review: ${v}`, tone: 'warn' }
 }
 
 export const DEPLOY_WORDS: Record<RepoBatch['deploy']['state'], string> = {

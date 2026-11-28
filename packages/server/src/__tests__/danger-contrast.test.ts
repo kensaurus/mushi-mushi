@@ -154,10 +154,12 @@ describe('danger contrast', () => {
     expect(contrastRatio(color(LIGHT, '--color-accent-foreground'), color(LIGHT, '--color-accent-muted'))).toBeGreaterThanOrEqual(4.5)
   })
 
-  it('paints the selected segment and its count with the full accent-foreground token', () => {
+  // 2026-11-27: the selected segment is a raised tile with an accent edge (not an accent wash);
+  // its count keeps the full accent-foreground token. Tile contrast: console-tone-contrast.test.ts.
+  it('paints the selected segment count with the full accent-foreground token', () => {
     const forms = readFileSync(segmentedControl, 'utf8')
     expect(forms).toContain("active ? 'text-accent-foreground' : 'text-fg-faint'")
-    expect(forms).toContain('bg-accent-muted text-accent-foreground')
+    expect(forms).toContain('ring-accent-edge')
     expect(forms).not.toMatch(/text-accent-foreground\/\d+/)
   })
 

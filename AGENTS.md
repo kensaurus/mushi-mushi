@@ -143,7 +143,7 @@ Cron, billing, retention, and platform hygiene workers live alongside the 19 pip
 | `webhooks-linear-agent` | Linear AgentSessionEvent webhooks (acknowledge within 10s; may dispatch fix-worker) |
 | `reporter-notify-fanout` | Email / push for a developer reply to a reporter; enqueued by the `report_comments` trigger, which stays the in-app writer (Plan 018) |
 
-Also: **`api`** (Hono REST router), **`api-ext`** (the overflow half of the admin API: `api` forwards the CI runner, verified-fix, inventory, Ask Mushi, Codebase Atlas, modernization / super-admin, agent-skills, QA coverage, full-stack audit, UX-run, pipeline, tester-marketplace, per-app Home, setup-gaps, Health check (`health-checks.ts`: `/v1/admin/health-checks`), release-batch, local-worker (`work.ts`: `/v1/worker/*`, `/v1/admin/work/*`), server doctor (`/v1/admin/doctor`), review follow-up settings (`/v1/admin/byok/review-followups`, `/v1/admin/byok/cursor/models`; moved 2026-10-29 to keep `api` under its upload budget), spend-down (`/v1/admin/byok/spend-down`, `…/projects/:projectId/resume`, `/v1/admin/byok/keys/:keyId/spend-down`; moved 2026-10-30, same reason) and repo clean-up (`repo-housekeeping.ts`, ADR 0051) paths there with the caller's headers, because `api` hit Supabase's 5 MB deployment size limit on 2026-10-21 and again on 2026-10-22 (tester marketplace moved 2026-10-26); public URLs are unchanged, `_shared/edge-proxy.ts`; `scripts/deploy-edge-function.test.mjs` holds `api` under the last upload size known to deploy) and **`mcp`** (Streamable HTTP MCP transport) — infrastructure, not agents.
+Also: **`api`** (Hono REST router), **`api-ext`** (the overflow half of the admin API: `api` forwards the CI runner, verified-fix, inventory, Ask Mushi, Codebase Atlas, modernization / super-admin, agent-skills, QA coverage, full-stack audit, pipeline, tester-marketplace, per-app Home, setup-gaps, Health check (`health-checks.ts`: `/v1/admin/health-checks`), release-batch, local-worker (`work.ts`: `/v1/worker/*`, `/v1/admin/work/*`), server doctor (`/v1/admin/doctor`), review follow-up settings (`/v1/admin/byok/review-followups`, `/v1/admin/byok/cursor/models`; moved 2026-10-29 to keep `api` under its upload budget), spend-down (`/v1/admin/byok/spend-down`, `…/projects/:projectId/resume`, `/v1/admin/byok/keys/:keyId/spend-down`; moved 2026-10-30, same reason) and repo clean-up (`repo-housekeeping.ts`, ADR 0051) paths there with the caller's headers, because `api` hit Supabase's 5 MB deployment size limit on 2026-10-21 and again on 2026-10-22 (tester marketplace moved 2026-10-26); public URLs are unchanged, `_shared/edge-proxy.ts`; `scripts/deploy-edge-function.test.mjs` holds `api`, `api-ext` and `api-loop` under the last upload size known to deploy), **`api-loop`** (the second overflow half, since 2026-11-27 when `api-ext` hit HTTP 413: UX runs, fresh-eyes runs, the UX scorecard, the timeline, UX captures, personas and test accounts, security proof, release kits and fine-tuning; `api` forwards them) and **`mcp`** (Streamable HTTP MCP transport) — infrastructure, not agents.
 
 ---
 
@@ -213,6 +213,16 @@ findings into `metric_series` (time-series) and `gate_runs` / `gate_findings` (t
 The admin console `/code-health` page reads the data back via `GET /v1/admin/code-health?project_id=`.
 
 **yen-yen integration**: `scripts/scan-god-files.mjs` scans `apps/mobile/app`, `apps/mobile/components`, `apps/mobile/lib` for files over 2,000 LOC. `.github/workflows/bundle-budget.yml` posts bundle KB + scan findings on every push to `main`. Requires `MUSHI_API_URL` + `MUSHI_INGEST_KEY` repo secrets on `kensaurus/yen-yen` (mint via Projects → SDK ingest key; `scripts/setup-yen-yen-ingest-secrets.mjs` automates Playwright + `gh secret set`).
+
+---
+
+## Security proof, release kits, store media (Plan 025 P4–P6)
+
+ADR [0074](./docs/adr/0074-security-proof-release-kits-and-store-media.md). All routes are in `api-loop` (`api` forwards them).
+
+- **Security proof.** The host's CI runs `docs/templates/mushi-security.yml` (copy kept byte-identical in `_shared/security-workflow.ts`): OSV-Scanner + Gitleaks every PR, `claude-code-security-review` opt-in on trusted authors only, ZAP + Nuclei weekly. Results go to `POST /v1/security/results` (project key, `mcp:write`; `isNonSdkKeyPath` keeps it off the SDK heartbeat) → `security_scan_runs` / `security_scan_findings`, reports with source `security_scan`. Mushi never runs a scanner or hosts Semgrep/opengrep rules. A release's proof reads `releases.commit_sha` (`computeProof` in `_shared/security-proof.ts`); a lane that never ran is never green.
+- **Release kit.** `release_kits` / `release_kit_assets`, bucket `release-kits`. Screenshots are copied from `ux_baselines` (Plan 025 P1; falls back to `ux_surfaces` thumbnails until it lands). `mushi-ux clips` uploads opt-in, capped WebM clips. `export_release_kit` returns a signed `manifest.json` in lazycow's `lazycow.release-kit` v1 format (type copied in `_shared/lazycow-release-kit.ts`, schema copy validated in `release-kit.test.ts`) for lazycow `make_product_video({ kitUrl, preset })` (`docs/integrations/lazycow-release-kit.md`). Mushi never renders video.
+- **Store media.** ASC `upload_screenshots` / `upload_app_preview`, Play `upload_listing_images` / `set_promo_video`, only through `connector_actions` approval (`request_store_media_upload` asks; a person approves and runs in the console). Every asset is pinned by SHA-256 and re-hashed in `act()`. The uploaders live in `_shared/connectors/store-media-act.ts` and run only from `POST …/kit/store-upload/:actionId/execute` (api-ext), which injects them as `ctx.storeMedia`; the generic org execute route refuses those actions unclaimed (`USE_RELEASE_KIT`), keeping the code out of the size-capped `api` bundle. Tests use fixtures only; no live store call.
 
 ---
 
@@ -302,7 +312,7 @@ Live App URL
 | Group | Commands |
 | --- | --- |
 | **Setup & account** | `mushi init`, `mushi setup`, `mushi connect`, `mushi login`, `mushi upgrade`, `mushi reset`, `mushi whoami`, `mushi status`, `mushi doctor`, `mushi ping`, `mushi test` (synthetic report through ingest), `mushi migrate` (suggests a migration guide), `mushi completion`, `mushi nudge`, `mushi profile list/current/use` |
-| **Project & deploy** | `mushi project`, `mushi config`, `mushi deploy check`, `mushi selfhost up/doctor`, `mushi index`, `mushi sourcemaps upload`, `mushi audit`, `mushi radar scan/show`, `mushi recipe init/check/show/sources/change`, `mushi store pull/reviews/reviews-pull/reviews-set`, `mushi repo digest/cleanup/diagram`, `mushi code-health show/stats`, `mushi design settings/set/dispatch-findings` |
+| **Project & deploy** | `mushi project`, `mushi config`, `mushi deploy check`, `mushi selfhost up/doctor`, `mushi index`, `mushi sourcemaps upload`, `mushi audit`, `mushi radar scan/show`, `mushi recipe init/check/show/sources/change`, `mushi store pull/reviews/reviews-pull/reviews-set`, `mushi repo digest/cleanup/diagram`, `mushi code-health show/stats`, `mushi design settings/set/dispatch-findings`, `mushi widget show/set` (the bug widget look, ADR 0068) |
 | **Reports & lessons** | `mushi reports list/show/search/triage/file/…`, `mushi lessons list/show`, `mushi sync-lessons`, `mushi feedback board`, `mushi sentry import`, `mushi outbox list/edit/release/discard` |
 | **Journeys** | `mushi journeys`, `mushi journeys scan`, `mushi journeys record` |
 | **Fixes & releases** | `mushi fix`, `mushi fixes tail/refresh-ci/rerun-ci/merge/review/verify`, `mushi work` (a local Cursor CLI agent; you push and open the PR; `--followups` fixes Opus "fix first" findings on those PRs, and on cloud-agent PRs while cloud follow-ups are off), `mushi work --daemon` and `mushi worker install/status/revoke` (a local worker the console steers, ADR 0048; lanes fix reports, run follow-ups, resolve merge-queue conflicts (ADR 0049), audit the code (ADR 0050) or run skill-run rounds; any claiming lane also runs the first-time user tests the console queues, ADR 0053 amendment), `mushi console watch <reportId>`, `mushi releases draft/list/show/edit/publish/delete/stats/auto-release/calendar` |
@@ -385,7 +395,7 @@ mushi billing cap 0                    # clear spend cap
 
 ### MCP Tools
 
-Full catalog: **133 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/catalog.ts) — generated docs at [`apps/docs/content/sdks/mcp-tools.mdx`](apps/docs/content/sdks/mcp-tools.mdx). Vibe-coder incident loop: [`apps/docs/content/quickstart/incident-loop.mdx`](apps/docs/content/quickstart/incident-loop.mdx) (`get_fix_context` → prompt `summarize_report_for_fix`).
+Full catalog: **145 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/catalog.ts) — generated docs at [`apps/docs/content/sdks/mcp-tools.mdx`](apps/docs/content/sdks/mcp-tools.mdx). Vibe-coder incident loop: [`apps/docs/content/quickstart/incident-loop.mdx`](apps/docs/content/quickstart/incident-loop.mdx) (`get_fix_context` → prompt `summarize_report_for_fix`).
 
 Core MCP tools (`mcp:read` scope): `get_recent_reports`, `get_report_detail`, `get_fix_context`, `query_lessons`, `list_lessons`, `list_qa_story_runs`, `get_qa_story_run`
 
@@ -907,8 +917,8 @@ Reporter opens widget (capture.screenshot on-report/auto)
 | SdkInstallCard | `apps/admin/src/components/SdkInstallCard.tsx` | Checkbox + optional custom text for screenshot privacy caption |
 | ConfigHelp | `sdk-install.screenshot_sensitive_hint` in `configDocs.ts` | Operator docs + link to deep-dive |
 
-**Introduced in:** `@mushi-mushi/core` / `@mushi-mushi/web` **1.19.0** (current: **1.37.0** — see `docs/CHANGELOG.md`).
-`@mushi-mushi/react-native` **0.19.0** (current: **0.25.0**). Full doc:
+**Introduced in:** `@mushi-mushi/core` / `@mushi-mushi/web` **1.19.0** (current: **1.40.0** — see `docs/CHANGELOG.md`).
+`@mushi-mushi/react-native` **0.19.0** (current: **0.26.0**). Full doc:
 [`docs/SDK_SCREENSHOT_PREVIEW.md`](docs/SDK_SCREENSHOT_PREVIEW.md).
 
 ---

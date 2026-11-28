@@ -16,7 +16,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { testReportHref, useSendTestReport } from '../lib/useSendTestReport'
 import { usePageData } from '../lib/usePageData'
-import { formatDiagnosisDuration, type TimeToFirstDiagnosis } from '../lib/setupRail'
+import { buildSetupRail, formatDiagnosisDuration, type TimeToFirstDiagnosis } from '../lib/setupRail'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { Card, Btn, Input, ErrorAlert, ResultChip, type ResultChipTone, CopyButton, SegmentedControl, HelpBanner, Loading } from '../components/ui'
 import { SetupProgressRail } from '../components/onboarding/SetupProgressRail'
@@ -57,6 +57,7 @@ import { askMushiPanel } from '../lib/useAskMushiPanel'
 import { PageLoadError } from '../components/PageLoadError'
 import { Mascot } from '../components/mascot/Mascot'
 import { FIRST_RUN_NAME_PROJECT, onboardingTabGuide } from '../lib/fieldGuide'
+import { CHIP_TONE } from '../lib/chipTone'
 
 const SetupCopilotPage = lazy(() => import('./SetupCopilotPage').then((m) => ({ default: m.SetupCopilotPage })))
 
@@ -339,7 +340,7 @@ export function OnboardingPage() {
       case 'FORBIDDEN':
         return 'Not allowed in this team'
       case 'INVALID_NAME':
-        return 'Project name required'
+        return 'App name required'
       case 'NETWORK_ERROR':
         return 'Couldn\u2019t reach the server'
       default:
@@ -477,21 +478,21 @@ export function OnboardingPage() {
       <div>
         <h3 className="text-sm font-semibold text-fg">
           {setupCliMode && setup.hasAnyProject
-            ? 'Create a new project'
+            ? 'Add another app'
             : setupCliMode
-              ? 'Create your project'
-              : 'Create your first project'}
+              ? 'Add your app'
+              : 'Add your first app'}
         </h3>
         <ContainedBlock tone="muted" className="mt-2">
           <p className="text-xs text-fg-muted">
-            A project is one app: its bug reports, its key and its fixes (the sidebar lists them under Apps). Name it after your app.
+            Each app keeps its own bug reports, key and fixes (the sidebar lists them under Apps). Use your app's name.
           </p>
         </ContainedBlock>
       </div>
       <div className="flex gap-2">
         <div className="flex-1">
           <Input
-            label="Project name"
+            label="App name"
             helpId="onboarding.project_name"
             placeholder="e.g. My SaaS App"
             value={projectName}
@@ -533,13 +534,19 @@ export function OnboardingPage() {
 
   // First-run wizard: S1 (name the project) → S2 (see your first diagnosis).
   // The key is auto-minted by the create endpoint, so there is no key step.
+  // Its count is the rail's four steps, the same as the sidebar and Home: it
+  // said "Step 1 of 2" / "Step 2 of 2" beside a sidebar counting 4 (feedback 2026-11-22).
+  const firstRunRail = buildSetupRail({ project: project ?? null, ttfd: null })
+  const firstRunProgress = { done: firstRunRail.doneCount, total: firstRunRail.steps.length }
   const firstRunWizard = (
     <div className="space-y-4" data-testid="onboarding-first-run">
       {!project ? (
         <div className="space-y-4">
           <div>
-            <p className="text-3xs font-semibold text-fg-secondary">Step 1 of 2</p>
-            <h2 className="mt-0.5 text-base font-semibold text-fg">Name your project</h2>
+            <p className="text-3xs font-semibold text-fg-secondary" data-testid="onboarding-first-run-progress">
+              Set up · {firstRunProgress.done} of {firstRunProgress.total} done
+            </p>
+            <h2 className="mt-0.5 text-base font-semibold text-fg">Name your app</h2>
           </div>
           {/* The field guide says what this step does: the name is the only
               input, and the report key is made for you. */}
@@ -564,6 +571,7 @@ export function OnboardingPage() {
           projectSlug={project.project_slug}
           apiKey={createdProject?.apiKey ?? apiKey?.key ?? null}
           onDiagnosed={reloadAll}
+          setupProgress={firstRunProgress}
         />
       )}
       <p className="text-2xs text-fg-faint">
@@ -764,7 +772,7 @@ export function OnboardingPage() {
               <h3 className="text-sm font-semibold text-fg">Ask about this page</h3>
               <p className="mt-0.5 text-xs leading-relaxed text-fg-muted">
                 Press{' '}
-                <kbd className="rounded-sm bg-surface-overlay px-1 py-px font-mono text-2xs text-fg-secondary">
+                <kbd className={`rounded-sm ${CHIP_TONE.neutral} px-1 py-px font-mono text-2xs`}>
                   Cmd/Ctrl+J
                 </kbd>
                 {' '}or run{' '}

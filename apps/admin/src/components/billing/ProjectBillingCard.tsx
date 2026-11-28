@@ -139,7 +139,7 @@ export function ProjectBillingCard({
               </>
             )}
             {project.subscription?.cancel_at_period_end && (
-              <Badge tone="warnSubtle">
+              <Badge tone="warn">
                 Cancels at period end
               </Badge>
             )}
@@ -241,6 +241,12 @@ export function ProjectBillingCard({
         <PlanBenefitsList
           planId={tier.id}
           planName={tier.display_name}
+          // The cheapest self-serve paid plan from the live plan rows.
+          upgradePlan={
+            plans
+              .filter((p) => p.active && p.is_self_serve && !isSalesLedPlan(p) && Number(p.monthly_price_usd) > 0)
+              .sort((a, b) => Number(a.monthly_price_usd) - Number(b.monthly_price_usd))[0] ?? null
+          }
           flags={tier.feature_flags as Parameters<typeof PlanBenefitsList>[0]['flags']}
           retentionDays={tier.retention_days}
           // The tier from /v1/admin/billing has no seat_limit (server): use
@@ -267,9 +273,19 @@ interface PlanPickerProps {
   onPick: (planId: string, billingInterval: 'monthly' | 'annual') => void
 }
 
+/** $24.17, or $290 for a whole number. */
+function formatPlanUsd(usd: number): string {
+  return Number.isInteger(usd) ? String(usd) : usd.toFixed(2)
+}
+
 function PlanPicker({ plans, currentPlanId, currentInterval, busy, onPick }: PlanPickerProps) {
   const [billingInterval, setBillingInterval] = React.useState<'monthly' | 'annual'>(currentInterval ?? 'monthly')
-  const annualDiscountPct = 17 // ~2 months free
+  // Annual prices come from the Stripe Price objects checkout charges
+  // (GET /v1/admin/billing → plans[].annual_price_usd); the saving is derived
+  // from them. A plan whose annual price could not be read offers monthly only.
+  const annualPlans = plans.filter((p) => p.annual_price_usd != null)
+  const discounts = annualPlans.map((p) => p.annual_discount_pct).filter((d): d is number => d != null)
+  const annualDiscountPct = discounts.length ? Math.min(...discounts) : null
 
   return (
     <ContainedBlock tone="muted" className="p-3 space-y-2">
@@ -284,16 +300,18 @@ function PlanPicker({ plans, currentPlanId, currentInterval, busy, onPick }: Pla
           ariaLabel="Billing interval"
           options={[
             { id: 'monthly', label: 'Monthly' },
-            { id: 'annual', label: `Annual −${annualDiscountPct}%` },
+            // No readable annual price: the annual option is not offered.
+            ...(annualPlans.length
+              ? [{ id: 'annual' as const, label: annualDiscountPct != null ? `Annual −${annualDiscountPct}%` : 'Annual' }]
+              : []),
           ]}
         />
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
         {plans.map((p) => {
           const monthlyPrice = p.monthly_price_usd
-          const annualMonthlyPrice = billingInterval === 'annual'
-            ? Math.round(monthlyPrice * (1 - annualDiscountPct / 100))
-            : null
+          const annualPrice = p.annual_price_usd ?? null
+          const annualUnavailable = billingInterval === 'annual' && annualPrice == null
           const isCurrent = p.id === currentPlanId && billingInterval === currentInterval
           const includedDiagnoses = p.included_diagnoses_per_month
           const diagnosisRate = p.overage_unit_amount_decimal_diagnoses
@@ -303,14 +321,16 @@ function PlanPicker({ plans, currentPlanId, currentInterval, busy, onPick }: Pla
               <header className="flex items-baseline justify-between gap-2">
                 <h5 className="text-sm font-semibold text-fg">{p.display_name}</h5>
                 <span className="text-sm tabular-nums text-fg-secondary">
-                  {billingInterval === 'annual' && annualMonthlyPrice != null
-                    ? <>${annualMonthlyPrice}/mo</>
+                  {billingInterval === 'annual' && annualPrice != null
+                    ? <>${formatPlanUsd(annualPrice / 12)}/mo</>
                     : <>${monthlyPrice}/mo</>}
                 </span>
               </header>
               {billingInterval === 'annual' && (
                 <p className="text-2xs text-fg-muted mt-0.5">
-                  Billed ${(annualMonthlyPrice ?? 0) * 12}/yr · {annualDiscountPct}% off
+                  {annualPrice != null
+                    ? <>Billed ${formatPlanUsd(annualPrice)}/yr{p.annual_discount_pct != null ? <> · {p.annual_discount_pct}% off</> : null}</>
+                    : 'Annual price unavailable right now; monthly only.'}
                 </p>
               )}
               <ContainedBlock tone="neutral" className="mt-1 space-y-1">
@@ -343,7 +363,7 @@ function PlanPicker({ plans, currentPlanId, currentInterval, busy, onPick }: Pla
                 size="sm"
                 className="mt-2 w-full"
                 onClick={() => onPick(p.id, billingInterval)}
-                disabled={busy || isCurrent}
+                disabled={busy || isCurrent || annualUnavailable}
                 loading={busy}
               >
                 {isCurrent ? 'Current plan' : `Select ${p.display_name}`}

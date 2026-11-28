@@ -4,6 +4,7 @@ import { reporterCopy, type ReporterCategory } from '@mushi-mushi/core/reporter-
 import { MUSHI_COPY } from '@mushi-mushi/core'
 import type { SdkPreviewConfig, WidgetPosition } from '../../lib/sdkSnippets'
 import type { AssistantPreviewState } from './sdk-install-types'
+import { accentInk, parseAccentColour } from '../../lib/widgetAccent'
 
 /**
  * A mock browser viewport showing the widget as the host's users get it. We
@@ -16,7 +17,9 @@ import type { AssistantPreviewState } from './sdk-install-types'
  * the privacy line and a pinned Send. Copy comes from the same tables the
  * widget uses (`getLocale` + core `reporterCopy`), and colours are the
  * widget's neutral defaults: system Canvas / CanvasText under the chosen
- * colour scheme, with hairlines mixed from the ink. If the widget changes,
+ * colour scheme, with hairlines mixed from the ink. A console colour fills
+ * the one accent action (Send) and the launcher's underline, as the widget's
+ * `--_accent` does; without one they stay ink. If the widget changes,
  * change this in lockstep, or hosts will see a preview that lies.
  */
 
@@ -43,9 +46,15 @@ export function SdkInstallPreview({
   const [sent, setSent] = useState(false)
   const t = useMemo(() => getLocale('en'), [])
   const rc = useMemo(() => reporterCopy('en'), [])
+  // `inherit` follows the host page; the mock page has no theme of its own, so it previews like auto.
   const isDark =
     config.theme === 'dark' ||
-    (config.theme === 'auto' && typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches)
+    ((config.theme === 'auto' || config.theme === 'inherit') &&
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-color-scheme: dark)').matches)
+  const accentHex = parseAccentColour(config.accent)
+  const accent = accentHex ?? ink
+  const onAccent = accentHex ? accentInk(accentHex).ink : paper
 
   // The banner's brand / neon variants keep the Mushi palette (single source:
   // @mushi-mushi/core via the web build-widget-theme helper).
@@ -84,6 +93,7 @@ export function SdkInstallPreview({
       // Short until the button is pressed: a 320 px grey page with three skeleton bars read as a
       // broken preview (round-3 review, 2026-11-19). The open panel needs the full height.
       className={`relative w-full rounded-md border overflow-hidden ${panelOpen ? 'h-80' : 'h-32'}`}
+      // mushi-mushi-allowlist: the host's widget palette (preview of their app)
       style={{ colorScheme: isDark ? 'dark' : 'light', background: surface, color: ink, borderColor: hairline }}
       aria-label="Live preview of the issue-report widget in your app"
       data-testid="sdk-install-preview"
@@ -140,6 +150,7 @@ export function SdkInstallPreview({
             {/* The widget's banner "Report a bug" opens the report with Bug picked. */}
             <button
               type="button"
+              // mushi-mushi-allowlist: the host's widget palette (preview of their app)
               style={{ background: 'none', border: 0, color: 'inherit', cursor: 'pointer', font: 'inherit' }}
               onClick={() => {
                 open()
@@ -151,6 +162,7 @@ export function SdkInstallPreview({
             {config.bannerFeatureCta && (
               <button
                 type="button"
+                // mushi-mushi-allowlist: the host's widget palette (preview of their app)
                 style={{ background: 'none', border: 0, color: 'inherit', cursor: 'pointer', font: 'inherit', opacity: 0.8 }}
                 onClick={() => {
                   open()
@@ -188,7 +200,7 @@ export function SdkInstallPreview({
                   borderRadius: config.position.endsWith('left') ? '0 4px 4px 0' : '4px 0 0 4px',
                   fontSize: 12,
                   lineHeight: 1,
-                  boxShadow: `inset ${config.position.endsWith('left') ? 2 : -2}px 0 0 ${ink}`,
+                  boxShadow: `inset ${config.position.endsWith('left') ? 2 : -2}px 0 0 ${accent}`,
                 }
               : {
                   ...cornerPos[config.position],
@@ -200,7 +212,7 @@ export function SdkInstallPreview({
                   borderRadius: 4,
                   fontSize: 18,
                   lineHeight: 1,
-                  boxShadow: `inset 0 -3px 0 ${ink}`,
+                  boxShadow: `inset 0 -3px 0 ${accent}`,
                 }
           }
           aria-label="Mock bug-capture trigger button — click to preview panel"
@@ -247,6 +259,7 @@ export function SdkInstallPreview({
             >
               ⋯
             </span>
+            {/* mushi-mushi-allowlist: the host's widget palette (preview of their app) */}
             <button type="button" aria-label={t.widget.close} style={{ background: 'none', border: 0, color: muted, cursor: 'pointer' }} onClick={close}>
               ✕
             </button>
@@ -276,6 +289,7 @@ export function SdkInstallPreview({
                     aria-checked={chip === id}
                     data-category={id}
                     className="px-2 py-0.5"
+                    // mushi-mushi-allowlist: the host's widget palette (preview of their app)
                     style={{ ...pill, fontSize: 11, ...(chip === id ? { background: ink, color: paper, borderColor: ink } : {}) }}
                     onClick={() => setChip(chip === id ? null : id)}
                   >
@@ -313,7 +327,9 @@ export function SdkInstallPreview({
               type="button"
               aria-disabled={!sent && !canSend}
               title={!sent && !canSend ? rc.ui.addWords : undefined}
-              style={{ border: 0, borderRadius: 8, background: ink, color: paper, padding: '3px 12px', fontWeight: 600, cursor: 'pointer', opacity: !sent && !canSend ? 0.45 : 1 }}
+              data-testid="preview-send"
+              // mushi-mushi-allowlist: the host's widget palette (preview of their app)
+              style={{ border: 0, borderRadius: 8, background: accent, color: onAccent, padding: '3px 12px', fontWeight: 600, cursor: 'pointer', opacity: !sent && !canSend ? 0.45 : 1 }}
               onClick={() => (sent ? close() : canSend && setSent(true))}
             >
               {sent ? t.flows.success.done : t.panel.send}

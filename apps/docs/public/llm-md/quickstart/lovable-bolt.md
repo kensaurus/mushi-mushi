@@ -127,8 +127,14 @@ in your page, like the key of any chat or analytics tool.
 
 ## Change how the button looks
 
-The line takes a few settings, such as `data-position` and `data-theme`. The
-full list is on the [script-tag reference](/quickstart/web#no-bundler-script-tag).
+Change it in the Mushi console: **Connect → Report button → Customize the report button**, then Save. Your
+app picks up the corner, theme, label and colour at its next start, so you do
+not paste a new line or redeploy. You can also ask your editor's agent (MCP
+`set_widget_settings`) or run `mushi widget set`.
+
+The line also takes settings, such as `data-position` and `data-theme`, but a
+setting on the line wins over the console for good, so add one only to lock it.
+The full list is on the [script-tag reference](/quickstart/web#no-bundler-script-tag).
 
 ## If nothing shows up
 

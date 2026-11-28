@@ -3,7 +3,9 @@
  * PURPOSE: Release management — status, then "What you shipped" (a timeline
  *          of the app's releases with the fixes in each and how many
  *          reporters were told), then tabs: Drafts | Published | New draft |
- *          Batch | App stores, readout at the foot.
+ *          Batch | App stores, readout at the foot. A release's drawer ends
+ *          with "Ship it": its Security proof and its release kit, with
+ *          store uploads as approval requests (Plan 025 P4-P6, ADR 0074).
  */
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
@@ -40,6 +42,8 @@ import { ReleasesProvenanceReadout } from '../components/releases/ReleasesProven
 import { AutoReleaseCard } from '../components/releases/AutoReleaseCard'
 import { ReleaseBatchTab } from '../components/releases/ReleaseBatchTab'
 import { ReleaseTimeline, type TimelineRelease } from '../components/releases/ReleaseTimeline'
+import { SecurityProofPanel } from '../components/releases/SecurityProofPanel'
+import { ReleaseKitBuilder } from '../components/releases/ReleaseKitBuilder'
 import {
   InlineProof,
   SignalChip,
@@ -113,6 +117,14 @@ const TABS: Array<{ id: ReleasesTabId; label: string; description: string }> = [
   { id: 'batch', label: 'Batch', description: 'The release train running now or leaving next: its fixes, their review and CI, database migrations, and the deploy after it.' },
   { id: 'store', label: 'App stores', description: 'Store listing checks, the pre-submission checklist, and store reviews filed as reports.' },
 ]
+
+/**
+ * A release id from the URL (`?release=`), or null for anything that is not a uuid.
+ * @internal Exported for tests.
+ */
+export function releaseIdParam(value: string | null): string | null {
+  return value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value) ? value : null
+}
 
 /** The tab named in the URL, or null so the posture picks one. */
 function explicitReleasesTab(value: string | null): ReleasesTabId | null {
@@ -376,6 +388,14 @@ function ReleaseDrawer({
           </div>
         )}
 
+        {release.project_id && (
+          <div className="space-y-3" data-testid="release-ship-it">
+            <h3 className="text-xs font-semibold text-fg-secondary">Ship it</h3>
+            <SecurityProofPanel projectId={release.project_id} releaseId={release.id} canEdit={canEdit} />
+            <ReleaseKitBuilder projectId={release.project_id} releaseId={release.id} canEdit={canEdit} />
+          </div>
+        )}
+
         {credits.length > 0 && (
           <div>
             <h3 className="mb-2 text-xs font-semibold text-fg-secondary">
@@ -628,6 +648,16 @@ export function ReleasesPage() {
   const published = allReleases.filter((r) => r.status === 'published')
   const listReleases = activeTab === 'drafts' ? drafts : published
   const [timelineOpen, setTimelineOpen] = useState<TimelineRelease | null>(null)
+  // /releases?release=<id> opens that release's drawer (the team's action list links store uploads here).
+  const linkedReleaseId = releaseIdParam(searchParams.get('release'))
+  const { data: linkedRelease } = usePageData<Release>(linkedReleaseId ? `/v1/admin/releases/${linkedReleaseId}` : null)
+  const closeLinkedRelease = useCallback(() => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete('release')
+      return next
+    }, { replace: true })
+  }, [setSearchParams])
 
   const setActiveTab = useCallback(
     (tab: ReleasesTabId) => {
@@ -765,6 +795,14 @@ export function ReleasesPage() {
       />
 
       {activeProjectId && stats.totalReleases > 0 ? <ReleaseTimeline onOpen={setTimelineOpen} /> : null}
+      {linkedReleaseId && linkedRelease && linkedRelease.id === linkedReleaseId && (
+        <ReleaseDrawer
+          release={{ ...linkedRelease, fixed_report_ids: linkedRelease.fixed_report_ids ?? [], credited_reporter_ids: linkedRelease.credited_reporter_ids ?? [] }}
+          onClose={closeLinkedRelease}
+          onPublished={reloadAll}
+          canEdit={canEditProject}
+        />
+      )}
       {timelineOpen && (
         <ReleaseDrawer
           release={{ ...timelineOpen, project_id: activeProjectId ?? '', body_md: '', updated_at: timelineOpen.created_at }}

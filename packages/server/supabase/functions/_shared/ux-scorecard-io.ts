@@ -11,6 +11,7 @@
 
 import { z } from 'npm:zod@3'
 import { causeReportBody, scorecardPageKey, topCauses, UX_DIMENSIONS, UX_SCORECARD_PROMPT_VERSION, type UxCause, type UxPageFacts, type UxPageScore } from './ux-scorecard.ts'
+import { scorecardSurfaceKey } from './ux-surface-key.ts'
 
 export const UX_SCORECARD_RUN_ID_RE = /^[0-9]{8}-[0-9]{6}-[a-z0-9]{4}$/
 export const UX_SCORECARD_REPORTER = 'ux-scorecard'
@@ -32,14 +33,7 @@ export function parseViewport(v: unknown): { width: number; height: number } | n
   return width >= 320 && width <= 3840 && height >= 320 && height <= 2400 ? { width, height } : null
 }
 
-/** Pure: a ux_surfaces.surface_key for a page key: lower-case slug, at most 120 characters, unique enough per run. */
-export function scorecardSurfaceKey(pageKey: string): string {
-  const slug = pageKey.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean).join('-') || 'root'
-  if (slug.length <= 110) return slug
-  let h = 0
-  for (const ch of pageKey) h = (h * 31 + ch.charCodeAt(0)) >>> 0
-  return `${slug.slice(0, 100)}-${h.toString(36)}`
-}
+export { scorecardSurfaceKey }
 
 const SHOT_RE = /^[a-z0-9][a-z0-9-]{0,119}\/(?:early|settled)\.(?:png|jpg)$/
 
@@ -121,7 +115,12 @@ export type UxScorecardPage = z.infer<typeof UxScorecardPage>
 
 export const UxScorecardSnapshot = z.object({
   status: z.enum(['running', 'done', 'failed', 'stopped']),
-  start_url: z.string().url().max(500),
+  /**
+   * The live app the pages were captured on. Omitted by a run POST /v1/ux/captures
+   * opened (a native app has no URL, ADR 0073): its start_url and its line
+   * (platform, device) stay as that route wrote them.
+   */
+  start_url: z.string().url().max(500).optional(),
   viewport: z.string().regex(VIEWPORT_RE),
   /** Who scored the pages: 'server' (the platform route), or the local transport and its model. */
   scored_by: z.string().max(120),
@@ -176,8 +175,7 @@ export function scorecardRunRow(s: UxScorecardSnapshot, ctx: { projectId: string
     agent: UX_SCORECARD_REPORTER,
     model: s.scored_by.slice(0, 120),
     status: s.status,
-    start_url: s.start_url,
-    detail: `viewport ${s.viewport}`,
+    ...(s.start_url !== undefined ? { start_url: s.start_url, detail: `viewport ${s.viewport}` } : {}),
     cli_version: s.cli_version ?? null,
     counts: { pages: s.pages.length, scored: scored.length, failed: s.pages.filter((p) => p.error).length, mean: mean == null ? null : Math.round(mean * 10) / 10, causes: s.causes?.length ?? 0, prompt: UX_SCORECARD_PROMPT_VERSION },
     ...(s.causes ? { findings: s.causes } : {}),

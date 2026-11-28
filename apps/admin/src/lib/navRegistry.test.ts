@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest'
 import { NAV_REGISTRY, routeSection } from './navRegistry'
 import { buildOperatorNav } from './buildNav'
-import { HOME_HUB } from './pageHubs'
+import { APPS_HUB } from './pageHubs'
 import { paletteRoutesFor, rankPaletteRoutes } from './searchIndex'
 
 const sidebar = NAV_REGISTRY.filter((e) => e.inSidebar !== false)
@@ -32,14 +32,14 @@ describe('navigation names', () => {
       '/recipe': 'recipe',
       '/anti-gaming': 'anti-gaming',
       '/iterate': 'iterate',
-      '/dashboard?view=insights': 'intelligence',
+      '/portfolio?view=insights': 'intelligence',
       '/health?view=spikes': 'anomalies',
       '/prompt-lab': 'prompt lab',
       '/inbox': 'action inbox',
       '/queue': 'failed events',
       '/reports': 'reports',
       '/portfolio': 'portfolio',
-      '/dashboard?view=apps': 'overview',
+      '/portfolio?view=apps': 'overview',
     }
     for (const [path, alias] of Object.entries(formerNames)) {
       const entry = NAV_REGISTRY.find((e) => e.path === path)
@@ -96,13 +96,13 @@ describe('palette role gating (QA #72)', () => {
 
   it('leaves operator and super-admin pages out for a normal user', () => {
     const visible = paths({ isSuperAdmin: false, isOperator: false })
-    expect(visible).not.toContain('/dashboard?view=growth')
+    expect(visible).not.toContain('/portfolio?view=growth')
     expect(visible).not.toContain('/users')
     expect(visible).toContain('/settings')
   })
 
   it('keeps each page for the role that can open it', () => {
-    expect(paths({ isSuperAdmin: false, isOperator: true })).toContain('/dashboard?view=growth')
+    expect(paths({ isSuperAdmin: false, isOperator: true })).toContain('/portfolio?view=growth')
     expect(paths({ isSuperAdmin: true, isOperator: false })).toContain('/users')
   })
 })
@@ -112,8 +112,8 @@ describe('the vibe-coding cycle (ADR 0027)', () => {
 
   it('orders the Advanced sections along the cycle', () => {
     expect(sections.map((s) => s.title)).toEqual([
-      'Connect',
-      'Bugs',
+      'Set up & connect',
+      'Find & sort bugs',
       'Fix',
       'Verify',
       'Ship & watch',
@@ -124,8 +124,8 @@ describe('the vibe-coding cycle (ADR 0027)', () => {
 
   it('puts each step’s first page where the cycle starts it', () => {
     const first = (title: string) => sections.find((s) => s.title === title)?.items[0]?.path
-    expect(first('Connect')).toBe('/onboarding')
-    expect(first('Bugs')).toBe('/dashboard')
+    expect(first('Set up & connect')).toBe('/onboarding')
+    expect(first('Find & sort bugs')).toBe('/dashboard')
     expect(first('Fix')).toBe('/fixes')
     expect(first('Verify')).toBe('/qa-coverage')
     expect(first('Ship & watch')).toBe('/portfolio')
@@ -137,17 +137,18 @@ describe('the vibe-coding cycle (ADR 0027)', () => {
     for (const e of NAV_REGISTRY) expect(e.paletteGroup, e.path).toBe(group[e.sectionId])
   })
 
-  it('uses "Apps" for one page only (Home’s view is Overview)', () => {
+  it('uses "Apps" for one page only (its every-app view is Overview)', () => {
     expect(NAV_REGISTRY.filter((e) => e.label === 'Apps').map((e) => e.path)).toEqual(['/portfolio'])
-    expect(HOME_HUB.views.map((v) => v.label)).not.toContain('Apps')
+    // The hub's first view is the /portfolio page itself; no other view takes the name.
+    expect(APPS_HUB.views.slice(1).map((v) => v.label)).not.toContain('Apps')
   })
 })
 
 describe('routeSection (breadcrumb)', () => {
   it('names the section a page sits in and links to its first page', () => {
-    expect(routeSection('/graph')).toEqual({ title: 'Bugs', firstPath: '/dashboard' })
-    expect(routeSection('/reports/abc')).toEqual({ title: 'Bugs', firstPath: '/dashboard' })
-    expect(routeSection('/integrations/config')).toEqual({ title: 'Connect', firstPath: '/onboarding' })
+    expect(routeSection('/graph')).toEqual({ title: 'Find & sort bugs', firstPath: '/dashboard' })
+    expect(routeSection('/reports/abc')).toEqual({ title: 'Find & sort bugs', firstPath: '/dashboard' })
+    expect(routeSection('/integrations/config')).toEqual({ title: 'Set up & connect', firstPath: '/onboarding' })
     expect(routeSection('/judge')?.title).toBe('Verify')
   })
   it('returns null outside the sidebar', () => {

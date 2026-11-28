@@ -9,10 +9,10 @@ import { CHIP_TONE } from './chipTone'
 import { stoppedTitle } from './countDefinitions'
 
 export const PDCA_BOTTLENECK_TONE: Record<PdcaStageId, string> = {
-  plan: CHIP_TONE.infoSubtle,
-  do: CHIP_TONE.warnSubtle,
-  check: CHIP_TONE.warnSubtle,
-  act: CHIP_TONE.dangerSubtle,
+  plan: CHIP_TONE.info,
+  do: CHIP_TONE.warn,
+  check: CHIP_TONE.warn,
+  act: CHIP_TONE.danger,
 }
 
 const PDCA_BOTTLENECK_DEEP_LINK: Record<PdcaStageId, string> = {

@@ -14,6 +14,12 @@
 import type { SetupStep } from './useSetupStatus'
 
 const WORDS: Record<string, Partial<Pick<SetupStep, 'label' | 'description' | 'cta_label'>>> = {
+  // "Create your first project" / "A project groups all bug reports from one
+  // application": the console says "app" everywhere a builder reads (2026-11-24).
+  project_created: {
+    label: 'Name your app',
+    description: 'Each app keeps its own bug reports, key and fixes.',
+  },
   api_key_generated: {
     label: 'Get your app key',
     description: 'The key lets your app send bug reports to Mushi Mushi. It can only send reports.',
@@ -60,9 +66,18 @@ const WORDS: Record<string, Partial<Pick<SetupStep, 'label' | 'description' | 'c
 /** The steps in plain words, with no second button to a page an earlier open step already offers. */
 export function plainSetupSteps(steps: readonly SetupStep[]): SetupStep[] {
   const offered = new Set<string>()
+  // A test report from the console ticks "first bug report" before the button
+  // is in the app, so the list read "Get your first bug report ✓" under
+  // "Put the report button in your app — do this next" (journey walk,
+  // 2026-11-28). Say which report it was.
+  const buttonLive = steps.find((s) => s.id === 'sdk_installed')?.complete !== false
   return steps.map((step) => {
     const words = WORDS[step.id] ?? {}
     const next: SetupStep = { ...step, ...words }
+    if (step.id === 'first_report_received' && step.complete && !buttonLive) {
+      next.label = 'Test report received'
+      next.description = 'Your test report arrived. Add the report button so real users can send them too.'
+    }
     if (!step.complete && step.cta_to) {
       const page = step.cta_to.split('#')[0]!.split('?')[0]!
       // A link to its own card (#anchor) is its own action: Slack and Sentry both live on

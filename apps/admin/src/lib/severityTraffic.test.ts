@@ -3,11 +3,12 @@
  * (2026-10-04 audit: medium used `brand`, the same red as critical).
  */
 import { describe, expect, it } from 'vitest'
-import { SEVERITY_TRAFFIC, SEVERITY_TRAFFIC_BADGE, SEVERITY_TRAFFIC_ORDER } from './severityTraffic'
+import { SEVERITY_TRAFFIC } from './severityTraffic'
+import { severityChipTone } from './chipTone'
 
 describe('SEVERITY_TRAFFIC', () => {
   it('gives every severity its own fill', () => {
-    const fills = SEVERITY_TRAFFIC_ORDER.map((k) => SEVERITY_TRAFFIC[k].bg)
+    const fills = Object.values(SEVERITY_TRAFFIC).map((v) => v.bg)
     expect(new Set(fills).size).toBe(fills.length)
   })
 
@@ -20,6 +21,6 @@ describe('SEVERITY_TRAFFIC', () => {
 
   it('never paints medium in the brand red', () => {
     expect(SEVERITY_TRAFFIC.medium.bg).not.toContain('brand')
-    expect(SEVERITY_TRAFFIC_BADGE.medium).not.toContain('brand')
+    expect(severityChipTone('medium')).not.toContain('brand')
   })
 })

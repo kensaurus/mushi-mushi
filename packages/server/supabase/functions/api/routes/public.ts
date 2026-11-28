@@ -37,7 +37,6 @@ import { getActivePlugins, dispatchPluginEvent } from '../../_shared/plugins.ts'
 import { getAvailableTags } from '../../_shared/ontology.ts';
 import { executeNaturalLanguageQuery } from '../../_shared/nl-query.ts';
 import { getPlan, listPlans } from '../../_shared/plans.ts';
-import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
 import { dbError, ownedProjectIds, callerProjectIds } from '../shared.ts';
 import {
@@ -49,6 +48,7 @@ import {
   triggerClassification,
   type SdkConfigRow,
 } from '../helpers.ts';
+import { isMissingAccentColumn, withoutAccentColumn } from '../../_shared/sdk-config.ts';
 import { safeParse, ApiReportBodySchema } from '../../_shared/validate.ts';
 import { registerReporterFeatureBoardRoutes } from './reporter-feature-board.ts';
 import { registerReporterInboxRoutes } from './reporter-inbox.ts';
@@ -266,21 +266,22 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
   app.get('/v1/sdk/config', apiKeyAuth, async (c) => {
     const projectId = c.get('projectId') as string;
     const db = getServiceClient();
-    const { data, error } = await db
-      .from('project_settings')
-      .select(
-        'sdk_config_enabled, sdk_widget_position, sdk_widget_theme, sdk_widget_trigger_text, ' +
-          'sdk_widget_launcher, sdk_widget_attach_selector, sdk_banner_variant, sdk_banner_position, sdk_banner_bug_cta, sdk_banner_feature_cta, sdk_banner_message, sdk_banner_label, ' +
-          'sdk_screenshot_sensitive_hint, ' +
-          'sdk_capture_console, sdk_capture_network, sdk_capture_performance, sdk_capture_screenshot, ' +
-          'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at, ' +
-          'reporter_notifications_enabled, widget_brand_footer, ' +
-          'assistant_enabled, assistant_label, assistant_greeting, assistant_suggestions, ' +
-          'reporter_email_enabled, reporter_push_enabled, ' +
-          'journey_recording_until, journey_recording_sample',
-      )
-      .eq('project_id', projectId)
-      .maybeSingle();
+    const select =
+      'sdk_config_enabled, sdk_widget_position, sdk_widget_theme, sdk_widget_trigger_text, sdk_widget_accent, ' +
+      'sdk_widget_launcher, sdk_widget_attach_selector, sdk_banner_variant, sdk_banner_position, sdk_banner_bug_cta, sdk_banner_feature_cta, sdk_banner_message, sdk_banner_label, ' +
+      'sdk_screenshot_sensitive_hint, ' +
+      'sdk_capture_console, sdk_capture_network, sdk_capture_performance, sdk_capture_screenshot, ' +
+      'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at, ' +
+      'reporter_notifications_enabled, widget_brand_footer, ' +
+      'assistant_enabled, assistant_label, assistant_greeting, assistant_suggestions, ' +
+      'reporter_email_enabled, reporter_push_enabled, ' +
+      'journey_recording_until, journey_recording_sample';
+    const readConfig = (columns: string) =>
+      db.from('project_settings').select(columns).eq('project_id', projectId).maybeSingle();
+    const first = await readConfig(select);
+    // Until migration 20261122120000 is applied the accent column is missing;
+    // every installed widget reads this route, so fall back instead of a 500.
+    const { data, error } = isMissingAccentColumn(first.error) ? await readConfig(withoutAccentColumn(select)) : first;
 
     if (error) return dbError(c, error);
     // "Powered by Mushi" footer (growth loop, docs/plan-gtm.md → Workstream

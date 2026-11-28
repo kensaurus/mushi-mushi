@@ -16,7 +16,6 @@ import {
   SelectField,
 } from '../ui'
 import { PageLoadError } from '../PageLoadError'
-import { CHIP_TONE } from '../../lib/chipTone'
 import { SINCE_HOURS, costLogQuery } from './costLogQuery'
 import { OperationChip } from '../OperationChip'
 import { ModelChip, TokenIn, TokenOut, UsdAmount } from './CostDisplayChips'
@@ -30,7 +29,10 @@ export interface CostRow {
   model: string
   input_tokens: number
   output_tokens: number
-  cost_usd: number
+  /** null = unpriced: the shared price book had no price for the call. */
+  cost_usd: number | null
+  /** Why the call is unpriced; null when priced. */
+  unpriced_reason?: string | null
   occurred_at: string
   source?: 'invocation' | 'ledger'
   /** 'success' | 'error' for LLM calls; null for legacy ledger rows. */
@@ -171,7 +173,13 @@ export function CostRawLogTable({ projectId }: { projectId: string }) {
         enableSorting: true,
         cell: ({ row }) => (
           <div className="text-right">
-            <UsdAmount value={row.original.cost_usd} digits={5} />
+            {row.original.cost_usd == null ? (
+              <span className="text-2xs font-medium text-st-slow-ink" title={row.original.unpriced_reason ?? 'No price in the price book'}>
+                unpriced
+              </span>
+            ) : (
+              <UsdAmount value={row.original.cost_usd} digits={5} />
+            )}
           </div>
         ),
       },
@@ -184,7 +192,7 @@ export function CostRawLogTable({ projectId }: { projectId: string }) {
           if (!status) return <span className="text-fg-faint">—</span>
           if (status === 'success') return <span className="text-2xs text-fg-muted">OK</span>
           return (
-            <Badge className={CHIP_TONE.dangerSubtle} title={row.original.error_message ?? 'The call failed.'}>
+            <Badge tone="danger" title={row.original.error_message ?? 'The call failed.'}>
               Failed
             </Badge>
           )
@@ -234,9 +242,9 @@ export function CostRawLogTable({ projectId }: { projectId: string }) {
           {(failedOnly || since) && (
             <div className="flex flex-wrap items-center gap-1.5 pt-1">
               {failedOnly && (
-                <Badge className={CHIP_TONE.dangerSubtle}>Failed calls only</Badge>
+                <Badge tone="danger">Failed calls only</Badge>
               )}
-              {since && <Badge className={CHIP_TONE.neutral}>Last {since}</Badge>}
+              {since && <Badge tone="neutral">Last {since}</Badge>}
               <Btn
                 size="sm"
                 variant="ghost"

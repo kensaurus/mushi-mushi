@@ -5,7 +5,7 @@
 export default {
   index: 'Console overview',
 
-  '-- Connect': { type: 'separator', title: '1 · Connect' },
+  '-- Connect': { type: 'separator', title: '1 · Set up & connect' },
   onboarding: 'Set up',
   connect: 'Connect',
   'setup-copilot': 'Setup copilot',
@@ -17,7 +17,7 @@ export default {
   'sdk-health': 'SDK health',
   'sdk-upgrade-lockfile': 'SDK upgrade lockfile helper',
 
-  '-- Bugs': { type: 'separator', title: '2 · Bugs' },
+  '-- Bugs': { type: 'separator', title: '2 · Find & sort bugs' },
   dashboard: 'Home',
   inbox: 'To-do',
   reports: 'Bugs',
@@ -33,6 +33,7 @@ export default {
   repo: 'Pull requests',
   explore: 'Code map',
   'ux-runs': 'UX runs',
+  timeline: 'Timeline',
   iterate: 'Improvement runs',
 
   '-- Verify': { type: 'separator', title: '4 · Verify' },
@@ -59,6 +60,8 @@ export default {
   activity: 'User activity',
   intelligence: 'Weekly insights',
   releases: 'Releases',
+  'security-proof': 'Security proof',
+  'release-kits': 'Release kits',
   ops: 'Ops',
   providers: 'Providers & AI routes',
   notifications: 'Reporter updates',

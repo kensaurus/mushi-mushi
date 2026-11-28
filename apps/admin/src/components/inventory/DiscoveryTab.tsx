@@ -416,7 +416,7 @@ function ActionCard({
     return (
       <Card className="p-4 space-y-3">
         <div className="flex items-start gap-3">
-          <div className={`shrink-0 w-9 h-9 rounded-lg flex items-center justify-center ${CHIP_TONE.infoSubtle}`}>
+          <div className={`shrink-0 w-9 h-9 rounded-lg flex items-center justify-center ${CHIP_TONE.info}`}>
             <SdkIcon />
           </div>
           <div className="min-w-0">
@@ -441,7 +441,7 @@ function ActionCard({
     return (
       <Card className="p-4">
         <div className="flex items-start gap-3">
-          <div className={`shrink-0 w-9 h-9 rounded-lg flex items-center justify-center ${CHIP_TONE.warnSubtle}`}>
+          <div className={`shrink-0 w-9 h-9 rounded-lg flex items-center justify-center ${CHIP_TONE.warn}`}>
             <ClockIcon />
           </div>
           <div className="min-w-0 flex-1">
@@ -586,10 +586,10 @@ function ProposalsList({
 function ProposalStatusPill({ status }: { status: 'draft' | 'accepted' | 'discarded' }) {
   const styles =
     status === 'accepted'
-      ? CHIP_TONE.okSubtle
+      ? CHIP_TONE.ok
       : status === 'discarded'
         ? 'bg-surface-overlay text-fg-muted border-edge-subtle'
-        : CHIP_TONE.warnSubtle
+        : CHIP_TONE.warn
   return (
     <Badge className={`${styles} border text-2xs font-semibold`}>
       {status}
@@ -909,7 +909,7 @@ function LiveCrawlCard({
 
       {/* Quota exhausted banner */}
       {quotaExhausted && (
-        <div className={`rounded-md ${CHIP_TONE.warnSubtle} px-3 py-2 text-2xs`}>
+        <div className={`rounded-md ${CHIP_TONE.warn} px-3 py-2 text-2xs`}>
           Daily crawl budget reached — resets at 00:00 UTC, or raise the limit in{' '}
           <Link to="/settings?tab=general" className="underline">Settings → General</Link>.
         </div>
@@ -943,8 +943,11 @@ function LiveCrawlCard({
                 value={maxPages}
                 onChange={(e) => setMaxPages(Math.min(50, Math.max(1, Number(e.target.value))))}
               />
+              {/* No dollar estimate: the price catalog has no Firecrawl rate, so
+                  any figure here would be invented (cost catalog, 2026-11-25). */}
               <p className="text-2xs text-fg-faint">
-                Firecrawl: ~1 credit/page · Claude: ~$0.01 per story gen · 20 pages ≈ $0.10–0.30 total
+                Each page uses Firecrawl credits and one model call drafts the stories. What a run cost shows on{' '}
+                <Link to="/cost" className="underline">AI spend</Link>.
               </p>
             </div>
             <div className="space-y-1">
@@ -1004,9 +1007,9 @@ function LiveCrawlCard({
           {runs.slice(0, 5).map(run => (
             <div key={run.id} className="flex items-center gap-3 text-2xs">
               <span className={`shrink-0 font-mono px-1.5 py-0.5 rounded-sm ${
-                run.status === 'completed' ? CHIP_TONE.okSubtle :
-                run.status === 'failed' ? CHIP_TONE.dangerSubtle :
-                CHIP_TONE.infoSubtle
+                run.status === 'completed' ? CHIP_TONE.ok :
+                run.status === 'failed' ? CHIP_TONE.danger :
+                CHIP_TONE.info
               }`}>{run.status}</span>
               <span className="text-fg-muted truncate flex-1">{run.base_url}</span>
               {run.status === 'completed' && run.proposal_id && (

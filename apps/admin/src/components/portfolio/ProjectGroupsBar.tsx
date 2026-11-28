@@ -90,7 +90,7 @@ export function ProjectGroupsBar({ orgId, groups, apps, active, onSelect, onChan
         </button>
         {groups.map((g) => (
           <button key={g.id} type="button" className={chip(active === g.slug)} aria-pressed={active === g.slug} onClick={() => onSelect(g.slug)}>
-            <span aria-hidden className={`h-2 w-2 rounded-full border ${CHIP_TONE[groupTone(g.color)]}`} />
+            <span aria-hidden className={`h-2 w-2 rounded-full ${CHIP_TONE[groupTone(g.color)]}`} />
             {g.name}
             <span className="text-fg-faint">{g.project_ids.length}</span>
           </button>

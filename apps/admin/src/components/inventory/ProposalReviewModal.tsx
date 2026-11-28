@@ -597,12 +597,12 @@ function PageBlock({ page }: { page: ProposedPage }) {
         <ul className="divide-y divide-edge-subtle">
           {elements.map((el) => (
             <li key={el.id} className="px-2.5 py-1.5 flex items-center gap-2 text-2xs">
-              <span className="px-1.5 py-0.5 rounded bg-surface-overlay text-fg-faint font-mono uppercase tracking-wider">
+              <span className={`px-1.5 py-0.5 rounded ${CHIP_TONE.neutral} font-mono uppercase tracking-wider`}>
                 {(el.type ?? 'el').slice(0, 3)}
               </span>
               <span className="text-fg truncate min-w-0 flex-1">{el.action ?? el.id}</span>
               {el.testid && (
-                <code className={`hidden sm:inline px-1 py-0.5 rounded ${CHIP_TONE.infoSubtle} text-3xs font-mono`}>
+                <code className={`hidden sm:inline px-1 py-0.5 rounded ${CHIP_TONE.info} text-3xs font-mono`}>
                   {el.testid}
                 </code>
               )}

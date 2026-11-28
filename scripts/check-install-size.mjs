@@ -118,7 +118,19 @@ export const BUDGETS = [
   // (ADR 0063). Text only, no dependency change; measured 260.6 kB packed, 1,026.4 kB unpacked.
   // 2026-11-20: packed 262 → 265 kB: the docs index gained the "What leaves the browser"
   // security page (#1198). Text only, no code or dependency change; measured 262.1 kB packed.
-  { name: '@mushi-mushi/mcp', dir: 'packages/mcp', packed: 265_000, unpacked: 1_035_000 },
+  // 2026-11-22: unpacked 1,035 → 1,045 kB: two tools, get_widget_settings and
+  // set_widget_settings (#1224, ADR 0068), their catalog text in every built entry,
+  // and the docs index's widget/runtime-config copy. No new dependencies; measured
+  // 264.9 kB packed, 1,042.9 kB unpacked. With the theming page (#1222) in the docs
+  // index on the same day, packed 265 → 268 kB: text only; measured 265.2 kB packed,
+  // 1,044.0 kB unpacked.
+  // 2026-11-27: packed 268 → 290 kB, unpacked 1,045 → 1,120 kB: ten tools in one release
+  // (ADR 0072 get_timeline, get_surface_history, get_ux_run, start_ux_run; ADR 0073
+  // upload_ux_captures with its PNG reader ux-captures.ts, list_personas, start_fresh_eyes;
+  // ADR 0074 get_security_proof, export_release_kit, request_store_media_upload), their
+  // catalog text in every built entry, and the docs index's new admin pages (Timeline, Security proof,
+  // Release kits). No new dependencies; measured 283.1 kB packed, 1,107.5 kB unpacked.
+  { name: '@mushi-mushi/mcp', dir: 'packages/mcp', packed: 290_000, unpacked: 1_120_000 },
   // 2026-10-28: packed 262 → 270 kB: release 5's version bump adds its CHANGELOG
   // entries (the changelog ships in the tarball), measured 265.4 kB packed.
   // 2026-10-29: 990 → 995 kB unpacked: `mushi doctor` reads the Health check
@@ -151,7 +163,11 @@ export const BUDGETS = [
   // without administrator rights (the Startup-folder launcher when schtasks is refused), pnpm
   // found on PATH, the heartbeat naming its agent, and `mushi login` asking outside an app
   // folder. No new dependencies; measured 300.4 kB packed, 1,097.1 kB unpacked (59 files).
-  { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 310_000, unpacked: 1_130_000 },
+  // 2026-11-27: unpacked 1,130 → 1,140 kB: the worker forwards a fresh-eyes persona
+  // (protocol.ts, `fresh_eyes_persona`, ADR 0073), `mushi ux` runs @mushi-mushi/ux@^0.5.0,
+  // and MUSHI_PUBLIC_ORIGIN (ADR 0072). No new dependencies; measured 306.2 kB packed,
+  // 1,130.4 kB unpacked (59 files).
+  { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 310_000, unpacked: 1_140_000 },
   // 2026-11-13 (ADR 0060): `mushi-mushi` is the one package users install and
   // the `npx mushi-mushi` launcher. Its own tarball is the bin plus thin
   // re-exports and the four small framework adapters bundled in; measured

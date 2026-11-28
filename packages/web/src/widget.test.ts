@@ -18,7 +18,7 @@
  *          - Diagnostics fields surface the right health state
  */
 
-import { describe, it, expect, vi, beforeAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { MushiWidget, type WidgetCallbacks } from './widget';
 import { formatReceiptTime, shouldShowSdkFreshness, submitShortcutKey } from './widget-helpers';
 
@@ -651,7 +651,7 @@ describe('MushiWidget progressive disclosure — host categories', () => {
     { id: 'general', label: 'General feedback' },
   ];
   const chipLabels = (w: MushiWidget) =>
-    [...getShadow(w).querySelectorAll('.mushi-chip[data-action="chip"]')].map((b) => b.textContent);
+    [...getShadow(w).querySelectorAll('.mushi-tile[data-action="chip"]')].map((b) => b.textContent);
 
   it('a host category with a built-in id relabels that chip in place, never twice', () => {
     const w = new MushiWidget({ categories: TWM_LIKE }, noopCallbacks);
@@ -996,6 +996,10 @@ describe('MushiWidget — live-QA polish', () => {
     const w = new MushiWidget({ betaMode: beta }, { ...noopCallbacks, onSubmit: () => Promise.resolve({ reportId: REPORT_ID, queuedOffline: false }) });
     w.mount();
     w.open();
+    // ADR 0070: the beta copy sits behind a header chip, not in the form.
+    expect(q(w, '.mushi-beta-strip')).toBeNull();
+    q<HTMLButtonElement>(w, '[data-action="toggle-beta"]')!.click();
+    expect(q(w, '[data-action="toggle-beta"]')!.getAttribute('aria-expanded')).toBe('true');
     expect(q(w, '.mushi-beta-strip')!.textContent).not.toMatch(/Reports go to|Sent to/);
     expect(q<HTMLAnchorElement>(w, '.mushi-beta-strip a')!.getAttribute('href')).toBe('mailto:dev@acme.test');
     typeDescription(w, LONG);
@@ -1025,7 +1029,7 @@ describe('MushiWidget — live-QA polish', () => {
     w.mount();
     w.open();
     q<HTMLButtonElement>(w, '[data-category="idea"]')!.click();
-    expect(q<HTMLTextAreaElement>(w, 'textarea.mushi-textarea')!.placeholder).toBe('Describe your idea…');
+    expect(q<HTMLTextAreaElement>(w, 'textarea.mushi-textarea')!.placeholder).toBe('What would you like it to do?');
     typeDescription(w, 'Please add a CSV export for my invoices');
     submit(w);
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
@@ -1043,7 +1047,7 @@ describe('MushiWidget — live-QA polish', () => {
     w.open();
     q<HTMLButtonElement>(w, '[data-category="idea"]')!.click();
     expect(q(w, '[data-category="idea"]')!.textContent).toBe('アイデア');
-    expect(q<HTMLTextAreaElement>(w, 'textarea.mushi-textarea')!.placeholder).toBe('アイデアを教えてください…');
+    expect(q<HTMLTextAreaElement>(w, 'textarea.mushi-textarea')!.placeholder).toBe('どんな機能があると嬉しいですか？');
     typeDescription(w, 'ダークモードを追加してほしいです');
     submit(w);
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ userCategory: 'feature' }));
@@ -1072,7 +1076,7 @@ describe('MushiWidget — live-QA polish', () => {
     q<HTMLButtonElement>(w, '[data-category="bug"]')!.click();
     // Optional sub-chips appear once a type is picked.
     q<HTMLButtonElement>(w, '[data-intent="Crash"]')!.click();
-    expect(q<HTMLTextAreaElement>(w, 'textarea.mushi-textarea')!.placeholder).toBe('What went wrong?');
+    expect(q<HTMLTextAreaElement>(w, 'textarea.mushi-textarea')!.placeholder).toBe('What did you do, and what happened?');
     typeDescription(w, LONG);
     submit(w);
     expect(onSubmit.mock.calls[0][0]).toEqual({ category: 'bug', description: LONG, intent: 'Crash' });
@@ -1099,14 +1103,19 @@ describe('MushiWidget — live-QA polish', () => {
     expect(submitShortcutKey('Linux x86_64')).toBe('Ctrl');
   });
 
-  it('the footer says why Send is disabled, then shows "Ctrl + Enter to send" on Windows', () => {
+  it('the meter under the textarea counts down, then shows "Ctrl + Enter to send" on Windows', () => {
     const spy = vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Win32');
     const w = new MushiWidget({}, noopCallbacks);
     w.mount();
     w.open();
-    expect(q(w, '.mushi-footer-hint')!.textContent).toBe('Add a few words');
+    // ADR 0070: validation sits next to the field, never as a footer sentence.
+    expect(q(w, '.mushi-footer-hint')).toBeNull();
+    expect(q(w, '[data-region="meter"] #mushi-hint')!.textContent).toBe('8 more characters');
+    typeDescription(w, 'broken');
+    expect(q(w, '#mushi-hint')!.textContent).toBe('2 more characters');
     typeDescription(w, LONG);
-    expect(q(w, '.mushi-footer-hint')!.textContent).toBe('Ctrl + Enter to send');
+    expect(q(w, '#mushi-hint')!.textContent).toBe('Ctrl + Enter to send');
+    expect(q(w, '#mushi-hint')!.classList.contains('ok')).toBe(true);
     spy.mockRestore();
     w.destroy();
   });
@@ -1119,22 +1128,22 @@ describe('MushiWidget — live-QA polish', () => {
     w.open();
     const send = () => q<HTMLButtonElement>(w, '[data-action="submit"]')!;
     typeDescription(w, 'broken');
-    expect(send().getAttribute('aria-disabled')).toBe('true');
+    expect(send().dataset.ready).toBe('false');
     submit(w);
     expect(onSubmit).not.toHaveBeenCalled();
 
     // Screenshot captured on open (no click): still disabled.
     w.setScreenshotAttached(true);
-    expect(send().getAttribute('aria-disabled')).toBe('true');
+    expect(send().dataset.ready).toBe('false');
 
     // Pointing at an element is a deliberate attachment.
     w.setElementSelected(true);
-    expect(send().getAttribute('aria-disabled')).toBe('false');
+    expect(send().dataset.ready).toBe('true');
     w.setElementSelected(false);
-    expect(send().getAttribute('aria-disabled')).toBe('true');
+    expect(send().dataset.ready).toBe('false');
 
     typeDescription(w, 'broken!!');
-    expect(send().getAttribute('aria-disabled')).toBe('false');
+    expect(send().dataset.ready).toBe('true');
     w.destroy();
   });
 
@@ -1145,7 +1154,7 @@ describe('MushiWidget — live-QA polish', () => {
     w.setScreenshotAttached(false);
     q<HTMLButtonElement>(w, '[data-action="screenshot"]')!.click();
     w.setScreenshotAttached(true);
-    expect(q(w, '[data-action="submit"]')!.getAttribute('aria-disabled')).toBe('false');
+    expect(q<HTMLElement>(w, '[data-action="submit"]')!.dataset.ready).toBe('true');
     w.destroy();
   });
 
@@ -1154,14 +1163,14 @@ describe('MushiWidget — live-QA polish', () => {
     ja.mount();
     ja.open();
     typeDescription(ja, '保存できない');
-    expect(q(ja, '[data-action="submit"]')!.getAttribute('aria-disabled')).toBe('false');
+    expect(q<HTMLElement>(ja, '[data-action="submit"]')!.dataset.ready).toBe('true');
     ja.destroy();
 
     const strict = new MushiWidget({ minDescriptionLength: 20 }, noopCallbacks);
     strict.mount();
     strict.open();
     typeDescription(strict, 'Save does nothing');
-    expect(q(strict, '[data-action="submit"]')!.getAttribute('aria-disabled')).toBe('true');
+    expect(q<HTMLElement>(strict, '[data-action="submit"]')!.dataset.ready).toBe('false');
     strict.destroy();
   });
 
@@ -1176,7 +1185,9 @@ describe('MushiWidget — live-QA polish', () => {
     w.setScreenshotError(true, 'taint');
     w.setScreenshotError(true);
     const btn = q<HTMLButtonElement>(w, '[data-action="screenshot"]')!;
-    expect(btn.textContent).toContain('Try again');
+    // ADR 0070: an icon tool; its label is the accessible name and tooltip.
+    expect(btn.getAttribute('aria-label')).toContain('Try again');
+    expect(btn.getAttribute('title')).toContain('Try again');
     expect(btn.disabled).toBe(false);
     expect(q(w, '[data-role="screenshot-reason"]')!.textContent).toContain('another site');
 
@@ -1649,8 +1660,9 @@ describe('MushiWidget — reporter loop v2 (Phase 1)', () => {
     const trigger = q<HTMLButtonElement>(w, '.mushi-trigger')!;
     trigger.focus();
     trigger.click();
+    // ADR 0070: step 1 is the type tiles, so focus lands on the first one.
+    expect(getShadow(w).activeElement).toBe(q(w, '.mushi-tile[data-category="bug"]'));
     const ta = q<HTMLTextAreaElement>(w, 'textarea.mushi-textarea')!;
-    expect(getShadow(w).activeElement).toBe(ta);
     ta.value = 'Checkout button is greyed out';
     ta.dispatchEvent(new Event('input', { bubbles: true }));
     key(ta, 'Enter', { ctrlKey: true });
@@ -1843,5 +1855,156 @@ describe('MushiWidget avoidSelectors', () => {
       avoidSelectors: ['[data-mushi-test-avoid="header"]', '[data-mushi-test-avoid="tabs"]'],
     });
     expect(top).toBe(`${56 + 8}px`);
+  });
+});
+
+// ── ADR 0070: colour-coded type tiles first, inline validation ──────────────
+
+describe('MushiWidget — type tiles and inline validation (ADR 0070)', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: vi.fn().mockReturnValue({ matches: false }),
+    });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    Object.defineProperty(window, 'matchMedia', { writable: true, configurable: true, value: undefined });
+  });
+
+  const getShadow = (w: MushiWidget): ShadowRoot => (w as unknown as { shadow: ShadowRoot }).shadow;
+  const q = <T extends Element = HTMLElement>(w: MushiWidget, sel: string): T | null =>
+    getShadow(w).querySelector(sel) as T | null;
+  const qa = (w: MushiWidget, sel: string) => Array.from(getShadow(w).querySelectorAll<HTMLElement>(sel));
+  const panel = (w: MushiWidget) => q<HTMLElement>(w, '.mushi-panel')!;
+  const type = (w: MushiWidget, text: string) => {
+    const ta = q<HTMLTextAreaElement>(w, 'textarea.mushi-textarea')!;
+    ta.value = text;
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  const open = (config = {}, callbacks: Partial<WidgetCallbacks> = {}) => {
+    const w = new MushiWidget(config, { ...noopCallbacks, ...callbacks });
+    w.mount();
+    w.open();
+    return w;
+  };
+
+  it('shows six colour-coded tiles with an icon each, in a radiogroup above the textarea', () => {
+    const w = open();
+    const tiles = qa(w, '.mushi-tiles[role="radiogroup"] > .mushi-tile[role="radio"]');
+    expect(tiles.map((t) => t.dataset.category)).toEqual(['bug', 'slow', 'visual', 'confusing', 'idea', 'other']);
+    expect(tiles.map((t) => t.textContent)).toEqual(['Bug', 'Slow', 'Looks wrong', 'Confusing', 'Idea', 'Other']);
+    for (const t of tiles) expect(t.querySelector('svg.mushi-ico')).not.toBeNull();
+    // The tiles come before the textarea, in the same (stable) region.
+    const lead = q(w, '[data-region="lead"]')!;
+    expect(lead.firstElementChild?.classList.contains('mushi-tiles')).toBe(true);
+    expect(lead.lastElementChild?.tagName).toBe('TEXTAREA');
+    w.destroy();
+  });
+
+  it('a tap picks the type: header tint, a per-type prompt, and focus moves to the words', () => {
+    const w = open();
+    expect(panel(w).dataset.cat).toBeUndefined();
+    expect(q<HTMLTextAreaElement>(w, 'textarea')!.placeholder).toBe('What happened?');
+    q<HTMLButtonElement>(w, '[data-category="bug"]')!.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+    expect(q(w, '[data-category="bug"]')!.getAttribute('aria-checked')).toBe('true');
+    expect(panel(w).dataset.cat).toBe('bug');
+    expect(q(w, '.mushi-header .mushi-header-type svg')).not.toBeNull();
+    expect(q<HTMLTextAreaElement>(w, 'textarea')!.placeholder).toBe('What did you do, and what happened?');
+    expect(getShadow(w).activeElement).toBe(q(w, 'textarea'));
+    w.destroy();
+  });
+
+  it('the idea tile prompts with the host featureRequestDescription when set', () => {
+    const w = open({ featureRequestDescription: 'Share an idea for the app' });
+    q<HTMLButtonElement>(w, '[data-category="idea"]')!.click();
+    expect(q<HTMLTextAreaElement>(w, 'textarea')!.placeholder).toBe('Share an idea for the app');
+    w.destroy();
+  });
+
+  it('the Other tile sends category other and offers no intent chips', async () => {
+    const onSubmit = vi.fn();
+    const w = open({}, { onSubmit });
+    q<HTMLButtonElement>(w, '[data-category="other"]')!.click();
+    expect(q(w, '.mushi-intents')).toBeNull();
+    type(w, 'Something else entirely');
+    q<HTMLButtonElement>(w, '[data-action="submit"]')!.click();
+    await Promise.resolve();
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ category: 'other', description: 'Something else entirely' }));
+    w.destroy();
+  });
+
+  it('Send below the minimum is refused inline: the meter turns red and focus goes to the words', () => {
+    vi.useFakeTimers();
+    const onSubmit = vi.fn();
+    const w = open({}, { onSubmit });
+    type(w, 'bad');
+    const send = q<HTMLButtonElement>(w, '[data-action="submit"]')!;
+    expect(send.getAttribute('aria-disabled')).toBe('false');
+    send.click();
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(q(w, '#mushi-hint')!.classList.contains('nudge')).toBe(true);
+    expect(q(w, '#mushi-hint')!.textContent).toBe('5 more characters');
+    expect(panel(w).classList.contains('mushi-nudge')).toBe(true);
+    expect(getShadow(w).activeElement).toBe(q(w, 'textarea'));
+    vi.advanceTimersByTime(50);
+    expect(q(w, '[role="status"][aria-live="polite"]')!.textContent).toBe('Add a few words');
+    // Reaching the minimum clears the error and says so once.
+    type(w, 'bad button');
+    expect(q(w, '#mushi-hint')!.classList.contains('nudge')).toBe(false);
+    expect(panel(w).classList.contains('mushi-nudge')).toBe(false);
+    vi.advanceTimersByTime(50);
+    expect(q(w, '[role="status"][aria-live="polite"]')!.textContent).toBe('Ready to send');
+    w.destroy();
+  });
+
+  it('typing re-renders only the meter: the textarea node survives (IME-safe)', () => {
+    const w = open({ locale: 'ja' });
+    const ta = q<HTMLTextAreaElement>(w, 'textarea')!;
+    const lead = q(w, '[data-region="lead"]')!.innerHTML;
+    for (const text of ['保', '保存', '保存でき', '保存できない']) {
+      type(w, text);
+      expect(q(w, 'textarea')).toBe(ta);
+    }
+    expect(q(w, '[data-region="lead"]')!.innerHTML).toBe(lead);
+    expect(q(w, '#mushi-hint')!.textContent).toContain('Enter で送信');
+    w.destroy();
+  });
+
+  it('the beta notice is a header chip that opens and closes (Escape) a disclosure', () => {
+    const w = open({ betaMode: { enabled: true, appName: 'Acme', contactEmail: 'dev@acme.test' } });
+    const chip = () => q<HTMLButtonElement>(w, '.mushi-header [data-action="toggle-beta"]')!;
+    expect(chip().getAttribute('aria-expanded')).toBe('false');
+    expect(q(w, '[data-region="body"] .mushi-beta-strip')).toBeNull();
+    chip().click();
+    expect(q(w, '#mushi-beta-pop a')!.getAttribute('href')).toBe('mailto:dev@acme.test');
+    chip().focus();
+    chip().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(q(w, '#mushi-beta-pop')).toBeNull();
+    expect(w.getIsOpen()).toBe(true);
+    w.destroy();
+  });
+
+  it('privacy is one lock line in the footer with the full sentence for screen readers', () => {
+    const w = open();
+    const line = q(w, '[data-region="footer"] .mushi-privacy')!;
+    expect(line.querySelector('svg')).not.toBeNull();
+    expect(line.querySelector('.mushi-privacy-text')!.textContent).toBe('Only the developer sees this');
+    expect(line.getAttribute('title')).toContain('Remove anything private');
+    expect(line.querySelector('.mushi-sr')!.textContent).toContain('Remove anything private');
+    w.destroy();
+  });
+
+  it('the success view draws a check with "Got it" and the SLA chip', async () => {
+    vi.useFakeTimers();
+    const w = open({}, { onSubmit: () => Promise.resolve({ reportId: 'abcdef12-3456-7890-abcd-ef1234567890', queuedOffline: false }) });
+    type(w, 'The save button does nothing');
+    q<HTMLButtonElement>(w, '[data-action="submit"]')!.click();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(q(w, '.mushi-success-stamp .mushi-success-check')).not.toBeNull();
+    expect(q(w, '.mushi-success-title')!.textContent).toBe('Got it');
+    expect(q(w, '.mushi-success-sla svg')).not.toBeNull();
+    w.destroy();
   });
 });

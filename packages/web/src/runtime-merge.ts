@@ -24,8 +24,20 @@ export function mergeRuntimeCapture(
   return merged as MushiConfig['capture'];
 }
 
-/** Widget keys where an explicit host value beats the runtime one; pass the original init config as `host` when merging repeatedly. */
-const HOST_WINS_WIDGET_KEYS: readonly string[] = ['brandFooter'];
+/**
+ * One rule for every widget appearance key (ADR 0068, 2026-11-22): a value
+ * the host app set in code wins; the console's runtime value fills only what
+ * the code left unset; then the SDK default. "Set in code" is judged against
+ * `host` (the original init config), never against `config`, so a cached
+ * runtime payload applied earlier cannot masquerade as a host value. Pass the
+ * bootstrap config as `host` when merging repeatedly.
+ *
+ * The launcher (`trigger` / `launcher`) keeps its own rules below; the banner
+ * fields are judged one by one against `host.widget.bannerConfig`.
+ */
+function hostSet(host: MushiConfig, key: string): boolean {
+  return (host.widget as Record<string, unknown> | undefined)?.[key] !== undefined;
+}
 
 /**
  * Host triggers where the app draws its own launcher: `manual` (the app calls
@@ -34,6 +46,9 @@ const HOST_WINS_WIDGET_KEYS: readonly string[] = ['brandFooter'];
  * only an explicit console `hidden` still applies.
  */
 const HOST_OWNED_TRIGGERS: readonly string[] = ['manual', 'attach'];
+
+/** Runtime `banner<Field>` keys, judged one by one against the host's bannerConfig. */
+const BANNER_FIELDS = ['variant', 'position', 'message', 'label', 'bugCta', 'featureCta'] as const;
 
 export function mergeRuntimeConfig(
   config: MushiConfig,
@@ -60,45 +75,30 @@ export function mergeRuntimeConfig(
     widgetTrigger === 'hidden' && !explicitHidden && hostTrigger && hostTrigger !== 'hidden'
       ? hostTrigger
       : widgetTrigger;
-  const runtimeWidget = runtime.widget as Record<string, unknown> | undefined;
-  const runtimeBannerVariant = runtimeWidget?.bannerVariant as string | undefined;
-  const runtimeBannerPosition = runtimeWidget?.bannerPosition as string | undefined;
-  const runtimeBannerMessage = runtimeWidget?.bannerMessage as string | null | undefined;
-  const runtimeBannerLabel = runtimeWidget?.bannerLabel as string | null | undefined;
-  const runtimeBannerBugCta = runtimeWidget?.bannerBugCta as string | null | undefined;
-  const runtimeBannerFeatureCta = runtimeWidget?.bannerFeatureCta as boolean | undefined;
-  const derivedBannerConfig =
-    runtimeBannerVariant ||
-    runtimeBannerPosition ||
-    runtimeBannerMessage != null ||
-    runtimeBannerLabel != null ||
-    runtimeBannerBugCta != null ||
-    runtimeBannerFeatureCta != null
-      ? {
-          ...(config.widget?.bannerConfig ?? {}),
-          ...(runtimeBannerVariant ? { variant: runtimeBannerVariant as 'neon' | 'brand' | 'subtle' } : {}),
-          ...(runtimeBannerPosition ? { position: runtimeBannerPosition as 'top' | 'bottom' } : {}),
-          ...(runtimeBannerMessage != null ? { message: runtimeBannerMessage } : {}),
-          ...(runtimeBannerLabel != null
-            ? { label: runtimeBannerLabel === '' ? (false as const) : runtimeBannerLabel }
-            : {}),
-          ...(runtimeBannerBugCta != null ? { bugCta: runtimeBannerBugCta ?? undefined } : {}),
-          ...(runtimeBannerFeatureCta != null ? { featureCta: runtimeBannerFeatureCta } : {}),
-        }
-      : undefined;
-  const definedRuntimeWidget: Record<string, unknown> = {};
-  if (runtime.widget) {
-    for (const [key, value] of Object.entries(runtime.widget)) {
-      if (key === 'trigger' || key === 'launcher') continue;
-      if (value === undefined || value === null) continue;
-      if (
-        HOST_WINS_WIDGET_KEYS.includes(key) &&
-        (host.widget as Record<string, unknown> | undefined)?.[key] !== undefined
-      ) {
-        continue; // MIT config beats remote for this key
-      }
-      definedRuntimeWidget[key] = value;
+  const runtimeWidget = (runtime.widget ?? {}) as Record<string, unknown>;
+  // Banner fields: the console fills each one the host's bannerConfig left
+  // unset ('' label = no label pill).
+  const hostBanner = (host.widget?.bannerConfig ?? {}) as Record<string, unknown>;
+  const bannerPatch: Record<string, unknown> = {};
+  for (const field of BANNER_FIELDS) {
+    const value = runtimeWidget['banner' + field[0].toUpperCase() + field.slice(1)];
+    if (value != null && value !== '' || field === 'label' && value === '') {
+      if (hostBanner[field] === undefined) bannerPatch[field] = value === '' ? false : value;
     }
+  }
+  const derivedBannerConfig = Object.keys(bannerPatch).length
+    ? ({ ...config.widget?.bannerConfig, ...bannerPatch } as MushiWidgetConfig['bannerConfig'])
+    : undefined;
+  const definedRuntimeWidget: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(runtimeWidget)) {
+    // accentText is chosen for its accent (the server checks the pair for
+    // contrast), so it follows whichever accent wins, never alone. Code beats
+    // the console for every other key (ADR 0068).
+    if (key === 'trigger' || key === 'launcher' || key === 'accentText' || value == null || hostSet(host, key)) continue;
+    definedRuntimeWidget[key] = value;
+  }
+  if (definedRuntimeWidget.accent !== undefined && runtimeWidget.accentText != null) {
+    definedRuntimeWidget.accentText = runtimeWidget.accentText;
   }
   return {
     ...config,

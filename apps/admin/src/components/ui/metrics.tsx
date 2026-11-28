@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { META_CHIP_TONE } from '../../lib/tokens';
 import { IconAlertTriangle, IconBell, IconCheck, IconEye, IconTerminal, IconArrowRight } from '../icons';
 import { statLinkLabel } from '../../lib/statCardLinks';
 import { InfoHint, MetricHelpTrigger } from './fields';
@@ -159,6 +158,8 @@ interface RecommendedActionCta {
   href?: string
   to?: string
   disabled?: boolean
+  /** Hover text: why a disabled CTA is disabled. */
+  title?: string
 }
 
 /** Compact key/value chip rendered under the recommendation title. Used by
@@ -189,6 +190,8 @@ interface RecommendedActionProps {
   tone?: 'urgent' | 'info' | 'success' | 'neutral'
   meta?: RecommendedActionMeta[]
   actions?: RecommendedActionInlineAction[]
+  /** A short visible line under the CTA (why it is disabled and what to do); the CTA is described by it. */
+  ctaNote?: ReactNode
 }
 
 const RECOMMENDED_TONES = {
@@ -208,7 +211,7 @@ const RECOMMENDED_ACCENTS = {
 const CTA_BTN_CLASS =
   'shrink-0 inline-flex items-center gap-1 rounded-sm bg-brand px-2.5 py-1 text-xs font-medium text-brand-fg hover:bg-brand-hover motion-safe:transition-opacity disabled:opacity-50 disabled:cursor-not-allowed'
 
-function RecommendedActionCtaEl({ cta }: { cta: RecommendedActionCta }) {
+function RecommendedActionCtaEl({ cta, describedBy }: { cta: RecommendedActionCta; describedBy?: string }) {
   if (cta.to) {
     return (
       <Link to={cta.to} className={CTA_BTN_CLASS} aria-disabled={cta.disabled}>
@@ -229,18 +232,24 @@ function RecommendedActionCtaEl({ cta }: { cta: RecommendedActionCta }) {
     )
   }
   return (
-    <button type="button" onClick={cta.onClick} disabled={cta.disabled} className={CTA_BTN_CLASS}>
+    <button
+      type="button"
+      onClick={cta.onClick}
+      disabled={cta.disabled}
+      title={cta.title}
+      aria-describedby={describedBy}
+      className={CTA_BTN_CLASS}
+    >
       {cta.label}
     </button>
   )
 }
 
-const META_CHIP_TONES: Record<NonNullable<RecommendedActionMeta['tone']>, string> = META_CHIP_TONE
 
 const INLINE_ACTION_TONES: Record<NonNullable<RecommendedActionInlineAction['tone']>, string> = {
   primary: 'bg-brand text-brand-fg hover:bg-brand-hover',
   ghost: 'bg-surface-overlay text-fg-secondary hover:text-fg hover:bg-surface-raised border border-edge',
-  danger: CHIP_TONE.dangerSubtle + ' hover:bg-danger-muted/70',
+  danger: CHIP_TONE.danger + ' hover:bg-danger-muted/70',
 }
 
 function InlineActionEl({ action }: { action: RecommendedActionInlineAction }) {
@@ -279,7 +288,9 @@ export function RecommendedAction({
   tone = 'info',
   meta,
   actions,
+  ctaNote,
 }: RecommendedActionProps) {
+  const noteId = useId()
   return (
     <div className={`flex items-start gap-3 rounded-md border p-3 mb-3 ${RECOMMENDED_TONES[tone]}`}>
       <div className={`mt-0.5 shrink-0 ${RECOMMENDED_ACCENTS[tone]}`}>
@@ -307,7 +318,7 @@ export function RecommendedAction({
             {meta.map((m, i) => (
               <li
                 key={`${m.label}-${i}`}
-                className={`inline-flex items-center gap-1 px-1.5 py-px rounded-sm text-2xs ${META_CHIP_TONES[m.tone ?? 'neutral']}`}
+                className={`inline-flex items-center gap-1 px-1.5 py-px rounded-sm text-2xs ${CHIP_TONE[m.tone ?? 'neutral']}`}
               >
                 <span className="font-semibold text-2xs opacity-70">{m.label}</span>
                 <span className="font-mono">{m.value}</span>
@@ -323,7 +334,13 @@ export function RecommendedAction({
           </div>
         )}
       </div>
-      {cta && <RecommendedActionCtaEl cta={cta} />}
+      {cta && !ctaNote && <RecommendedActionCtaEl cta={cta} />}
+      {cta && ctaNote ? (
+        <div className="flex min-w-0 max-w-xs flex-col items-end gap-1 text-right">
+          <RecommendedActionCtaEl cta={cta} describedBy={noteId} />
+          <div id={noteId}>{ctaNote}</div>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -517,7 +534,7 @@ const METRIC_SECTION_META: Record<
 > = {
   shows: {
     Icon: IconEye,
-    chipClass: CHIP_TONE.infoSubtle,
+    chipClass: CHIP_TONE.info,
   },
   counted: {
     Icon: IconTerminal,
@@ -525,7 +542,7 @@ const METRIC_SECTION_META: Record<
   },
   takeaway: {
     Icon: IconCheck,
-    chipClass: CHIP_TONE.okSubtle,
+    chipClass: CHIP_TONE.ok,
   },
 }
 

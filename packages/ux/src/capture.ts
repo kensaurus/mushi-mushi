@@ -14,6 +14,15 @@ import { ignoreList, ignoreStyle } from './ignore.js'
 import { isFrameworkNoise, runProbes } from './probes.js'
 import type { ProbeResult, ReplayStep, Surface, Viewport } from './types.js'
 
+/** What a fresh context may differ in: a device's scale, touch, language and motion. */
+interface FreshContextExtra {
+  deviceScaleFactor?: number
+  isMobile?: boolean
+  hasTouch?: boolean
+  locale?: string
+  reducedMotion?: 'reduce'
+}
+
 export interface BrowserSession {
   /** Discovery browses here; app state it leaves behind stays here. */
   context: BrowserContext
@@ -23,8 +32,10 @@ export interface BrowserSession {
    * Captures share no client state, so a screen looks the same however many
    * other screens were visited before it (glot.it /words lost its empty
    * state after other screens wrote to localStorage, 2026-10-07).
+   * `extra` is a persona's device, language and motion (fresh-eyes, ADR 0073);
+   * never a User-Agent.
    */
-  freshContext(): Promise<BrowserContext>
+  freshContext(extra?: FreshContextExtra): Promise<BrowserContext>
   /**
    * Visit each path once in the shared context, then seed every later capture
    * from the storage that leaves behind. A first-ever visit can sit on a boot
@@ -104,8 +115,8 @@ export async function openSession(opts: SessionOptions = {}): Promise<BrowserSes
     }
     seed = await context.storageState({ indexedDB: true })
   }
-  const freshContext = async () => {
-    const fresh = await browser.newContext({ serviceWorkers: 'block', storageState: seed })
+  const freshContext = async (extra: FreshContextExtra = {}) => {
+    const fresh = await browser.newContext({ ...extra, serviceWorkers: 'block', storageState: seed })
     await installGuard(fresh, opts.allow ?? [], guard, opts.policy)
     await fresh.addInitScript({ content: CLS_SCRIPT })
     return fresh

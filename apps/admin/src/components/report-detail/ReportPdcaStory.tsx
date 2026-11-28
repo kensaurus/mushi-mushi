@@ -36,6 +36,9 @@ import { humanizeFixError } from '../../lib/humanizeFixError'
 import { reportHasCodeLocation } from '../../lib/reportCodeLocation'
 import type { ReportDetail, ReportFixAttempt } from './types'
 import { isSampleModel, SAMPLE_EXPLANATION_LABEL } from '../../lib/reportInternals'
+import { dispatchSetupSentence, type DispatchSetupSteps } from '../../lib/dispatchSetupSteps'
+import { DispatchSetupLine } from './DispatchSetupLine'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 type StoryState = StageStamp
 
@@ -52,6 +55,22 @@ interface StoryNode {
   link?: { href: string; label: string }
   /** Optional screenshot URL to render as a 56x40 thumbnail. */
   thumbnail?: string | null
+  /** A step that waits on the dispatch setup: shown inline, each step a link. */
+  setup?: DispatchSetupSteps
+  /** The raw error behind a plain headline, shown only under "Technical details". */
+  technical?: string | null
+  /** The judge's grade of the triage: shown with the diagnosis it grades, never as a fix check. */
+  grade?: { agreed: boolean; score: number | null; reason: string | null; at: string | null }
+}
+
+/** Raw errors are stack traces; the disclosure shows the start of one, not all of it. */
+const TECHNICAL_MAX_CHARS = 1500
+
+/** @internal Exported for unit tests only. */
+export function capTechnical(raw: string | null | undefined): string | null {
+  const t = raw?.trim()
+  if (!t) return null
+  return t.length > TECHNICAL_MAX_CHARS ? `${t.slice(0, TECHNICAL_MAX_CHARS)}…` : t
 }
 
 interface Props {
@@ -59,6 +78,10 @@ interface Props {
   dispatchState: DispatchState
   /** Operator accounts: show the model and its latency on the first step. */
   showInternals?: boolean
+  /** The page's dispatch gate: with `setup`, "Fix written" says what to set up first. */
+  dispatchBlock?: { blocked: boolean; setup?: DispatchSetupSteps | null }
+  /** Inside another card (the page folds it under the Progress line, ADR 0069): no card of its own. */
+  bare?: boolean
 }
 
 /**
@@ -72,12 +95,10 @@ const STEP_NAME: Partial<Record<PdcaStageId, string>> = {
   act: 'Fix live',
 }
 
-export function ReportPdcaStory({ report, dispatchState, showInternals = false }: Props) {
-  const nodes = buildStoryNodes(report, dispatchState, showInternals)
-  return (
-    // The heading sits outside the list: an <ol> may only hold <li>, and a
-    // <header> inside it broke the list for screen readers (REPORT A14).
-    <Card className="relative mb-3 p-3 motion-safe:animate-mushi-fade-in">
+export function ReportPdcaStory({ report, dispatchState, showInternals = false, dispatchBlock, bare = false }: Props) {
+  const nodes = buildStoryNodes(report, dispatchState, showInternals, dispatchBlock?.blocked ? dispatchBlock.setup ?? null : null)
+  const body = (
+    <>
       {/* No "Explained → Fix written → …" chain beside the heading: the four
           rows are that chain (round-3 sweep 2026-11-19). */}
       <h3 className="mb-2 text-2xs font-semibold text-fg-secondary">The story so far</h3>
@@ -88,8 +109,12 @@ export function ReportPdcaStory({ report, dispatchState, showInternals = false }
           return <StoryRow key={id} node={node} isLast={isLast} />
         })}
       </ol>
-    </Card>
+    </>
   )
+  // The heading sits outside the list: an <ol> may only hold <li>, and a
+  // <header> inside it broke the list for screen readers (REPORT A14).
+  if (bare) return <div className="relative" data-testid="report-story">{body}</div>
+  return <Card className="relative mb-3 p-3 motion-safe:animate-mushi-fade-in">{body}</Card>
 }
 
 function StoryRow({ node, isLast }: { node: StoryNode; isLast: boolean }) {
@@ -139,7 +164,7 @@ function StoryRow({ node, isLast }: { node: StoryNode; isLast: boolean }) {
         {/* The circle shows the state; "✓ Done" / "○ Not yet" beside it said
             it again (round-3 sweep 2026-11-19). Screen readers still hear it. */}
         <span className="sr-only">Status: {v.label}</span>
-        {isIdle && <InfoHint content={node.headline} />}
+        {isIdle && !node.setup && <InfoHint content={node.headline} />}
         {node.at && (
           <span className="text-2xs text-fg-faint ml-auto">
             <RelativeTime value={node.at} />
@@ -148,6 +173,19 @@ function StoryRow({ node, isLast }: { node: StoryNode; isLast: boolean }) {
       </div>
       {/* A step that has not started says why behind its ⓘ, not in a grey sentence. */}
       {!isIdle && <InlineProof className="mt-0.5">{node.headline}</InlineProof>}
+      {node.grade && <GradeLine grade={node.grade} />}
+      {node.technical && (
+        <details className="group mt-1" data-testid={`story-technical-${node.id}`}>
+          <summary className="cursor-pointer list-none text-2xs text-fg-secondary hover:text-fg">
+            <span className="inline-block motion-safe:transition-transform group-open:rotate-90" aria-hidden="true">▸</span> Technical details
+          </summary>
+          <pre className="mt-1 max-h-40 overflow-auto rounded-sm border border-edge-subtle bg-surface-overlay p-1.5 font-mono text-3xs whitespace-pre-wrap text-fg-secondary wrap-anywhere">
+            {node.technical}
+          </pre>
+        </details>
+      )}
+      {/* Blocked on setup is not "not started yet": say what to do, in the open (feedback 2026-11-22). */}
+      {node.setup && <DispatchSetupLine setup={node.setup} lead="No fix yet. To dispatch one:" className="mt-0.5" data-testid="story-dispatch-setup" />}
       {(detailsClean.length > 0 || node.thumbnail || node.link) && (
         <div className="mt-1.5 flex items-center gap-2 flex-wrap">
           {node.thumbnail && (
@@ -169,7 +207,7 @@ function StoryRow({ node, isLast }: { node: StoryNode; isLast: boolean }) {
           {detailsClean.map((d, i) => (
             <span
               key={i}
-              className="inline-flex items-center rounded-sm bg-surface-overlay/40 px-1.5 py-px text-3xs font-mono text-fg-muted"
+              className={`inline-flex items-center rounded-sm ${CHIP_TONE.neutral} px-1.5 py-px text-3xs font-mono`}
             >
               {d}
             </span>
@@ -191,11 +229,35 @@ function StoryRow({ node, isLast }: { node: StoryNode; isLast: boolean }) {
   )
 }
 
+/**
+ * The judge grades the triage (category, severity, component, repro), not a
+ * fix. It sat on "Fix checked" as "Failed" on report 3a5cb64c, where no fix
+ * had a pull request to check (2026-11-22); it belongs with the diagnosis.
+ */
+function GradeLine({ grade }: { grade: NonNullable<StoryNode['grade']> }) {
+  const pct = grade.score != null ? `${Math.round(grade.score * 100)}%` : null
+  const verdict = grade.agreed ? 'the judge agreed with the triage' : 'the judge disagreed with the triage'
+  return (
+    <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-2xs text-fg-muted" data-testid="story-diagnosis-grade">
+      <span className="font-medium text-fg-secondary">Diagnosis grade:</span>
+      <span className={grade.agreed ? 'text-fg-secondary' : 'text-warn-foreground'}>{[pct, verdict].filter(Boolean).join(', ')}</span>
+      {grade.reason && <InfoHint content={grade.reason} />}
+      {grade.at && (
+        <span className="text-fg-faint">
+          <RelativeTime value={grade.at} />
+        </span>
+      )}
+    </p>
+  )
+}
+
 /** @internal Exported for unit tests only. */
 export function buildStoryNodes(
   report: ReportDetail,
   dispatchState: DispatchState,
   showInternals = false,
+  /** The steps left before a fix can be dispatched, when that is what stops it. */
+  setup: DispatchSetupSteps | null = null,
 ): Record<PdcaStageId, StoryNode> {
   const fix: ReportFixAttempt | undefined = report.fix_attempts?.[0]
   const judge = report.judge_eval ?? null
@@ -214,8 +276,8 @@ export function buildStoryNodes(
       ? 'done'
       : 'pending'
   const planHeadline = classifyFailed
-    // The raw error lives once, screened, behind the Pipeline strip's Details (console 2026-11-19).
-    ? 'Classification failed. The Pipeline strip below says why and has a Retry button.'
+    // The raw error lives once, screened, behind the Progress line's Details (console 2026-11-19).
+    ? 'Classification failed. The Progress line says why and has a Retry button.'
     : classified
       // The summary shows once, higher up (summaryPlace); the step says what was decided.
       ? `Sorted as ${(CATEGORY_LABELS[report.category] ?? report.category ?? 'a report').toLowerCase()}`
@@ -229,6 +291,16 @@ export function buildStoryNodes(
     // and the triage bar; repeating them here made "Medium" ×5 and "97%" ×4
     // (round-3 sweep 2026-11-19). Only the sample report is named here.
     details: [isSampleModel(report.stage1_model) ? SAMPLE_EXPLANATION_LABEL : null],
+    ...(judge
+      ? {
+          grade: {
+            agreed: judge.classification_agreed !== false,
+            score: judge.judge_score ?? null,
+            reason: judge.judge_reasoning?.trim() || null,
+            at: judge.created_at ?? null,
+          },
+        }
+      : {}),
   }
 
   // DO — dispatch metadata
@@ -258,13 +330,17 @@ export function buildStoryNodes(
     if (liveStatus === 'completed' && dispatchState.prUrl) return 'Fix dispatched — PR opened just now'
     if (inFlight) return 'The fix agent is drafting the PR right now'
     if (fixStatus === 'failed') {
-      return `Last attempt stopped — ${humanizeFixError(fix?.error)?.title ?? fix?.error ?? 'see fixes page'}`
+      // One plain line; the raw error (often a Node stack) only under "Technical details".
+      const human = humanizeFixError(fix?.error, { category: fix?.failure_category ?? null })
+      return human && human.known !== false ? human.title : 'The last fix attempt stopped without a pull request.'
     }
     if (dispatched) return 'Fix attempt recorded'
-    return reportHasCodeLocation(report)
-      ? 'No fix dispatched yet — click "Dispatch fix" to start'
-      : 'No fix dispatched yet — no stack trace or file for an agent to change'
+    if (!reportHasCodeLocation(report)) return 'No fix dispatched yet — no stack trace or file for an agent to change'
+    return setup
+      ? dispatchSetupSentence(setup, 'No fix yet. To dispatch one:')
+      : 'No fix dispatched yet — click "Dispatch fix" to start'
   })()
+  const doSetup = doState === 'idle' && setup && reportHasCodeLocation(report) ? setup : undefined
   const doLink = fix?.pr_url
     ? { href: fix.pr_url, label: `PR${fix.pr_number ? ` #${fix.pr_number}` : ''}` }
     : dispatchState.prUrl
@@ -283,52 +359,50 @@ export function buildStoryNodes(
       fix?.lines_changed != null ? `${fix.lines_changed} loc` : null,
     ],
     link: doLink,
+    ...(doSetup ? { setup: doSetup } : {}),
+    technical: doState === 'failed' ? capTechnical(fix?.error) : null,
   }
 
-  // CHECK — judge + CI
+  // CHECK: CI on the fix's pull request. The judge grades the triage, so its
+  // grade is on the plan step, never a fix check (report 3a5cb64c).
   let checkState: StoryState = 'idle'
-  if (judge) checkState = judge.classification_agreed === false ? 'failed' : 'done'
-  else if (ciConclusion === 'success') checkState = 'done'
+  if (ciConclusion === 'success') checkState = 'done'
   else if (ciConclusion === 'failure' || ciConclusion === 'timed_out') checkState = 'failed'
   else if (fix?.pr_url) checkState = 'pending'
   const checkHeadline = (() => {
-    if (judge) {
-      const verdict = judge.classification_agreed === false ? 'judge disagreed with the classifier' : 'judge agreed with the classifier'
-      const trimmedReason = judge.judge_reasoning?.trim()
-      return trimmedReason ? `${verdict} — ${trimmedReason}` : verdict
-    }
     if (ciConclusion) return `Fix CI: ${ciConclusion.replace(/_/g, ' ')}`
     if (fix?.pr_url) return 'CI is running on the PR'
+    if (fixStatus === 'failed') return 'Nothing to check: the last attempt opened no pull request.'
     return showInternals
-      ? 'No judge or CI signal yet — runs once a fix is dispatched'
+      ? 'No CI signal yet — runs once a fix opens a pull request'
       : 'Not checked yet. The checks run once a fix is dispatched.'
   })()
   const check: StoryNode = {
     id: 'check',
     state: checkState,
     headline: checkHeadline,
-    at: judge?.created_at ?? null,
-    details: [
-      judge?.judge_score != null ? `judge ${(judge.judge_score * 100).toFixed(0)}%` : null,
-      ciConclusion ? `CI ${ciConclusion.replace(/_/g, ' ')}` : null,
-    ],
+    // Its own time: when CI last reported on the fix, never the judge's.
+    at: ciConclusion ? fix?.check_run_updated_at ?? null : null,
+    details: [ciConclusion ? `CI ${ciConclusion.replace(/_/g, ' ')}` : null],
     thumbnail: report.screenshot_url ?? null,
   }
 
   // ACT — merge + close. A closed PR, red CI or an agent review flag blocks
   // the loop instead of "Awaiting merge" (see lib/pdcaAct.ts).
   const blocker = actBlocker(fix)
+  // An attempt that stopped before a PR is the "Fix written" step's failure:
+  // nothing reached "live" to be blocked (report 3a5cb64c, 2026-11-22).
   let actState: StoryState = 'idle'
   if (status === 'fixed') actState = 'done'
-  else if (fixStatus === 'failed' || status === 'dismissed') actState = 'failed'
+  else if (status === 'dismissed') actState = 'failed'
   else if (blocker) actState = ACT_BLOCKER_STAMP[blocker]
   else if (fix?.pr_url || ciConclusion === 'success') actState = 'pending'
   const actHeadline = (() => {
     if (status === 'fixed') return 'Loop closed — report marked fixed and routed back upstream'
     if (status === 'dismissed') return 'Loop closed — report dismissed (no fix needed)'
-    if (fixStatus === 'failed') return `Loop blocked — ${fix?.error ?? 'fix attempt failed'}`
     if (blocker) return ACT_BLOCKER_COPY[blocker]
     if (actState === 'pending') return 'Awaiting merge: press Merge at the top of this page'
+    if (fixStatus === 'failed' && !fix?.pr_url) return 'Not yet: no pull request was opened, so nothing can go live'
     return 'Not yet: the fix has to be written and checked first'
   })()
   const actLink = fix?.pr_url && actState !== 'done'
@@ -340,7 +414,8 @@ export function buildStoryNodes(
     id: 'act',
     state: actState,
     headline: actHeadline,
-    at: status === 'fixed' ? fix?.completed_at ?? null : null,
+    // When it landed, not when the last (perhaps failed) attempt ended.
+    at: status === 'fixed' ? fix?.merged_at ?? report.fixed_at ?? null : null,
     link: actLink,
   }
 

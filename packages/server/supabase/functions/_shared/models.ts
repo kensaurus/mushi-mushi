@@ -20,8 +20,9 @@
 // moved too (gap #14a): their models resolve through `pdca-models.ts`.
 // `claude-call-paths.test.ts` guards the routes moved in gap #14b.
 //
-// Keep pricing rows in `pricing.ts` (and the SQL backfill in the matching
-// migration) in sync when adding a new model here.
+// Prices live in the shared KENSAURUS catalog (kensaurus-shared, priced by
+// `llm-cost.ts`). Add a new model id to KNOWN_MODEL_IDS there; a model the
+// catalog lacks is recorded as unpriced until price-sync or an override adds it.
 // =============================================================================
 
 // --- Anthropic ---------------------------------------------------------------

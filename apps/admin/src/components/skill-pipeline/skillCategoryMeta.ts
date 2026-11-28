@@ -24,6 +24,7 @@ import {
   IconStorage,
   IconTerminal,
 } from '../icons'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 export interface SkillCategoryMeta {
   label: string
@@ -40,7 +41,7 @@ const SKILL_CATEGORY_META: Record<string, SkillCategoryMeta> = {
     label: 'Workflows',
     hint: 'Multi-step bundles that chain skills end-to-end',
     Icon: IconGraph,
-    badgeClass: 'bg-accent-muted text-accent-foreground',
+    badgeClass: `${CHIP_TONE.accent}`,
     accentClass: 'border-l-accent/50',
   },
   debug: {
@@ -61,35 +62,35 @@ const SKILL_CATEGORY_META: Record<string, SkillCategoryMeta> = {
     label: 'Audit',
     hint: 'Security, accessibility, performance, and design-system checks',
     Icon: IconAudit,
-    badgeClass: 'bg-info-muted text-info-foreground',
+    badgeClass: `${CHIP_TONE.info}`,
     accentClass: 'border-l-info/50',
   },
   enhance: {
     label: 'Enhance',
     hint: 'Polish UI, UX, SEO, PWA, and post-launch iteration',
     Icon: IconSliders,
-    badgeClass: 'bg-rose-muted text-rose',
+    badgeClass: `${CHIP_TONE.medium}`,
     accentClass: 'border-l-rose/50',
   },
   iterate: {
     label: 'Iterate',
     hint: 'Ranked fix loops on a live app and agent-harness guards',
     Icon: IconBolt,
-    badgeClass: 'bg-info-muted text-info-foreground',
+    badgeClass: `${CHIP_TONE.info}`,
     accentClass: 'border-l-info/50',
   },
   backend: {
     label: 'Backend',
     hint: 'API design, observability, error handling, and data pipelines',
     Icon: IconNetwork,
-    badgeClass: 'bg-info-muted text-info-foreground',
+    badgeClass: `${CHIP_TONE.info}`,
     accentClass: 'border-l-info/50',
   },
   design: {
     label: 'Design',
     hint: 'PRDs, themes, motion, and generative visual assets',
     Icon: IconPencil,
-    badgeClass: 'bg-accent-muted text-accent-foreground',
+    badgeClass: `${CHIP_TONE.accent}`,
     accentClass: 'border-l-accent/50',
   },
   deploy: {
@@ -124,14 +125,14 @@ const SKILL_CATEGORY_META: Record<string, SkillCategoryMeta> = {
     label: 'Mushi Mushi',
     hint: 'Health checks, setup, and integration smoke tests',
     Icon: IconSkills,
-    badgeClass: 'bg-brand-subtle text-brand-foreground',
+    badgeClass: `${CHIP_TONE.brand}`,
     accentClass: 'border-l-brand/50',
   },
   meta: {
     label: 'Meta',
     hint: 'Skill authoring, MCP builders, and agent tooling',
     Icon: IconSliders,
-    badgeClass: 'bg-accent-muted text-accent-foreground',
+    badgeClass: `${CHIP_TONE.accent}`,
     accentClass: 'border-l-accent/50',
   },
   protocol: {

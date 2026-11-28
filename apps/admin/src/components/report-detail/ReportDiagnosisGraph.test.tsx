@@ -13,7 +13,8 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReportDetail } from './types'
-import { ReportDiagnosisGraph } from './ReportDiagnosisGraph'
+import { DiagnosisVerdict, ReportDiagnosisGraph } from './ReportDiagnosisGraph'
+import { buildDiagnosisGraph } from '../../lib/reportDiagnosisGraph'
 
 let container: HTMLDivElement
 let root: Root
@@ -176,5 +177,19 @@ describe('ReportDiagnosisGraph', () => {
     render()
     click(container.querySelector('[data-node-id="console"]'))
     expect(container.querySelector('aside a[href="#report-console-logs"]')).not.toBeNull()
+  })
+
+  // ADR 0069: inside the page's "Why Mushi Mushi thinks this" fold the graph has no heading of its own.
+  it('bare: the lanes and the panel without the card heading', () => {
+    act(() => root.render(createElement(ReportDiagnosisGraph, { report: REPORT, bare: true })))
+    expect(container.textContent).not.toContain('How Mushi Mushi reached this diagnosis')
+    expect(container.querySelector('section[aria-label^="Evidence:"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="diagnosis-node-panel"]')).not.toBeNull()
+  })
+
+  it('DiagnosisVerdict carries the verdict and the count for a fold summary', () => {
+    act(() => root.render(createElement(DiagnosisVerdict, { graph: buildDiagnosisGraph(REPORT) })))
+    expect(container.textContent).toContain('Likely cause, not confirmed')
+    expect(container.textContent).toMatch(/\d+ things? to check/)
   })
 })

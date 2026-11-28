@@ -3,8 +3,9 @@
  * PURPOSE: Per-feature opt-in for the pages that are not part of the core
  *          bug → diagnosis → fix loop (console audit 2026-10-20, Phase 1).
  *          Replaces the global Quick / Beginner / Advanced switch: the
- *          sidebar always shows the same nine pages, and each Lab adds its
- *          page to a "Labs" group when switched on in Settings › Labs.
+ *          sidebar always shows the same five pages (ADR 0069), and each Lab
+ *          adds its page to a "Labs" group when switched on in Settings › Labs.
+ *          Every Lab starts off, the owner's too: they see what customers see.
  *          Modelled on Supabase Studio's Feature Previews (per feature, with
  *          a route to try it), not on an "expert mode".
  *
@@ -26,7 +27,7 @@ export interface LabFeature {
   /** Sidebar route the Lab adds when enabled (first) and any routes it covers. */
   paths: readonly string[]
   /** Group heading in Settings › Labs. */
-  group: 'bugs' | 'fixing' | 'checks' | 'team' | 'automation'
+  group: 'bugs' | 'fixing' | 'checks' | 'team' | 'automation' | 'operator'
 }
 
 export const LAB_FEATURES: readonly LabFeature[] = [
@@ -38,6 +39,7 @@ export const LAB_FEATURES: readonly LabFeature[] = [
   { id: 'ci-runners', label: 'CI runners', description: 'Where your tests run, how long they wait for a machine, and what slows your fixes down.', paths: ['/ci'], group: 'fixing' },
   { id: 'code-map', label: 'Code map', description: 'A map of your indexed repository you can ask questions about.', paths: ['/explore'], group: 'fixing' },
   { id: 'ux-runs', label: 'UX runs', description: 'A coding agent works through your screens; you see what improved.', paths: ['/ux-runs'], group: 'fixing' },
+  { id: 'timeline', label: 'Timeline', description: 'Your app release by release: bugs fixed, screens improved, and a before/after of every screen.', paths: ['/timeline'], group: 'fixing' },
   { id: 'improvement-runs', label: 'Improvement runs', description: 'One AI drafts a change and a second AI critiques it until it passes.', paths: ['/iterate'], group: 'fixing' },
   { id: 'editor-agents', label: 'Editor agents', description: 'Status and catalog of the MCP connection your editor uses.', paths: ['/mcp'], group: 'automation' },
   { id: 'agent-skills', label: 'Agent skills', description: 'Browse agent skills and run skill pipelines on a report.', paths: ['/skills'], group: 'automation' },
@@ -51,6 +53,13 @@ export const LAB_FEATURES: readonly LabFeature[] = [
   { id: 'processing-jobs', label: 'Processing jobs', description: 'The triage and fix job queue, with retries and dead letters.', paths: ['/queue'], group: 'automation' },
   { id: 'tester-rewards', label: 'Tester rewards', description: 'Points, tiers and payouts for people who report bugs.', paths: ['/rewards'], group: 'team' },
   { id: 'sql-query', label: 'SQL query', description: 'Ask your Mushi Mushi data a question in plain words or SQL.', paths: ['/query'], group: 'team' },
+  // ADR 0069: these left the sidebar's five pages. Each one still opens by URL, ⌘K and in-page links.
+  { id: 'pipeline', label: 'Pipeline', description: 'Every bug on its way to a merged fix, stage by stage, and what is moving it right now.', paths: ['/pipeline'], group: 'automation' },
+  { id: 'journey-optimizer', label: 'Journey optimizer', description: 'Scans your live site for slow, broken or confusing pages. The scan needs your own Firecrawl key.', paths: ['/journeys'], group: 'checks' },
+  { id: 'apps', label: 'Apps', description: 'Every app in this team side by side, with what each one still needs set up.', paths: ['/portfolio'], group: 'operator' },
+  { id: 'integrations', label: 'Integrations', description: 'Sentry, Slack, GitHub, Linear and the other tools Mushi Mushi talks to.', paths: ['/integrations/config'], group: 'operator' },
+  { id: 'checks', label: 'Checks', description: 'Scheduled tests and page checks for your app, and whether your test runs are healthy.', paths: ['/checks'], group: 'operator' },
+  { id: 'team', label: 'Team', description: 'Members, invites, billing and how your team signs in.', paths: ['/team'], group: 'operator' },
 ] as const
 
 export const LAB_GROUP_LABEL: Record<LabFeature['group'], string> = {
@@ -59,6 +68,7 @@ export const LAB_GROUP_LABEL: Record<LabFeature['group'], string> = {
   checks: 'Checks and AI quality',
   team: 'Team and reporters',
   automation: 'Automation',
+  operator: 'Several apps and a team',
 }
 
 const STORAGE_KEY = 'mushi:labs'

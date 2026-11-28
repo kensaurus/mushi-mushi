@@ -24,6 +24,14 @@ function report(overrides: Partial<ReportDetail> = {}): ReportDetail {
 const sentryLog = (stack: string) => [{ level: 'error', message: 'x', timestamp: 1, stack }]
 
 describe('reportHasCodeLocation: no location', () => {
+  it('a date is not a folder', () => {
+    expect(reportHasCodeLocation(report({ component: 'Broke on 11/28/2026 after the release' }))).toBe(false)
+  })
+
+  it('a one-slash route name in prose is still false', () => {
+    expect(reportHasCodeLocation(report({ component: 'app/words page header' }))).toBe(false)
+  })
+
   it('a web-vital report (Poor FCP, nothing captured) is false', () => {
     expect(
       reportHasCodeLocation(
@@ -170,5 +178,12 @@ describe('parseStackFrames', () => {
       'Error\n    at Foo (src/foo.ts:10:5)\n    at src/bar.ts:3:1\n    at x (node_modules/y/z.js:1:1)',
     )
     expect(frames.map((f) => `${f.fn ?? ''}|${f.file}:${f.line}:${f.col}`)).toEqual(['Foo|src/foo.ts:10:5', '|src/bar.ts:3:1'])
+  })
+})
+
+describe('reportHasCodeLocation: a named folder (journey walk 2026-11-28)', () => {
+  it('a folder three levels deep counts, so the page never says "Likely in <folder>" beside "no file to change"', () => {
+    expect(reportHasCodeLocation(report({ component: 'supabase/functions/htttg-delete-account' }))).toBe(true)
+    expect(reportHasCodeLocation(report({ stage1_classification: { component: 'The `apps/mobile/screens` folder' } as ReportDetail['stage1_classification'] }))).toBe(true)
   })
 })

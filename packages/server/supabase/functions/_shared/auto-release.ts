@@ -305,6 +305,14 @@ export async function runAutoRelease(
     return { status: 'nothing_to_release' }
   }
 
+  // Pin the release to the commit it ships, so its Security proof can read
+  // the scans for that commit (ADR 0074). A branch name in target_commitish is
+  // not a commit; an unapplied column is not a failure.
+  const commit = (trigger.commit ?? '').trim().toLowerCase()
+  if (/^[0-9a-f]{7,40}$/.test(commit)) {
+    await Promise.resolve(db.from('releases').update({ commit_sha: commit }).eq('id', drafted.releaseId)).catch(() => undefined)
+  }
+
   const published = await publish(db, drafted.releaseId, { kind: 'system', id: `auto-release:${trigger.source}` })
   if (!published.ok) {
     return { status: 'failed', error: published.error, releaseId: drafted.releaseId, published: published.published }

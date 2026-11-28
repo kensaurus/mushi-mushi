@@ -25,7 +25,7 @@ export function ledgerCell(source: LedgerSource): LedgerCell {
 
 /** The app total, marked when a source failed so it reads as "at least". */
 export function ledgerTotal(app: Pick<LedgerApp, 'totalUsd' | 'complete'>): { text: string; tone: BadgeTone | null; title: string | undefined } {
-  if (!app.complete) return { text: `${formatUsd(app.totalUsd)}+`, tone: 'warnSubtle', title: 'At least this much: a source could not be read and is left out.' }
+  if (!app.complete) return { text: `${formatUsd(app.totalUsd)}+`, tone: 'warn', title: 'At least this much: a source could not be read and is left out.' }
   return { text: formatUsd(app.totalUsd), tone: null, title: undefined }
 }
 

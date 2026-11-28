@@ -216,3 +216,7 @@ on the user's machine, where the browser and the model run, as before.
   a separate decision.
 - *Passing the goal or accounts as arguments or environment variables.* `ps`
   and a Windows shell would read them.
+
+## Amendment 2026-11-27: test accounts are a per-project opt-in
+
+Amended by ADR [0073](0073-native-ux-captures-and-project-personas.md) (owner, Plan 025 P3). "Synthetic accounts (Mushi only)" and "Only an operator's console session on Mushi's own project may ask for them" no longer hold: a project opts in (`project_settings.fresh_eyes_accounts`), and its accounts come from the app's own signed test-account hook, or from the internal mint above for an app that signs in on this Mushi (operators only). The grant rules above (an owner's or admin's console click, 2 hours, spent in the claim's compare-and-set, the granting person's own machine, passwords only in the claim answer) stay.

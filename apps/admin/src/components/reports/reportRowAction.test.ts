@@ -6,7 +6,7 @@ describe('closedRowAction', () => {
     for (const status of ['fixed', 'verified', 'resolved']) {
       expect(closedRowAction(status)?.label).toBe('View')
       expect(closedRowAction(status)?.label).not.toMatch(/fixed/i)
-      expect(closedRowAction(status)?.className).not.toContain('bg-brand')
+      expect(closedRowAction(status)?.intent).toBe('neutral')
     }
   })
 

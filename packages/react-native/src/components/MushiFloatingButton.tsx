@@ -18,7 +18,6 @@ import {
   Platform,
   Dimensions,
   useColorScheme,
-  type ViewStyle,
 } from 'react-native'
 import { mushiPalette, MUSHI_COPY, MUSHI_GEOMETRY } from '@mushi-mushi/core'
 
@@ -228,7 +227,7 @@ export const MushiFloatingButton: FC<MushiFloatingButtonProps> = ({
           backgroundColor: accentColor,
           shadowColor: dark ? accentColor : pal.ink,
           transform: [{ scale }],
-        } as ViewStyle,
+        },
       ]}
       onStartShouldSetResponder={() => !draggable}
       onResponderGrant={handlePressIn}

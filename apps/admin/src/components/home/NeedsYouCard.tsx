@@ -16,6 +16,22 @@ import type { FixFirstItem, HomeSection, NeedsYouItem } from '../../lib/projectH
 import { HomeSectionBody } from './HomeSectionBody'
 import { Mascot } from '../mascot/Mascot'
 import { HOME_ALL_CLEAR } from '../../lib/fieldGuide'
+import { useActiveProjectId } from '../ProjectSwitcher'
+import { getStoredProjectScopeMode, openAppOnly } from '../../lib/projectScope'
+
+/**
+ * Home shows one app, so its buttons open that app's items. With "All apps"
+ * stored from an earlier visit, "1 critical bug is waiting" used to open Bugs
+ * combined across every app: "6 reports · 6 critical", this app's bug third
+ * (journey walk, 2026-11-28). Clicking leaves All apps for this app, as an
+ * app group's "Open →" does.
+ */
+function useStayOnThisApp(): () => void {
+  const projectId = useActiveProjectId()
+  return () => {
+    if (projectId && getStoredProjectScopeMode() === 'all') openAppOnly(projectId)
+  }
+}
 
 const NEEDS_YOU_LIMIT = 5
 
@@ -48,6 +64,7 @@ function waitingLine(n: number | null): string | null {
 
 /** One root cause: what is wrong, how much waits on it, and its one fix. */
 function FixFirstRow({ item, quiet }: { item: FixFirstItem; quiet: boolean }) {
+  const stayOnThisApp = useStayOnThisApp()
   const fix = item.fix
   const waiting = waitingLine(item.affects)
   return (
@@ -59,12 +76,12 @@ function FixFirstRow({ item, quiet }: { item: FixFirstItem; quiet: boolean }) {
           {waiting && <p className="text-xs font-medium text-fg">{waiting}</p>}
         </div>
         {fix?.kind === 'one_click' && (
-          <Btn size="sm" variant={quiet ? 'ghost' : 'primary'} to={fix.to}>
+          <Btn size="sm" variant={quiet ? 'ghost' : 'primary'} to={fix.to} onClick={stayOnThisApp}>
             {fix.label}
           </Btn>
         )}
         {fix?.kind === 'guided' && fix.to && (
-          <Btn size="sm" variant="ghost" to={fix.to}>
+          <Btn size="sm" variant="ghost" to={fix.to} onClick={stayOnThisApp}>
             {fix.label}
           </Btn>
         )}
@@ -97,9 +114,24 @@ function FixFirst({ section, quiet }: { section: HomeSection<FixFirstItem[]> | u
 }
 
 export function NeedsYouCard({ section, fixFirst, leading = [], partial = [], hasReports = false, primaryElsewhere = false }: Props) {
+  const stayOnThisApp = useStayOnThisApp()
   const hasRootCauses = fixFirst?.status === 'ok' && (fixFirst.data ?? []).length > 0
   // Every read answered, nothing waits, and the app has real reports.
   const trulyClear = !hasRootCauses && partial.length === 0 && hasReports
+  // Nothing needs you: one calm line, not a card (ADR 0069). The health
+  // lights under it are the app's live status.
+  if (section.status === 'ok' && !hasRootCauses && leading.length + (section.data ?? []).length === 0) {
+    return (
+      <div id="home-needs-you" aria-label="Needs you" role="status" data-testid="home-needs-you-clear" className="flex min-w-0 items-center gap-2">
+        {trulyClear ? (
+          <Mascot {...HOME_ALL_CLEAR} size="sm" />
+        ) : (
+          <p className="text-sm text-fg-secondary">Nothing needs you right now.</p>
+        )}
+        {partial.length > 0 && <p className="text-2xs text-fg-faint">Some checks could not be read just now, so this may be missing an item.</p>}
+      </div>
+    )
+  }
   return (
     <Section title="Needs you" id="home-needs-you">
       {primaryElsewhere && (
@@ -113,13 +145,10 @@ export function NeedsYouCard({ section, fixFirst, leading = [], partial = [], ha
           const all = [...leading, ...items].slice(0, NEEDS_YOU_LIMIT)
           return (
             <>
-              {all.length === 0 && trulyClear ? (
-                <div data-testid="home-needs-you-clear">
-                  <Mascot {...HOME_ALL_CLEAR} size="md" />
-                </div>
-              ) : all.length === 0 ? (
+              {/* Only root causes wait (an empty list without them is the one line above). */}
+              {all.length === 0 ? (
                 <p className="text-sm text-fg-secondary" data-testid="home-needs-you-clear">
-                  {hasRootCauses ? 'Nothing else needs you right now.' : 'Nothing needs you right now. Mushi Mushi will list it here when something does.'}
+                  Nothing else needs you right now.
                 </p>
               ) : (
                 <ol className="divide-y divide-edge-subtle" data-testid="home-needs-you">
@@ -127,7 +156,7 @@ export function NeedsYouCard({ section, fixFirst, leading = [], partial = [], ha
                     <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 py-2 first:pt-0 last:pb-0" data-testid={`home-needs-you-${item.id}`}>
                       <p className="min-w-0 flex-1 text-sm text-fg">{item.text}</p>
                       {/* One primary action: the costliest item; the rest stay quiet. */}
-                      <Btn size="sm" variant={i === 0 && !primaryElsewhere ? 'primary' : 'ghost'} to={item.action.to}>
+                      <Btn size="sm" variant={i === 0 && !primaryElsewhere ? 'primary' : 'ghost'} to={item.action.to} onClick={stayOnThisApp}>
                         {item.action.label}
                       </Btn>
                     </li>

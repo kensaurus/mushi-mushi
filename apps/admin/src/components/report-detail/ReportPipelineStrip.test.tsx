@@ -4,9 +4,11 @@
  * The report page's Pipeline strip: every stage drawn with its state, the
  * failed stage called out in plain words with the raw text behind Details,
  * Retry triage posts once and says what happened, and a refused retry says why.
+ * ADR 0069: a builder sees one status line and the callout; the stages (and the
+ * page's story, passed as children) start folded under "Show each step".
  */
 
-import { act, createElement } from 'react'
+import { act, createElement, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -73,13 +75,13 @@ afterEach(() => {
   container.remove()
 })
 
-async function render(onRetryDispatch = vi.fn()) {
+async function render(onRetryDispatch = vi.fn(), children?: ReactNode) {
   await act(async () => {
     root.render(
       createElement(
         MemoryRouter,
         null,
-        createElement(ReportPipelineStrip, { reportId: 'r1', onRetryDispatch, dispatchBlock: { blocked: false, reason: null }, hasFixActions: false }),
+        createElement(ReportPipelineStrip, { reportId: 'r1', onRetryDispatch, dispatchBlock: { blocked: false, reason: null }, hasFixActions: false }, children),
       ),
     )
   })
@@ -132,6 +134,27 @@ describe('ReportPipelineStrip', () => {
     expect(q('trail-stage-triage-time')?.textContent).toBe('not needed')
     expect(q('trail-stage-triage-time')?.getAttribute('title')).toBe('Sorted without an AI quick check.')
     expect(q('report-pipeline-callout')).toBeNull()
+  })
+
+  it('shows one status line and folds the stages and the story away (ADR 0069)', async () => {
+    state.trail = trail({ state: 'failed', problem: 'Triage failed.', retry: { kind: 'triage', allowed: true, reason: null } })
+    await render(vi.fn(), createElement('p', { 'data-testid': 'story' }, 'The story so far'))
+    const fold = q('report-pipeline-steps') as HTMLDetailsElement
+    expect(fold.open).toBe(false)
+    expect(fold.querySelectorAll('li[data-testid^="trail-stage-"]')).toHaveLength(8)
+    expect(fold.contains(q('story'))).toBe(true)
+    // The verdict and the failed stage's Retry stay outside the fold.
+    expect(fold.contains(q('report-pipeline-callout'))).toBe(false)
+    expect(fold.textContent).not.toContain('Failed at Quick check')
+    expect(container.textContent).toContain('Failed at Quick check')
+    expect(fold.contains(q('report-pipeline-retry'))).toBe(false)
+  })
+
+  it('keeps the folded story reachable when the trail does not load', async () => {
+    state.trail = null
+    await render(vi.fn(), createElement('p', { 'data-testid': 'story' }, 'The story so far'))
+    expect((q('report-pipeline-steps') as HTMLDetailsElement).contains(q('story'))).toBe(true)
+    expect(container.querySelectorAll('li[data-testid^="trail-stage-"]')).toHaveLength(0)
   })
 
   it('a moving report has no callout', async () => {

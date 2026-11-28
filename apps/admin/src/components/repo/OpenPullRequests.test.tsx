@@ -100,7 +100,7 @@ describe('OpenPullRequests', () => {
   it('confirms a merge while the fix PR\'s first review is still running', async () => {
     render([{ ...pr(11, [check('gate', 'success')]), review: { state: 'queued', label: 'Review in progress', fixId: null, verdict: null } }])
     act(() => button('Merge')?.click())
-    expect(host.textContent).toContain('Its Opus review is still running; merging now skips it.')
+    expect(host.textContent).toContain('Its AI review is still running; merging now skips it.')
     mocks.apiFetchMutate.mockResolvedValueOnce({ ok: true, data: { merged: true, alreadyMerged: false } })
     await act(async () => {
       button('Confirm merge')?.click()
@@ -113,9 +113,9 @@ describe('OpenPullRequests', () => {
   })
 
   it('confirms when ANY linked review is pending, even if the one shown has a verdict', async () => {
-    render([{ ...pr(12, [check('gate', 'success')]), review: { state: 'merge', label: 'Opus review: merge', fixId: null, verdict: 'merge', pending: true } }])
+    render([{ ...pr(12, [check('gate', 'success')]), review: { state: 'merge', label: 'AI review: merge', fixId: null, verdict: 'merge', pending: true } }])
     act(() => button('Merge')?.click())
-    expect(host.textContent).toContain('Its Opus review is still running; merging now skips it.')
+    expect(host.textContent).toContain('Its AI review is still running; merging now skips it.')
     mocks.apiFetchMutate.mockResolvedValueOnce({ ok: true, data: { merged: true, alreadyMerged: false } })
     await act(async () => {
       button('Confirm merge')?.click()
@@ -127,20 +127,20 @@ describe('OpenPullRequests', () => {
     )
   })
 
-  // ADR 0030: a Mushi fix PR shows its Opus review; a hold blocks Merge here.
+  // ADR 0030: a Mushi fix PR shows its AI review; a hold blocks Merge here.
   it('shows the review of a fix PR and keeps Merge off for a hold', () => {
-    const held = { ...pr(9, [check('gate', 'success')]), review: { state: 'hold', label: 'Opus review: hold', fixId: null, verdict: 'hold' } }
-    expect(openPrMergeBlocker(held as never)).toBe('The Opus review says hold: open the fix to read the findings.')
-    render([held, { ...pr(10, [check('gate', 'success')]), review: { state: 'merge', label: 'Opus review: merge', fixId: null, verdict: 'merge' } }])
-    expect(host.textContent).toContain('Opus review: hold')
-    expect(host.textContent).toContain('Opus review: merge')
+    const held = { ...pr(9, [check('gate', 'success')]), review: { state: 'hold', label: 'AI review: hold', fixId: null, verdict: 'hold' } }
+    expect(openPrMergeBlocker(held as never)).toBe('The AI review says hold: open the fix to read the findings.')
+    render([held, { ...pr(10, [check('gate', 'success')]), review: { state: 'merge', label: 'AI review: merge', fixId: null, verdict: 'merge' } }])
+    expect(host.textContent).toContain('AI review: hold')
+    expect(host.textContent).toContain('AI review: merge')
     const mergeIn = (group: string) => [...host.querySelectorAll(`[data-testid="open-prs-${group}"] button`)].find((b) => b.textContent?.trim() === 'Merge') as HTMLButtonElement
     expect(mergeIn('hold').disabled).toBe(true)
     expect(mergeIn('mergeable').disabled).toBe(false)
   })
 
   it('groups PRs by what can be done: mergeable first, then needs a fix, hold, waiting', () => {
-    const review = (state: string, verdict: string | null) => ({ state, label: `Opus review: ${state}`, fixId: null, verdict })
+    const review = (state: string, verdict: string | null) => ({ state, label: `AI review: ${state}`, fixId: null, verdict })
     render([
       { ...pr(1, [check('gate', 'success')]), review: review('hold', 'hold') },
       { ...pr(2, [check('gate', 'failure')]) },

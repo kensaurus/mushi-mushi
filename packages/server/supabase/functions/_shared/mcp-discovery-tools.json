@@ -1,5 +1,5 @@
 {
-  "packagePin": "@mushi-mushi/mcp@0.31.8",
+  "packagePin": "@mushi-mushi/mcp@0.33.1",
   "tools": {
     "activation_status": {
       "title": "Activation cockpit status",
@@ -707,6 +707,36 @@
         ]
       },
       "returnsUntrusted": true
+    },
+    "export_release_kit": {
+      "title": "Export a release kit",
+      "description": "Export the release kit of one release (releaseId) for a product-video tool: signs every ready asset (before/after screenshots copied from the UX baselines, Playwright clips, device recordings) for 24 hours, writes manifest.json beside them in lazycow's release-kit format (schema lazycow.release-kit, version 1: app, release, brand, screens with before/after, recordings, changelog; every asset with its own signed URL, bytes and sha256) and returns { kitUrl, expiresAt, preset, manifest }, where preset is lazycow's name (appstore-iphone | play-promo | social-9x16 | social-1x1). Pass both to lazycow's make_product_video({ kitUrl, preset }); the rendered file comes back as a product_video asset of the kit. Mushi never renders video. Mushi's own fields (per-asset store checks, the preset's output spec, the release's Security proof headline) are under manifest.mushi. An empty kit is 422 KIT_EMPTY. Optional projectId. Write: it writes the manifest and mints signed URLs.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Export a release kit",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
+            "type": "string"
+          },
+          "releaseId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "Release UUID (list releases in the console or with get_release_calendar)"
+          }
+        },
+        "required": [
+          "releaseId"
+        ]
+      }
     },
     "file_report": {
       "title": "File a report",
@@ -3071,6 +3101,38 @@
       },
       "returnsUntrusted": true
     },
+    "get_security_proof": {
+      "title": "Security proof of a release",
+      "description": "Return the Security proof of one release (releaseId), one commit (commitSha) or, with neither, the newest commit the scans saw: per lane (dependencies = OSV-Scanner, secrets = Gitleaks, ai_review = claude-code-security-review, dast = ZAP baseline + Nuclei, weekly) its state passed | findings | error | skipped | off | unknown | stale, the counts by severity, the run it used and its findings (title, severity, location, report id, deduped_by). The scanners run in the app's own CI (mushi-security.yml) and post their results; Mushi never runs them. state is proven (dependencies and secrets green for the commit, nothing failing elsewhere), attention, incomplete (a required lane has no result for the commit; a lane that never ran is not a pass) or not_pinned (the release names no commit). Optional projectId. Returns { state, headline, commitSha, lanes, findings, release }. Read-only.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Security proof of a release",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
+            "type": "string"
+          },
+          "releaseId": {
+            "description": "Release UUID; its pinned commit is the one proven",
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "commitSha": {
+            "description": "A commit to prove instead of a release",
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{7,40}$"
+          }
+        }
+      },
+      "returnsUntrusted": true
+    },
     "get_similar_bugs": {
       "title": "Similar bugs",
       "description": "Find existing bugs similar to a component, page, or description via pgvector nearest-neighbour search (same backend as search_reports, tuned for \"have we seen this before?\"). Returns ranked { reports: [{ id, summary, similarity }] }. Read-only. Use to dedupe before filing or group regressions; use search_reports for general free-text search.",
@@ -3222,6 +3284,56 @@
       },
       "returnsUntrusted": true
     },
+    "get_surface_history": {
+      "title": "One screen's history",
+      "description": "Return one screen's history across releases (ADR 0072): surface { key, label, path }, frames oldest first [{ id, viewport (desktop | mobile), version, release_id, run_id, score, penalty, cost_usd, pinned (kept forever), created_at, url (signed for one hour) }], scores across scorecard runs [{ at, run, score, cached (reused, no model call), cost_usd }] and the changes the UX loop kept on it [{ at, run, shipped (its PR merged), what, commit_sha }]. Required surfaceKey (a key from get_timeline's surfaces); optional projectId. Read-only, no model call. Use to show a before and after of a screen, or to check whether a fix changed what users see.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "One screen's history",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "surfaceKey": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,119}$",
+            "description": "A screen key from get_timeline's surfaces[].key"
+          },
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "surfaceKey"
+        ]
+      },
+      "returnsUntrusted": true
+    },
+    "get_timeline": {
+      "title": "The app release by release",
+      "description": "Return how one app got better, release by release (Plan 025, ADR 0072), without screenshots: rail ('releases' when the app has release rows, else 'runs': each UX or scorecard run is a stop), points oldest first [{ id, kind (release | unreleased | run), at, label, title, status, version, runs (run ids), cost_usd (what the runs' AI calls cost; null = not recorded), judged (verdicts that were a model call), cached (verdicts reused because the page had not changed), score (the newest scorecard mean, 1-10), improved_screens, reports_closed, reports [{ id, title }], baselines (screens pinned to it) }], surfaces [{ key, label, path, latest_score, first_score, frames (pinned shots) }], month (the last 30 days: releases, reports_closed, top_reports, screens_improved, runs, cost_usd, judged, cached, movers [{ key, label, from, to }]) and settings { keep_releases }. Optional projectId (defaults to the configured project). Read-only, no model call. Use get_surface_history with a surface key for that screen's screenshots, scores and kept changes; get_ux_run with a run id for one run.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "The app release by release",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
+            "type": "string"
+          }
+        }
+      },
+      "returnsUntrusted": true
+    },
     "get_two_way_comms_health": {
       "title": "Two-way communication health",
       "description": "Summarize SDK ↔ admin two-way reporter health for a host app: last SDK heartbeat, app version/platform last seen, unread reporter messages, recent reporter replies, and pending QA/TDD follow-ups. Use after wiring @mushi-mushi/web in a Vite/Capacitor app to confirm reports land in the console and admin/MCP replies reach the in-app widget.",
@@ -3355,6 +3467,55 @@
         ]
       },
       "returnsUntrusted": true
+    },
+    "get_ux_run": {
+      "title": "One UX run",
+      "description": "Return one UX run (ADR 0020/0067) by its local run id (from get_timeline's points[].runs, or the CLI): run { status, phase, agent, model, judge_model, branch, pr_url, counts, cost_usd, cost { judged, cached, unpriced }, started_at, finished_at, error }, surfaces (each screen with status, problem scores before and after, the review's verdict, and signed screenshot URLs valid for one hour) and iterations (each attempt with outcome, reason, commit and files). Required runId; optional projectId. Read-only. Use to see what a run changed and what it cost; get_timeline for the history across runs.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "One UX run",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "pattern": "^[0-9]{8}-[0-9]{6}-[a-z0-9]{4}$",
+            "description": "Local run id, e.g. 20261127-091500-ab3d (get_timeline points[].runs) (`run_id` is accepted too.)"
+          },
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runId"
+        ]
+      },
+      "returnsUntrusted": true
+    },
+    "get_widget_settings": {
+      "title": "Bug widget look",
+      "description": "Return how the in-app bug widget looks for one project, as the console sets it (served to installed SDKs at startup, no redeploy): { projectId, enabled (false: SDKs ignore console settings), canEdit, widget: { position, theme (auto | light | dark | inherit), triggerText (null = the default bug icon), accent (a #rrggbb brand colour, or \"auto\" to match the site), accentText (the black or white text Mushi checked against the accent, null when auto), launcher (auto | banner | edge-tab | attach | manual | hidden) } }. A value the app's own code sets in Mushi.init / data-* attributes wins over these. Optional projectId. Read-only.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "Bug widget look",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
+            "type": "string"
+          }
+        }
+      }
     },
     "get_worker_status": {
       "title": "Local worker status and problems",
@@ -3889,6 +4050,26 @@
         "required": [
           "projectId"
         ]
+      }
+    },
+    "list_personas": {
+      "title": "List the app’s personas",
+      "description": "Return the user profiles a first-time user test or a PDCA critic can play for one project (ADR 0073): each persona { id, name, goal, locale, device (desktop | mobile | tablet), expertise (new | casual | power), accessibility (screen_reader, low_vision, keyboard_only, reduced_motion, color_blind, motor, plain_language), patienceSteps (the step cap), costCapUsd (the most one test may spend on Mushi Mushi's AI calls), brief (the words the visitor model reads), runs (its last 12 tests: status, ttfv_seconds, reached, steps) }, plus presets, the test-account setting { mode: off | mushi | hook } and the AI budget { monthlyUsd, spentUsd, heldUsd }. Optional projectId. Read-only.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "List the app’s personas",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
+            "type": "string"
+          }
+        }
       }
     },
     "list_portfolio_findings": {
@@ -5083,6 +5264,105 @@
         ]
       }
     },
+    "request_store_media_upload": {
+      "title": "Ask to upload store media (needs approval)",
+      "description": "Ask to put release-kit media on a store: action upload_screenshots (App Store, displayType such as APP_IPHONE_67), upload_app_preview (App Store, previewType such as IPHONE_67; 15–30 s, H.264 or ProRes 422 HQ, at most 30 fps), upload_listing_images (Google Play, imageType such as phoneScreenshots or featureGraphic) or set_promo_video (Google Play, a YouTube URL). Give releaseId, connectorId (an App Store Connect or Google Play connector bound to the app), locale and assetIds from the kit. Mushi checks each asset against the store's spec first (422 SPEC_CHECK_FAILED with the reason) and stores the exact payload, every asset pinned by its SHA-256. This only creates a request: nothing is uploaded until a team owner or admin approves it in the console and runs it there. Confirm with the user first. Returns { actionId, payloadSha256, payload, status: \"pending_approval\" }. Write.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Ask to upload store media (needs approval)",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
+            "type": "string"
+          },
+          "releaseId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "Release UUID whose kit holds the assets"
+          },
+          "connectorId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "description": "App Store Connect or Google Play connector bound to the app (list_connectors)"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "upload_screenshots",
+              "upload_app_preview",
+              "upload_listing_images",
+              "set_promo_video"
+            ]
+          },
+          "locale": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 20,
+            "description": "Store language, e.g. en-US"
+          },
+          "displayType": {
+            "description": "upload_screenshots: e.g. APP_IPHONE_67, APP_IPAD_PRO_3GEN_129",
+            "type": "string",
+            "maxLength": 40
+          },
+          "previewType": {
+            "description": "upload_app_preview: e.g. IPHONE_67",
+            "type": "string",
+            "maxLength": 40
+          },
+          "imageType": {
+            "description": "upload_listing_images: phoneScreenshots, featureGraphic, icon, …",
+            "type": "string",
+            "maxLength": 40
+          },
+          "replace": {
+            "description": "upload_listing_images: clear that image type for the language first",
+            "type": "boolean"
+          },
+          "youtubeUrl": {
+            "description": "set_promo_video: the published YouTube video",
+            "type": "string",
+            "maxLength": 200,
+            "format": "uri"
+          },
+          "previewFrameTimeCode": {
+            "description": "upload_app_preview: poster frame, e.g. 00:00:05:00",
+            "type": "string",
+            "pattern": "^\\d{2}:\\d{2}:\\d{2}:\\d{2}$"
+          },
+          "assetIds": {
+            "description": "Kit asset ids to upload",
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          "reason": {
+            "description": "Why, shown to the approver",
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "releaseId",
+          "connectorId",
+          "action",
+          "locale"
+        ]
+      }
+    },
     "run_design_deviance": {
       "title": "Run the design deviance scan",
       "description": "Refresh the design tokens and start a new deviance scan of the repo (off-token colours, fonts, spacing, radius, contrast below AA, raw interactive elements). The scan reads up to 1,500 files in the background: the result is { refresh, run } with run.status \"running\" (poll get_design_deviance until running clears), or run null when the repo has no tokens to compare against (refresh says why). At most one scan per project every 5 minutes (429 RATE_LIMITED otherwise). Optional projectId. Write: it records a scan; nothing in the repo changes.",
@@ -5725,6 +6005,119 @@
         ]
       }
     },
+    "set_widget_settings": {
+      "title": "Change the bug widget look",
+      "description": "Change how the in-app bug widget looks for one project; installed SDKs pick it up at their next start, with no redeploy. Send any of accent (a hex colour like #3b5bdb, or \"auto\" to match the site; Mushi picks black or white text with at least 3:1 contrast), position (top-left | top-right | bottom-left | bottom-right), theme (auto | light | dark | inherit), triggerText (up to 24 characters; \"\" restores the default icon) and launcher (auto | banner | edge-tab | attach | manual | hidden). A value the app's own code sets wins over the console, so if nothing changes in the app, check Mushi.init. Project owners and admins only (403 otherwise); 60 changes an hour per app. Optional projectId. Returns { before, after, changed }. Write.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Change the bug widget look",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
+            "type": "string"
+          },
+          "accent": {
+            "description": "Hex colour like #3b5bdb, or \"auto\" to match the site",
+            "type": "string",
+            "maxLength": 20
+          },
+          "position": {
+            "description": "Corner of the launcher",
+            "type": "string",
+            "enum": [
+              "top-left",
+              "top-right",
+              "bottom-left",
+              "bottom-right"
+            ]
+          },
+          "theme": {
+            "description": "auto follows the OS; inherit follows the page",
+            "type": "string",
+            "enum": [
+              "auto",
+              "light",
+              "dark",
+              "inherit"
+            ]
+          },
+          "triggerText": {
+            "description": "Launcher label, up to 24 characters; \"\" restores the default icon",
+            "type": "string",
+            "maxLength": 24
+          },
+          "launcher": {
+            "description": "How the widget opens",
+            "type": "string",
+            "enum": [
+              "auto",
+              "banner",
+              "edge-tab",
+              "attach",
+              "manual",
+              "hidden"
+            ]
+          }
+        }
+      }
+    },
+    "start_fresh_eyes": {
+      "title": "Start a first-time user test",
+      "description": "Queue a first-time user test (fresh eyes, ADR 0053) for the user's own local worker: an AI that has never seen the app tries one goal from its start page while Mushi Mushi times every step and notes where it got stuck. Optional personaId (from list_personas: the visitor's device, language, needs and step cap), url (default: the app's known address), goal (default: the persona's goal, else the last one, else \"sign up and start using the app\"), sessions (1–5, default 3), successText (words on screen that mean the goal was reached), dryRun (true: look around only, file nothing; false, the default, files what stops the visitor as reports) and projectId. It never signs up with test accounts: only an owner or admin can grant those, from the console. Answers 409 NO_WORKER with the one thing to do when no computer of the user's can run it, 402 when the AI budget cannot cover the run, 404 PERSONA_NOT_FOUND. Returns { runId, status: \"queued\", runner, personaId, reservedUsd }. Write: it queues a run that may file reports. The result shows on the console's First-time user test page.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Start a first-time user test",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
+            "type": "string"
+          },
+          "personaId": {
+            "description": "A persona id from list_personas",
+            "type": "string"
+          },
+          "url": {
+            "description": "The start page (default: the app's known address)",
+            "type": "string",
+            "maxLength": 500
+          },
+          "goal": {
+            "description": "What the visitor came to do (default: the persona's goal, else the last one)",
+            "type": "string",
+            "maxLength": 300
+          },
+          "sessions": {
+            "description": "Visitors, 1-5 (default 3)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "successText": {
+            "description": "Words on screen that mean the goal was reached",
+            "type": "string",
+            "maxLength": 120
+          },
+          "dryRun": {
+            "description": "Look around only and file nothing",
+            "type": "boolean"
+          }
+        }
+      }
+    },
     "start_skill_pipeline": {
       "title": "Start a skill pipeline",
       "description": "Start a new skill pipeline run for a report. Pass rootSkillSlug and optionally reportId. Returns run_id, context_packet (full instructions + report context), and step list. Read the context_packet — it contains skill instructions plus full report context (repro steps, root cause, RAG files). After executing each step, call checkin_pipeline_step. The PM watching the console sees progress live.",
@@ -5763,6 +6156,34 @@
         "required": [
           "rootSkillSlug"
         ]
+      }
+    },
+    "start_ux_run": {
+      "title": "How to start a UX run",
+      "description": "Return how to start a UX run for one app, without starting one (ADR 0017/0020/0072): a cloud run spends the repo's Actions minutes and Cursor credits, so only a person in the console starts it. Returns { started: false, why, console_path (the UX runs page, where Run in the cloud is one click), commands { scorecard, loop } (run on your own machine with your own keys; --sync mirrors the run to the console), next }. Optional kind (scorecard | loop, default scorecard) and projectId. No change is made and no model is called. After the run, read it with get_ux_run or get_timeline.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "How to start a UX run",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "description": "scorecard (score every page, default) or loop (a coding agent improves screens)",
+            "type": "string",
+            "enum": [
+              "scorecard",
+              "loop"
+            ]
+          },
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
+            "type": "string"
+          }
+        }
       }
     },
     "submit_fix_result": {
@@ -6582,6 +7003,116 @@
           "dispatched"
         ],
         "additionalProperties": false
+      }
+    },
+    "upload_ux_captures": {
+      "title": "Upload app screenshots to the UX scorecard",
+      "description": "Open a UX scorecard run for screens another driver captured (a Maestro flow, adb screencap, the iOS simulator, an SDK debug build or a browser), so each screen is scored on the same written rubric as a web page (ADR 0073). platform is ios | android | flutter | react_native | capacitor | web | other; optional device (\"Pixel 8 (API 35)\"), source (maestro | adb | simctl | sdk | playwright | other), app (a name), viewport (\"390x844\"), maxCostUsd (0.05–20, caps the scoring budget the run reserves) and projectId. pages is 1 to 60 of { facts, shots }: facts are the scorecard page facts { key, path (starts with /), label, title, headings, text, controls, settleMs (null), axe (null), overflowX, consoleErrors, cls, viewport { width, height } } and shots is [\"settled\"] or [\"early\", \"settled\"]. Returns { runId, reservedUsd, uploads: [{ page, name, signedUrl }], next }: PUT each PNG (Content-Type image/png, at most 8 MB) to its signedUrl, then score each page with POST next.score { facts, shots: [name] }, group with POST next.group, and close the run with PUT next.finish. On the stdio server, dir instead reads <dir>/pages/<screen>/settled.png (plus early.png, facts.json, an Android window.xml or a Maestro hierarchy.json) and does the uploads itself; score=true also scores, groups and closes the run. Refused with 402 when the AI budget cannot cover the run. Viewers cannot upload. Write: it stores screenshots and a run; nothing in the app or repo changes.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Upload app screenshots to the UX scorecard",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
+            "type": "string"
+          },
+          "platform": {
+            "type": "string",
+            "enum": [
+              "ios",
+              "android",
+              "flutter",
+              "react_native",
+              "capacitor",
+              "web",
+              "other"
+            ],
+            "description": "What the screens are from"
+          },
+          "device": {
+            "description": "The device or simulator, e.g. \"Pixel 8 (API 35)\"",
+            "type": "string",
+            "maxLength": 120
+          },
+          "source": {
+            "description": "The driver that captured them",
+            "type": "string",
+            "enum": [
+              "maestro",
+              "adb",
+              "simctl",
+              "sdk",
+              "playwright",
+              "other"
+            ]
+          },
+          "app": {
+            "description": "What to call the app",
+            "type": "string",
+            "maxLength": 120
+          },
+          "viewport": {
+            "description": "WIDTHxHEIGHT, e.g. 390x844 (default: the first screen)",
+            "type": "string"
+          },
+          "maxCostUsd": {
+            "description": "The most the run may spend on server scoring",
+            "type": "number",
+            "minimum": 0.05,
+            "maximum": 20
+          },
+          "pages": {
+            "description": "The screens: { facts, shots }. Omit when dir is given.",
+            "maxItems": 60,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "facts": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                },
+                "shots": {
+                  "minItems": 1,
+                  "maxItems": 2,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "early",
+                      "settled"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "facts",
+                "shots"
+              ]
+            }
+          },
+          "dir": {
+            "description": "stdio only: a folder with pages/<screen>/settled.png (+ early.png, facts.json); uploads the PNGs too",
+            "type": "string"
+          },
+          "score": {
+            "description": "With dir: score each screen, group the causes and close the run",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "platform"
+        ]
       }
     },
     "use_mushi": {

@@ -152,6 +152,50 @@ export const MUSHI_REPORTER_STATUS: Record<
   },
 };
 
+/**
+ * Report-type tile colours (web widget report screen, ADR 0070). One hue per
+ * type, so a reporter recognises the type by colour and icon before reading:
+ * bug red, slow amber, looks-wrong violet, confusing blue, idea green, other grey.
+ *
+ * - `solid`: tile border and the panel header stripe; ≥ 3:1 on the panel.
+ * - `ink`: the tile icon and tinted text; ≥ 4.5:1 on both washes.
+ * - The tile fill is `solid` at MUSHI_REPORT_TYPE_WASH (unpicked / picked).
+ *
+ * Measured on `#FFFFFF` (light) and `#121212` (dark), the system Canvas the
+ * panel defaults to; `design-tokens.test.ts` asserts every ratio.
+ */
+export type MushiReportTypeId = 'bug' | 'slow' | 'visual' | 'confusing' | 'idea' | 'other';
+
+export interface MushiReportTypeTone {
+  solid: string;
+  ink: string;
+}
+
+export const MUSHI_REPORT_TYPE_COLORS: Record<MushiThemeMode, Record<MushiReportTypeId, MushiReportTypeTone>> = {
+  light: {
+    bug: { solid: '#D92D20', ink: '#B42318' },
+    slow: { solid: '#B54708', ink: '#93370D' },
+    visual: { solid: '#7A3FE4', ink: '#6427C9' },
+    confusing: { solid: '#2160E0', ink: '#1849A9' },
+    idea: { solid: '#14803C', ink: '#0E6630' },
+    other: { solid: '#667085', ink: '#475467' },
+  },
+  dark: {
+    bug: { solid: '#F97066', ink: '#FDA29B' },
+    slow: { solid: '#F79009', ink: '#FEC84B' },
+    visual: { solid: '#A48AFB', ink: '#C9B8FD' },
+    confusing: { solid: '#5B9BF8', ink: '#9EC5FC' },
+    idea: { solid: '#3CCB7F', ink: '#8DE8B4' },
+    other: { solid: '#98A2B3', ink: '#D0D5DD' },
+  },
+};
+
+/** Tile fill opacity of `solid`: unpicked (`wash`) and picked (`strong`). */
+export const MUSHI_REPORT_TYPE_WASH: Record<MushiThemeMode, { wash: number; strong: number }> = {
+  light: { wash: 0.08, strong: 0.14 },
+  dark: { wash: 0.14, strong: 0.24 },
+};
+
 /** Resolve the palette for a theme mode. */
 export function mushiPalette(mode: MushiThemeMode): MushiColorPalette {
   return mode === 'dark' ? MUSHI_COLORS_DARK : MUSHI_COLORS_LIGHT;

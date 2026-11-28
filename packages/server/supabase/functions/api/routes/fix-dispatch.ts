@@ -37,7 +37,6 @@ import { getAvailableTags } from '../../_shared/ontology.ts';
 import { executeNaturalLanguageQuery } from '../../_shared/nl-query.ts';
 import { withIdempotency } from '../../_shared/idempotency.ts';
 import { getPlan, listPlans } from '../../_shared/plans.ts';
-import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
 import { dbError, ownedProjectIds, callerProjectIds, callerCanAccessProject } from '../shared.ts';
 import { featureRequestDispatchBlock } from '../../_shared/report-category.ts';

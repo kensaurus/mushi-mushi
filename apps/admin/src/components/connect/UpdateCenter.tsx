@@ -115,6 +115,10 @@ export function UpdateCenter({ project, preflight }: UpdateCenterProps) {
   const githubHint = githubCheck && !githubCheck.ready ? githubCheck.hint : null
   const prLabel = prNumberFrom(state.prUrl) ?? 'Upgrade PR'
   const ci = CI_CHIP[view.ci]
+  // A merged upgrade PR with a newer release out is history: the page offered
+  // its "View PR", "Check CI status" and change table beside the new upgrade
+  // (journey walk, 2026-11-28). Then only the new upgrade leads.
+  const oldPrIsHistory = view.mode === 'pr_merged' && Boolean(view.upgradeLabel)
 
   return (
     <div className="space-y-4">
@@ -126,7 +130,9 @@ export function UpdateCenter({ project, preflight }: UpdateCenterProps) {
         <VersionTable view={view} />
       </div>
 
-      {!hasGithubReady && (
+      {/* Nothing to upgrade until the app reports an SDK version: a brand-new app opened Connect
+          on a yellow "GitHub not ready for upgrade PRs" (fresh-account walk, 2026-11-24). */}
+      {!hasGithubReady && Boolean(project.sdk_version) && (
         <HelpBanner
           tone="warn"
           title="GitHub not ready for upgrade PRs"
@@ -198,7 +204,7 @@ export function UpdateCenter({ project, preflight }: UpdateCenterProps) {
       {state.syncError && (
         <p className="text-xs text-danger-foreground" role="status">{state.syncError}</p>
       )}
-      {!state.syncError && state.checkedAt && !state.syncing ? (
+      {!state.syncError && state.checkedAt && !state.syncing && !oldPrIsHistory ? (
         <p className="text-xs text-fg-muted" role="status" data-testid="update-center-ci-checked">
           Checked {checkedAgo(state.checkedAt)}: {ci.label}.
           {view.ci === 'failing' && state.workflowUrl ? (
@@ -218,7 +224,7 @@ export function UpdateCenter({ project, preflight }: UpdateCenterProps) {
       <div className="flex flex-wrap items-center gap-3">
         {hasGithubReady ? (
           <>
-            {(view.mode === 'pr_open' || view.mode === 'pr_merged') && state.prUrl ? (
+            {(view.mode === 'pr_open' || view.mode === 'pr_merged') && state.prUrl && !oldPrIsHistory ? (
               <Btn
                 size="sm"
                 variant={view.mode === 'pr_open' ? 'primary' : 'ghost'}
@@ -243,7 +249,7 @@ export function UpdateCenter({ project, preflight }: UpdateCenterProps) {
                 </Btn>
               </Tooltip>
             ) : null}
-            {(view.mode === 'pr_open' || view.mode === 'pr_merged') && state.jobId ? (
+            {(view.mode === 'pr_open' || view.mode === 'pr_merged') && state.jobId && !oldPrIsHistory ? (
               <Btn
                 size="sm"
                 variant="ghost"
@@ -315,7 +321,7 @@ export function UpdateCenter({ project, preflight }: UpdateCenterProps) {
         ) : null}
       </div>
 
-      {state.plan && state.plan.length > 0 && view.mode !== 'up_to_date' && (
+      {state.plan && state.plan.length > 0 && view.mode !== 'up_to_date' && view.mode !== 'pr_merged' && (
         <div>
           <p className="text-2xs text-fg-muted mb-1">What the upgrade PR changes in your repo</p>
           <BumpPlanTable bumps={state.plan} />

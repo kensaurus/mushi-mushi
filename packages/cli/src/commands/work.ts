@@ -3,7 +3,7 @@
  * Cursor CLI), so a Cursor account's allowance can be spent without that
  * account's GitHub ever touching the repo. The agent only edits a git
  * worktree; this command commits, pushes and opens the draft PR with the
- * local git and `gh` credentials, and asks for the Opus review (ADR 0030).
+ * local git and `gh` credentials, and asks for the AI review (ADR 0030).
  * The attempt is registered in Mushi (as `submit_fix_result` does) when the
  * agent starts and shows as running in the console until the run closes it;
  * a stop (Ctrl-C, SIGTERM) closes it too, without a retry cooldown.
@@ -235,7 +235,7 @@ export function earlierAttemptsBlock(items: readonly EarlierAttempt[]): string {
   for (const [i, a] of items.slice(0, 3).entries()) {
     const lines: string[] = []
     if (a.prUrl) lines.push(`Pull request: ${cap(a.prUrl, 200)}`)
-    if (a.verdict) lines.push(`Opus review: ${a.verdict}`)
+    if (a.verdict) lines.push(`AI review: ${a.verdict}`)
     const summary = cap(a.summary, 1200)
     if (summary && !COMMAND_LIKE.test(summary)) lines.push(`Reviewer: ${fence(summary)}`)
     for (const f of a.findings.filter((x) => x.severity === 'blocker' || x.severity === 'major').slice(0, 4)) {
@@ -898,7 +898,7 @@ export async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): P
   const onOrigin = new Set(listed.stdout.split('\n').map((l) => l.split('refs/heads/')[1]?.trim()).filter((b): b is string => !!b))
   let branch = firstBranch
   if (onOrigin.size > 0) {
-    // A branch left by a closed, unmerged PR is a redo (an Opus hold, a person
+    // A branch left by a closed, unmerged PR is a redo (an AI review hold, a person
     // closing it): work on the next free name. An open or merged PR is not.
     for (const b of onOrigin) {
       const prs = await runProc('gh', ['pr', 'list', '--head', b, '--state', 'all', '--json', 'state', '--limit', '5'], { cwd: o.repoDir })
@@ -1044,12 +1044,12 @@ export async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): P
     await pushWithHooks(wt, ['--quiet', '-u', 'origin', branch], o.log)
     stage = 'pr'
     o.onStage?.(stage)
-    const body = `Mushi report: ${detail.id}\n\n${cap(last, 1500) || 'See the commits.'}\n\nOpened by \`mushi work\` with a local ${spec.label} agent; Mushi's Opus review decides whether it merges.`
+    const body = `Mushi report: ${detail.id}\n\n${cap(last, 1500) || 'See the commits.'}\n\nOpened by \`mushi work\` with a local ${spec.label} agent; Mushi's AI review decides whether it merges.`
     const pr = await runProc('gh', ['pr', 'create', '--draft', '--base', base, '--head', branch, '--title', prTitle(detail.summary, detail.id), '--body', body], { cwd: wt })
     const prUrl = pr.stdout.match(/https:\/\/github\.com\/\S+\/pull\/\d+/)?.[0] ?? null
     if (!prUrl) throw new MushiCliError('E_INTERNAL', `gh pr create failed: ${failureTail(pr)}`)
     await close(submitPayload({ branch, prUrl, commitSha: sha, filesChanged: files, linesChanged: lines, summary: last || prTitle(detail.summary, detail.id) }))
-    // The Opus review gate (ADR 0030) only queues cloud agents' PRs by itself.
+    // The AI review gate (ADR 0030) only queues cloud agents' PRs by itself.
     await api(`/v1/admin/fixes/${fixId}/review`, { method: 'POST', body: '{}' }).catch((err: unknown) =>
       o.log(`  review: not queued (${err instanceof Error ? err.message : String(err)})`),
     )
@@ -1094,7 +1094,7 @@ interface LocalFollowupClaim {
  * One review follow-up round on a PR `mushi work` opened (ADR 0032 amendment
  * 2026-10-24): the server checks the round and hands back the screened
  * prompt, the local agent changes the PR branch's working tree, and the CLI
- * commits and pushes, which re-queues the Opus review.
+ * commits and pushes, which re-queues the AI review.
  */
 /** Used by the local worker (worker/daemon.ts). */
 export async function followUpOne(api: Api, f: LocalFollowupCandidate, o: WorkOptions): Promise<{ fixId: string; outcome: string; prUrl?: string; agentUnavailable?: boolean }> {
@@ -1153,7 +1153,7 @@ export async function followUpOne(api: Api, f: LocalFollowupCandidate, o: WorkOp
     }
     o.onStage?.('commit')
     await git(wt, ['add', '-A'])
-    await commitWithHooks(wt, ['--quiet', '-m', `fix: address the Opus review (round ${claim.round})`, '-m', commitBody(cap(last, 1500) || 'See the diff.', `Made by a local ${spec.label} agent through \`mushi work --followups\`.`)], o.log)
+    await commitWithHooks(wt, ['--quiet', '-m', `fix: address the AI review (round ${claim.round})`, '-m', commitBody(cap(last, 1500) || 'See the diff.', `Made by a local ${spec.label} agent through \`mushi work --followups\`.`)], o.log)
     const sha = await git(wt, ['rev-parse', 'HEAD'])
     // Fast-forward only: a push rejected because the branch moved fails loudly.
     o.onStage?.('push')
@@ -1433,7 +1433,7 @@ export function registerWorkCommands(program: Command): void {
     .option('--model <id>', 'Model for the agent (cursor: cursor-agent --list-models; claude: opus, sonnet, haiku or a claude-… id)')
     .option('--max <n>', 'Reports per run', '3')
     .option('--report <id>', 'Work on this report only')
-    .option('--followups', 'Instead of new reports: fix the Opus "fix first" findings on PRs mushi work opened, and push to them')
+    .option('--followups', 'Instead of new reports: fix the AI review’s "fix first" findings on PRs mushi work opened, and push to them')
     .option('--recheck', 'Instead of fixing: run the check each open code-audit report was filed with again on the base branch (no agent, no tokens; shared wrappers followed) and close those that no longer reproduce; with --dry-run, only count them and show how the rest collapse into one report per pattern')
     .option('--collapse-backlog', 'Instead of fixing: group the open code-audit reports filed before pattern keys by root cause, on the base branch, and close each group\'s children as duplicates of its parent (ADR 0065); a dry run unless --apply')
     .option('--apply', 'With --collapse-backlog: make the change (every row is tagged, and the revert SQL is printed)')

@@ -38,10 +38,10 @@ function repoFixture(over: Partial<RepoBatch> = {}): RepoBatch {
     train: { kind: 'next', prNumber: null, state: null, attempt: 1, detail: null, createdAt: null, ci: 'unknown', ciFailing: [], leavesAt: '2026-10-27T14:00:00Z', readyCount: 1, maxMembers: 15, intervalMinutes: 360 },
     members: [
       { fixAttemptId: 'a1', prNumber: 101, prUrl: 'https://github.com/kensaurus/glot.it/pull/101', title: 'Quiz crashes on submit', headSha: 'h1', verdict: 'merge', verdictAtHead: true, ci: 'green', ciFailing: [], draft: false, express: false, benched: null, rides: true, why: 'Ready: it rides the next train.', queueDetail: 'Approved; waits for the next release train.' },
-      { fixAttemptId: 'a2', prNumber: 102, prUrl: null, title: null, headSha: 'h2', verdict: 'merge', verdictAtHead: false, ci: 'failing', ciFailing: ['test'], draft: false, express: false, benched: null, rides: false, why: 'Opus approved an older commit (abc1234); it is reviewed again at h2 first.', queueDetail: null },
+      { fixAttemptId: 'a2', prNumber: 102, prUrl: null, title: null, headSha: 'h2', verdict: 'merge', verdictAtHead: false, ci: 'failing', ciFailing: ['test'], draft: false, express: false, benched: null, rides: false, why: 'The AI review approved an older commit (abc1234); it is reviewed again at h2 first.', queueDetail: null },
     ],
     gates: [
-      { id: 'approved_at_head', label: 'Opus said merge at its current commit, and nothing holds it', passed: 1, total: 2 },
+      { id: 'approved_at_head', label: 'The AI review said merge at its current commit, and nothing holds it', passed: 1, total: 2 },
       { id: 'ci_green', label: 'Its own CI is green', passed: 1, total: 2 },
     ],
     migrations: { source: 'default', globs: ['supabase/migrations/**'], files: [{ prNumber: 101, path: 'supabase/migrations/20261027_add_col.sql' }], complete: false, unread: [102] },
@@ -92,13 +92,13 @@ describe('ReleaseBatchTab', () => {
     await render()
     const m1 = q('batch-member-101')!
     expect(m1.dataset.rides).toBe('yes')
-    expect(m1.textContent).toContain('Opus: merge')
+    expect(m1.textContent).toContain('AI review: merge')
     expect(m1.textContent).toContain('CI green')
     expect(m1.textContent).toContain('Merge queue: Approved; waits for the next release train.')
     expect(m1.querySelector('a')!.getAttribute('href')).toBe('https://github.com/kensaurus/glot.it/pull/101')
     const m2 = q('batch-member-102')!
     expect(m2.textContent).toContain('Waits')
-    expect(m2.textContent).toContain('Opus: merge (older commit)')
+    expect(m2.textContent).toContain('AI review: merge (older commit)')
     expect(m2.textContent).toContain('CI failing')
     expect(m2.textContent).toContain('Untitled fix')
   })

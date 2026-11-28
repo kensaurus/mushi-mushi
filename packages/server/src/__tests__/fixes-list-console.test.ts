@@ -16,6 +16,9 @@ import { Hono } from 'hono'
 import { makeFakeDb, type FakeDb, type Row } from './__stubs__/fake-supabase.ts'
 
 const P = '1000000b-0000-4000-8000-000000000000'
+const Q = '3000000b-0000-4000-8000-000000000000'
+// The projects the caller may open; a test widens it to two apps.
+let callerIds = [P]
 const USER = '2000000b-0000-4000-8000-000000000000'
 
 let db: FakeDb
@@ -61,7 +64,7 @@ vi.mock('../../supabase/functions/_shared/fix-report-truth-load.ts', () => ({
 }))
 vi.mock('../../supabase/functions/api/shared.ts', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()
-  return { ...actual, callerProjectIds: async () => [P] }
+  return { ...actual, callerProjectIds: async () => callerIds }
 })
 
 let app: Hono
@@ -90,6 +93,20 @@ async function get(path: string) {
 }
 
 describe('GET /v1/admin/fixes', () => {
+  it('lists one app when asked, and nothing for an app the caller cannot open (journey walk 2026-11-28)', async () => {
+    callerIds = [P, Q]
+    db = makeFakeDb({ fix_attempts: [attempt(1), attempt(2, { project_id: Q }), attempt(3)] })
+    const all = await get('/v1/admin/fixes')
+    expect(all.json.data.total).toBe(3)
+    const one = await get(`/v1/admin/fixes?project_id=${Q}`)
+    expect(one.json.data.fixes.map((f: Row) => f.id)).toEqual(['f2'])
+    expect(one.json.data.total).toBe(1)
+    const notMine = await get('/v1/admin/fixes?project_id=4000000b-0000-4000-8000-000000000000')
+    expect(notMine.json.data).toEqual({ fixes: [], total: 0 })
+    expect((await get('/v1/admin/fixes?project_id=nope')).status).toBe(400)
+    callerIds = [P]
+  })
+
   it('#89 returns the agent and CI-sync fields the rows render', async () => {
     db = makeFakeDb({
       fix_attempts: [

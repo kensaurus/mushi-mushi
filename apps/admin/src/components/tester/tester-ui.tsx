@@ -119,12 +119,12 @@ export function TesterPipelineRow({
 }) {
   const badgeClass =
     badgeTone === 'warn'
-      ? CHIP_TONE.warnSubtle
+      ? CHIP_TONE.warn
       : badgeTone === 'ok'
-        ? CHIP_TONE.okSubtle
+        ? CHIP_TONE.ok
         : badgeTone === 'neutral'
           ? 'bg-surface-overlay text-fg-muted border-edge'
-          : CHIP_TONE.infoSubtle
+          : CHIP_TONE.info
 
   return (
     <Link

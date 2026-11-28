@@ -2,7 +2,7 @@
  * FILE: apps/admin/src/components/ProjectFavicon.tsx
  * PURPOSE: Project avatar for the switcher + project list — shows the
  *          monitored app's real favicon when we know its origin, otherwise
- *          a deterministic initials chip so glot.it vs yen-yen are still
+ *          a deterministic initials chip so two projects are still
  *          distinguishable at a glance.
  */
 
@@ -15,6 +15,16 @@ import {
   type ProjectFaviconSource,
 } from '@mushi-mushi/core'
 import { projectInitials, projectInitialsChipClass } from '../lib/resolveProjectDomain'
+import { RESOLVED_PUBLIC_ORIGIN } from '../lib/env'
+
+/** `.<host>` of MUSHI_PUBLIC_ORIGIN: apps on its subdomains are allowed by img-src. */
+const PUBLIC_SUBDOMAIN_SUFFIX = (() => {
+  try {
+    return `.${new URL(RESOLVED_PUBLIC_ORIGIN).hostname.toLowerCase()}`
+  } catch {
+    return null
+  }
+})()
 
 /**
  * The console's CSP (scripts/cloudfront-mushi-spa-response.js, img-src) only
@@ -36,10 +46,10 @@ export function isCspLoadableImageUrl(url: string): boolean {
       host === 'www.google.com' ||
       host.endsWith('.googleusercontent.com') ||
       host === 'avatars.githubusercontent.com' ||
-      // The owner's apps on their own subdomains (tsumagoi., solo-boss., talk.):
-      // img-src allows https://*.kensaur.us, so their icons load. Missing here,
-      // those apps showed initials instead of their favicon (2026-10-29).
-      (u.protocol === 'https:' && host.endsWith('.kensaur.us')) ||
+      // Apps on subdomains of the public Mushi origin (MUSHI_PUBLIC_ORIGIN):
+      // img-src allows https://*.<that host>, so their icons load. Missing
+      // here, those apps showed initials instead of their favicon (2026-10-29).
+      (u.protocol === 'https:' && PUBLIC_SUBDOMAIN_SUFFIX !== null && host.endsWith(PUBLIC_SUBDOMAIN_SUFFIX)) ||
       // App Store icons (projects.icon_url from _shared/app-icon.ts).
       host.endsWith('.mzstatic.com')
     )
@@ -95,7 +105,7 @@ export function ProjectFavicon({
       <span
         aria-hidden="true"
         title={domain ? `${source.project_name} (favicon unavailable)` : source.project_name}
-        className={`shrink-0 inline-flex items-center justify-center rounded-md border font-semibold leading-none ${theme} ${className}`}
+        className={`shrink-0 inline-flex items-center justify-center rounded-md font-semibold leading-none ${theme} ${className}`}
         style={{ width: chipSize, height: chipSize, fontSize: Math.max(9, size - 7) }}
       >
         {initials}

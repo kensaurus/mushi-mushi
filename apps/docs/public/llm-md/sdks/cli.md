@@ -72,6 +72,8 @@ Console URL resolution: `MUSHI_CONSOLE_URL` → saved config → localhost `:646
 | `mushi project create` | Create project, mint key, write config |
 | `mushi doctor` | Local + optional server preflight checks |
 | `mushi nudge` | Print a phase-tuned `Mushi.init()` snippet (`alpha` / `beta` / `ga`) |
+| `mushi widget show` | The bug widget's look as the console serves it: colour, corner, theme, trigger text, launcher |
+| `mushi widget set` | Change it without a redeploy, e.g. `--accent '#3b5bdb' --position bottom-left --theme dark --trigger-text 'Report a bug'` (`--accent auto` matches your site; owners and admins). A value your app's code sets wins ([ADR 0068](https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0068-host-code-wins-over-console-widget-settings.md)) |
 | `mushi reset  --confirm` | Archive project and wipe test data (irreversible) |
 | `mushi completion <bash\|zsh\|fish>` | Print a tab-completion script generated from the live command tree |
 

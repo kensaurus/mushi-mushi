@@ -3,7 +3,9 @@
  * PURPOSE: The UX scorecard on /ux-runs?view=scorecard (ADR 0067): every page
  *          of the app scored 1–10 on a written rubric, worst first, with its
  *          trend across runs; the root causes that span pages; and the
- *          reports they were filed as. `mushi-ux scorecard --sync` fills it.
+ *          reports they were filed as. `mushi-ux scorecard --sync` fills it,
+ *          and so does `mushi-ux upload` for a phone app's own screenshots
+ *          (ADR 0073): those runs carry a platform badge ("Android · Pixel 8").
  *
  * Data: GET /v1/admin/projects/:pid/ux-scorecard[?run=<id>]
  */
@@ -19,7 +21,9 @@ import {
   crossCuttingCauses,
   deltaLabel,
   reportForCause,
+  runDetailWithoutPlatform,
   runMean,
+  runPlatformLabel,
   scoreTone,
   UX_DIMENSION_LABEL,
   UX_DIMENSIONS,
@@ -27,9 +31,22 @@ import {
   type UxScorecardRow,
 } from '../../lib/uxScorecard'
 
-const SEVERITY_TONE = { high: 'dangerSubtle', medium: 'warnSubtle', low: 'infoSubtle' } as const
+const SEVERITY_TONE = { high: 'danger', medium: 'warn', low: 'info' } as const
 /** Viewports offered for the next run: desktop first (console apps), a laptop, a phone. */
 const VIEWPORTS = ['1440x900', '1280x800', '390x844'] as const
+
+/** A native run's platform as a small phone glyph and its words; a web run shows nothing. */
+function PlatformBadge({ label }: { label: string }) {
+  return (
+    <Badge tone="neutral" className="gap-1" title={`Screens captured from the ${label} app, not a browser`}>
+      <svg viewBox="0 0 12 12" width={11} height={11} fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" aria-hidden="true">
+        <rect x="3.4" y="0.8" width="5.2" height="10.4" rx="1.2" />
+        <path d="M5.3 9.6H6.7" />
+      </svg>
+      {label}
+    </Badge>
+  )
+}
 
 /** The viewport the next `mushi-ux scorecard` run of this app uses (project setting). */
 function ViewportSetting({ projectId, value, onSaved }: { projectId: string; value: string; onSaved: () => void }) {
@@ -76,10 +93,13 @@ export function UxScorecardView({ projectId, runId, onPickRun }: { projectId: st
       <EmptyState
         title="No scorecard yet"
         description={`Score every page of this app on your machine, with your signed-in browser profile: mushi-ux scorecard --url <your app> --profile-dir <cached profile> --sync. Pages are scored at ${d?.viewport ?? '1440x900'}; add --file to file the top root causes as bugs.`}
+        hints={['A phone app: take its screenshots (Maestro, adb or the iOS simulator), then upload them with mushi-ux upload <dir> --platform android (or ios).']}
       />
     )
   }
   const mean = runMean(d)
+  const platformLabel = runPlatformLabel(d.run)
+  const detail = runDetailWithoutPlatform(d.run)
   const cross = crossCuttingCauses(d.causes)
   const worst = d.rows.filter((r) => r.overall <= 4).length
 
@@ -96,15 +116,17 @@ export function UxScorecardView({ projectId, runId, onPickRun }: { projectId: st
             {d.runs.map((r) => (
               <option key={r.local_run_id} value={r.local_run_id}>
                 {formatRelative(r.started_at)} · {r.counts?.scored ?? 0} pages{r.counts?.mean != null ? ` · ${r.counts.mean}/10` : ''}
+                {runPlatformLabel(r) ? ` · ${runPlatformLabel(r)}` : ''}
               </option>
             ))}
           </select>
         </label>
-        <span>{d.run.detail ?? `viewport ${d.viewport}`}</span>
+        {platformLabel && <PlatformBadge label={platformLabel} />}
+        <span>{detail ?? `viewport ${d.viewport}`}</span>
         <ViewportSetting projectId={projectId} value={d.viewport} onSaved={q.reload} />
         {d.run.model && <span>scored by {d.run.model}</span>}
         {d.rubricVersion && <span title="Trends compare runs of the same rubric version only">rubric {d.rubricVersion}</span>}
-        {d.run.status !== 'done' && <Badge tone={d.run.status === 'failed' ? 'dangerSubtle' : 'infoSubtle'}>{d.run.status === 'failed' ? 'Failed' : 'Running'}</Badge>}
+        {d.run.status !== 'done' && <Badge tone={d.run.status === 'failed' ? 'danger' : 'info'}>{d.run.status === 'failed' ? 'Failed' : 'Running'}</Badge>}
       </div>
       {d.run.error && <p className="text-xs text-danger">{d.run.error}</p>}
 
@@ -127,8 +149,8 @@ export function UxScorecardView({ projectId, runId, onPickRun }: { projectId: st
                 <li key={c.patternKey} className="rounded-md border border-edge-subtle px-3 py-2 text-xs">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <Badge tone={SEVERITY_TONE[c.severity]}>{c.severity}</Badge>
-                    <Badge tone="infoSubtle">{UX_DIMENSION_LABEL[c.dimension]}</Badge>
-                    {c.kind === 'contradiction' && <Badge tone="warnSubtle">Two views disagree</Badge>}
+                    <Badge tone="info">{UX_DIMENSION_LABEL[c.dimension]}</Badge>
+                    {c.kind === 'contradiction' && <Badge tone="warn">Two views disagree</Badge>}
                     <span className="font-medium text-fg">{c.title}</span>
                     {report ? (
                       <Link className="ml-auto text-brand underline underline-offset-2" to={`/reports/${report.id}`}>

@@ -88,7 +88,7 @@ export interface FixAttempt {
   retryable?: boolean;
   /** Set on the latest attempt when it failed on a rejected key. keyHealthy null = not checked yet. */
   credential_block?: { provider: string; keyHealthy: boolean | null } | null;
-  /** Latest completed Opus review verdict of this PR (GET /v1/admin/fixes, ADR 0030); null when not reviewed. */
+  /** Latest completed AI review verdict of this PR (GET /v1/admin/fixes, ADR 0030); null when not reviewed. */
   review_verdict?: 'merge' | 'fix_first' | 'hold' | null;
   /** The commit that verdict is about; a different head means the verdict is stale. */
   review_head_sha?: string | null;
@@ -166,15 +166,15 @@ export const DISPATCH_STATUS_LABEL: Record<DispatchJob['status'], string> = {
 };
 
 const CHECK_RUN_TONE: Record<string, string> = {
-  success: CHIP_TONE.okSubtle,
-  failure: CHIP_TONE.dangerSubtle,
+  success: CHIP_TONE.ok,
+  failure: CHIP_TONE.danger,
   cancelled: 'bg-surface-overlay text-fg-muted',
-  timed_out: CHIP_TONE.warnSubtle,
-  action_required: CHIP_TONE.warnSubtle,
+  timed_out: CHIP_TONE.warn,
+  action_required: CHIP_TONE.warn,
   neutral: 'bg-surface-overlay text-fg-muted',
-  in_progress: CHIP_TONE.infoSubtle,
-  queued: CHIP_TONE.infoSubtle,
-  pending: CHIP_TONE.infoSubtle,
+  in_progress: CHIP_TONE.info,
+  queued: CHIP_TONE.info,
+  pending: CHIP_TONE.info,
 };
 
 /**
@@ -184,7 +184,7 @@ const CHECK_RUN_TONE: Record<string, string> = {
 export function ciBadge(fix: FixAttempt): { label: string; className: string } | null {
   if (fix.ci_infra?.infra) {
     // ADR 0033: the machine stopped or never came; the code was not tested.
-    return { label: readFixCi(fix).label, className: CHIP_TONE.warnSubtle };
+    return { label: readFixCi(fix).label, className: CHIP_TONE.warn };
   }
   const conclusion = fix.check_run_conclusion?.toLowerCase();
   const status = fix.check_run_status?.toLowerCase();

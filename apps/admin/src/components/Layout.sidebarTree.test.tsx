@@ -6,7 +6,7 @@
  * FILE: apps/admin/src/components/Layout.sidebarTree.test.tsx
  * PURPOSE: The rendered sidebar shows where you are (owner, 2026-10-27:
  *          "some of the pages and subpages are not showing on the sidebar"):
- *          Pipeline is listed, a core page's sub-pages open under it, a page
+ *          every account sees the same five pages (ADR 0069), a pinned page's sub-pages open under it, a page
  *          under More pages opens that list, and the display settings sit in
  *          the account menu, not in the sidebar footer.
  */
@@ -16,20 +16,24 @@ import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type * as UseNavCountsModule from '../lib/useNavCounts'
+
 const state = vi.hoisted(() => ({
-  // The full sidebar is the operator's (navRegistry coreNavPathsFor); a builder test sets false.
+  // The owner's account; a builder test sets false. Both see the same five pages (ADR 0069).
   isOperator: true,
   collapsed: false,
   enabledLabs: new Set<string>(),
   sliceCalls: [] as Array<readonly string[] | null | undefined>,
+  // Loaded nav counts for a test that needs badges; null = still loading.
+  counts: null as Record<string, unknown> | null,
 }))
 
-vi.mock('../lib/useNavCounts', () => ({
+vi.mock('../lib/useNavCounts', async (importOriginal) => ({
+  ...(await importOriginal<typeof UseNavCountsModule>()),
   useNavCounts: (opts: { live?: boolean; slices?: readonly string[] | null } = {}) => {
     if (opts.live) state.sliceCalls.push(opts.slices)
-    return { ready: false, slices: {} }
+    return state.counts ?? { ready: false, slices: {} }
   },
-  toneForBacklog: () => 'warn',
 }))
 
 vi.mock('../lib/labs', async () => {
@@ -108,6 +112,7 @@ beforeEach(() => {
   state.collapsed = false
   state.enabledLabs = new Set()
   state.sliceCalls = []
+  state.counts = null
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   container = document.createElement('div')
   document.body.appendChild(container)
@@ -137,13 +142,14 @@ function current(): string[] {
 }
 
 describe('the sidebar shows where you are', () => {
-  it('lists Pipeline and highlights it on /pipeline', () => {
+  it('lists Pipeline under More pages and highlights it on /pipeline', () => {
     renderAt('/pipeline')
-    expect(nav().querySelector('a[href="/pipeline"]')).not.toBeNull()
+    expect(nav().querySelector('[data-testid="nav-more-pages"] a[href="/pipeline"]')).not.toBeNull()
     expect(current()).toEqual(['/pipeline'])
   })
 
-  it("opens a core page's sub-pages under it and highlights the one you are on", () => {
+  it("opens a pinned page's sub-pages under it and highlights the one you are on", () => {
+    state.enabledLabs = new Set(['checks'])
     renderAt('/qa-coverage')
     const children = nav().querySelector('[data-testid="nav-children"]')
     expect(children).not.toBeNull()
@@ -205,6 +211,7 @@ describe('the icon rail shows where you are too', () => {
 
   it('shows the sub-page you are on and a More pages button', () => {
     state.collapsed = true
+    state.enabledLabs = new Set(['checks'])
     renderAt('/qa-coverage')
     expect(rail().querySelector('a[href="/qa-coverage"]')).not.toBeNull()
     expect(rail().querySelector('a[href="/judge"]')).toBeNull()
@@ -268,15 +275,15 @@ describe('the brand mark links home', () => {
  * saw 21 More pages including SQL query, Processing jobs and Agent skills.
  */
 describe('a builder gets the short sidebar', () => {
-  it('lists Home, Bugs, Fixes, Pipeline, Connect and Settings as the pages, the rest under More pages', () => {
+  it('lists Home, Bugs, Fixes, Connect and Settings as the pages, the rest under More pages', () => {
     state.isOperator = false
     renderAt('/credits')
-    for (const p of ['/dashboard', '/reports', '/fixes', '/pipeline', '/connect', '/settings']) {
+    for (const p of ['/dashboard', '/reports', '/fixes', '/connect', '/settings']) {
       expect(nav().querySelector(`a[href="${p}"]`), p).not.toBeNull()
     }
     const more = nav().querySelector('[data-testid="nav-more-pages"]')!
-    // Team, Apps and Checks moved under More pages for a builder.
-    for (const p of ['/team', '/checks']) {
+    // Team, Apps, Checks, Pipeline and Journeys are under More pages for a builder (ADR 0069).
+    for (const p of ['/team', '/checks', '/pipeline', '/journeys']) {
       const links = [...nav().querySelectorAll(`a[href="${p}"]`)]
       expect(links.length, p).toBeGreaterThan(0)
       expect(links.every((a) => more.contains(a)), p).toBe(true)
@@ -284,5 +291,122 @@ describe('a builder gets the short sidebar', () => {
     for (const op of ['/queue', '/query', '/skills', '/judge', '/prompt-lab']) {
       expect(nav().querySelector(`a[href="${op}"]`), op).toBeNull()
     }
+  })
+})
+
+/**
+ * ADR 0069 (owner, 2026-11-24): "Builder view by default: you see what
+ * customers see; operator pages one click away."
+ */
+describe('the owner gets the same five pages as a builder', () => {
+  it('lists only the five as pages, with Apps, Integrations, Checks, Team, Pipeline and Journeys under More pages', () => {
+    renderAt('/credits')
+    // More pages also sits in the core section; only the pages above it count.
+    const core = [...nav().querySelectorAll('#nav-section-core a[href]')]
+      .filter((a) => !a.closest('#nav-more-pages'))
+      .map((a) => a.getAttribute('href'))
+    expect(core).toEqual(['/dashboard', '/reports', '/fixes', '/connect', '/settings'])
+    expect(nav().querySelector('#nav-section-labs')).toBeNull()
+    const more = nav().querySelector('[data-testid="nav-more-pages"]')!
+    for (const p of ['/portfolio', '/integrations/config', '/checks', '/team', '/pipeline', '/journeys']) {
+      expect(more.querySelector(`a[href="${p}"]`), p).not.toBeNull()
+    }
+  })
+})
+
+/**
+ * A check page while Checks is not pinned (ADR 0069 follow-up). Until
+ * 2026-11-28 only "Checks" lit up and the page itself had no row anywhere
+ * (owner: "some pages are not displayed on the side bar"). Now its row sits
+ * under Checks in More pages, and that row is the one marked current.
+ */
+describe('a sub-page whose parent is under More pages', () => {
+  for (const isOperator of [false, true]) {
+    it(`opens More pages, lists the sub-page under its page and marks it (${isOperator ? 'operator' : 'builder'})`, () => {
+      state.isOperator = isOperator
+      renderAt('/qa-coverage')
+      const more = nav().querySelector('[data-testid="nav-more-pages"]')!
+      expect(more).not.toBeNull()
+      expect(current()).toEqual(['/qa-coverage'])
+      const kids = more.querySelector('[data-testid="nav-more-children"]')!
+      expect(kids.querySelector('a[href="/qa-coverage"][aria-current="page"]')).not.toBeNull()
+      expect(more.querySelector('[data-testid="nav-more-children-toggle"]')!.getAttribute('aria-expanded')).toBe('true')
+      // The core-page sub-list is for a parent that is in the sidebar.
+      expect(nav().querySelector('[data-testid="nav-children"]')).toBeNull()
+    })
+  }
+
+  it('lists CI runners under Checks for the operator, under its group heading', () => {
+    renderAt('/ci')
+    const kids = nav().querySelector('[data-testid="nav-more-children"]')!
+    expect(kids.textContent).toContain('Builds & tests (CI)')
+    expect(kids.querySelector('a[href="/ci"][aria-current="page"]')).not.toBeNull()
+    expect(current()).toEqual(['/ci'])
+  })
+
+  it('keeps sub-pages folded on other pages until you open them', () => {
+    renderAt('/credits')
+    const more = nav().querySelector('[data-testid="nav-more-pages"]')!
+    expect(more.querySelector('[data-testid="nav-more-children"]')).toBeNull()
+    const toggle = [...more.querySelectorAll('[data-testid="nav-more-children-toggle"]')].find((b) =>
+      b.getAttribute('aria-label')?.endsWith('under Checks'),
+    ) as HTMLButtonElement
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    act(() => toggle.click())
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    expect(more.querySelector('[data-testid="nav-more-children"] a[href="/qa-coverage"]')).not.toBeNull()
+  })
+
+  it('lists Manage apps under Apps', () => {
+    renderAt('/projects')
+    const kids = nav().querySelector('[data-testid="nav-more-children"]')!
+    expect(kids.querySelector('a[href="/projects"][aria-current="page"]')).not.toBeNull()
+  })
+
+  it('shows the sub-page itself in the icon rail', () => {
+    state.collapsed = true
+    renderAt('/qa-coverage')
+    const rail = container!.querySelector('aside nav[aria-label="Main navigation"]') as HTMLElement
+    expect(rail.querySelector('a[href="/qa-coverage"][aria-current="page"]')).not.toBeNull()
+  })
+})
+
+const ZERO_COUNTS = { untriagedBacklog: 0, untriagedAutomated: 0, fixesInFlight: 0, fixesFailed: 0, fixesRetryable: 0, prsOpen: 0, urgentOpenReports: 0, regressedActions: 0, inboxOpenActions: 0, notificationsUnread: 0, queueFailed: 0, healthIssues: 0, flaggedDevices: 0, feedbackWithReply: 0, judgeDisagreements: 0, projectCount: 0, projectsNeedingAttention: 0, neverIngestedCount: 0, staleKeyCount: 0, memberCount: null, pendingInvites: 0, membersInactiveCount: 0, membersAtSeatCap: false, membersExpiringInvites: 0, superAdminSignups7d: null, superAdminChurn30d: null, slices: {}, ready: true }
+
+describe('a pinned page with sub-pages (Checks as a Lab)', () => {
+  it('keeps its sub-pages one click away on any page, open while you are in that family', () => {
+    state.enabledLabs = new Set(['checks'])
+    renderAt('/credits')
+    const toggle = nav().querySelector('[data-testid="nav-children-toggle"]') as HTMLButtonElement
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(nav().querySelector('[data-testid="nav-children"]')).toBeNull()
+    act(() => toggle.click())
+    expect(nav().querySelector('[data-testid="nav-children"] a[href="/qa-coverage"]')).not.toBeNull()
+  })
+
+  it('opens by itself on one of its sub-pages and marks that row', () => {
+    state.enabledLabs = new Set(['checks'])
+    renderAt('/qa-coverage')
+    const kids = nav().querySelector('[data-testid="nav-children"]')!
+    expect(kids.querySelector('a[href="/qa-coverage"][aria-current="page"]')).not.toBeNull()
+    expect(current()).toEqual(['/qa-coverage'])
+  })
+})
+
+describe('a closed More pages still says when something in it needs you', () => {
+  it('shows one dot naming the pages, and drops it once the list is open', () => {
+    state.counts = { ...ZERO_COUNTS, inboxOpenActions: 3, notificationsUnread: 400 }
+    renderAt('/dashboard')
+    const dot = nav().querySelector('[data-testid="nav-more-attention"]')!
+    expect(dot.getAttribute('aria-label')).toBe('Needs you under More pages: To-do')
+    const toggle = [...nav().querySelectorAll('button')].find((b) => b.textContent === 'More pages') as HTMLButtonElement
+    act(() => toggle.click())
+    expect(nav().querySelector('[data-testid="nav-more-attention"]')).toBeNull()
+  })
+
+  it('shows nothing when nothing under it needs you', () => {
+    state.counts = { ...ZERO_COUNTS, notificationsUnread: 400 }
+    renderAt('/dashboard')
+    expect(nav().querySelector('[data-testid="nav-more-attention"]')).toBeNull()
   })
 })

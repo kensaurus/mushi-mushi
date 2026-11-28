@@ -1,12 +1,12 @@
 /**
  * Rule: `mushi-mushi/no-redundant-border-on-chip-tone`
  *
- * CHIP_TONE.*Subtle / CHIP_TONE.* recipes already include a single
- * `border border-<tone>/<opacity>`. Appending another `border` or
- * `border-<tone>/<opacity>` produces duplicate/contradictory Tailwind classes.
+ * CHIP_TONE.* recipes already carry their edge: `inset-ring
+ * inset-ring-<tone>-edge` (2026-11-27). Appending `border`, `ring-1` or
+ * `border-<tone>/<opacity>` draws a second, contradictory edge.
  *
- * Prefer the bare CHIP_TONE constant. If you need a stronger border,
- * use a non-Subtle tone or a dedicated recipe (SELECTED_TONE).
+ * Prefer the bare CHIP_TONE constant (or `Badge tone=…`). For a selected
+ * chip use SELECTED_TONE.
  *
  * Allowlist: `// mushi-mushi-allowlist: <reason>` on the preceding line.
  */
@@ -15,7 +15,7 @@ import type { Rule } from 'eslint'
 import type { Node, Literal, TemplateLiteral } from 'estree'
 
 const CHIP_TONE_IDENT = /CHIP_TONE\.\w+/
-const REDUNDANT_BORDER = /\bborder(?:\s+border-(?:ok|warn|danger|info|accent|brand)\/\d+|-?(?:ok|warn|danger|info|accent|brand)\/\d+)/
+const REDUNDANT_BORDER = /(?:^|\s)(?:border|ring-1|ring|inset-ring(?:-\d)?)(?=\s|$)|(?:^|\s)border-?(?:ok|warn|danger|info|accent|brand)\/\d+/
 
 function extractStrings(node: Node): string[] {
   if (node.type === 'Literal' && typeof (node as Literal).value === 'string') {
@@ -72,7 +72,7 @@ const rule: Rule.RuleModule = {
     },
     messages: {
       redundantBorder:
-        'CHIP_TONE recipes already include a border — drop the appended border class (or use SELECTED_TONE / a non-Subtle tone).',
+        'CHIP_TONE recipes already include their inset ring edge — drop the appended border/ring class (or use SELECTED_TONE).',
     },
     schema: [],
   },
@@ -89,7 +89,7 @@ const rule: Rule.RuleModule = {
       if (REDUNDANT_BORDER.test(joined) && /CHIP_TONE/.test(context.sourceCode.getText(node))) {
         // Require both CHIP_TONE reference AND a border fragment in the string parts
         // that is outside the recipe itself (i.e. in a literal sibling)
-        const literalParts = strings.filter((s) => /\bborder\b/.test(s))
+        const literalParts = strings.filter((s) => REDUNDANT_BORDER.test(s))
         if (literalParts.length > 0) {
           context.report({ node, messageId: 'redundantBorder' })
         }

@@ -32,6 +32,7 @@ vi.mock('../../lib/toast', () => ({ useToast: () => toast }))
 import { ReportTriageBar } from './ReportTriageBar'
 import { useConfirmedDispatch } from './useConfirmedDispatch'
 import type { PreflightState } from '../../lib/useDispatchPreflight'
+import type { DispatchState } from '../../lib/dispatchFix'
 
 const FRONTEND: LinkedRepo = { id: 'repo-front', repo_url: 'https://github.com/acme/solo-boss-cloud', default_branch: 'main', is_primary: true }
 const BACKEND: LinkedRepo = { id: 'repo-back', repo_url: 'https://github.com/acme/solo-boss-cloud_backend', default_branch: 'develop', is_primary: false }
@@ -73,6 +74,8 @@ function Harness(props: {
   report?: ReportDetail
   preflight?: PreflightState
   hasCodeLocation?: boolean
+  showDispatch?: boolean
+  dispatchState?: DispatchState
 }) {
   const report = props.report ?? REPORT
   const confirmed = useConfirmedDispatch({
@@ -90,12 +93,13 @@ function Harness(props: {
       onTriage: vi.fn(async () => {}),
       saving: false,
       savedAt: null,
-      dispatchState: { status: 'idle' },
+      dispatchState: props.dispatchState ?? { status: 'idle' },
       onRequestDispatch: confirmed.request,
       dispatchBlock: confirmed.block,
       isDispatchBusy: false,
       repoChoice: props.repoChoice,
       hasCodeLocation: props.hasCodeLocation,
+      showDispatch: props.showDispatch,
     }),
     confirmed.dialog,
   )
@@ -104,7 +108,7 @@ function Harness(props: {
 async function render(
   repoChoice: DispatchTargetRepo,
   onDispatch = vi.fn(),
-  extra: { report?: ReportDetail; preflight?: PreflightState; hasCodeLocation?: boolean } = {},
+  extra: { report?: ReportDetail; preflight?: PreflightState; hasCodeLocation?: boolean; showDispatch?: boolean; dispatchState?: DispatchState } = {},
 ): Promise<void> {
   await act(async () => {
     root.render(createElement(Harness, { repoChoice, onDispatch, ...extra }))
@@ -174,6 +178,49 @@ describe('ReportTriageBar dispatch gate (#19)', () => {
     expect(btn?.disabled).toBe(true)
     expect(btn?.title).toBe('Set up first: Autofix enabled.')
     expect(onDispatch).not.toHaveBeenCalled()
+  })
+
+  // A new user's first report: a disabled button and a tooltip only on hover (feedback 2026-11-22).
+  it('says what to set up under the button, with links and a count, and keeps the hover text reachable', async () => {
+    const check = (key: string, label: string, ready: boolean, fixHref: string) => ({ key, label, ready, hint: '', fixHref })
+    const checks = [
+      check('github', 'GitHub repo connected', false, '/integrations/config#platform-card-github'),
+      check('codebase', 'Codebase indexed', false, '/integrations/config#integrations-codebase'),
+      check('agent', 'AI key for writing fixes', true, '/settings/keys'),
+      check('autofix', 'Autofix enabled', false, '/integrations/config#integrations-codebase'),
+    ]
+    await render(choice([FRONTEND], 'repo-front'), vi.fn(), {
+      preflight: {
+        loading: false,
+        ready: false,
+        checks,
+        failing: checks.filter((c) => !c.ready),
+        error: null,
+        repoUrl: null,
+        baseBranch: null,
+        reload: () => {},
+      } as unknown as PreflightState,
+    })
+    const btn = buttonByText('Dispatch fix')
+    expect(btn?.disabled).toBe(true)
+    const line = container.querySelector('[data-testid="report-dispatch-setup"]')
+    expect(line?.textContent).toBe('To dispatch a fix: Connect GitHub, · Index your code, · Turn on Autofix (1 of 4 done)')
+    expect(Array.from(line!.querySelectorAll('a')).map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
+      ['Connect GitHub', '/integrations/config#platform-card-github'],
+      ['Index your code', '/integrations/config#integrations-codebase'],
+      ['Turn on Autofix', '/integrations/config#integrations-codebase'],
+    ])
+    expect(btn?.getAttribute('aria-describedby')).toBe(line?.id)
+    // The disabled Btn takes no pointer events; its wrapper carries the hover text.
+    expect(container.querySelector('[data-testid="report-dispatch-wrap"]')?.getAttribute('title')).toBe(
+      'Set up first: GitHub repo connected, Codebase indexed, Autofix enabled.',
+    )
+  })
+
+  it('shows no setup line when the setup is done', async () => {
+    await render(choice([FRONTEND], 'repo-front'))
+    expect(container.querySelector('[data-testid="report-dispatch-setup"]')).toBeNull()
+    expect(container.querySelector('[data-testid="report-dispatch-wrap"]')?.getAttribute('title')).toBeNull()
   })
 
   it('cancel in the confirm sends nothing', async () => {
@@ -347,11 +394,31 @@ describe('ReportTriageBar with no code location', () => {
     expect(onDispatch).toHaveBeenCalledTimes(1)
   })
 
-  it('with a code location, "Dispatch fix" stays the primary and no reason shows', async () => {
+  // ADR 0069: Copy fix prompt (in the fix card) is the page's one primary; the bar stays secondary.
+  it('with a code location, "Dispatch fix" is a secondary button and no reason shows', async () => {
     await render(choice([FRONTEND], 'repo-front'), vi.fn(), { hasCodeLocation: true })
-    expect(isPrimary(buttonByText('Dispatch fix'))).toBe(true)
+    expect(buttonByText('Dispatch fix')).toBeDefined()
+    expect(isPrimary(buttonByText('Dispatch fix'))).toBe(false)
     expect(isPrimary(buttonByText('Not a code bug'))).toBe(false)
     expect(buttonByText('Dispatch anyway')).toBeUndefined()
     expect(container.textContent).not.toContain('no stack trace or file to change')
+  })
+})
+
+// ADR 0069: Autofix shows only once GitHub is connected; the page passes showDispatch.
+describe('ReportTriageBar before GitHub is connected', () => {
+  it('leaves Dispatch out and keeps the triage controls', async () => {
+    const onDispatch = vi.fn()
+    await render(choice([FRONTEND], 'repo-front'), onDispatch, { showDispatch: false })
+    expect(buttonByText('Dispatch fix')).toBeUndefined()
+    expect(container.querySelector('[data-testid="report-dispatch-wrap"]')).toBeNull()
+    expect(buttonByText('Not a code bug')).toBeDefined()
+    expect(Array.from(container.querySelectorAll('label')).some((l) => l.textContent?.startsWith('Status'))).toBe(true)
+    expect(onDispatch).not.toHaveBeenCalled()
+  })
+
+  it('still shows a dispatch that is already under way', async () => {
+    await render(choice([FRONTEND], 'repo-front'), vi.fn(), { showDispatch: false, dispatchState: { status: 'running' } as DispatchState })
+    expect(buttonByText('Agent running…')).toBeDefined()
   })
 })

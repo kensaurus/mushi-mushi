@@ -242,7 +242,7 @@ function utcDay(iso: string): string {
 
 /**
  * Every spend-down run one key paid for in the last `days` days, joined to
- * its attempt (outcome, merged, model) and its Opus review (verdict, cost).
+ * its attempt (outcome, merged, model) and its AI review (verdict, cost).
  * Reads existing tables only; the rollup is spendDownScoreboard().
  */
 export async function keyScoreboardRuns(

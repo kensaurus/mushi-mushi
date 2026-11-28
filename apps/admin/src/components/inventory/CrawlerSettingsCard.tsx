@@ -3,7 +3,6 @@ import { Btn, Card, Badge, ErrorAlert } from '../ui'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
 import { usePageData } from '../../lib/usePageData'
-import { CHIP_TONE } from '../../lib/chipTone'
 
 /**
  * Crawler & synthetic-monitor settings card.
@@ -171,7 +170,7 @@ export function CrawlerSettingsCard({ projectId }: Props) {
           <SettingRow label="Auth">
             {data?.crawler_auth ? (
               <span className="flex items-center gap-2">
-                <Badge className={`${CHIP_TONE.infoSubtle} font-mono`}>
+                <Badge tone="info" className="font-mono">
                   {data.crawler_auth.type}
                 </Badge>
                 {data.crawler_auth.type === 'cookie' && data.crawler_auth.config.name && (
@@ -190,7 +189,7 @@ export function CrawlerSettingsCard({ projectId }: Props) {
           </SettingRow>
           <SettingRow label="Synthetic monitor">
             {data?.synthetic_monitor_enabled ? (
-              <Badge className={`${CHIP_TONE.okSubtle} font-mono`}>
+              <Badge tone="ok" className="font-mono">
                 enabled · every {data.synthetic_monitor_cadence_minutes} min
               </Badge>
             ) : (
@@ -208,7 +207,7 @@ export function CrawlerSettingsCard({ projectId }: Props) {
           </SettingRow>
           <SettingRow label="Allow mutations">
             {data?.synthetic_monitor_allow_mutations ? (
-              <Badge className={`${CHIP_TONE.warnSubtle} font-mono`}>
+              <Badge tone="warn" className="font-mono">
                 mutations enabled
               </Badge>
             ) : (

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 import { Readable } from 'node:stream'
 import { describe, expect, it } from 'vitest'
-import { literalPattern, parseStdinRequest, readStdin, syncsToConsole } from './fresh-eyes-request.js'
+import { literalPattern, parseStdinRequest, readStdin, stepsFor, syncsToConsole } from './fresh-eyes-request.js'
 import { runFreshEyes } from './fresh-eyes.js'
 
 const req = (over: Record<string, unknown> = {}) =>
@@ -9,7 +9,21 @@ const req = (over: Record<string, unknown> = {}) =>
 
 describe('a queued run on stdin (ADR 0053 amendment)', () => {
   it('reads the run the console queued', () => {
-    expect(parseStdinRequest(req())).toEqual({ runId: '20261028-090000-ab12', url: 'https://glot.it/', goal: 'sign up and pick a language', sessions: 3, successText: null, dryRun: true, accounts: [] })
+    expect(parseStdinRequest(req())).toEqual({ runId: '20261028-090000-ab12', url: 'https://glot.it/', goal: 'sign up and pick a language', sessions: 3, successText: null, dryRun: true, accounts: [], persona: null })
+  })
+
+  it('reads the persona the console picked (ADR 0073), and refuses a malformed one', () => {
+    const persona = { name: 'Japanese visitor', brief: 'You are "Japanese visitor". You are on a phone.', locale: 'ja-JP', device: 'mobile', needs: ['reduced_motion', 'reduced_motion'], steps: 30 }
+    expect(parseStdinRequest(req({ persona })).persona).toEqual({ ...persona, needs: ['reduced_motion'] })
+    for (const bad of [{ ...persona, locale: 'Japanese' }, { ...persona, device: 'watch' }, { ...persona, steps: 200 }, { ...persona, needs: ['x-ray'] }, { ...persona, brief: 'ab' }]) {
+      expect(() => parseStdinRequest(req({ persona: bad }))).toThrow(/persona/)
+    }
+  })
+
+  it('a persona sets the step cap unless --steps does', () => {
+    expect(stepsFor(undefined, false, 12)).toBe(12)
+    expect(stepsFor('40', false, 12)).toBe(40)
+    expect(stepsFor(undefined, true, null)).toBe(60)
   })
 
   it('refuses anything that is not a run', () => {

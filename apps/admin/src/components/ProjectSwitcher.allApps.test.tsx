@@ -47,7 +47,7 @@ vi.mock('./ProjectSnapshotMeta', () => ({ ProjectSnapshotMeta: () => null }))
 
 import { ProjectSwitcher } from './ProjectSwitcher'
 import { ACTIVE_PROJECT_STORAGE_KEY } from '../lib/activeProject'
-import { getStoredProjectScopeMode, requestOpenProjectSwitcher, setStoredProjectScopeMode } from '../lib/projectScope'
+import { adoptLinkedAppScope, getStoredProjectScopeMode, requestOpenProjectSwitcher, setStoredProjectScopeMode } from '../lib/projectScope'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -115,7 +115,7 @@ describe('ProjectSwitcher — All apps', () => {
     await click(chip())
     await click(allRow()!)
     expect(chip().textContent).toContain('All apps')
-    expect(chip().getAttribute('aria-label')).toBe('Project: All apps — switch project')
+    expect(chip().getAttribute('aria-label')).toBe('App: All apps — switch app')
     expect(params().get('apps')).toBe('all')
     expect(params().get('project')).toBe(PROJECT_A)
     expect(getStoredProjectScopeMode()).toBe('all')
@@ -147,6 +147,20 @@ describe('ProjectSwitcher — All apps', () => {
     expect(chip().textContent).toContain('All apps')
   })
 
+  it.each(['/pipeline', '/reports', '/dashboard', '/ci'])(
+    'a deep link %s?project=<id> opens that one app even when All apps was stored',
+    async (path) => {
+      setStoredProjectScopeMode('all')
+      // main.tsx runs this on the URL the console loads with.
+      expect(adoptLinkedAppScope(`?project=${PROJECT_B}`)).toBe(true)
+      await render(`${path}?project=${PROJECT_B}`)
+      expect(params().has('apps')).toBe(false)
+      expect(params().get('project')).toBe(PROJECT_B)
+      expect(chip().textContent).toContain('yen-yen')
+      expect(getStoredProjectScopeMode()).toBe('project')
+    },
+  )
+
   it('falls back to a real app when the stored one no longer exists, staying in All apps', async () => {
     window.localStorage.setItem(ACTIVE_PROJECT_STORAGE_KEY, GONE)
     setStoredProjectScopeMode('all')
@@ -169,9 +183,9 @@ describe('ProjectSwitcher — All apps', () => {
     setup.value = { loading: true, error: null, data: null, reload }
     await render('/reports?apps=all')
     expect(chip().textContent).toContain('All apps')
-    expect(chip().getAttribute('aria-label')).toBe('Project: All apps — switch project')
+    expect(chip().getAttribute('aria-label')).toBe('App: All apps — switch app')
     expect(chip().getAttribute('aria-busy')).toBeNull()
-    expect(host.textContent).not.toContain('Loading project')
+    expect(host.textContent).not.toContain('Loading app')
     await click(chip())
     expect(reload).toHaveBeenCalledOnce()
   })
@@ -179,7 +193,7 @@ describe('ProjectSwitcher — All apps', () => {
   it('keeps the loading chip for one app until the list arrives', async () => {
     setup.value = { loading: true, error: null, data: null, reload: vi.fn() }
     await render(`/reports?project=${PROJECT_A}`)
-    expect(host.querySelector('[aria-label="Loading project"]')).not.toBeNull()
+    expect(host.querySelector('[aria-label="Loading app"]')).not.toBeNull()
     expect(host.querySelector('[data-testid="project-switcher-chip"]')).toBeNull()
   })
 
@@ -187,7 +201,7 @@ describe('ProjectSwitcher — All apps', () => {
     await render(`/fixes?project=${PROJECT_B}&apps=all`)
     expect(chip().textContent).toContain('yen-yen')
     expect(chip().textContent).not.toContain('All apps')
-    expect(chip().getAttribute('aria-label')).toBe('Project: yen-yen — switch project')
+    expect(chip().getAttribute('aria-label')).toBe('App: yen-yen — switch app')
     expect(chip().getAttribute('title')).toContain('This page shows one app at a time: yen-yen')
     // The choice itself is untouched — it still applies on pages that combine.
     expect(params().get('apps')).toBe('all')

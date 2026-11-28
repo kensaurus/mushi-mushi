@@ -57,10 +57,10 @@ export interface HeatRow {
 }
 
 const STATE_CELL: Record<SignalTone, string> = {
-  danger: 'bg-danger-muted text-danger-foreground',
-  warn: 'bg-warn-muted text-warn-foreground',
-  ok: 'bg-ok-muted text-ok-foreground',
-  info: 'bg-info-muted text-info-foreground',
+  danger: 'bg-danger-muted text-danger-foreground', // mushi-mushi-allowlist: a heat cell's fill is the data
+  warn: 'bg-warn-muted text-warn-foreground', // mushi-mushi-allowlist: a heat cell's fill is the data
+  ok: 'bg-ok-muted text-ok-foreground', // mushi-mushi-allowlist: a heat cell's fill is the data
+  info: 'bg-info-muted text-info-foreground', // mushi-mushi-allowlist: a heat cell's fill is the data
   off: 'bg-surface-overlay text-fg-secondary',
 }
 

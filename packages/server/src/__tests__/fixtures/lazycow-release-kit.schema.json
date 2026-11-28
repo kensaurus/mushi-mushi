@@ -1,0 +1,177 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/kensaurus/lazycow-studio/blob/main/docs/product-kit.schema.json",
+  "title": "Release kit (lazycow.release-kit, version 1)",
+  "description": "What an app's release kit holds for Lazycow Studio's product videos (docs/product-kit.md): screenshots before and after a release, short screen recordings, changelog lines and brand tokens. Any tool may export one (Mushi's export_release_kit is one). The TypeScript type is src/release-kit.ts; py/studio/product.py validate_manifest is the check the studio runs. Unknown fields are ignored; a different major version is refused.",
+  "type": "object",
+  "required": ["schema", "version", "app"],
+  "anyOf": [
+    { "required": ["screens"], "properties": { "screens": { "minItems": 1 } } },
+    { "required": ["recordings"], "properties": { "recordings": { "minItems": 1 } } }
+  ],
+  "properties": {
+    "schema": { "const": "lazycow.release-kit" },
+    "version": { "const": 1, "description": "The major version. A change that breaks readers gets a new number." },
+    "app": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "tagline": { "type": "string", "maxLength": 90 },
+        "url": { "type": "string", "format": "uri", "pattern": "^https://", "description": "The app's site. Only its host is shown (in the browser frame)." },
+        "stores": { "type": "array", "items": { "enum": ["app-store", "google-play", "web"] }, "uniqueItems": true, "description": "Where people get it: named on the end card." }
+      }
+    },
+    "release": {
+      "type": "object",
+      "properties": {
+        "version": { "type": "string", "maxLength": 24, "examples": ["1.4.0"] },
+        "date": { "type": "string", "format": "date" },
+        "title": { "type": "string", "maxLength": 80 }
+      }
+    },
+    "brand": {
+      "type": "object",
+      "properties": {
+        "colors": {
+          "type": "object",
+          "properties": {
+            "background": { "$ref": "#/$defs/color" },
+            "text": { "$ref": "#/$defs/color" },
+            "primary": { "$ref": "#/$defs/color" },
+            "accent": { "$ref": "#/$defs/color" }
+          },
+          "description": "Text too close to the background (contrast under 4.5:1) is shown in white or near-black instead."
+        },
+        "font": {
+          "type": "object",
+          "properties": {
+            "family": { "type": "string", "pattern": "^[A-Za-z0-9 ]{1,60}$", "description": "Used when it is one of the studio's bundled faces (docs/product-kit.md › Fonts) and no file is sent." },
+            "file": { "$ref": "#/$defs/asset", "description": "woff2, woff, ttf or otf, at most 8 MB." }
+          }
+        },
+        "logo": { "$ref": "#/$defs/asset", "description": "PNG, JPEG or WebP (no SVG), at most 5 MB; shown square with round corners." },
+        "cta": { "type": "string", "maxLength": 40, "description": "The end card's call to action. Default: Get <app name>." }
+      }
+    },
+    "labels": {
+      "type": "object",
+      "description": "Words the video shows, for a kit in another language.",
+      "properties": {
+        "before": { "type": "string", "maxLength": 20, "default": "Before" },
+        "after": { "type": "string", "maxLength": 20, "default": "Now" },
+        "news": { "type": "string", "maxLength": 30, "default": "What's new" }
+      }
+    },
+    "screens": {
+      "type": "array",
+      "maxItems": 24,
+      "items": {
+        "type": "object",
+        "required": ["id", "viewport", "after"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "surface": { "type": "string", "maxLength": 40, "description": "The screen's name (Home, Search, Settings): shown above its caption; matches changelog lines and recordings." },
+          "viewport": { "$ref": "#/$defs/viewport" },
+          "before": { "$ref": "#/$defs/asset", "description": "The screen before the release (optional). PNG, JPEG or WebP." },
+          "after": { "$ref": "#/$defs/asset", "description": "The screen in this release. PNG, JPEG or WebP, at most 25 MB and 12000 px a side." },
+          "caption": { "type": "string", "maxLength": 120, "description": "Otherwise a changelog line for this surface, else the next unused one." },
+          "focus": {
+            "type": "object",
+            "description": "Where the camera drifts to, as a share of the picture (0-1). Default x 0.5, y 0.35.",
+            "properties": { "x": { "type": "number", "minimum": 0, "maximum": 1 }, "y": { "type": "number", "minimum": 0, "maximum": 1 } }
+          }
+        }
+      }
+    },
+    "recordings": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "required": ["id", "viewport", "file"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "surface": { "type": "string", "maxLength": 40 },
+          "viewport": { "$ref": "#/$defs/viewport" },
+          "file": { "$ref": "#/$defs/asset", "description": "MP4, MOV or WebM, at most 250 MB, 120 s and 4096 px a side. Its sound is dropped." },
+          "caption": { "type": "string", "maxLength": 120 },
+          "trim": {
+            "type": "object",
+            "properties": { "from": { "type": "number", "minimum": 0 }, "to": { "type": "number", "exclusiveMinimum": 0 } },
+            "description": "Seconds of the recording to use."
+          }
+        }
+      }
+    },
+    "changelog": {
+      "type": "array",
+      "maxItems": 30,
+      "items": {
+        "oneOf": [
+          { "type": "string", "maxLength": 140 },
+          { "type": "object", "required": ["text"], "properties": { "text": { "type": "string", "maxLength": 140 }, "surface": { "type": "string", "maxLength": 40 } } }
+        ]
+      },
+      "description": "One change per line, in plain words. A line with a surface captions that screen; the rest caption screens in order, and up to four left over make a What's new card (not in App Store previews)."
+    },
+    "expiresAt": { "type": "string", "format": "date-time", "description": "When the kit's signed links stop working." },
+    "source": { "type": "object", "description": "Who made the kit (ignored by the studio).", "properties": { "name": { "type": "string" }, "url": { "type": "string" } } }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,39}$", "description": "Unique across screens and recordings." },
+    "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+    "viewport": {
+      "type": "object",
+      "required": ["width", "height"],
+      "properties": {
+        "width": { "type": "integer", "minimum": 100, "maximum": 8000, "description": "CSS pixels (or the device's points)." },
+        "height": { "type": "integer", "minimum": 100, "maximum": 8000 },
+        "device": { "enum": ["phone", "tablet", "desktop"], "description": "Default: from the shape (tall = phone, wide and 960+ = desktop, else tablet)." },
+        "platform": { "enum": ["ios", "android", "web"], "description": "Picks the phone's camera cut-out (none for web)." }
+      }
+    },
+    "asset": {
+      "type": "object",
+      "required": ["url"],
+      "properties": {
+        "url": { "type": "string", "maxLength": 4000, "description": "https://… (absolute, or relative to the manifest's own link). A relative URL inherits nothing from the manifest link's query string, so a kit served from signed links must give each asset its own absolute signed URL. In a kit folder on the computer: a path inside that folder." },
+        "type": { "enum": ["image/png", "image/jpeg", "image/webp", "video/mp4", "video/webm", "video/quicktime", "font/woff2", "font/woff", "font/ttf", "font/otf"] },
+        "bytes": { "type": "integer", "minimum": 1, "description": "When given, the download must be exactly this size." },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "When given, the download must have this hash." }
+      }
+    }
+  },
+  "examples": [
+    {
+      "schema": "lazycow.release-kit",
+      "version": 1,
+      "app": { "name": "Quiet Notes", "tagline": "Notes that stay out of your way", "url": "https://quietnotes.example", "stores": ["app-store", "google-play"] },
+      "release": { "version": "1.4.0", "date": "2026-11-27", "title": "Faster search" },
+      "brand": {
+        "colors": { "background": "#0f1115", "text": "#f4f5f7", "primary": "#5b8cff", "accent": "#7cf0c5" },
+        "font": { "family": "DM Sans" },
+        "logo": { "url": "logo.png", "type": "image/png" },
+        "cta": "Try Quiet Notes"
+      },
+      "screens": [
+        { "id": "home", "surface": "Home", "viewport": { "width": 393, "height": 852, "device": "phone", "platform": "ios" },
+          "before": { "url": "home-before.png", "type": "image/png" }, "after": { "url": "home-after.png", "type": "image/png" } },
+        { "id": "search", "surface": "Search", "viewport": { "width": 393, "height": 852, "device": "phone", "platform": "ios" },
+          "after": { "url": "search-after.png", "type": "image/png" }, "focus": { "x": 0.5, "y": 0.2 } },
+        { "id": "web-home", "surface": "On the web", "viewport": { "width": 1440, "height": 900, "device": "desktop", "platform": "web" },
+          "after": { "url": "web-home.png", "type": "image/png" } }
+      ],
+      "recordings": [
+        { "id": "search-flow", "surface": "Search", "viewport": { "width": 393, "height": 852, "device": "phone" },
+          "file": { "url": "search.mp4", "type": "video/mp4" }, "caption": "Results as you type" }
+      ],
+      "changelog": [
+        { "text": "A calmer home screen", "surface": "Home" },
+        "Search finds notes in under a second",
+        "Dark mode follows your system"
+      ],
+      "expiresAt": "2026-12-04T00:00:00Z"
+    }
+  ]
+}

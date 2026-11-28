@@ -1,6 +1,6 @@
 {
   "name": "mushi-mushi",
-  "version": "1.38.0",
+  "version": "1.40.1",
   "license": "MIT",
   "description": "The one package: SDK and setup wizard for any app. One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code.",
   "bin": {
@@ -286,9 +286,9 @@
     "@types/node": "^22.20.0",
     "eslint": "^10.6.0",
     "eslint-plugin-mushi-mushi": "workspace:*",
-    "tsup": "^8.5.1",
+    "tsup": "^9.0.0",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.9"
+    "vitest": "^5.1.1"
   },
   "author": "Kenji Sakuramoto <kensaurus@gmail.com> (https://github.com/kensaurus)",
   "repository": {

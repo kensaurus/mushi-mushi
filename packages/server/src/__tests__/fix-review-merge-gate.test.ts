@@ -215,7 +215,7 @@ describe('POST /v1/admin/fixes/:id/merge — the review gate', () => {
     db = makeDb({ fix_attempts: [attempt()], fix_reviews: [review()] })
     const res = await call('POST', MERGE, { override: true, overrideReason: 'Checked by hand' })
     expect(res.status).toBe(200)
-    expect(res.json.data.review).toEqual({ state: 'hold', label: 'Opus review: hold', overridden: true })
+    expect(res.json.data.review).toEqual({ state: 'hold', label: 'AI review: hold', overridden: true })
     expect(mocks.merge.mock.calls[0][3]).toMatchObject({ sha: 'sha1' })
     const meta = mocks.audit.mock.calls.find((c) => c[3] === 'fix.merge')?.[6]
     expect(meta).toMatchObject({ review_state: 'hold', review_override: true, override_reason: 'Checked by hand', merged_head_sha: 'sha1' })
@@ -310,7 +310,7 @@ describe('GET /v1/admin/fixes/:id/timeline — carries the review', () => {
     expect(res.status).toBe(200)
     expect(res.json.data.review).toMatchObject({
       state: 'hold',
-      label: 'Opus review: hold',
+      label: 'AI review: hold',
       fixesReport: false,
       findings: [{ severity: 'blocker', file: 'src/a.ts' }],
     })

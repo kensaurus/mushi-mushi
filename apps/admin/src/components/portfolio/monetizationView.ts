@@ -86,17 +86,17 @@ export function appSummary(app: Pick<MonetizationAppView, 'rules' | 'findings'>,
   // the store's review are named as that; anything else to do keeps "to fix".
   const inReview = (f: MonetizationFinding) => f.ruleId === 'monetization_store_product_unready' && /\bis (IN_REVIEW|WAITING_FOR_REVIEW)\b/.test(f.message)
   if (serious > 0 && errors === 0 && app.findings.filter((f) => f.severity === 'warn').every(inReview)) {
-    return { text: `${serious} in review`, tone: 'warnSubtle' }
+    return { text: `${serious} in review`, tone: 'warn' }
   }
-  if (serious > 0) return { text: `${serious} to fix`, tone: errors > 0 ? 'dangerSubtle' : 'warnSubtle' }
-  if (app.rules.some((r) => r.state === 'error')) return { text: 'Could not check', tone: 'dangerSubtle' }
+  if (serious > 0) return { text: `${serious} to fix`, tone: errors > 0 ? 'danger' : 'warn' }
+  if (app.rules.some((r) => r.state === 'error')) return { text: 'Could not check', tone: 'danger' }
   if (app.rules.length === 0 || app.rules.some((r) => r.state === 'unknown')) return { text: app.findings.length ? `${app.findings.length} notes, partly checked` : 'Partly checked', tone: 'neutral' }
-  if (app.findings.length > 0) return { text: `${app.findings.length} notes`, tone: 'infoSubtle' }
+  if (app.findings.length > 0) return { text: `${app.findings.length} notes`, tone: 'info' }
   // A planned rule never ran: "Every check passed" would claim a check nobody made.
   const checked = app.rules.length
   const notRun = planned.filter((id) => !app.rules.some((r) => r.ruleId === id)).length
   if (notRun > 0) return { text: `${checked} of ${checked + notRun} checked`, tone: 'neutral' }
-  return { text: 'Every check passed', tone: 'okSubtle' }
+  return { text: 'Every check passed', tone: 'ok' }
 }
 
 const IOS_READY = new Set(['APPROVED', 'READY_TO_SUBMIT'])
@@ -104,9 +104,9 @@ const IOS_READY = new Set(['APPROVED', 'READY_TO_SUBMIT'])
 /** A product's store state as a chip: not read is neutral, never ready. */
 export function productState(p: ProductView): { text: string; tone: BadgeTone } {
   if (p.storeState === null) return { text: 'store not read', tone: 'neutral' }
-  if (p.storeState === 'NOT_IN_STORE') return { text: 'not in the store', tone: 'warnSubtle' }
+  if (p.storeState === 'NOT_IN_STORE') return { text: 'not in the store', tone: 'warn' }
   const ready = p.platform === 'iOS' ? IOS_READY.has(p.storeState) : p.storeState === 'ACTIVE'
-  return { text: p.storeState.toLowerCase().replace(/_/g, ' '), tone: ready ? 'okSubtle' : 'warnSubtle' }
+  return { text: p.storeState.toLowerCase().replace(/_/g, ' '), tone: ready ? 'ok' : 'warn' }
 }
 
 export const HEADLINE_METRICS: ReadonlyArray<{ id: string; label: string }> = [
@@ -157,11 +157,11 @@ export function productStatus(p: Pick<ProductView, 'platform' | 'storeState'>): 
 
 const SUMMARY_STATUS: Partial<Record<string, RunStatus>> = {
   // Amber for a warning, red for a failure, grey for "not (fully) checked".
-  warnSubtle: 'waiting',
-  dangerSubtle: 'failed',
+  warn: 'waiting',
+  danger: 'failed',
   neutral: 'idle',
-  infoSubtle: 'idle',
-  okSubtle: 'passed',
+  info: 'idle',
+  ok: 'passed',
 }
 
 /** The app row's mark: ✕ serious or could not check, ◷ N to fix (warnings), ○ partly checked or notes, ✓ every check passed. */

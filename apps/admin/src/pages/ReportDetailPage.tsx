@@ -7,10 +7,20 @@
  * recommended skill shows a truncated preview of that URL (full value in the
  * title and the copy button tooltip) beside a small copy button. Section
  * icons distinguish console logs from the two timelines.
+ *
+ * ADR 0069 (2026-11-24): a bug report has one primary action. Top to bottom:
+ * what broke (header), the likely cause (diagnosis card), then "Copy fix
+ * prompt" with the editor lanes beside it. The progress shows as one line
+ * (stages and the story folded under it), triage is a secondary row, and
+ * "Generate test" / "Send to my local worker" sit in a "More actions" fold.
+ * "Why Mushi Mushi thinks this" (the evidence graph) starts closed. Dispatch
+ * (Autofix) shows once GitHub is connected; before that, the collapsed
+ * "let Mushi Mushi dispatch the fix" card says how to turn it on.
  */
 import { roundLongDecimals } from '../lib/format'
 import { reportSourceKind } from '../lib/reportSourceKind'
 import { useEffect, useMemo, useState, useCallback } from 'react'
+import { buildDiagnosisGraph } from '../lib/reportDiagnosisGraph'
 import { useNow } from '../lib/useNow'
 import { useEntitlements } from '../lib/useEntitlements'
 import { useParams, useNavigate, useSearchParams as useReactSearchParams } from 'react-router-dom'
@@ -64,7 +74,7 @@ import { FixCiFeedback } from '../components/fixes/FixCiFeedback'
 import { ReportFixActions } from '../components/report-detail/ReportFixActions'
 import { ReportTriageBar } from '../components/report-detail/ReportTriageBar'
 import { ReportPdcaStory } from '../components/report-detail/ReportPdcaStory'
-import { ReportDiagnosisGraph } from '../components/report-detail/ReportDiagnosisGraph'
+import { DiagnosisVerdict, ReportDiagnosisGraph } from '../components/report-detail/ReportDiagnosisGraph'
 import { BeforeAfterCard } from '../components/report-detail/BeforeAfterCard'
 import { ReportBranchGraph } from '../components/report-detail/ReportBranchGraph'
 import { usePlatformIntegrations } from '../lib/usePlatformIntegrations'
@@ -88,10 +98,11 @@ import { UnifiedTimelineCard } from '../components/report-detail/UnifiedTimeline
 import { ReportPipelineStrip } from '../components/report-detail/ReportPipelineStrip'
 import { ReportRelatedFooter } from '../components/report-detail/ReportRelatedFooter'
 import { RegressionChain } from '../components/report-detail/RegressionChain'
-import { DiagnosisFixHero } from '../components/report-detail/DiagnosisFixHero'
+import { DiagnosisFixHero, Stage2AbsentNote } from '../components/report-detail/DiagnosisFixHero'
 import { GenerateTestButton } from '../components/report-detail/GenerateTestButton'
 import { SendToWorkerButton } from '../components/pipeline/SendToWorkerButton'
 import { SentryContextPanel } from '../components/report-detail/SentryContextPanel'
+import { sentryLastEventAt } from '../components/report-detail/sentryLastEvent'
 import { ReportReplayPlayer } from '../components/report-detail/ReportReplayPlayer'
 import { AgentTracePanel } from '../components/report-detail/AgentTracePanel'
 import { TraceWaterfall } from '../components/report-detail/TraceWaterfall'
@@ -116,6 +127,7 @@ import { PageLoadError } from '../components/PageLoadError'
 import { humanizeApiError } from '../lib/humanizeApiError'
 import { reportHasCodeLocation } from '../lib/reportCodeLocation'
 import { useConfirmedDispatch } from '../components/report-detail/useConfirmedDispatch'
+import { DispatchSetupLine } from '../components/report-detail/DispatchSetupLine'
 import { isReporterKeyHash, reportHasReporter } from '../components/report-detail/reporterPresence'
 
 // Same shape the API accepts (api/ids.ts isUuid): RFC 4122, version 1-5.
@@ -479,7 +491,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
   const { state: dispatchState, dispatch: dispatchFix } = useDispatchFix(report.id, report.project_id)
   // Every dispatch from this page (the triage bar and the recommendation's
   // retry) goes to the repo chosen in the triage bar's Repo select.
-  const repoChoice = useDispatchTargetRepo(report.project_id)
+  const repoChoice = useDispatchTargetRepo(report.project_id, report.sentry_release)
   const { dispatchTargetRepoId } = repoChoice
   const dispatch = useCallback(
     () => dispatchFix(dispatchTargetRepoId ? { targetRepoId: dispatchTargetRepoId } : undefined),
@@ -524,11 +536,26 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
   // request, "Not a code bug" leads and Dispatch is "Dispatch anyway" (BL-061).
   const hasCodeLocation = useMemo(() => reportHasCodeLocation(report), [report])
 
-  const recommendation = useMemo(
-    () =>
-      deriveRecommendation(report, dispatchState, commentCount, requestDispatch, nowMs, dispatchBlockState, hasCodeLocation, (patch) => void onTriage(patch)),
-    [report, dispatchState, commentCount, requestDispatch, nowMs, dispatchBlockState, hasCodeLocation, onTriage],
-  )
+  // Autofix opens a PR, so its Dispatch shows once GitHub is connected (ADR 0069). Hidden only
+  // when the preflight says so: a slow or failed preflight never hides it for good.
+  const githubConnected = preflight.checks.find((c) => c.key === 'github')?.ready !== false
+
+  const recommendation = useMemo(() => {
+    const rec = deriveRecommendation(report, dispatchState, commentCount, requestDispatch, nowMs, dispatchBlockState, hasCodeLocation, (patch) => void onTriage(patch))
+    if (githubConnected) return rec
+    // Before GitHub: drop the dispatch CTA and actions; the preflight card says how to get Autofix.
+    const ctaIsDispatch = rec.cta?.onClick === requestDispatch
+    return {
+      ...rec,
+      cta: ctaIsDispatch ? undefined : rec.cta,
+      setupSteps: ctaIsDispatch ? undefined : rec.setupSteps,
+      actions: rec.actions?.filter((a) => a.onClick !== requestDispatch),
+    }
+  }, [report, dispatchState, commentCount, requestDispatch, nowMs, dispatchBlockState, hasCodeLocation, onTriage, githubConnected])
+
+  // "Why Mushi Mushi thinks this": the fold's summary carries the verdict; the graph mounts when opened.
+  const diagnosisGraph = useMemo(() => buildDiagnosisGraph(report), [report])
+  const [whyOpen, setWhyOpen] = useState(false)
 
   // Bumped when a reply reaches the reporter so the Reporter view refetches
   // ("What the reporter sees" went stale until a page reload).
@@ -579,7 +606,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
           'Set status and severity to drive routing and notifications',
           'Dispatch a fix, or reply to the reporter directly',
         ]}
-        helpHowToUse="Use the Recommended action below for the fastest path. Otherwise set Status / Severity manually, dispatch a fix, push to your tracker, or reply in the triage thread."
+        helpHowToUse="Copy the fix prompt and paste it into your coding agent: that is the fastest path. Status, severity and the other controls sit in the triage row; Why Mushi Mushi thinks this and each step of the report open from their folds."
       />
 
       {isSampleReport(report.custom_metadata) && (
@@ -655,55 +682,13 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
           detailed classification + evidence sections stay below. */}
       <DiagnosisFixHero report={report} showInternals={showInternals} />
 
-      {/* Optional and below the answer (audit 2026-11-11): "Auto-fix is paused" sat above the title
-          on a brand-new account's test report that never asked for auto-fix. */}
       {/* The last automatic run stopped on an empty account: the remedy here, where the bug is. */}
       {agentCredits.state?.out && latestFix?.status === 'failed' && isAgentOutOfUsageError(latestFix.error) ? (
         <AgentCreditsOutCard state={agentCredits.state} withFollowups={false} className="mb-3" />
       ) : null}
-      {isDispatchEligible ? <DispatchPreflightBanner preflight={preflight} projectId={report.project_id} className="mb-3" /> : null}
 
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <GenerateTestButton report={report} />
-        {/* Hidden unless you have a local worker lane for this app (ADR 0048). */}
-        <SendToWorkerButton projectId={report.project_id} reportIds={[report.id]} data-testid="report-send-to-worker" />
-      </div>
-
-      {/* The one Plan → Do → Check → Act progress display (REPORT D): the
-          page used to repeat it as a flow graph and a receipt strip too. */}
-      <ReportPdcaStory report={report} dispatchState={dispatchState} showInternals={showInternals} />
-
-      {/* Where the report is stuck, how long each stage took, the error in plain words and the
-          retry for that stage (console 2026-11-19). The story above says what happened; this
-          strip is the machine view with the buttons. */}
-      <ReportPipelineStrip
-        reportId={report.id}
-        onRetryDispatch={requestDispatch}
-        dispatchBlock={dispatchBlockState}
-        hasFixActions={Boolean(latestFix?.pr_url && !latestFix.merged_at && latestFix.pr_state !== 'merged' && latestFix.pr_state !== 'closed')}
-        onReportChanged={onReload}
-      />
-
-      {/* Why Mushi believes the diagnosis, claim by claim, with the weak ones
-          marked (console audit 2026-10-20). */}
-      <ReportDiagnosisGraph report={report} showInternals={showInternals} />
-
-      <BeforeAfterCard report={report} />
-
-      {latestFix && (
-        <ReportBranchGraph
-          fix={latestFix}
-          traceUrl={platform.traceUrl(latestFix.langfuse_trace_id)}
-          className="mb-3"
-        />
-      )}
-
-      {/* Screenshot hero — promoted out of the User-report section so it's
-          the first piece of evidence triagers see. audit P0. */}
-      {report.screenshot_url && (
-        <ScreenshotHero url={report.screenshot_url} className="mb-3" />
-      )}
-
+      {/* The next step for this report's state (a PR ready, a fix running, a failed attempt). It is
+          left out when it only repeats the triage row below (repeatsTriageBar). */}
       {recommendation.repeatsTriageBar ? null : (
       <RecommendedAction
         title={recommendation.title}
@@ -712,8 +697,25 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
         tone={recommendation.tone}
         meta={recommendation.meta}
         actions={recommendation.actions}
+        ctaNote={
+          recommendation.setupSteps ? (
+            <DispatchSetupLine setup={recommendation.setupSteps} data-testid="recommendation-dispatch-setup" />
+          ) : undefined
+        }
       />
       )}
+
+      {/* One status line ("Progress · Next: Fix") with the failed stage's Retry; the eight stages
+          and the plain-words story fold under "Show each step" (ADR 0069). */}
+      <ReportPipelineStrip
+        reportId={report.id}
+        onRetryDispatch={requestDispatch}
+        dispatchBlock={dispatchBlockState}
+        hasFixActions={Boolean(latestFix?.pr_url && !latestFix.merged_at && latestFix.pr_state !== 'merged' && latestFix.pr_state !== 'closed')}
+        onReportChanged={onReload}
+      >
+        <ReportPdcaStory report={report} dispatchState={dispatchState} showInternals={showInternals} dispatchBlock={dispatchBlockState} bare />
+      </ReportPipelineStrip>
 
       <ReportTriageBar
         report={report}
@@ -726,8 +728,33 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
         isDispatchBusy={isDispatchBusy}
         repoChoice={repoChoice}
         hasCodeLocation={hasCodeLocation}
+        showDispatch={githubConnected}
       />
       {confirmed.dialog}
+
+      {/* Optional and below the answer (audit 2026-11-11). Open only when GitHub is connected and
+          Dispatch waits on the rest of the setup; before GitHub it is one closed line. */}
+      {isDispatchEligible ? (
+        <DispatchPreflightBanner
+          preflight={preflight}
+          projectId={report.project_id}
+          className="mb-3"
+          required={githubConnected && Boolean(dispatchBlockState.setup)}
+        />
+      ) : null}
+
+      {/* Less common actions, one click away (ADR 0069). Native <details>: the buttons keep their
+          confirm dialogs and popovers mounted. The worker button hides itself without a lane (ADR 0048). */}
+      <details className="group/more mb-3" data-testid="report-more-actions">
+        <summary className="cursor-pointer list-none text-xs font-medium text-fg-secondary hover:text-fg">
+          <span className="inline-block transition-transform group-open/more:rotate-90" aria-hidden="true">▸</span> More actions
+          <span className="font-normal text-fg-muted"> · generate a regression test, send to a local worker</span>
+        </summary>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <GenerateTestButton report={report} />
+          <SendToWorkerButton projectId={report.project_id} reportIds={[report.id]} data-testid="report-send-to-worker" />
+        </div>
+      </details>
 
       {report.tester_submission && (
         <Section title="Mushi Mushi Bounties" className="mb-3">
@@ -745,6 +772,42 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
         dispatchState={dispatchState}
         hasFixHistory={(report.fix_attempts?.length ?? 0) > 0}
       />
+
+      {/* Why Mushi believes the diagnosis, claim by claim, with the weak ones
+          marked (console audit 2026-10-20). Closed by default (ADR 0069); the
+          graph measures its links, so it mounts only once opened. */}
+      <details
+        className="group/why mb-3 rounded-md border border-edge-subtle bg-surface-raised px-3 py-2"
+        data-testid="report-why-fold"
+        onToggle={(e) => setWhyOpen(e.currentTarget.open)}
+      >
+        <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 text-sm font-semibold text-fg">
+          <span className="inline-block text-2xs text-fg-muted transition-transform group-open/why:rotate-90" aria-hidden="true">▸</span>
+          Why Mushi Mushi thinks this
+          <DiagnosisVerdict graph={diagnosisGraph} />
+        </summary>
+        {whyOpen ? (
+          <div className="mt-2">
+            <ReportDiagnosisGraph report={report} showInternals={showInternals} bare />
+          </div>
+        ) : null}
+      </details>
+
+      <BeforeAfterCard report={report} />
+
+      {latestFix && (
+        <ReportBranchGraph
+          fix={latestFix}
+          traceUrl={platform.traceUrl(latestFix.langfuse_trace_id)}
+          className="mb-3"
+        />
+      )}
+
+      {/* Screenshot hero — promoted out of the User-report section so it's
+          the first piece of evidence triagers see. audit P0. */}
+      {report.screenshot_url && (
+        <ScreenshotHero url={report.screenshot_url} className="mb-3" />
+      )}
 
       {/* items-start: each card is as tall as its content; stretched to the
           row's tallest card, the LLM classification and timeline cards were
@@ -786,7 +849,12 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
               (REPORT A2): a Stage-2 diagnosis without a Stage-1 object is
               classified, not "pending". */}
           {isReportClassified(report) ? (
-            <ClassificationFields report={report} showInternals={showInternals} />
+            <>
+              <ClassificationFields report={report} showInternals={showInternals} />
+              {/* Why there is no full diagnosis, and the setting that changes it (ADR 0069: moved
+                  here from the diagnosis card, which keeps a one-line version). */}
+              <Stage2AbsentNote report={report} />
+            </>
           ) : report.processing_error ? (
             // The reason in plain words, the raw text and the Retry live in the Pipeline strip;
             // this card no longer repeats the raw error (console 2026-11-19).
@@ -905,6 +973,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
           reportStatus={report.status}
           onSentryClosed={onReload}
           hideNoBreadcrumbsNote
+          lastEventAt={sentryLastEventAt(report)}
         />
       </div>
 
@@ -977,8 +1046,8 @@ function describeTriageUpdate(updates: Record<string, string>): string | null {
 
 /** Platform chip colour map — mirrors the same sentiment used by InboxPage. */
 const PLATFORM_BADGE: Record<string, string> = {
-  ios:     CHIP_TONE.infoSubtle,
-  android: CHIP_TONE.okSubtle,
+  ios:     CHIP_TONE.info,
+  android: CHIP_TONE.ok,
   web:     'bg-brand/12 text-brand border border-brand/28',
   macos:   'bg-surface-overlay text-fg-secondary border-edge-subtle',
   windows: 'bg-surface-overlay text-fg-secondary border-edge-subtle',
@@ -1022,7 +1091,7 @@ function DeviceAndBuildPanel({
                 {row.value}
               </span>
             ) : (
-              <code className="text-2xs font-mono text-fg bg-surface-overlay/60 px-1.5 py-0.5 rounded-sm">
+              <code className={`text-2xs font-mono ${CHIP_TONE.neutral} px-1.5 py-0.5 rounded-sm`}>
                 {row.value}
               </code>
             )}

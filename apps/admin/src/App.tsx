@@ -1,5 +1,5 @@
 import { legacyHubRoutes } from './lib/pageHubs'
-import { ReportsHomeRedirect } from './lib/reportsHomeRedirect'
+import { ConsoleRootRedirect } from './lib/consoleRootRedirect'
 import { FirstRunGate } from './components/FirstRunGate'
 import { OperatorRoute } from './components/OperatorRoute'
 import { HubRedirect } from './components/PageHubView'
@@ -68,11 +68,13 @@ const ProvidersPage = lazy(() => import('./pages/ProvidersPage').then(m => ({ de
 const CreditsPage = lazy(() => import('./pages/CreditsPage').then(m => ({ default: m.CreditsPage })))
 const DesignPage = lazy(() => import('./pages/DesignPage').then(m => ({ default: m.DesignPage })))
 const TeamPage = lazy(() => import('./pages/TeamPage').then(m => ({ default: m.TeamPage })))
-const HomePage = lazy(() => import('./pages/HomePage').then(m => ({ default: m.HomePage })))
+const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
 const UxRunsPage = lazy(() => import('./pages/UxRunsPage').then(m => ({ default: m.UxRunsPage })))
+const TimelinePage = lazy(() => import('./pages/TimelinePage').then(m => ({ default: m.TimelinePage })))
 const FirstUserTestPage = lazy(() => import('./pages/FirstUserTestPage').then(m => ({ default: m.FirstUserTestPage })))
+const PersonasPage = lazy(() => import('./pages/PersonasPage').then(m => ({ default: m.PersonasPage })))
 const JourneysPage = lazy(() => import('./pages/JourneysPage').then(m => ({ default: m.JourneysPage })))
-const PortfolioPage = lazy(() => import('./pages/PortfolioPage').then(m => ({ default: m.PortfolioPage })))
+const AppsPage = lazy(() => import('./pages/AppsPage').then(m => ({ default: m.AppsPage })))
 const PromptLabPage = lazy(() => import('./pages/PromptLabPage').then(m => ({ default: m.PromptLabPage })))
 const MarketplacePage = lazy(() => import('./pages/MarketplacePage').then(m => ({ default: m.MarketplacePage })))
 const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage').then(m => ({ default: m.IntegrationsPage })))
@@ -325,7 +327,7 @@ export function App() {
             to /login when unauthenticated.
             (Retired PublicHomePage so the noindex admin shell no longer duplicates
             the indexable landing.) */}
-        <Route path="/" element={<ReportsHomeRedirect />} />
+        <Route path="/" element={<ConsoleRootRedirect />} />
         <Route path="/login" element={<LoginPage />} />
         {/* Bare /signup lands directly on the signup form instead of bouncing
             through ProtectedRoute -> /login (see docs/pricing.mdx CTA and
@@ -387,7 +389,7 @@ export function App() {
                 <RouteErrorBoundary source="protected-route">
                 <Suspense fallback={<Loading text="Loading…" />}>
                 <SentryRoutes>
-                  {/* Plan 021: pages that are views of Home, Mushi health or Team now
+                  {/* Plan 021: pages that are views of Apps, Mushi health or Team now
                       (lib/pageHubs.ts) redirect there with the query kept. */}
                   {legacyHubRoutes().map(({ path, hub, viewId }) => (
                     <Route key={path} path={path} element={<HubRedirect hub={hub} viewId={viewId} />} />
@@ -396,7 +398,7 @@ export function App() {
                   {/* Stripe Checkout returns here (STRIPE_SUCCESS_URL / STRIPE_CANCEL_URL defaults); lib/billingFunnel.ts. */}
                   <Route path="/billing/success" element={<Navigate to="/team?view=billing&checkout=success" replace />} />
                   <Route path="/billing/cancel" element={<Navigate to="/team?view=billing&checkout=cancelled" replace />} />
-                  <Route path="/dashboard" element={<FirstRunGate><HomePage /></FirstRunGate>} />
+                  <Route path="/dashboard" element={<FirstRunGate><DashboardPage /></FirstRunGate>} />
                   <Route path="/console" element={<Navigate to="/dashboard" replace />} />
                   <Route path="/reports" element={<FirstRunGate><ReportsPage /></FirstRunGate>} />
                   <Route path="/reports/:id" element={<ReportDetailPage />} />
@@ -423,9 +425,11 @@ export function App() {
                   <Route path="/credits" element={<CreditsPage />} />
                   <Route path="/design" element={<DesignPage />} />
                   <Route path="/ux-runs" element={<UxRunsPage />} />
+                  <Route path="/timeline" element={<TimelinePage />} />
                   <Route path="/first-user-test" element={<FirstUserTestPage />} />
+                  <Route path="/personas" element={<PersonasPage />} />
                   <Route path="/journeys" element={<JourneysPage />} />
-                  <Route path="/portfolio" element={<PortfolioPage />} />
+                  <Route path="/portfolio" element={<AppsPage />} />
                   <Route path="/prompt-lab" element={<OperatorRoute><PromptLabPage /></OperatorRoute>} />
                   <Route path="/fine-tuning" element={<Navigate to="/prompt-lab?tab=fine-tuning" replace />} />
                   <Route path="/marketplace" element={<MarketplacePage />} />

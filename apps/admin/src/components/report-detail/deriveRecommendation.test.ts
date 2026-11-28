@@ -414,6 +414,8 @@ describe('classification state agrees with the rest of the page', () => {
     )
     expect(rec.title).not.toMatch(/pending/i)
     expect(rec.title).toBe('Triage this report')
+    // The triage bar right below holds the same Dispatch fix: the page shows the bar alone.
+    expect(rec.repeatsTriageBar).toBe(true)
   })
 
   it('a new report with nothing classified yet is still pending', () => {
@@ -461,7 +463,37 @@ describe('dispatch controls go through the page request and gate', () => {
       reason: 'Set up first: Autofix enabled.',
     })
     expect(rec.cta?.disabled).toBe(true)
+    expect(rec.cta?.title).toBe('Set up first: Autofix enabled.')
     expect(rec.meta).toContainEqual({ label: 'Cannot dispatch', value: 'Set up first: Autofix enabled.', tone: 'warn' })
+    expect(rec.setupSteps).toBeUndefined()
+  })
+
+  // A new user's first report: two disabled Dispatch fix buttons, one tooltip (feedback 2026-11-22).
+  it('a setup-only block carries the steps for the visible line instead of the chip', () => {
+    const setup = { steps: [{ key: 'autofix', label: 'Turn on Autofix', href: '/integrations/config#integrations-codebase' }], done: 3, total: 4 }
+    const rec = deriveRecommendation(classifiedNew(), makeDispatchState(), 0, vi.fn(), Date.now(), {
+      blocked: true,
+      reason: 'Set up first: Autofix enabled.',
+      setup,
+    })
+    expect(rec.cta?.disabled).toBe(true)
+    expect(rec.cta?.title).toBe('Set up first: Autofix enabled.')
+    expect(rec.setupSteps).toBe(setup)
+    expect(rec.meta?.some((m) => m.label === 'Cannot dispatch')).not.toBe(true)
+
+    // Only a dispatch CTA gets the line under it; a disabled "Retry dispatch" keeps the chip.
+    const retryCard = deriveRecommendation(
+      makeReport({ fix_attempts: [makeFixAttempt({ status: 'failed', failure_category: 'llm_rate_limit' })] } as Partial<ReportDetail>),
+      makeDispatchState(),
+      0,
+      vi.fn(),
+      Date.now(),
+      { blocked: true, reason: 'Set up first: Autofix enabled.', setup },
+    )
+    expect(retryCard.actions?.find((a) => a.label === 'Retry dispatch')?.disabled).toBe(true)
+    expect(retryCard.cta?.onClick).toBeUndefined()
+    expect(retryCard.setupSteps).toBeUndefined()
+    expect(retryCard.meta).toContainEqual({ label: 'Cannot dispatch', value: 'Set up first: Autofix enabled.', tone: 'warn' })
   })
 
   it('a blocked gate disables "Retry dispatch" and leaves links alone', () => {
@@ -492,7 +524,7 @@ describe('a report with no code location', () => {
     ['new + low', { status: 'new', severity: 'low', stage1_classification: { category: 'bug' } }],
   ] as const
 
-  it.each(triageable)('%s: no dispatch CTA, the reason, and "Dispatch anyway" as a ghost action', (_, overrides) => {
+  it.each(triageable)('%s: no dispatch CTA, the reason, and "Dispatch anyway" as a ghost action', (label, overrides) => {
     const request = vi.fn()
     const rec = deriveRecommendation(makeReport(overrides), makeDispatchState(), 0, request, Date.now(), undefined, false)
     expect(rec.cta).toBeUndefined()
@@ -505,7 +537,22 @@ describe('a report with no code location', () => {
     // The triage bar says and does the same; the page shows the bar alone (sweep 2026-11-18).
     expect(rec.repeatsTriageBar).toBe(true)
     const withCode = deriveRecommendation(makeReport(overrides), makeDispatchState(), 0, request, Date.now(), undefined, true)
-    expect(withCode.repeatsTriageBar).toBeUndefined()
+    // With a code location only the urgent "Confirm priority" card adds anything; the two
+    // info cards were a second "Dispatch fix" above the bar's own (2026-11-24).
+    expect(withCode.repeatsTriageBar).toBe(label === 'new + critical' ? undefined : true)
+  })
+
+  // ADR 0069: a "No suggested action" card only pointed at the triage row; the page leaves it out.
+  it('a triaged report with notes has no card of its own', () => {
+    const rec = deriveRecommendation(
+      makeReport({ status: 'classified', stage1_classification: { category: 'bug' } }),
+      makeDispatchState(),
+      2,
+      vi.fn(),
+    )
+    expect(rec.title).toBe('No suggested action')
+    expect(rec.cta).toBeUndefined()
+    expect(rec.repeatsTriageBar).toBe(true)
   })
 
   it('"Dispatch anyway" is disabled while the gate blocks', () => {

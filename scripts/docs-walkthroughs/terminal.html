@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Terminal</title>
+<!--
+  A terminal window for the install walkthrough. The recorder serves it at
+  https://terminal.example/ with the transcript placeholder (T below) set to the real output of
+  the command, captured just before filming from the published package in a
+  throwaway app with an empty config (scripts/record-docs-walkthroughs.mjs,
+  captureTerminal). This page only types the command and prints that output.
+-->
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: end center; padding-bottom: 14px; background: radial-gradient(ellipse at 30% 20%, #2a2633 0%, #15141a 60%, #0e0d12 100%); font-family: Inter, 'Segoe UI', system-ui, sans-serif; }
+  .win { width: 1220px; border-radius: 14px; overflow: hidden; background: #111116; border: 1px solid #2c2b33; box-shadow: 0 30px 80px rgba(0,0,0,.55); }
+  .bar { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; background: #1c1b22; border-bottom: 1px solid #2c2b33; color: #9b9aa6; font-size: 14px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .bar .title { flex: 1; text-align: center; margin-right: 52px; }
+  #term { height: 612px; padding: 18px 24px; overflow: hidden; font: 600 19.5px/1.42'Cascadia Mono', 'SF Mono', Menlo, Consolas, monospace; color: #e8e7ef; white-space: pre; }
+  .prompt { color: #7ee2a8; }
+  .caret { display: inline-block; width: 10px; height: 1.15em; vertical-align: text-bottom; background: #e8e7ef; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .c30 { color: #6f6e7a; } .c31 { color: #ff7b72; } .c32 { color: #7ee2a8; } .c33 { color: #f5c46b; }
+  .c34 { color: #79b8ff; } .c35 { color: #d2a8ff; } .c36 { color: #6fe0e6; } .c37 { color: #e8e7ef; }
+  .c90 { color: #8a8996; } .b { font-weight: 700; } .dim { opacity: .7; }
+</style>
+</head>
+<body>
+<div class="win">
+  <div class="bar">
+    <span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
+    <span class="title">~/my-app</span>
+  </div>
+  <div id="term"></div>
+</div>
+<script>
+  const T = __TRANSCRIPT__
+  const term = document.getElementById('term')
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+  /** ANSI SGR colours to spans; any other escape is dropped. */
+  function ansiToHtml(line) {
+    let out = ''
+    let cls = []
+    const parts = line.split(/\x1b\[([0-9;]*)m/)
+    for (let i = 0; i < parts.length; i++) {
+      if (i % 2 === 0) {
+        const text = esc(parts[i].replace(/\x1b\[[0-9;?]*[A-Za-z]/g, ''))
+        if (text) out += cls.length ? `<span class="${cls.join(' ')}">${text}</span>` : text
+        continue
+      }
+      for (const code of (parts[i] || '0').split(';').map(Number)) {
+        if (code === 0) cls = []
+        else if (code === 1) cls.push('b')
+        else if (code === 2) cls.push('dim')
+        else if (code === 22) cls = cls.filter((c) => c !== 'b' && c !== 'dim')
+        else if (code === 39) cls = cls.filter((c) => !/^c\d+$/.test(c))
+        else if ((code >= 30 && code <= 37) || (code >= 90 && code <= 97)) cls = cls.filter((c) => !/^c\d+$/.test(c)).concat(`c${code}`)
+      }
+    }
+    return out
+  }
+
+  let line = null
+  function newPrompt() {
+    line = document.createElement('div')
+    line.innerHTML = `<span class="prompt">~/my-app $</span> <span class="cmd"></span><span class="caret"></span>`
+    term.appendChild(line)
+  }
+
+  window.__term = {
+    /** Types a command at the prompt, one key at a time. */
+    async type(text, delay = 55) {
+      if (!line) newPrompt()
+      const cmd = line.querySelector('.cmd')
+      for (const ch of text) {
+        cmd.textContent += ch
+        await sleep(delay)
+      }
+    },
+    /** "Presses Enter": prints the captured output line by line, then a new prompt. */
+    async run(id, perLine = 45) {
+      line.querySelector('.caret').remove()
+      const block = document.createElement('div')
+      block.className = 'out'
+      block.id = `out-${id}`
+      term.appendChild(block)
+      for (const l of T[id].split(/\r?\n/)) {
+        const div = document.createElement('div')
+        div.innerHTML = ansiToHtml(l) || ' '
+        block.appendChild(div)
+        await sleep(perLine)
+      }
+      newPrompt()
+    },
+  }
+  newPrompt()
+</script>
+</body>
+</html>

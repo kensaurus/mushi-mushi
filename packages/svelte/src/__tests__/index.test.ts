@@ -58,7 +58,9 @@ beforeEach(async () => {
   _sdkInstance = null
   vi.resetModules()
 
-  vi.mock('@mushi-mushi/web', () => ({
+  // vitest 5 throws on a vi.mock that is not top-level; doMock registers it
+  // for the fresh module graph that resetModules() just created.
+  vi.doMock('@mushi-mushi/web', () => ({
     Mushi: {
       init: vi.fn((_config: unknown) => { _sdkInstance = mockSdkInstance; return mockSdkInstance }),
       getInstance: vi.fn(() => _sdkInstance),

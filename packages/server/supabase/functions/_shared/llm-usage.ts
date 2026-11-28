@@ -22,7 +22,8 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { extractAnthropicCacheUsage, logLlmInvocation, type LlmInvocationRecord } from './telemetry.ts'
 import { sanitizeLlmError } from './llm-error-sanitize.ts'
-import { LLM_PRICING_PER_M_TOKENS } from './pricing.ts'
+import { isKnownModel } from './llm-cost.ts'
+import { takeVendorCost } from './vendor-cost.ts'
 
 export interface LlmTokenUsage {
   inputTokens: number | null
@@ -66,22 +67,16 @@ export function extractLlmUsage(source: unknown): LlmTokenUsage {
   }
 }
 
-function isPriced(model: string): boolean {
-  const key = model.toLowerCase()
-  const bare = key.includes('/') ? key.split('/').slice(-1)[0] : key
-  return Object.prototype.hasOwnProperty.call(LLM_PRICING_PER_M_TOKENS, bare)
-}
-
 /**
  * The model that actually served the call (`response.modelId`, e.g. Claude's
  * server-side refusal fallback `claude-sonnet-5`), else `fallback`. A served
- * id the price table does not know (OpenAI's dated `gpt-4.1-2025-04-14`) is
- * ignored: it would be costed at the unknown-model fallback rate.
+ * id Mushi does not know (OpenAI's dated `gpt-4.1-2025-04-14`) is ignored:
+ * no catalog row carries it, so the call would read as unpriced.
  */
 export function servedModel(result: unknown, fallback: string): string {
   try {
     const id = (result as { response?: { modelId?: unknown } } | null)?.response?.modelId
-    return typeof id === 'string' && id.trim() && isPriced(id) ? id : fallback
+    return typeof id === 'string' && id.trim() && isKnownModel(id) ? id : fallback
   } catch {
     return fallback
   }
@@ -141,6 +136,7 @@ export function buildLlmUsageRecord(ctx: LlmUsageContext, outcome: LlmUsageOutco
   const resultObj = (outcome.result ?? null) as {
     experimental_providerMetadata?: unknown
     providerMetadata?: unknown
+    response?: { id?: unknown }
   } | null
   const cache = extractAnthropicCacheUsage(
     resultObj?.experimental_providerMetadata ?? resultObj?.providerMetadata,
@@ -167,6 +163,8 @@ export function buildLlmUsageRecord(ctx: LlmUsageContext, outcome: LlmUsageOutco
     cacheCreationInputTokens: cache.cacheCreationInputTokens,
     cacheReadInputTokens: cache.cacheReadInputTokens,
     skipHostedBilling: ctx.skipHostedBilling === true || ctx.billHosted !== true,
+    // What the provider said the call cost (OpenRouter), keyed by its generation id.
+    vendorCostUsd: failed ? null : takeVendorCost(typeof resultObj?.response?.id === 'string' ? resultObj.response.id : null),
   }
 }
 

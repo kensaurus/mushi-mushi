@@ -12,14 +12,14 @@
  *          list changes (`keysToken`), so the switch can be made right after.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { apiFetch } from '../../lib/supabase';
 import { usePageData } from '../../lib/usePageData';
 import { describeByokError } from '../../lib/byokErrors';
 import { Btn, InfoHint, ResultChip, SegmentedControl } from '../ui';
 import { StatusPill } from '../signal/StatusMark';
 
-type AiProvider = 'anthropic' | 'openai';
+export type AiProvider = 'anthropic' | 'openai';
 
 interface AiProviderResponse {
   organizationId: string;
@@ -51,10 +51,16 @@ interface Props {
   keysToken: string;
   /** Opens the add-key form for OpenAI; called when OpenAI is chosen with no OpenAI key. */
   onNeedOpenAiKey: () => void;
+  /** The saved choice, so the key cards below can say what each key is used for under it. */
+  onProvider?: (provider: AiProvider) => void;
 }
 
-export function AiProviderSection({ keysToken, onNeedOpenAiKey }: Props) {
+export function AiProviderSection({ keysToken, onNeedOpenAiKey, onProvider }: Props) {
   const status = usePageData<AiProviderResponse | null>('/v1/admin/byok/ai-provider', { deps: [keysToken] });
+  const savedProvider = status.data?.aiProvider;
+  useEffect(() => {
+    if (savedProvider) onProvider?.(savedProvider);
+  }, [savedProvider, onProvider]);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<{ tone: 'success' | 'error' | 'info'; message: string } | null>(null);
 

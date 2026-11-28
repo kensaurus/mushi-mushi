@@ -60,6 +60,7 @@ import { registerCodeAuditCollapseRoutes } from './work-collapse.ts'
 import { applyRecheck, auditFiledLastHour, codeAuditBacklog, fileAuditFinding, parseRecheckBody, recheckList } from './work-audit.ts'
 import { claimFreshEyes, endFreshEyesRun, type FreshEyesClaimDeps } from './work-fresh-eyes.ts'
 import { mintSyntheticAccount } from '../../_shared/synthetic-accounts.ts'
+import { hookAccountFor } from '../../_shared/test-account-hook-io.ts'
 import { isOperatorUser } from '../../_shared/operator-gate.ts'
 import { postTeamNote } from '../../_shared/reporter-comms.ts'
 import { claimConflict, endConflictClaim, type ModeLane } from '../../_shared/work-conflicts.ts'
@@ -153,7 +154,7 @@ export const defaultWorkRouteDeps: WorkRouteDeps = {
   freshEyes: () => ({
     mint: (db, createdBy, now) => mintSyntheticAccount(db, createdBy, now, Deno.env.get('MUSHI_FRESH_EYES_EMAIL_DOMAIN')),
     isOperator: isOperatorUser,
-    selfProjectId: Deno.env.get('MUSHI_SELF_PROJECT_ID'),
+    hookAccount: hookAccountFor,
   }),
   now: () => new Date(),
 }

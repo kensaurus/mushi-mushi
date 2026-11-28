@@ -14,15 +14,14 @@ import { describe, expect, it } from 'vitest'
 const fn = (rel: string) => readFileSync(resolve(__dirname, '../../supabase/functions', rel), 'utf8')
 const api = fn('api/index.ts')
 const ext = fn('api-ext/index.ts')
+const loop = fn('api-loop/index.ts')
 
 const MOVED: Array<{ file: string; register: string; count: number }> = [
   { file: 'codebase-understand', register: 'registerCodebaseUnderstandRoutes', count: 15 },
   { file: 'modernization-health-super', register: 'registerModernizationHealthSuperRoutes', count: 9 },
   { file: 'qa-coverage', register: 'registerQaCoverageRoutes', count: 9 },
   { file: 'fullstack-audit', register: 'registerFullstackAuditRoutes', count: 2 },
-  { file: 'ux-runs', register: 'registerUxRunsRoutes', count: 6 },
   { file: 'pipeline', register: 'registerPipelineRoutes', count: 3 },
-  { file: 'fresh-eyes', register: 'registerFreshEyesRoutes', count: 6 },
   { file: 'journeys', register: 'registerJourneyRoutes', count: 3 },
   { file: 'landing-visits', register: 'registerLandingVisitRoutes', count: 2 },
   { file: 'health-checks', register: 'registerHealthCheckRoutes', count: 1 },
@@ -32,6 +31,43 @@ const MOVED: Array<{ file: string; register: string; count: number }> = [
   { file: 'accounts-register', register: 'registerAccountsRegisterRoutes', count: 4 },
   { file: 'kensaurus-ops', register: 'registerKensaurusOpsRoutes', count: 1 },
 ]
+
+// 2026-11-27: api-ext reached the deployment size limit (HTTP 413), so the
+// loop's groups run in api-loop. api forwards them there, not to api-ext.
+const LOOP: Array<{ file: string; register: string; count: number }> = [
+  { file: 'ux-runs', register: 'registerUxRunsRoutes', count: 6 },
+  { file: 'fresh-eyes', register: 'registerFreshEyesRoutes', count: 6 },
+  { file: 'ux-scorecard', register: 'registerUxScorecardRoutes', count: 6 },
+  { file: 'ux-timeline', register: 'registerUxTimelineRoutes', count: 6 },
+  { file: 'ux-captures', register: 'registerUxCaptureRoutes', count: 1 },
+  { file: 'personas', register: 'registerPersonaRoutes', count: 3 },
+  { file: 'security-proof', register: 'registerSecurityProofRoutes', count: 5 },
+  { file: 'fine-tuning', register: 'registerFineTuningRoutes', count: 9 },
+]
+
+describe('route groups that run in api-loop', () => {
+  const loopForwards = [...api.matchAll(/forwardToApiLoop\(\[([\s\S]*?)\]\)/g)].map((m) => m[1]).join(' ')
+  const loopPatterns = [...loopForwards.matchAll(/'([^']+)'/g)].map((m) => m[1])
+  // A forward ending in /* covers every path under its prefix (Hono wildcard).
+  const forwardedToLoop = (p: string) => loopPatterns.some((f) => f === p || (f.endsWith('/*') && p.startsWith(f.slice(0, -1))))
+  for (const g of LOOP) {
+    it(`api forwards every ${g.file} path to api-loop, and only api-loop registers the group`, () => {
+      const src = fn(`api/routes/${g.file}.ts`)
+      const paths = [...new Set([...src.matchAll(/(?:app|parent)\.(?:get|post|put|patch|delete)\(\s*'([^']+)'/g)].map((m) => m[1]))]
+      expect(paths).toHaveLength(g.count)
+      for (const p of paths) expect(forwardedToLoop(p), p).toBe(true)
+      expect(api).not.toContain(`${g.register}(app)`)
+      expect(ext).not.toContain(`${g.register}(app)`)
+      expect(loop).toContain(`${g.register}(app)`)
+    })
+  }
+
+  it('api forwards every release-kit path to api-loop through the release prefix', () => {
+    expect(loopForwards).toContain("'/v1/admin/projects/:id/releases/:rid/*'")
+    expect(ext).not.toContain('registerReleaseKitRoutes(app)')
+    expect(loop).toContain('registerReleaseKitRoutes(app)')
+  })
+})
 
 describe('route groups that run in api-ext', () => {
   for (const g of MOVED) {

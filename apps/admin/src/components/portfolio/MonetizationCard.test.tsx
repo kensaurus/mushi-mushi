@@ -73,8 +73,8 @@ describe('monetization labels', () => {
     expect(metricText(RESPONSE.hubs[0].metrics, 'active_trials')).toBe('—')
     expect(metricText(RESPONSE.hubs[0].metrics, 'mrr')).toBe('$21')
     expect(productState({ id: 'a', storeIdentifier: 'a', platform: 'iOS', storeState: null })).toEqual({ text: 'store not read', tone: 'neutral' })
-    expect(productState({ id: 'a', storeIdentifier: 'a', platform: 'iOS', storeState: 'WAITING_FOR_REVIEW' }).tone).toBe('warnSubtle')
-    expect(productState({ id: 'a', storeIdentifier: 'a', platform: 'Android', storeState: 'ACTIVE' }).tone).toBe('okSubtle')
+    expect(productState({ id: 'a', storeIdentifier: 'a', platform: 'iOS', storeState: 'WAITING_FOR_REVIEW' }).tone).toBe('warn')
+    expect(productState({ id: 'a', storeIdentifier: 'a', platform: 'Android', storeState: 'ACTIVE' }).tone).toBe('ok')
   })
 
   it('an app with an unchecked rule is "partly checked", never "every check passed"', () => {
@@ -85,7 +85,7 @@ describe('monetization labels', () => {
     expect(appSummary({ rules: three, findings: [] }, ['monetization_billing_library_outdated'])).toEqual({ text: '3 of 4 checked', tone: 'neutral' })
     expect(appStatus({ rules: three, findings: [] }, ['monetization_billing_library_outdated']).status).toBe('idle')
     expect(appSummary({ rules: [], findings: [] }).text).toBe('Partly checked')
-    expect(appSummary({ rules: [{ ruleId: 'x', state: 'error', reason: '' }], findings: [] }).tone).toBe('dangerSubtle')
+    expect(appSummary({ rules: [{ ruleId: 'x', state: 'error', reason: '' }], findings: [] }).tone).toBe('danger')
   })
 })
 

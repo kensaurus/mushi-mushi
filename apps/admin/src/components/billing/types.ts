@@ -85,6 +85,10 @@ export interface PlanCatalog {
   is_self_serve: boolean
   active: boolean
   feature_flags: Record<string, unknown>
+  /** USD a year from the Stripe Price checkout charges; null/absent = not offered or not readable. */
+  annual_price_usd?: number | null
+  /** Whole-percent saving of annual over 12 monthly payments, derived from the two prices. */
+  annual_discount_pct?: number | null
 }
 
 interface ProjectTier {

@@ -109,6 +109,8 @@ interface LlmHealth {
     avgLatencyMs: number
     p95LatencyMs?: number
     costUsd?: number
+    /** Calls with no price in the price book; not in costUsd. */
+    unpricedCalls?: number
     lastFailureAt?: string | null
   }>
   recent: LlmRecent[]
@@ -691,6 +693,11 @@ function HealthPageContent() {
                         <SignalChip tone="info">avg {f.avgLatencyMs}ms</SignalChip>
                         <SignalChip tone="neutral">p95 {f.p95LatencyMs ?? 0}ms</SignalChip>
                         <SignalChip tone="brand">{costStr}</SignalChip>
+                        {(f.unpricedCalls ?? 0) > 0 && (
+                          <SignalChip tone="warn" title="No price in the price book for these calls; they are not in the cost.">
+                            {f.unpricedCalls} unpriced
+                          </SignalChip>
+                        )}
                         {f.fallbacks > 0 && (
                           <SignalChip tone="warn">
                             {f.fallbacks} fallback{f.fallbacks === 1 ? '' : 's'}
@@ -878,9 +885,9 @@ function HealthPageContent() {
                           <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                             <code className="break-all font-mono font-semibold text-fg">{g.fn}</code>
                             <span className="break-all font-mono text-fg-secondary">{g.model}</span>
-                            {g.fallback && <Badge tone="warnSubtle">fallback</Badge>}
-                            {g.status !== 'success' && <Badge tone="dangerSubtle">{g.status}</Badge>}
-                            {g.keySource && <Badge tone="infoSubtle">{g.keySource}</Badge>}
+                            {g.fallback && <Badge tone="warn">fallback</Badge>}
+                            {g.status !== 'success' && <Badge tone="danger">{g.status}</Badge>}
+                            {g.keySource && <Badge tone="info">{g.keySource}</Badge>}
                             <span className="text-fg-muted tabular-nums">
                               {g.rows.length} {g.rows.length === 1 ? 'call' : 'calls'}
                             </span>

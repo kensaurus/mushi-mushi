@@ -96,6 +96,7 @@ import { dbError, enumerateAccessibleProjectIds, userCanAccessProject } from '..
 import { denyViewerWrite } from '../viewer-gate.ts';
 import { activeWorkClaims, enqueueReports } from '../../_shared/work-claims.ts';
 import { hostOnline } from '../../_shared/work-lanes.ts';
+import { mapWithConcurrency } from '../../_shared/concurrency.ts';
 
 const plog = log.child('pipeline-routes');
 
@@ -104,6 +105,8 @@ type Db = ReturnType<typeof getServiceClient>;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const IN_CHUNK = 100;
+/** Chunks of one read in flight at once: enough to stop 100 chunk reads queuing in a row, few enough for the connection pool. */
+const CHUNK_READS = 4;
 const DAY = 24 * 3600_000;
 /** Per request: each item may make two or three GitHub calls, and the request passes through `api`. */
 export const MAX_ACTION_ITEMS = 10;
@@ -156,14 +159,25 @@ export const defaultPipelineDeps: PipelineRouteDeps = {
   now: () => new Date(),
 };
 
+/**
+ * Read `ids` in chunks, CHUNK_READS at a time, rows kept in chunk order (the
+ * same rows a one-by-one loop returns). Any failed chunk fails the read.
+ */
 async function inChunks<T>(ids: string[], read: (chunk: string[]) => Promise<{ data: unknown; error: { message: string } | null }>, size = IN_CHUNK): Promise<T[]> {
-  const out: T[] = [];
-  for (let i = 0; i < ids.length; i += size) {
-    const { data, error } = await read(ids.slice(i, i + size));
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += size) chunks.push(ids.slice(i, i + size));
+  const parts = await mapWithConcurrency(chunks, CHUNK_READS, async (chunk) => {
+    const { data, error } = await read(chunk);
     if (error) throw new Error(error.message);
-    out.push(...((data ?? []) as T[]));
-  }
-  return out;
+    return (data ?? []) as T[];
+  });
+  return parts.flat();
+}
+
+/** Mark a promise started early as handled, so an early throw elsewhere never leaves it an unhandled rejection; awaiting it still throws. */
+function started<T>(p: Promise<T>): Promise<T> {
+  p.catch(() => {});
+  return p;
 }
 
 async function scopedProjectIds(c: Ctx, db: Db, userId: string, requested: string | undefined): Promise<{ ids: string[] } | { denied: Response }> {
@@ -180,8 +194,19 @@ export async function readPipeline(db: Db, projectIds: string[], now: Date) {
   const since7 = new Date(now.getTime() - 7 * DAY).toISOString();
   const since14 = new Date(now.getTime() - 14 * DAY).toISOString();
   const since60 = new Date(now.getTime() - 60 * DAY).toISOString();
+  // Reads that need only the app ids start beside the first batch, so none
+  // of them waits behind the per-PR reads (each catches its own failure).
+  const projectsQ = Promise.resolve(db.from('projects').select('id, name, organization_id, owner_id').in('id', projectIds));
+  const followupsOnP = started(
+    Promise.all(projectIds.map(async (id) => ((await followupsEnabledForProject(db, id)).enabled ? id : null))).then(
+      (ids) => new Set(ids.filter((id): id is string => !!id)),
+    ),
+  );
+  const dispatchersP = started(projectsQ.then((r) => readDispatchers(db, projectIds, (r.data ?? []) as DispatcherProject[], now)));
+  const intakeP = started(readIntake(db, projectIds, now));
+  const localInfraP = started(readLocalInfra(db, projectIds, now));
   const [projectsRes, reportsRes, attemptsRes, failedRes, queueRes, trainsRes, deploysRes, verdictsRes] = await Promise.all([
-    db.from('projects').select('id, name, organization_id, owner_id').in('id', projectIds),
+    projectsQ,
     db
       .from('reports')
       .select('id, project_id, status, title, summary, description, created_at, processing_error')
@@ -243,46 +268,59 @@ export async function readPipeline(db: Db, projectIds: string[], now: Date) {
   const known = new Set(reports.map((r) => r.id));
   const missing = [...new Set(attempts.map((a) => a.report_id).filter((id): id is string => !!id && !known.has(id)))];
   const since3 = new Date(now.getTime() - 3 * DAY).toISOString();
-  const [fixReports, reviews, followups, events] = await Promise.all([
+  const fixReportsP = started(
     inChunks<ReportRow>(missing, (ids) => db.from('reports').select('id, project_id, status, title, summary, description, created_at, processing_error').in('id', ids) as never),
+  );
+  const reviewsP = started(
     inChunks<ReviewRow>(attemptIds, (ids) =>
       db.from('fix_reviews').select('fix_attempt_id, status, verdict, summary, findings, error, completed_at, created_at, queued_at, head_sha, skip_reason').in('fix_attempt_id', ids) as never,
     ),
-    // Every follow-up row: the active ones move a PR, all of them are the cloud trigger's history.
+  );
+  // Every follow-up row: the active ones move a PR, all of them are the cloud trigger's history.
+  const followupsP = started(
     inChunks<FollowupRow>(attemptIds, (ids) =>
       db.from('fix_review_followups').select('id, fix_attempt_id, status, kind, head_sha_before, cursor_agent_id').in('fix_attempt_id', ids) as never,
     ),
-    // The latest event per attempt: small chunks, since CI writes many events per PR.
-    inChunks<EventRow>(attemptIds, (ids) => db.from('fix_events').select('fix_attempt_id, at, label').in('fix_attempt_id', ids).gte('at', since3).order('at', { ascending: false }).limit(1000) as never, 20).catch(
-      (err) => {
-        plog.warn('fix events read failed', { err: err instanceof Error ? err.message : String(err) });
-        return [] as EventRow[];
-      },
-    ),
-  ]);
-  // Reviewed heads too: a CI repair is judged on the commit Opus reviewed.
-  const heads = [
-    ...attempts.filter((a) => a.pr_state === 'open' || a.pr_state === 'draft').map((a) => a.commit_sha ?? ''),
-    ...reviews.map((r) => r.head_sha ?? ''),
-  ];
-  let ciJobs = new Map<string, CiJobForRepair[]>();
-  let ciReadable = true;
-  try {
-    ciJobs = await ciJobsForHeads(db, projectIds, heads);
-  } catch (err) {
-    // The PR's own check summary (check_run_conclusion) still reads red or green.
-    ciReadable = false;
-    plog.warn('ci jobs read failed', { err: err instanceof Error ? err.message : String(err) });
-  }
-
-  const followupsOn = new Set<string>();
-  await Promise.all(
-    projectIds.map(async (id) => {
-      if ((await followupsEnabledForProject(db, id)).enabled) followupsOn.add(id);
+  );
+  // The latest event per attempt: small chunks, since CI writes many events per PR.
+  const eventsP = inChunks<EventRow>(attemptIds, (ids) => db.from('fix_events').select('fix_attempt_id, at, label').in('fix_attempt_id', ids).gte('at', since3).order('at', { ascending: false }).limit(1000) as never, 20).catch(
+    (err) => {
+      plog.warn('fix events read failed', { err: err instanceof Error ? err.message : String(err) });
+      return [] as EventRow[];
+    },
+  );
+  // CI jobs start once the reviews are in, the action facts once the follow-ups are.
+  const ciP = started(
+    reviewsP.then(async (reviews) => {
+      // Reviewed heads too: a CI repair is judged on the commit AI reviewed.
+      const heads = [
+        ...attempts.filter((a) => a.pr_state === 'open' || a.pr_state === 'draft').map((a) => a.commit_sha ?? ''),
+        ...reviews.map((r) => r.head_sha ?? ''),
+      ];
+      try {
+        return { jobs: await ciJobsForHeads(db, projectIds, heads), readable: true };
+      } catch (err) {
+        // The PR's own check summary (check_run_conclusion) still reads red or green.
+        plog.warn('ci jobs read failed', { err: err instanceof Error ? err.message : String(err) });
+        return { jobs: new Map<string, CiJobForRepair[]>(), readable: false };
+      }
     }),
   );
-  const dispatchers = await readDispatchers(db, projectIds, (projectsRes.data ?? []) as DispatcherProject[], now);
-  const actionFacts = await readActionFacts(db, projectIds, attempts, followups, now);
+  const actionFactsP = started(followupsP.then((followups) => readActionFacts(db, projectIds, attempts, followups, now)));
+  const [fixReports, reviews, followups, events, ci, actionFacts, followupsOn, dispatchers, intake, localInfra] = await Promise.all([
+    fixReportsP,
+    reviewsP,
+    followupsP,
+    eventsP,
+    ciP,
+    actionFactsP,
+    followupsOnP,
+    dispatchersP,
+    intakeP,
+    localInfraP,
+  ]);
+  const ciJobs = ci.jobs;
+  const ciReadable = ci.readable;
   const stages = buildPipeline({
     now,
     reports: [...reports, ...fixReports],
@@ -297,14 +335,13 @@ export async function readPipeline(db: Db, projectIds: string[], now: Date) {
     ciReadable,
     actionFacts: actionFacts ?? undefined,
   });
-  const intake = await readIntake(db, projectIds, now);
   const names = new Map(((projectsRes.data ?? []) as Array<{ id: string; name: string }>).map((p) => [p.id, p.name]));
   const withDispatch = withDispatcherGroup(
     withDispatcherGroup(
       dispatchers ? withDispatcherGroup(stages, dispatcherGroup(dispatchers, now)) : stages,
       intakeGroup(intake, names),
     ),
-    await readLocalInfra(db, projectIds, now),
+    localInfra,
   );
   const deploys = (deploysRes.data ?? []) as DeployRow[];
   return {
@@ -645,7 +682,7 @@ async function cloudReady(db: Db, projectId: string, cache: CloudReadyCache): Pr
 }
 
 /**
- * A follow-up on one PR: a CI repair (Opus said merge, CI fails on the code)
+ * A follow-up on one PR: a CI repair (The AI review said merge, CI fails on the code)
  * or the Opus "fix first" findings. Mushi's cloud agent when follow-ups can
  * run for the app; otherwise the local `mushi work --followups` lanes, which
  * read the request row (CI repair) or the review itself (findings).

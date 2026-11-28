@@ -87,6 +87,32 @@ export function sentryRowStatus(
   return { state: shared.state, detail: shared.detail ?? savedHint.detail }
 }
 
+/**
+ * Pure: the line under Settings → Error tracking → "Sentry DSN" (console polish 2026-11-22).
+ * Settings showed an empty DSN field while the row said Working: Sentry connects with the org
+ * slug and auth token (Integrations, an organization default or the server environment), and
+ * the DSN is optional: Mushi Mushi never sends events to it, it only reads it as a sign the app
+ * reports crashes to Sentry (configDocs `settings.general.sentry_dsn`). An empty field next to
+ * "Working" read as broken. With a DSN saved, or Sentry not connected at
+ * all, there is nothing to explain (`null`).
+ */
+export function sentryDsnFieldNote(input: {
+  dsnSaved: boolean
+  shared: ConnectionView | null
+  platform: PlatformResponse | null
+}): string | null {
+  if (input.dsnSaved || !input.shared || input.shared.state === 'not_connected') return null
+  if (!sentryConfiguredFromPlatform(input.platform)) return null
+  const source = input.platform?.sourceByField?.sentry_auth_token_ref ?? input.platform?.sourceByField?.sentry_org_slug
+  const via =
+    source === 'org'
+      ? "your organization's Sentry org slug and auth token"
+      : source === 'env'
+        ? "the server's Sentry org slug and auth token"
+        : 'the org slug and auth token on the Integrations page'
+  return `No DSN saved, and none is needed: Sentry is connected through ${via}, which import, enrichment and resolve-on-merge use. A DSN only marks this app as reporting crashes to Sentry.`
+}
+
 type ReadState = { data: unknown; error: string | null }
 
 /**

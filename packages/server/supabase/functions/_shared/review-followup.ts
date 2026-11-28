@@ -1,7 +1,7 @@
 /**
  * FILE: packages/server/supabase/functions/_shared/review-followup.ts
  * PURPOSE: The rules of the review follow-up loop (ADR 0032), as pure
- *          functions: when a "fix_first" Opus review (ADR 0030) earns one
+ *          functions: when a "fix_first" AI review (ADR 0030) earns one
  *          follow-up, whether a queued follow-up may be dispatched now,
  *          whether the configured Cursor model is one the key can use, the
  *          prompt, the Cursor create request, how a finished run is read,
@@ -174,7 +174,7 @@ export interface PriorFollowup {
 }
 
 /**
- * What a follow-up asks the agent to do: act on the Opus findings of a
+ * What a follow-up asks the agent to do: act on the AI review findings of a
  * "fix_first" review (ADR 0032), or make CI green on a "merge" review whose
  * head fails CI on the code (the 2026-10-22 amendment).
  */
@@ -302,6 +302,48 @@ const CODE_FAILURE_CONCLUSIONS = new Set(['failure', 'timed_out'])
 const PENDING_KINDS = new Set(['running', 'queued'])
 const INFRA_KINDS = new Set(['waiting_for_runner', 'runner_lost', 'queue_expired'])
 
+/** The latest attempt of each job (workflow + job name) on one head. */
+function latestCiJobs(rows: readonly CiJobForRepair[]): CiJobForRepair[] {
+  const latest = new Map<string, CiJobForRepair>()
+  for (const r of rows) {
+    const key = `${r.workflow_name ?? ''}\u0000${r.job_name}`
+    const prev = latest.get(key)
+    const newer =
+      !prev ||
+      (r.run_attempt ?? 1) > (prev.run_attempt ?? 1) ||
+      ((r.run_attempt ?? 1) === (prev.run_attempt ?? 1) && Date.parse(r.gh_created_at ?? '') > Date.parse(prev.gh_created_at ?? ''))
+    if (newer) latest.set(key, r)
+  }
+  return [...latest.values()]
+}
+
+/**
+ * `pending` only because the newest collected row is the draft guard's stop,
+ * with no job actually queued or running. The collector reads a bounded page
+ * of runs per repo, so on a busy repo the run after "ready for review" can be
+ * missed for good: 68 open fix PRs read "CI still running after 3 hours" for
+ * up to 22 days while GitHub showed every check green (2026-11-24).
+ * @internal Exported for unit tests only.
+ */
+export function isDraftStopOnlyPending(rows: readonly CiJobForRepair[]): boolean {
+  const jobs = latestCiJobs(rows)
+  return jobs.some(isDraftGuardStop) && !jobs.some((j) => PENDING_KINDS.has(j.ci_kind))
+}
+
+/**
+ * The head's CI, with the PR's GitHub check summary
+ * (fix_attempts.check_run_conclusion, read by ci-sync from the check runs)
+ * settling a draft-stop-only `pending`. Only `success` settles it; anything
+ * else keeps the collected state.
+ */
+export function ciHeadStateWithChecks(rows: readonly CiJobForRepair[], checkRunConclusion: string | null | undefined): CiHeadState {
+  const ci = ciHeadState(rows)
+  if (ci.state === 'pending' && (checkRunConclusion ?? '').toLowerCase() === 'success' && isDraftStopOnlyPending(rows)) {
+    return { state: 'green', failing: [] }
+  }
+  return ci
+}
+
 /**
  * CI on one head, from its `ci_jobs` rows: the latest attempt of each job
  * (workflow + job name) decides, so a re-run that passed clears a failure.
@@ -316,17 +358,7 @@ const INFRA_KINDS = new Set(['waiting_for_runner', 'runner_lost', 'queue_expired
  * the state is `base_failing`.
  */
 export function ciHeadState(rows: readonly CiJobForRepair[], baseFailing: ReadonlySet<string> | null = null): CiHeadState {
-  const latest = new Map<string, CiJobForRepair>()
-  for (const r of rows) {
-    const key = `${r.workflow_name ?? ''}\u0000${r.job_name}`
-    const prev = latest.get(key)
-    const newer =
-      !prev ||
-      (r.run_attempt ?? 1) > (prev.run_attempt ?? 1) ||
-      ((r.run_attempt ?? 1) === (prev.run_attempt ?? 1) && Date.parse(r.gh_created_at ?? '') > Date.parse(prev.gh_created_at ?? ''))
-    if (newer) latest.set(key, r)
-  }
-  const jobs = [...latest.values()]
+  const jobs = latestCiJobs(rows)
   if (jobs.length === 0) return { state: 'none', failing: [] }
   // The draft run's intentional stop is not a test result: CI runs once the
   // PR is marked ready, so it counts as pending until that run is collected.
@@ -753,7 +785,7 @@ export function buildFollowupPrompt(input: FollowupPromptInput): { text: string;
 
   const head = [
     'You are following up on an existing pull request that a coding agent opened to fix a bug a real user reported.',
-    'An independent reviewer (Claude Opus) read the pull request and said "fix first": it is close, but the findings below must be addressed before it can merge.',
+    'An independent AI reviewer read the pull request and said "fix first": it is close, but the findings below must be addressed before it can merge.',
     '',
     `Pull request: ${input.prUrl}`,
     `Branch: ${input.branch ? fenceFollowupText(input.branch.slice(0, 200)) : '(the pull request head branch)'}`,
@@ -910,7 +942,7 @@ export function buildCiRepairPrompt(input: CiRepairPromptInput): { text: string;
   const checks = input.checks.slice(0, CI_REPAIR_MAX_CHECKS)
   const head = [
     'You are following up on an existing pull request that a coding agent opened to fix a bug a real user reported.',
-    'An independent reviewer (Claude Opus) read the pull request and said it can merge, but CI on the reviewed commit fails on the code. Your job is to make CI green without weakening any test.',
+    'An independent AI reviewer read the pull request and said it can merge, but CI on the reviewed commit fails on the code. Your job is to make CI green without weakening any test.',
     '',
     `Pull request: ${input.prUrl}`,
     `Branch: ${input.branch ? fenceFollowupText(input.branch.slice(0, 200)) : '(the pull request head branch)'}`,

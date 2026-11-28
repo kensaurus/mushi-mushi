@@ -47,3 +47,17 @@ describe('SegmentedControl scroll strip', () => {
     expect(out).toContain('whitespace-nowrap')
   })
 })
+
+// Console polish 2026-11-22: the selected-tab note named Connect's "Studio" tab, renamed "Editor".
+// Connect has no section tabs since ADR 0069 (one step at a time), so the note names no Connect tab.
+describe('SegmentedControl notes', () => {
+  it('names no Connect tab that the page does not show', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { join } = await import('node:path')
+    const forms = readFileSync(join(__dirname, 'forms.tsx'), 'utf8')
+    const connect = readFileSync(join(__dirname, '../../pages/ConnectPage.tsx'), 'utf8')
+    expect(connect).not.toContain('<SectionAnchorNav')
+    expect(forms).toContain('(a selected tab beside "Add to Cursor")')
+    expect(forms).not.toMatch(/Connect: "[^"]+" tab/)
+  })
+})

@@ -198,7 +198,7 @@ describe('fix-worker wiring', () => {
     expect(src).toMatch(/the fix's edits could not be applied/)
   })
 
-  it('queues the Opus review once the draft PR is recorded (ADR 0047)', () => {
+  it('queues the AI review once the draft PR is recorded (ADR 0047)', () => {
     const recorded = src.indexOf('branch: prResult.branch,')
     const enqueue = src.indexOf('await enqueueFixReview(db, {')
     expect(recorded).toBeGreaterThan(prCreate)

@@ -16,36 +16,32 @@ description: The Connect page wires GitHub, the SDK, MCP, the CLI and your edito
 > the Mushi Mushi SDK. This page wires GitHub, the SDK, MCP, the CLI and upgrade PRs
 > in one place.
 
-A row of status pills at the top (**App checked in**, **SDK version**, **Editor**)
-says what is already connected. Below them, the page opens with a client picker:
-pick your AI client, then a lane (MCP / CLI / Skills). Connecting GitHub enables the
-**Create Upgrade PR** flow; the SDK and MCP sections work without it.
+## Steps
 
----
+The page is three steps, in the order a new app needs them, and only the step
+to do now is open ([ADR 0069](https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0069-builder-console-is-the-fix-loop.md)).
+A done step is one line with a ✓ and **Change**; a later step is one line you
+can still open. Links into the page open their step: `#connect-sdk`,
+`#connect-studio` and `#connect-github`.
 
-## Client picker (3 lanes)
+| # | Step | What it does |
+|---|------|--------------|
+| 1 | **Report button** | The install snippet: the **Script tag** leads, the framework the app's repo uses sits beside it, and every other framework is in **Other frameworks**. **Make a key and fill it in** fills in the key; **Where does your app run?** says where it goes on Lovable, Bolt, Vercel, Netlify or EAS. **Customize the report button** opens the widget settings. Done once the app checks in. |
+| 2 | **Editor** | Cursor, Claude Code and VS Code lead; **Other editors** lists the rest. The MCP one-click comes first, **Use the CLI or skills instead** opens the other two ways, and **Set it up by hand** shows the MCP endpoint. Done once your editor calls Mushi Mushi. |
+| 3 | **GitHub** | Link the repo so upgrade PRs, autofix and CI secret sync can use its token. |
 
-| Lane | What it does |
-|------|--------------|
-| **MCP** | One-click install for Cursor, VS Code, Claude Code, Windsurf and other clients (`ClientConnectButton` mints a scoped key, then opens a deeplink or gives you config JSON) |
-| **CLI** | Three commands to copy: `npm install -g @mushi-mushi/cli@latest`, `mushi login`, then `mushi setup --ide ` |
-| **Skills** | Copy skill setup for the selected client |
+If your only key is an SDK key, a note under the editor step offers **Add an MCP
+key** (`mcp:read`), which your editor needs to read this app's reports.
 
-If your only key is an SDK key, a note under the picker offers **Add an MCP key**
-(`mcp:read`), which your editor needs to read this app's reports.
+### Once the app checks in
 
----
+The **Update center** (per-package freshness and **Create Upgrade PR**) and
+**SDK health** (problems that stop bug reports from arriving, each with a fix;
+see [SDK health](/admin/sdk-health)) show below the steps. While the SDK is
+current and nothing is wrong they are one line, with **Details** for the rest.
+Until the app checks in, links to `#connect-sdk-health` open the report button step.
 
-## Sections
-
-| # | Section | What it does |
-|---|---------|--------------|
-| 1 | Client picker | MCP / CLI / Skills lanes (above) |
-| 2 | **GitHub** | Link the repo so upgrade PRs, autofix and CI secret sync can use its token. **Manage** opens Integrations. |
-| 3 | **SDK health** | Problems that stop bug reports from arriving, each with a fix (see [SDK health](/admin/sdk-health)) |
-| 4 | **Bug capture SDK** | Framework tabs and a copy-ready install snippet; **Make a key and fill it in** fills in the key |
-| 5 | **Native app CI secrets** | Diagnose, and one-click sync of `NEXT_PUBLIC_MUSHI_*` into GitHub Actions |
-| 6 | **Update center** | Per-package freshness and **Create Upgrade PR** |
+Native apps (Capacitor, Expo, React Native) also get **Native app CI secrets**.
 
 ---
 
@@ -82,7 +78,7 @@ See also: [Self-hosting](/self-hosting) · [`AGENTS.md` native CI section](https
 
 When a package is outdated or deprecated:
 
-1. Click **Create Upgrade PR** on the Update center row.
+1. Click **Create Upgrade PR** in the Update center (shown once the app checks in).
 2. Backend enqueues `sdk_upgrade_jobs` → `sdk-upgrade-worker` bumps
    `@mushi-mushi/*` in `package.json` files only (never `workspace:` / `file:`).
 3. Draft PR opens on GitHub, auto-readied, status streams via SSE.
@@ -98,18 +94,18 @@ CLI equivalent: see [SDK reference → CLI](/sdks/cli) (`mushi upgrade` for loca
 
 ## Quick path (5 minutes)
 
+### Add the report button
+Copy the snippet → paste into your app → deploy or run locally.
+
+### Wire MCP
+In the editor step, click **Add to Cursor** (or your editor's button), restart
+the IDE, then run `mushi doctor`.
+
 ### Connect GitHub
 Press **Connect GitHub**, sign in to GitHub and pick your repository. The list
 shows only repositories you can open, with the one named like your app first.
 If the Mushi Mushi GitHub App is not on your account yet, GitHub asks you to install
 it first.
-
-### Install SDK
-Copy the framework snippet → paste into your app → deploy or run locally.
-
-### Wire MCP
-In the client picker's **MCP** lane, click **Add to Cursor** (or your client's
-button), restart the IDE, then run `mushi doctor`.
 
 ### Wire CLI (SDK + env + MCP)
 `mushi connect` saves credentials, writes the SDK env vars to `.env.local` and wires

@@ -27,7 +27,7 @@ import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import type { PreflightCheck, PreflightState } from '../../lib/useDispatchPreflight'
 import { CHIP_TONE } from '../../lib/chipTone'
-import { Btn } from '../ui'
+import { Badge, Btn, btnClassName } from '../ui'
 
 interface Props {
   busy: boolean
@@ -39,8 +39,8 @@ interface Props {
   preflight?: PreflightState
   /** GitHub repo URL the fix PR will land on. Sourced from platform integrations. */
   repoUrl?: string | null
-  /** Table row — shorter label, width-constrained trigger. */
-  variant?: 'default' | 'table'
+  /** Table row — shorter label, width-constrained trigger. Card = phone row, same label, 44px target. */
+  variant?: 'default' | 'table' | 'card'
   /** Why this report cannot be dispatched (e.g. a feature request), from
    *  `dispatchBlock()` — the same gate the report page uses. */
   blockReason?: string | null
@@ -149,7 +149,9 @@ export function DispatchFixPreflight({
     onConfirm()
   }
 
-  const isTable = variant === 'table'
+  // `card` is the phone row: the table's short label on a 44px touch target.
+  const isTable = variant === 'table' || variant === 'card'
+  const isCard = variant === 'card'
   const triggerLabel = busy
     ? isTable
       ? 'Sending…'
@@ -172,12 +174,12 @@ export function DispatchFixPreflight({
           setOpen((v) => !v)
         }}
         disabled={busy}
-        className={[
-          'inline-flex items-center justify-center gap-0.5 rounded-sm border font-medium disabled:cursor-wait disabled:opacity-50',
-          isTable
-            ? 'h-5 min-h-0 shrink-0 truncate px-1.5 text-3xs leading-none bg-brand/12 text-brand border border-brand/28 hover:bg-brand/20'
-            : 'px-2 py-1 text-2xs bg-brand/12 text-brand border border-brand/28 hover:bg-brand/20',
-        ].join(' ')}
+        // Fix is the red intent (lib/actionIntent.ts): the same hue as a Critical chip.
+        className={btnClassName({
+          intent: 'fix',
+          size: isCard ? 'md' : 'sm',
+          className: `shrink-0 disabled:cursor-wait ${isCard ? 'min-h-11 px-3' : isTable ? 'max-w-full truncate' : ''}`,
+        })}
       >
         <span className="truncate">{triggerLabel}</span>
       </button>
@@ -202,13 +204,9 @@ export function DispatchFixPreflight({
               const match = repoUrl.match(/github\.com\/([^/]+\/[^/]+)/i)
               const shortName = match?.[1] ?? repoUrl.replace(/^https?:\/\//, '')
               return (
-                <span
-                  className="inline-flex items-center gap-1 rounded-sm bg-surface-overlay px-1.5 py-px text-2xs text-fg-muted font-mono"
-                  title={`PR will land on ${repoUrl}`}
-                >
-                  <span aria-hidden="true">📂</span>
+                <Badge tone="neutral" className="font-mono font-normal" title={`PR will land on ${repoUrl}`} icon="📂">
                   {shortName}
-                </span>
+                </Badge>
               )
             })()}
           </div>
@@ -374,7 +372,7 @@ function PreflightChecklist({
   }
   if (failing.length === 0) {
     return (
-      <div className={`mt-2 rounded-sm ${CHIP_TONE.okSubtle} p-2 text-2xs`}>
+      <div className={`mt-2 rounded-sm ${CHIP_TONE.ok} p-2 text-2xs`}>
         <div className="flex items-center gap-1.5">
           <CheckIcon />
           <span className="font-medium">All {checks.length} prerequisites met</span>

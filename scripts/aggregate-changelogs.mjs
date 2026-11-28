@@ -107,7 +107,11 @@ function extractHeadline(body) {
 function extractHighlights(body) {
   const out = []
   const lines = body.split(/\r?\n/)
-  const bulletRe = /^([\t ]*)-\s+\*\*([^*]+)\*\*:?\s*(.*)$/
+  // A changeset whose text starts with a list is written by Changesets as
+  // "- c98879e: - **Title** …" (the body reaches here as "c98879e: - **…"):
+  // accept that commit prefix, or the release's first (usually main) bullet
+  // never reaches the changelog.
+  const bulletRe = /^([\t ]*)(?:[0-9a-f]{7,40}:\s+)?-\s+\*\*([^*]+)\*\*:?\s*(.*)$/
   for (let i = 0; i < lines.length; i++) {
     const m = lines[i].match(bulletRe)
     if (!m) continue

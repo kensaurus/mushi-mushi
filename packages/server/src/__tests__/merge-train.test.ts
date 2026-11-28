@@ -79,6 +79,15 @@ describe('who rides', () => {
     expect(isExpress(c({ severity: 'critical' }))).toBe(true)
     expect(isExpress(c())).toBe(false)
   })
+  it('puts high and critical CI security-scan fixes on the express lane (ADR 0074), not medium or low', () => {
+    expect(isExpress(c({ source: 'security_scan', severity: 'high' }))).toBe(true)
+    expect(isExpress(c({ source: 'security_scan', severity: 'HIGH' }))).toBe(true)
+    expect(isExpress(c({ source: 'security_scan', severity: 'critical' }))).toBe(true)
+    expect(isExpress(c({ source: 'security_scan', severity: 'medium' }))).toBe(false)
+    expect(isExpress(c({ source: 'security_scan', severity: null }))).toBe(false)
+    // A high bug from any other inbox still waits for the train.
+    expect(isExpress(c({ source: 'widget', severity: 'high' }))).toBe(false)
+  })
   it('picks the oldest ready members up to the limit', () => {
     const rows = [
       c({ rowId: 'b', prNumber: 12, queuedAt: '2026-10-23T09:00:00Z' }),

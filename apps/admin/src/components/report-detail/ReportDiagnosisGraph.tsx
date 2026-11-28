@@ -13,6 +13,10 @@
  *          SVG overlay measured from the buttons, so text wraps naturally,
  *          every node is reachable by keyboard, and below the lg breakpoint
  *          the lanes stack and the links are hidden.
+ *
+ *          ADR 0069: the report page folds it into "Why Mushi Mushi thinks
+ *          this" and renders it `bare` (no card, no heading: the fold's
+ *          summary carries the verdict).
  */
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -44,22 +48,22 @@ const LANE_DOT: Record<DiagnosisLane, string> = {
 }
 
 const VERDICT_TONE: Record<DiagnosisGraph['verdict']['tone'], string> = {
-  ok: CHIP_TONE.okSubtle,
-  warn: CHIP_TONE.warnSubtle,
-  danger: CHIP_TONE.dangerSubtle,
-  info: CHIP_TONE.infoSubtle,
+  ok: CHIP_TONE.ok,
+  warn: CHIP_TONE.warn,
+  danger: CHIP_TONE.danger,
+  info: CHIP_TONE.info,
 }
 
 function stateChip(node: DiagnosisNode): { label: string; tone: string } | null {
-  if (node.state === 'failed') return { label: 'failed', tone: CHIP_TONE.dangerSubtle }
-  if (node.needsLook) return { label: node.confidence != null ? `check · ${Math.round(node.confidence * 100)}%` : 'check this', tone: CHIP_TONE.warnSubtle }
-  if (node.state === 'pending') return { label: 'in progress', tone: CHIP_TONE.infoSubtle }
+  if (node.state === 'failed') return { label: 'failed', tone: CHIP_TONE.danger }
+  if (node.needsLook) return { label: node.confidence != null ? `check · ${Math.round(node.confidence * 100)}%` : 'check this', tone: CHIP_TONE.warn }
+  if (node.state === 'pending') return { label: 'in progress', tone: CHIP_TONE.info }
   // Unchecked: the title says it ("Not graded yet"); a "not checked" chip
   // under it said it twice (round-3 sweep 2026-11-19).
   if (node.state === 'unchecked') return null
-  if (node.state === 'open') return { label: 'your move', tone: CHIP_TONE.infoSubtle }
-  if (node.state === 'done') return { label: 'done', tone: CHIP_TONE.okSubtle }
-  if (node.confidence != null) return { label: `${Math.round(node.confidence * 100)}%`, tone: CHIP_TONE.okSubtle }
+  if (node.state === 'open') return { label: 'your move', tone: CHIP_TONE.info }
+  if (node.state === 'done') return { label: 'done', tone: CHIP_TONE.ok }
+  if (node.confidence != null) return { label: `${Math.round(node.confidence * 100)}%`, tone: CHIP_TONE.ok }
   return null
 }
 
@@ -267,7 +271,31 @@ function NodePanel({
   )
 }
 
-export function ReportDiagnosisGraph({ report, showInternals = false }: { report: ReportDetail; showInternals?: boolean }) {
+/** The verdict chip and "N things to check", shared by the card header and the page's fold summary. */
+export function DiagnosisVerdict({ graph }: { graph: DiagnosisGraph }) {
+  const marks = graph.nodes.filter((n) => n.needsLook).length
+  return (
+    <>
+      <Badge className={`${VERDICT_TONE[graph.verdict.tone]} text-3xs`}>{graph.verdict.label}</Badge>
+      {marks > 0 && (
+        <span className="text-2xs font-normal text-fg-muted">
+          {marks === 1 ? '1 thing to check' : `${marks} things to check`}
+        </span>
+      )}
+    </>
+  )
+}
+
+export function ReportDiagnosisGraph({
+  report,
+  showInternals = false,
+  bare = false,
+}: {
+  report: ReportDetail
+  showInternals?: boolean
+  /** Inside the page's fold: no card and no heading of its own. */
+  bare?: boolean
+}) {
   const graph = useMemo(() => buildDiagnosisGraph(report), [report])
   const [selected, setSelected] = useState<string | null>(() => initialDiagnosisSelection(graph))
   useEffect(() => {
@@ -286,22 +314,9 @@ export function ReportDiagnosisGraph({ report, showInternals = false }: { report
   const paths = useEdgePaths(canvas, graph, wide)
   const stepOf = useMemo(() => new Map(graph.path.map((id, i) => [id, i + 1])), [graph.path])
   const byId = useMemo(() => new Map(graph.nodes.map((n) => [n.id, n])), [graph.nodes])
-  const marks = graph.nodes.filter((n) => n.needsLook).length
   const node = selected ? byId.get(selected) ?? null : null
 
-  return (
-    <Card className="mb-3 p-3 motion-safe:animate-mushi-fade-in" data-testid="report-diagnosis-graph">
-      <div className="mb-2 flex flex-wrap items-center gap-2">
-        <IconGraph className="h-4 w-4 text-fg-muted" aria-hidden />
-        <h3 className="text-sm font-semibold text-fg">How Mushi Mushi reached this diagnosis</h3>
-        <Badge className={`${VERDICT_TONE[graph.verdict.tone]} text-3xs`}>{graph.verdict.label}</Badge>
-        {marks > 0 && (
-          <span className="text-2xs text-fg-muted">
-            {marks === 1 ? '1 thing to check' : `${marks} things to check`}
-          </span>
-        )}
-      </div>
-
+  const body = (
       <div className="grid gap-3 lg:grid-cols-5">
         <div className="min-w-0 overflow-x-auto lg:col-span-4">
           <div ref={canvas} className="relative grid gap-3 lg:min-w-3xl lg:grid-cols-5 lg:gap-x-9 lg:gap-y-3">
@@ -356,6 +371,16 @@ export function ReportDiagnosisGraph({ report, showInternals = false }: { report
           </div>
         </aside>
       </div>
+  )
+  if (bare) return <div data-testid="report-diagnosis-graph">{body}</div>
+  return (
+    <Card className="mb-3 p-3 motion-safe:animate-mushi-fade-in" data-testid="report-diagnosis-graph">
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <IconGraph className="h-4 w-4 text-fg-muted" aria-hidden />
+        <h3 className="text-sm font-semibold text-fg">How Mushi Mushi reached this diagnosis</h3>
+        <DiagnosisVerdict graph={graph} />
+      </div>
+      {body}
     </Card>
   )
 }

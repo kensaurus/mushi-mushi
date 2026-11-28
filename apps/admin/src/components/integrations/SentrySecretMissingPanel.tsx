@@ -54,7 +54,7 @@ export function SentrySecretMissingPanel({ orgSlug, autoImportOn, canManage, onP
   }
 
   return (
-    <div className={`mx-3 mb-2 rounded-sm px-3 py-2 text-2xs space-y-2 ${CHIP_TONE.warnSubtle}`} data-testid="mushi-sentry-secret-missing">
+    <div className={`mx-3 mb-2 rounded-sm px-3 py-2 text-2xs space-y-2 ${CHIP_TONE.warn}`} data-testid="mushi-sentry-secret-missing">
       <p className="leading-snug">
         <strong>Sentry alerts are being dropped.</strong> Sentry sends them to this app, but Mushi Mushi has no webhook
         secret to check them with, so it rejects each one.

@@ -117,7 +117,7 @@ describe('Mushi public API error isolation', () => {
     await vi.waitFor(() => {
       expect(shadow.querySelector('[data-role="screenshot-reason"]')?.textContent).toContain('Allow it');
     });
-    expect(shadow.querySelector('[data-action="screenshot"]')?.textContent).toContain('Try again');
+    expect(shadow.querySelector('[data-action="screenshot"]')?.getAttribute('aria-label')).toContain('Try again');
   });
 
   it('a screenshotProvider that resolves to a file:// URI attaches nothing', async () => {
@@ -130,7 +130,7 @@ describe('Mushi public API error isolation', () => {
     (shadow.querySelector('[data-action="screenshot"]') as HTMLButtonElement).click();
 
     await vi.waitFor(() => {
-      expect(shadow.querySelector('[data-action="screenshot"]')?.textContent).toContain('Try again');
+      expect(shadow.querySelector('[data-action="screenshot"]')?.getAttribute('aria-label')).toContain('Try again');
     });
     expect(shadow.querySelector('.mushi-screenshot-preview img')).toBeNull();
   });

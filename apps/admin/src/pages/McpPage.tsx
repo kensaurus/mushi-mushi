@@ -49,7 +49,7 @@ import {
 } from '../lib/mcpPageHelpers'
 import { accountKeyForProject, mcpJsonDraftCheck } from '../lib/mcpSetupView'
 import type { AccountKeyRow } from '../components/mcp/McpAccountKeysList'
-import { CHIP_TONE, HEADER_BADGE_TONE } from '../lib/chipTone'
+import { CHIP_TONE } from '../lib/chipTone'
 import { PageLoadError } from '../components/PageLoadError'
 
 export function McpPage() {
@@ -364,12 +364,12 @@ export function McpPage() {
             <Badge
               className={
                 bannerSeverity === 'ok'
-                  ? CHIP_TONE.okSubtle
+                  ? CHIP_TONE.ok
                   : bannerSeverity === 'warn'
-                    ? CHIP_TONE.warnSubtle
+                    ? CHIP_TONE.warn
                     : bannerSeverity === 'brand'
-                      ? HEADER_BADGE_TONE.brand
-                      : HEADER_BADGE_TONE.neutral
+                      ? CHIP_TONE.neutral
+                      : CHIP_TONE.neutral
               }
             >
               {headerBadge}

@@ -21,6 +21,7 @@ const SOURCE_TO_KIND: Readonly<Record<string, Exclude<ReportSourceKind, 'user' |
   site_audit: 'check',
   code_audit: 'check',
   security_advisory: 'check',
+  security_scan: 'check',
   library_modernizer: 'check',
   skill_run: 'check',
   fresh_eyes: 'check',

@@ -1,7 +1,12 @@
 /**
  * FILE: apps/admin/src/components/settings/GeneralPanel.tsx
- * PURPOSE: Settings → General. Lists, one card each:
- *            Bug alerts       Slack bot channel, older Slack webhook
+ * PURPOSE: Settings → General. Bug alerts (the Slack channel) lead; the rest
+ *          sits in one "Advanced" group that is closed until asked, opens by
+ *          itself when a link points into it or the saved branch pattern is
+ *          refused (ADR 0069). Lists, one card each:
+ *            Bug alerts       Slack bot channel
+ *          Advanced:
+ *            Older webhook    the older Slack webhook
  *            Error tracking   Sentry
  *            Your database    Supabase project link (read-only)
  *            Bug sorting      triage model, confidence, grouping, fix branches
@@ -14,6 +19,7 @@
  */
 
 import { useMemo, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { apiFetch } from '../../lib/supabase'
 import { usePageData } from '../../lib/usePageData'
 import { useToast } from '../../lib/toast'
@@ -48,8 +54,8 @@ import { providerStatusView } from './keyStatus'
 import { SettingsList, SettingsRow, type RowStatusValue } from './SettingsRow'
 import { slackAlertStatus, slackCanOfferTest } from './slackAlertStatus'
 import { fixBranchFieldState } from './fixBranchField'
-import { sentryRowStatus, useSentryConnection } from '../../lib/useSentryConnection'
-import type { HealthRow } from '../integrations/types'
+import { sentryDsnFieldNote, sentryRowStatus, useSentryConnection } from '../../lib/useSentryConnection'
+import type { HealthRow, PlatformResponse } from '../integrations/types'
 
 /** Tri-state select values for `widget_brand_footer` (null = plan default). */
 type BrandFooterChoice = 'default' | 'on' | 'off'
@@ -106,6 +112,24 @@ const DEFAULT_BRANCH_TEMPLATE = 'bugfix/MUSHI-{reportId}-{category}'
 /** The model each job really runs: column defaults and retired ids resolve like the server does. */
 const eff = effectiveModelId
 
+/** Ids inside the Advanced group: a link to any of them opens it. */
+const GENERAL_ADVANCED_ANCHORS: readonly string[] = [
+  'settings-advanced',
+  'slack-webhook',
+  'error-tracking',
+  'supabase',
+  'bug-sorting',
+  'stage1-confidence',
+  'dedup',
+  'fix-branch',
+  'daily-limits',
+  'crawl-pages',
+  'crawl-runs',
+  'tdd-gens',
+  'widget',
+  'widget-brand-footer',
+]
+
 export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
   const toast = useToast()
   const entitlements = useEntitlements()
@@ -114,11 +138,15 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
   // The same verdict the Integrations card shows, from the same inputs, so
   // the two pages never disagree about Sentry.
   const sentryShared = useSentryConnection()
+  // The same credentials read (cached): says where Sentry's connection comes from when no DSN is saved.
+  const sentryPlatform = usePageData<PlatformResponse>('/v1/admin/integrations/platform')
   // The Slack probe the Integrations card reads (same request, cached), so a
   // test sent from either page shows on both.
   const health = usePageData<{ history: HealthRow[] }>('/v1/admin/health/history')
   const slackProbe = health.data?.history?.find((h) => h.kind === 'slack')
   const [draft, setDraft] = useState<ProjectSettings | null>(null)
+  const location = useLocation()
+  const [advancedChoice, setAdvancedChoice] = useState<{ nav: string; open: boolean } | null>(null)
   const [saving, setSaving] = useState(false)
   const [showLegacyWebhook, setShowLegacyWebhook] = usePersistentState(
     'settings:general:slack-webhook-open',
@@ -219,6 +247,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
   // the saved-value line fills in a detail the verdict leaves empty, and
   // stands in while there is nothing to check (no Sentry credentials yet).
   const sentryStatus: RowStatusValue = sentryRowStatus(sentryShared, sentrySavedHint)
+  const sentryDsnNote = sentryDsnFieldNote({ dsnSaved: sentryDsnSaved, shared: sentryShared, platform: sentryPlatform.data })
 
   const supabaseRefSaved = Boolean(saved.supabase_project_ref)
   const supabaseKeyView = providerStatusView('supabase', pool.data?.keys ?? [], pool.data?.legacyKeys ?? [], {
@@ -235,6 +264,12 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
     saved: saved.fix_branch_template,
     defaultValue: DEFAULT_BRANCH_TEMPLATE,
   })
+  // A click opens or closes Advanced until the next navigation. Otherwise it is open when a link
+  // points into it, or when the saved branch pattern is refused: the banner's "Fix pattern" and
+  // the footer's "Fix the branch name pattern first" both need that field on screen.
+  const advancedLinked = GENERAL_ADVANCED_ANCHORS.includes(location.hash.slice(1))
+  const advancedChosen = advancedChoice && advancedChoice.nav === location.key ? advancedChoice.open : null
+  const showAdvanced = advancedChosen ?? (advancedLinked || Boolean(branch.error))
 
   return (
     <>
@@ -256,8 +291,11 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
             ) : null
           }
         >
+          {/* Short values get short fields: an 11-character channel ID in a
+              1000px box read as a form that wanted a paragraph (2026-11-22). */}
           <Input
             label="Channel ID"
+            containerClassName="max-w-xs"
             helpId="settings.general.slack_channel_id"
             type="text"
             value={settings.slack_channel_id ?? ''}
@@ -277,7 +315,31 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
             </ResultChip>
           )}
         </SettingsRow>
+      </SettingsList>
 
+      {/* Advanced: closed until asked, rendered only when open (ADR 0069). The form keeps every
+          value in its own state, so closing it loses nothing and Save still counts its changes. */}
+      <div
+        id="settings-advanced"
+        className="flex scroll-mt-6 flex-wrap items-center justify-between gap-2 rounded-md border border-edge-subtle px-4 py-3"
+      >
+        <p className="min-w-0 text-sm text-fg-secondary">
+          Advanced: Sentry, the older Slack webhook, your Supabase link, bug sorting, daily limits and the widget line.
+        </p>
+        <Btn
+          size="sm"
+          variant="ghost"
+          aria-expanded={showAdvanced}
+          aria-controls="settings-advanced-body"
+          onClick={() => setAdvancedChoice({ nav: location.key, open: !showAdvanced })}
+          data-testid="settings-advanced-toggle"
+        >
+          {showAdvanced ? 'Hide' : 'Show'}
+        </Btn>
+      </div>
+      {showAdvanced && (
+      <div id="settings-advanced-body" className="space-y-4">
+      <SettingsList id="slack-webhook" title="Older Slack webhook" description="Posts bug alerts without threads or buttons.">
         <SettingsRow
           icon={<IconChat size={16} />}
           title="Older Slack webhook"
@@ -334,13 +396,19 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
         >
           {/* The DSN carries the public key; mask it like the webhook secret below. */}
           <SecretInput
-            label="Sentry DSN"
+            label="Sentry DSN (optional)"
             helpId="settings.general.sentry_dsn"
             value={settings.sentry_dsn ?? ''}
             onChange={(e) => update({ sentry_dsn: e.target.value })}
             placeholder="e.g. https://<key>@o0.ingest.sentry.io/<project-id>"
             validate={sentryDsn()}
           />
+          {/* An empty DSN beside "Working" read as broken: say why it can stay empty. */}
+          {sentryDsnNote && (
+            <p className="-mt-1 text-2xs text-fg-muted" data-testid="sentry-dsn-note">
+              {sentryDsnNote}
+            </p>
+          )}
           <SettingsChangeHint current={settings.sentry_dsn ?? ''} saved={saved.sentry_dsn ?? ''} kind="secret" />
           <SecretInput
             label="Webhook secret"
@@ -390,6 +458,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
         >
           <Input
             label="Supabase project ref"
+            containerClassName="max-w-xs"
             helpId="settings.general.supabase_project_ref"
             type="text"
             value={settings.supabase_project_ref ?? ''}
@@ -535,6 +604,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
         >
           <Input
             label="Branch name pattern"
+            containerClassName="max-w-lg"
             helpId="settings.general.fix_branch_template"
             type="text"
             value={settings.fix_branch_template ?? DEFAULT_BRANCH_TEMPLATE}
@@ -642,6 +712,8 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
           />
         </SettingsRow>
       </SettingsList>
+      </div>
+      )}
 
       <SettingsFormFooter
         dirty={dirty}

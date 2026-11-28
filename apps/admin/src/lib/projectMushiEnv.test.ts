@@ -1,54 +1,57 @@
 import { describe, expect, it } from 'vitest'
 import {
   bundlerKindForFramework,
+  isExpoEnv,
+  isMushiSelfProject,
   mushiEnvVarsForBundler,
-  mushiEnvVarsForProjectSlug,
+  mushiEnvVarsForProject,
 } from './projectMushiEnv'
 
-describe('mushiEnvVarsForProjectSlug', () => {
-  it('uses Vite self vars for mushi-mushi admin dogfood', () => {
-    const env = mushiEnvVarsForProjectSlug('mushi-mushi')
+describe('mushiEnvVarsForProject (ADR 0072: from the stack, never the app name)', () => {
+  it('uses the Vite self vars only for the configured self project', () => {
+    expect(isMushiSelfProject('p-self', 'p-self')).toBe(true)
+    expect(isMushiSelfProject('p-other', 'p-self')).toBe(false)
+    expect(isMushiSelfProject('p-self', undefined)).toBe(false)
+    const env = mushiEnvVarsForProject({ isSelf: true })
     expect(env.apiKeyVar).toBe('VITE_MUSHI_SELF_API_KEY')
     expect(env.projectIdVar).toBe('VITE_MUSHI_SELF_PROJECT_ID')
   })
 
-  it('uses Expo public vars for yen-yen', () => {
-    const env = mushiEnvVarsForProjectSlug('yen-yen')
+  it('gives any Expo app the Expo names and the CI vars store builds need', () => {
+    const env = mushiEnvVarsForProject({ framework: 'expo' })
     expect(env.apiKeyVar).toBe('EXPO_PUBLIC_MUSHI_API_KEY')
-    expect(env.envFileHint).toBe('apps/mobile/.env.local')
+    expect(isExpoEnv(env)).toBe(true)
     expect(env.ciVars?.projectId.name).toBe('EXPO_PUBLIC_MUSHI_PROJECT_ID')
     expect(env.ciVars?.apiKey.ghKind).toBe('secret')
+    expect(mushiEnvVarsForProject({ framework: 'react-native' }).apiKeyVar).toBe('EXPO_PUBLIC_MUSHI_API_KEY')
   })
 
-  it('uses Vite vars for solo-boss-cloud', () => {
-    const env = mushiEnvVarsForProjectSlug('solo-boss-cloud')
-    expect(env.apiKeyVar).toBe('VITE_MUSHI_API_KEY')
+  it('uses Vite vars for a Vite app', () => {
+    expect(mushiEnvVarsForProject({ framework: 'vite' }).apiKeyVar).toBe('VITE_MUSHI_API_KEY')
   })
 
-  it('defaults to Next public vars for unknown slugs', () => {
-    const env = mushiEnvVarsForProjectSlug('my-app')
-    expect(env.apiKeyVar).toBe('NEXT_PUBLIC_MUSHI_API_KEY')
+  it('defaults to Next public vars without a known stack', () => {
+    expect(mushiEnvVarsForProject().apiKeyVar).toBe('NEXT_PUBLIC_MUSHI_API_KEY')
+    expect(isExpoEnv(mushiEnvVarsForProject())).toBe(false)
   })
 
   it('uses NEXT_PUBLIC_ when the connected repo is Next, not bare MUSHI_*', () => {
-    const env = mushiEnvVarsForProjectSlug('my-next-app', 'next')
+    const env = mushiEnvVarsForProject({ framework: 'next' })
     expect(env.projectIdVar).toBe('NEXT_PUBLIC_MUSHI_PROJECT_ID')
     expect(env.apiKeyVar).toBe('NEXT_PUBLIC_MUSHI_API_KEY')
     expect(env.endpointVar).toBe('NEXT_PUBLIC_MUSHI_API_ENDPOINT')
-    expect(mushiEnvVarsForProjectSlug('my-next-app', 'nextjs').projectIdVar).toBe(
-      'NEXT_PUBLIC_MUSHI_PROJECT_ID',
-    )
+    expect(mushiEnvVarsForProject({ framework: 'nextjs' }).projectIdVar).toBe('NEXT_PUBLIC_MUSHI_PROJECT_ID')
   })
 
   it('uses NUXT_PUBLIC_ when the connected repo is Nuxt', () => {
-    const env = mushiEnvVarsForProjectSlug('my-nuxt-app', 'nuxt')
+    const env = mushiEnvVarsForProject({ framework: 'nuxt' })
     expect(env.projectIdVar).toBe('NUXT_PUBLIC_MUSHI_PROJECT_ID')
     expect(env.apiKeyVar).toBe('NUXT_PUBLIC_MUSHI_API_KEY')
   })
 
-  it('keeps the slug default when the framework is not a known bundler', () => {
-    expect(mushiEnvVarsForProjectSlug('my-app', 'vanilla').apiKeyVar).toBe('NEXT_PUBLIC_MUSHI_API_KEY')
-    expect(mushiEnvVarsForProjectSlug('my-app', null).apiKeyVar).toBe('NEXT_PUBLIC_MUSHI_API_KEY')
+  it('keeps the NEXT_PUBLIC_ default when the framework is not a bundler', () => {
+    expect(mushiEnvVarsForProject({ framework: 'vanilla' }).apiKeyVar).toBe('NEXT_PUBLIC_MUSHI_API_KEY')
+    expect(mushiEnvVarsForProject({ framework: null }).apiKeyVar).toBe('NEXT_PUBLIC_MUSHI_API_KEY')
   })
 })
 

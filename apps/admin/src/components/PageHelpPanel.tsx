@@ -88,7 +88,7 @@ function PageRelatedLinks({ links }: { links: PageFlowLink[] }) {
               className="group/link flex min-w-0 w-full items-start gap-2.5 rounded-md border border-edge-subtle bg-surface-overlay/60 px-3 py-2.5 motion-safe:transition-[transform,opacity] motion-safe:duration-150 hover:border-brand/45 hover:bg-brand-muted/25 hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 motion-safe:active:translate-y-0 motion-safe:active:scale-[0.99]"
             >
               <span
-                className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-brand/12 text-brand motion-safe:transition-opacity group-hover/link:bg-brand/20"
+                className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${CHIP_TONE.brand} motion-safe:transition-opacity group-hover/link:bg-brand/20`}
                 aria-hidden="true"
               >
                 {Icon ? <Icon className="h-4 w-4" /> : null}
@@ -203,7 +203,7 @@ export function PageHelp({
           <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
         <span
-          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${CHIP_TONE.okSubtle}`}
+          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${CHIP_TONE.ok}`}
           aria-hidden="true"
         >
           <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -218,7 +218,7 @@ export function PageHelp({
             {summaryPills.map((pill) => (
               <span
                 key={pill}
-                className="shrink-0 rounded-sm bg-surface-overlay/50 px-1.5 py-px text-2xs text-fg-faint"
+                className={`shrink-0 rounded-sm ${CHIP_TONE.neutral} px-1.5 py-px text-2xs`}
               >
                 {pill}
               </span>
@@ -266,7 +266,7 @@ export function PageHelp({
             onClick={() => commandPalette.open()}
           >
             Jump to any page
-            <kbd className="rounded bg-surface-overlay/80 px-1 py-px font-mono text-2xs text-fg-faint">
+            <kbd className={`rounded ${CHIP_TONE.neutral} px-1 py-px font-mono text-2xs`}>
               ⌘K
             </kbd>
           </button>

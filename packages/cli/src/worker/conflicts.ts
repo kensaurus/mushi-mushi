@@ -19,7 +19,7 @@
  *               merge of the head and the base, and push it fast-forward only,
  *               right after checking the branch is still at the head Mushi saw.
  *
- *          The server re-queues the Opus review of the new head and moves the
+ *          The server re-queues the AI review of the new head and moves the
  *          queue row on (POST /v1/worker/claims/:id/done).
  */
 

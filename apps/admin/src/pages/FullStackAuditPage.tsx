@@ -72,10 +72,10 @@ function AuditResultCard({ result }: { result: AuditResult }) {
   const { overall } = result.summary
   const tone =
     overall === 'fail'
-      ? CHIP_TONE.dangerSubtle
+      ? CHIP_TONE.danger
       : overall === 'warn' || overall === 'unknown'
-        ? CHIP_TONE.warnSubtle
-        : CHIP_TONE.okSubtle
+        ? CHIP_TONE.warn
+        : CHIP_TONE.ok
   const label =
     overall === 'fail'
       ? 'Issues found'

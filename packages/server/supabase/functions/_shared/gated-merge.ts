@@ -145,7 +145,7 @@ export async function gatedMergePullRequest(db: SupabaseClient, input: GatedMerg
       ok: false,
       status: 409,
       code: 'REVIEW_NOT_MERGE',
-      message: 'Mushi merges on its own only when the Opus review of this exact commit says merge.',
+      message: 'Mushi merges on its own only when the AI review of this exact commit says merge.',
       review: gate.review,
     }
   }
@@ -238,7 +238,7 @@ export async function gatedTrainMerge(
       continue
     }
     if (gate.review.state !== 'merge' || gate.review.headSha !== m.headSha || gate.overridden || gate.mergedBeforeReview) {
-      refused.push({ prNumber: m.prNumber, reason: 'The Opus review of this exact commit does not say merge.' })
+      refused.push({ prNumber: m.prNumber, reason: 'The AI review of this exact commit does not say merge.' })
     }
   }
   if (refused.length) {

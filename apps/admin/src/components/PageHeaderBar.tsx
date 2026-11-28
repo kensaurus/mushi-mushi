@@ -40,6 +40,7 @@ import { CopyViewLinkButton } from './CopyViewLinkButton'
 import { isDevFacingHint } from '../lib/devHintCopy'
 import { useLocationChrome } from '../lib/locationChrome'
 import { usePageHelpRegister } from '../lib/pageHelpContext'
+import type { PageFlowLink } from '../lib/pageLinks'
 import { Tooltip } from './ui'
 import { PDCA_STAGES, PDCA_OVERVIEW_CHIP, chipForPath, type PdcaStageId } from '../lib/pdca'
 import { stageChipCopy } from '../lib/navRegistry'
@@ -101,6 +102,11 @@ export interface PageHeaderBarProps {
   helpUseCases?: string[]
   helpHowToUse?: string
   helpFlowPath?: string
+  /**
+   * The "Related:" links under the page (Layout's RoutePageHelp). Leave
+   * undefined for the route's registry links; pass [] to show none.
+   */
+  helpRelatedLinks?: PageFlowLink[]
   /** Force-override help panel open state. Leave undefined for collapsed by default. */
   helpDefaultOpen?: boolean
   /** When true, suppresses the subtitle line — use when the page renders its
@@ -126,6 +132,7 @@ export function PageHeaderBar({
   helpUseCases,
   helpHowToUse,
   helpFlowPath,
+  helpRelatedLinks,
   helpDefaultOpen,
   withPageHero = false,
 }: PageHeaderBarProps) {
@@ -153,6 +160,7 @@ export function PageHeaderBar({
       useCases: helpUseCases,
       howToUse: helpHowToUse,
       flowPath: helpFlowPath,
+      relatedLinks: helpRelatedLinks,
       defaultOpen: helpDefaultOpen,
     })
     return () => registerPageHelp(null)
@@ -163,6 +171,7 @@ export function PageHeaderBar({
     helpUseCases,
     helpHowToUse,
     helpFlowPath,
+    helpRelatedLinks,
     helpDefaultOpen,
     registerPageHelp,
   ])

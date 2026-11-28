@@ -311,6 +311,7 @@ export async function importSentryIssues(
           culprit: issue.culprit,
           level: issue.level,
           permalink: issue.permalink,
+          lastSeen: issue.lastSeen,
           platform: issue.platform,
         },
         triggerClassification: input.triggerClassification,

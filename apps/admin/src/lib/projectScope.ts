@@ -94,16 +94,23 @@ function matchesRoute(pathname: string, route: string): boolean {
 const TEAM_ACCOUNT_WIDE_VIEWS: readonly string[] = ['members']
 
 /**
+ * Apps (/portfolio) views that read the open app, never every app: they were
+ * Home's views until ADR 0069 and still show one app at a time.
+ */
+const APPS_ONE_APP_VIEWS: readonly string[] = ['users', 'funnels', 'insights']
+
+/**
  * How a route behaves in all-apps mode. `search` defaults to the current URL's
- * query; it only matters for the Team page's views.
+ * query; it only matters for the Team and Apps pages' views.
  */
 export function allAppsSupportFor(pathname: string, search?: string): AllAppsSupport {
   // `/projects/:pid/qa-coverage/:storyId` is one app's story (a redirect).
   if (/^\/projects\/[^/]+\//.test(pathname)) return 'single'
+  const query = () => search ?? (typeof window !== 'undefined' ? window.location.search : '')
+  if (pathname === '/portfolio' && APPS_ONE_APP_VIEWS.includes(new URLSearchParams(query()).get('view') ?? '')) return 'single'
   if (pathname === '/team') {
-    const query = search ?? (typeof window !== 'undefined' ? window.location.search : '')
     // No `view` is the first view, Members (lib/pageHubs.ts drops it from the URL).
-    const view = new URLSearchParams(query).get('view') ?? 'members'
+    const view = new URLSearchParams(query()).get('view') ?? 'members'
     if (TEAM_ACCOUNT_WIDE_VIEWS.includes(view)) return 'account'
   }
   if (ALL_APPS_EXACT.includes(pathname)) return 'combined'
@@ -139,6 +146,29 @@ export function setStoredProjectScopeMode(mode: ProjectScopeMode): void {
     // Storage disabled: the URL param still carries the choice.
   }
   window.dispatchEvent(new CustomEvent(PROJECT_SCOPE_EVENT, { detail: { mode } }))
+}
+
+/**
+ * A link that names one app opens that app. `?project=<uuid>` without
+ * `?apps=all` (a deep link from MCP, an email, Slack, a bookmark) used to land
+ * on every app combined when All apps was the stored choice: the switcher wrote
+ * `&apps=all` back and Bugs and Pipeline listed every app (console review
+ * 2026-11-22). Call it with the query of the first URL the console opens on (a
+ * page load, or the `next` path after sign-in), before anything renders.
+ *
+ * In-app navigation never comes through here: while All apps is on, the
+ * switcher keeps `?apps=all` in the address, so a reload or a shared copy of
+ * that address stays combined.
+ *
+ * Returns whether it left All apps.
+ */
+export function adoptLinkedAppScope(search: string): boolean {
+  const params = new URLSearchParams(search)
+  if (params.get(PROJECT_SCOPE_QUERY_PARAM) === ALL_APPS_VALUE) return false
+  if (!isValidProjectId(params.get(ACTIVE_PROJECT_QUERY_PARAM))) return false
+  if (getStoredProjectScopeMode() !== 'all') return false
+  setStoredProjectScopeMode('project')
+  return true
 }
 
 function subscribeProjectScope(listener: () => void): () => void {

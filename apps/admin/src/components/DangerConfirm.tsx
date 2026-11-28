@@ -31,6 +31,7 @@
 import { useId, useState } from 'react'
 import { Modal } from './Modal'
 import { Btn } from './ui'
+import { CHIP_TONE } from '../lib/chipTone'
 
 interface DangerConfirmProps {
   open: boolean
@@ -145,7 +146,7 @@ export function DangerConfirm({
         />
         <p className="text-3xs text-fg-faint leading-snug">
           Type{' '}
-          <code className="font-mono text-fg-secondary bg-surface-overlay px-1 py-0.5 rounded-sm">
+          <code className={`font-mono ${CHIP_TONE.neutral} px-1 py-0.5 rounded-sm`}>
             {requiredText}
           </code>{' '}
           exactly to enable the {confirmLabel.toLowerCase()} button.

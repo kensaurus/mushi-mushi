@@ -34,7 +34,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PageLoadError } from '../components/PageLoadError'
 import { ConfirmDialog } from '../components/ConfirmDialog'
-import { Btn, Callout, Loading, PageStatus, Section, SegmentedControl, type PageStatusMetrics } from '../components/ui'
+import { Btn, Callout, PageStatus, Section, SegmentedControl, type PageStatusMetrics } from '../components/ui'
 import { StackedShareBar } from '../components/charts/StackedShareBar'
 import { IconAlertTriangle, IconBolt, IconNetwork, IconReleases, IconShieldCheck } from '../components/icons'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -45,7 +45,8 @@ import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useNow } from '../lib/useNow'
 import { useToast } from '../lib/toast'
 import { FunnelLegend, PipelineFunnel } from '../components/pipeline/PipelineFunnel'
-import { PipelineGroups } from '../components/pipeline/PipelineGroups'
+import { PipelineGroups, isClosingAction, sectionOf, sectionRun } from '../components/pipeline/PipelineGroups'
+import { PipelineSkeleton } from '../components/pipeline/PipelineSkeleton'
 import { PipelineActionDialog, type PendingAction } from '../components/pipeline/PipelineActionDialog'
 import { TrainHistory } from '../components/pipeline/TrainHistory'
 import { FixOpeners } from '../components/pipeline/FixOpeners'
@@ -158,6 +159,27 @@ export function PipelinePage() {
     () => topStuck(stages.filter((s) => s.id !== 'triaged').flatMap((s) => s.groups)) ?? topStuck(stages.flatMap((s) => s.groups)),
     [stages],
   )
+  // What the "Start here" button runs. When the top group shares its fix with other groups, the
+  // button runs that whole section, so its count is the section's and the section drops its own
+  // button ("Re-run CI (67)" above "Re-run CI (68)", 2026-11-22). A closing action (Not a code
+  // bug, Close PR) is never this button: one click must not close dozens of reports.
+  const heroRun = useMemo(() => {
+    if (!top?.action || isClosingAction(top.action)) return null
+    const stuckGroups = stages.flatMap((s) => s.groups.filter((g) => g.tone === 'stuck')).sort((a, b) => b.count - a.count)
+    const sec = sectionOf(stuckGroups, top.group.id)
+    if (sec && sec.action === top.action) {
+      const run = sectionRun(sec.groups)
+      return { action: top.action, ids: run.ids, reportIds: run.reportIds, target: `${sec.groups.length} groups: ${ACTION_META[top.action].label}`, key: `${top.action}:section`, section: true }
+    }
+    return {
+      action: top.action,
+      ids: top.ids,
+      reportIds: top.ids.map((id) => top.group.items.find((i) => i.id === id)?.reportId ?? null),
+      target: top.group.label,
+      key: `${top.action}:${top.group.id}`,
+      section: false,
+    }
+  }, [top, stages])
   // All apps: which apps the group to start with is in ("in yen-yen, glot.it +2"), so the lead says where.
   const topApps = useMemo(() => {
     if (!top || !showApp) return null
@@ -301,8 +323,8 @@ export function PipelinePage() {
         icon={<IconNetwork />}
         description="Every bug from report to deploy, where it is stuck, and the fix."
         helpTitle="About the pipeline"
-        helpWhatIsIt="Each bug moves from a report to a fix PR, an Opus review, CI, a release train, a merge and a deploy. This page shows how many are in each step now, which are stuck, and why."
-        helpHowToUse="Start with the coloured stage: ▲ red is the bottleneck, ◆ amber is nearly as stuck; the rest show their stuck count in plain ink. The age bar shows how long stuck work has waited. In the stuck groups, ▲ marks the one to start with, a red edge means something failed and ◆ means it is slow or waiting. Groups that take the same fix sit under one heading with one button for all of them. Open a group to see its PRs with the failing checks or review findings; More holds the rest (re-run, close with a reason). Every action asks first."
+        helpWhatIsIt="Each bug moves from a report to a fix PR, an AI review, CI, a release batch, a merge and a deploy. This page shows how many are in each step now, which are stuck, and why."
+        helpHowToUse="Start with the coloured stage: ▲ red is the bottleneck, ◆ amber is nearly as stuck; the rest show their stuck count in plain ink. The age bar shows how long stuck work has waited. In the stuck groups, the one marked Start here is the one to do first. Each group's left edge shows how long its oldest item has waited: grey under 3 days, amber 3 to 7 days, red 7 to 30 days, deep red over 30 days, and the age is written beside it. ◆ means slow or waiting. Groups that take the same fix sit under one heading with one button for all of them. Open a group to see its PRs with the failing checks or review findings; More holds the rest (re-run, close with a reason). Every action asks first."
       >
         {tab === 'workers' ? null : page.isValidating && !page.loading ? (
           <span className="text-2xs text-fg-muted">Updating…</span>
@@ -328,7 +350,7 @@ export function PipelinePage() {
       {tab === 'workers' && <WorkersPanel projectId={scope === 'project' ? projectId : null} now={now} />}
 
       {tab === 'pipeline' && page.error && <PageLoadError error={page.error} resource="the pipeline" endpoint={path} onRetry={reload} />}
-      {tab === 'pipeline' && page.loading && !data && <Loading text="Reading the pipeline…" />}
+      {tab === 'pipeline' && page.loading && !data && !page.error && <PipelineSkeleton />}
 
       {tab === 'pipeline' && data && (
         <>
@@ -357,25 +379,22 @@ export function PipelinePage() {
             // were calm cards at the bottom; they need you, so they lead (2026-11-18).
             metrics={statusMetrics}
             action={
-              top?.action ? (
+              heroRun ? (
                 <Btn
                   size="sm"
-                  variant={ACTION_META[top.action].variant === 'danger' ? 'ghost' : 'primary'}
+                  variant={ACTION_META[heroRun.action].variant === 'danger' ? 'ghost' : 'primary'}
+                  loading={busyKey === heroRun.key}
+                  disabled={busyKey != null && busyKey !== heroRun.key}
                   onClick={() =>
                     setPending({
-                      action: {
-                        action: top.action!,
-                        fixIds: top.ids,
-                        reportIds: top.ids.map((id) => top.group.items.find((i) => i.id === id)?.reportId ?? null),
-                        target: top.group.label,
-                      },
-                      key: `${top.action}:${top.group.id}`,
+                      action: { action: heroRun.action, fixIds: heroRun.ids, reportIds: heroRun.reportIds, target: heroRun.target },
+                      key: heroRun.key,
                     })
                   }
                   data-testid="pipeline-top-action"
                 >
-                  {ACTION_META[top.action].label}
-                  {top.ids.length > 1 ? ` (${top.ids.length})` : ''}
+                  {ACTION_META[heroRun.action].label}
+                  {heroRun.ids.length > 1 ? ` (${heroRun.ids.length})` : ''}
                 </Btn>
               ) : top ? (
                 <a href="#pipeline-stuck" className="text-xs font-medium text-brand hover:underline" data-testid="pipeline-top-why">
@@ -436,6 +455,7 @@ export function PipelinePage() {
                 workerLanes={workerLanes}
                 focusGroupId={stage ? null : searchParams.get('group')}
                 topGroupId={stage ? null : (top?.group.id ?? null)}
+                heroRunsSection={!stage && heroRun?.section === true}
               />
             )}
           </Section>

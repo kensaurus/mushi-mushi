@@ -66,7 +66,9 @@ const PLAN_NAMES: Record<string, string> = {
  * @internal Exported for tests only.
  */
 export function orgPillLabel(org: OrganizationSummary, mode: InstanceMode = checkEnv().mode): string {
-  if (org.billing_mode === 'complimentary') return 'comp'
+  // "Studio · free", not "comp": the abbreviation read as a code (journey
+  // walk, 2026-11-28). "free" keeps a comp team from reading as paid.
+  if (org.billing_mode === 'complimentary') return `${PLAN_NAMES[org.plan_id] ?? org.plan_id} · free`
   if (mode === 'self-hosted') return 'Self-hosted'
   return PLAN_NAMES[org.plan_id] ?? org.plan_id
 }

@@ -181,6 +181,8 @@ describe('buildFixPrompt (REPORT B15: editor-neutral, works without MCP)', () =>
   it('a report with no diagnosis yet still gives a usable prompt', () => {
     const out = buildFixPrompt(
       report({
+        // Not sorted yet: a classified row with no model output is "filed already sorted" (below).
+        status: 'new',
         stage1_classification: null,
         stage2_analysis: null,
         summary: null,
@@ -196,6 +198,17 @@ describe('buildFixPrompt (REPORT B15: editor-neutral, works without MCP)', () =>
     expect(out).toContain('Not diagnosed yet. Reproduce it first')
     expect(out).not.toContain('## Likely files')
     expect(out).toContain(`Fixes Mushi report ${ID}`)
+  })
+})
+
+describe('buildFixPrompt: a report filed already sorted (no model)', () => {
+  // Report f6df5143 (2026-11-22): a vuln-watch advisory read as "Not diagnosed yet".
+  it('says there is no AI diagnosis instead of "not diagnosed yet"', () => {
+    const out = buildFixPrompt(
+      report({ source: 'security_advisory', status: 'classified', stage1_classification: null, stage2_analysis: null, fix_packet: null }),
+    )
+    expect(out).toContain('No AI diagnosis: this report was filed already sorted.')
+    expect(out).not.toContain('Not diagnosed yet')
   })
 })
 

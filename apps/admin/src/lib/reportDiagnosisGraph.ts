@@ -34,18 +34,22 @@ function verdictFor(report: ReportDetail, byId: Map<string, DiagnosisNode>): Dia
   if (status === 'fixed' || byId.get('attempt')?.state === 'done') return { tone: 'ok', label: 'Fixed' }
   if (cause?.state === 'failed') return { tone: 'danger', label: 'Diagnosis failed' }
   if (cause?.state === 'pending') return { tone: 'info', label: 'Diagnosis in progress' }
-  if (judge?.title.startsWith('Judge disagrees')) return { tone: 'warn', label: 'Judge disagrees: check the triage' }
+  if (judge?.title.startsWith('A second AI disagrees')) return { tone: 'warn', label: 'A second AI disagrees: check the triage' }
   // Only the first check ran: it is sure of the kind of bug, not of a cause.
   // "Confident diagnosis" over "no full diagnosis" contradicted itself.
-  if (reportDiagnosisView(report).kind === 'stage1_only') return { tone: 'info', label: 'Sorted; cause not diagnosed' }
+  const view = reportDiagnosisView(report).kind
+  if (view === 'stage1_only') return { tone: 'info', label: 'Sorted; cause not diagnosed' }
+  // Written from a template or sorted by a person: no model, so nothing to confirm.
+  if (view === 'no_model') return { tone: 'info', label: cause?.title ?? 'Sorted without AI' }
+  if (cause?.title === 'Not diagnosed') return { tone: 'warn', label: 'Not diagnosed' }
   const confident = cause?.confidence != null && cause.confidence >= NEEDS_LOOK_BELOW
   if (confident && judge?.state === 'ok') return { tone: 'ok', label: 'Diagnosis confirmed by the judge' }
   if (confident) return { tone: 'info', label: 'Confident diagnosis, not graded yet' }
   return { tone: 'warn', label: 'Likely cause, not confirmed' }
 }
 
-export function buildDiagnosisGraph(report: ReportDetail): DiagnosisGraph {
-  const diagnosis = diagnosisNodes(report)
+export function buildDiagnosisGraph(report: ReportDetail, now: number = Date.now()): DiagnosisGraph {
+  const diagnosis = diagnosisNodes(report, now)
   const nodes = [
     ...evidenceNodes(report),
     ...signalNodes(report),

@@ -239,7 +239,7 @@ describe('SpendDownSection', () => {
     ]
     await render(true)
     expect(document.body.textContent).toContain(
-      'Last 7 days: 258 runs → 154 PRs → 19 mergeable, 0 merged · Opus review $8.04 (latest review per PR)',
+      'Last 7 days: 258 runs → 154 PRs → 19 mergeable, 0 merged · AI review $8.04 (latest review per PR)',
     )
     expect(document.body.textContent).toContain('tsumagoi: Paused: 3 of the last 20 reviewed fixes were mergeable (15%)')
     expect(document.body.textContent).toContain('probing 1/day')
@@ -289,7 +289,7 @@ describe('SpendDownSection', () => {
     }
     await render(true)
     expect(document.body.textContent).toContain(
-      'Review follow-ups, last 7 days: 12 sent → 9 pushed, 2 no change, 1 running → Opus after: 4 merge, 3 fix first, 1 hold (50% fix first → merge), 1 awaiting review',
+      'Review follow-ups, last 7 days: 12 sent → 9 pushed, 2 no change, 1 running → AI review after: 4 merge, 3 fix first, 1 hold (50% fix first → merge), 1 awaiting review',
     )
     mocks.followups = null
   })

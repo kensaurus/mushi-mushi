@@ -13,9 +13,9 @@ import { HomeSectionBody } from './HomeSectionBody'
 import { groupHomeKeys } from '../../lib/homeView'
 
 const SDK_TONE: Record<SdkFreshness, { tone: BadgeTone; text: string }> = {
-  'up-to-date': { tone: 'okSubtle', text: 'Up to date' },
-  outdated: { tone: 'warnSubtle', text: 'Update available' },
-  deprecated: { tone: 'dangerSubtle', text: 'No longer supported' },
+  'up-to-date': { tone: 'ok', text: 'Up to date' },
+  outdated: { tone: 'warn', text: 'Update available' },
+  deprecated: { tone: 'danger', text: 'No longer supported' },
   unknown: { tone: 'neutral', text: 'Version not seen yet' },
 }
 
@@ -25,9 +25,15 @@ interface Props {
   section: HomeSection<HomeAccess>
   /** The plan includes the audit log (enterprise). */
   auditLog: boolean
+  /** False on an app with no fix yet: "Fix history" would open an empty list. */
+  showFixHistory?: boolean
+  /** False on an app with no visits yet: "User activity" would open an empty list. */
+  showUserActivity?: boolean
+  /** Needs you already has the button to Connect (an SDK update): the version chip stays a label. */
+  sdkLinkElsewhere?: boolean
 }
 
-export function AccessCard({ section, auditLog }: Props) {
+export function AccessCard({ section, auditLog, sdkLinkElsewhere = false, showFixHistory = true, showUserActivity = true }: Props) {
   return (
     <Section title="Access and details" id="home-access">
       <HomeSectionBody section={section} what="access and details" notConnectedText="No details yet.">
@@ -42,7 +48,8 @@ export function AccessCard({ section, auditLog }: Props) {
                   {a.repo.branch && <Badge tone="neutral">{a.repo.branch}</Badge>}
                 </span>
               ) : (
-                <Link to="/connect" className="text-link hover:underline">Connect your repo</Link>
+                // The CI light carries "Connect GitHub"; a second button here was the same place (ADR 0069).
+                <span className="text-xs text-fg-muted">Not connected yet</span>
               )}
             </Row>
             <Row term="People">
@@ -62,9 +69,13 @@ export function AccessCard({ section, auditLog }: Props) {
                 {/* With no version yet the chip says it once ("Version not seen yet"). */}
                 {a.sdk.version && <span className="font-mono text-xs text-fg">{`${a.sdk.package ?? 'SDK'} ${a.sdk.version}`}</span>}
                 {a.sdk.latest && a.sdk.status !== 'up-to-date' && <span className="text-xs text-fg-muted">latest {a.sdk.latest}</span>}
-                <Link to="/connect">
+                {sdkLinkElsewhere ? (
                   <Badge tone={SDK_TONE[a.sdk.status].tone}>{SDK_TONE[a.sdk.status].text}</Badge>
-                </Link>
+                ) : (
+                  <Link to="/connect">
+                    <Badge tone={SDK_TONE[a.sdk.status].tone}>{SDK_TONE[a.sdk.status].text}</Badge>
+                  </Link>
+                )}
               </span>
             </Row>
             <Row term="Keys">
@@ -76,13 +87,16 @@ export function AccessCard({ section, auditLog }: Props) {
                 <KeyList keys={a.keys} keysTotal={a.keysTotal} />
               )}
             </Row>
-            <Row term="Logs">
-              <span className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
-                <Link to="/fixes" className="text-link hover:underline">Fix history</Link>
-                <Link to="/dashboard?view=users" className="text-link hover:underline">User activity</Link>
-                {auditLog && <Link to="/team?view=audit" className="text-link hover:underline">Audit log</Link>}
-              </span>
-            </Row>
+            {/* On a new app the logs are empty and the sidebar reaches them anyway (ADR 0069). */}
+            {(showFixHistory || showUserActivity || auditLog) && (
+              <Row term="Logs">
+                <span className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                  {showFixHistory && <Link to="/fixes" className="text-link hover:underline">Fix history</Link>}
+                  {showUserActivity && <Link to="/portfolio?view=users" className="text-link hover:underline">User activity</Link>}
+                  {auditLog && <Link to="/team?view=audit" className="text-link hover:underline">Audit log</Link>}
+                </span>
+              </Row>
+            )}
             <Row term="Created">
               <span className="text-xs text-fg-secondary">
                 <RelativeTime value={a.createdAt} />

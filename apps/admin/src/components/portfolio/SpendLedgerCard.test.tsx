@@ -267,7 +267,10 @@ describe('SpendLedgerCard signals', () => {
     const rows = Array.from(container.querySelectorAll('[data-testid="spend-ledger-table"] tbody tr'))
     expect(rows.map((r) => r.querySelector('td')!.textContent)).toEqual(['big', 'mid', 'small'])
     const widths = rows.map((r) => (r.querySelector('[data-testid="spend-total"] [data-testid="bar-cell-fill"]') as HTMLElement).style.width)
-    expect(widths).toEqual(['100%', '25%', `${(2 / 60) * 100}%`])
+    // jsdom 31 rounds serialised percentages (3.33333%), so compare the numbers.
+    expect(widths.every((w) => w.endsWith('%'))).toBe(true)
+    const expected = [100, 25, (2 / 60) * 100]
+    widths.forEach((w, i) => expect(Number.parseFloat(w)).toBeCloseTo(expected[i], 3))
     // Where the money goes, per app, as a stacked bar named with its amounts.
     const split = rows[0]!.querySelector('[data-testid="spend-split"]')!
     expect(split.getAttribute('aria-label')).toBe('big spend: Mushi Mushi AI $10.00, AI provider $30.00, CI $20.00, Cloud bills $0.00')

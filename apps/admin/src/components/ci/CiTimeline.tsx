@@ -16,13 +16,14 @@
  *          (`splitQuietLanes`) so the busy runners sit together.
  */
 
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import type { CiJob } from '../../lib/ciTypes'
 import {
   CI_OUTCOME_META,
   buildCiTimeline,
   foldGithubLanes,
   formatSeconds,
+  laneIsLive,
   splitQuietLanes,
   timelinePct,
   type CiJobOutcome,
@@ -158,11 +159,19 @@ function Lane({ lane, timeline, onInspect }: { lane: Timeline['lanes'][number]; 
     [lane],
   )
   const link = useCiLink(keys, ciRunnerKey(lane.label))
+  // Running now: the row is tinted in the running colour, so live work reads first.
+  const live = !lane.unassigned && laneIsLive(lane)
   return (
-    <li {...link} className={`${link.className} flex items-center gap-2 rounded-sm`} data-testid={`ci-timeline-lane-${lane.label}`} data-failed={laneFailed(lane) || undefined}>
+    <li
+      {...link}
+      className={`${link.className} flex items-center gap-2 rounded-sm`}
+      data-testid={`ci-timeline-lane-${lane.label}`}
+      data-failed={laneFailed(lane) || undefined}
+      data-live={live || undefined}
+    >
       <span
         // Pinned: on a narrow screen the lanes scroll sideways and the names stay put.
-        className={`sticky left-0 z-10 flex ${LABEL_W} shrink-0 items-center gap-1.5 bg-surface-raised text-2xs ${lane.unassigned ? 'italic text-fg-muted' : 'font-medium text-fg-secondary'}`}
+        className={`sticky left-0 z-10 flex ${LABEL_W} shrink-0 items-center gap-1.5 bg-surface-raised text-2xs ${lane.unassigned ? 'italic text-fg-muted' : live ? 'font-semibold text-st-running-ink' : 'font-medium text-fg-secondary'}`}
         title={lane.kind === 'family' ? `${lane.label}: jobs of one-job runners, packed so bars never overlap` : lane.label}
       >
         {lane.unassigned ? (
@@ -174,7 +183,7 @@ function Lane({ lane, timeline, onInspect }: { lane: Timeline['lanes'][number]; 
         )}
         <LaneName label={lane.label} />
       </span>
-      <div className="relative h-7 flex-1 rounded-sm bg-surface-overlay/50">
+      <div className={`relative h-7 flex-1 rounded-sm ${live ? 'bg-st-running-soft ring-1 ring-inset ring-st-running/30' : 'bg-surface-overlay/50'}`}>
         {lane.bars.map((bar) => (
           <Bar key={bar.jobId} bar={bar} timeline={timeline} onInspect={onInspect} />
         ))}
@@ -197,12 +206,25 @@ function LaneName({ label }: { label: string }) {
 const laneFailed = (l: { bars: ReadonlyArray<{ outcome: string }> }) => l.bars.some((b) => b.outcome === 'code_failure' || b.outcome === 'infra')
 
 /**
- * @internal Exported for tests. Lanes with a failed job (a code failure or a stopped machine)
- * first, "No runner yet" always last, otherwise the given order (busiest first).
+ * @internal Exported for tests. Machines running (or waiting on) a job right now first, then
+ * those with a failed job (a code failure or a stopped machine), "No runner yet" always last,
+ * otherwise the given order (busiest first).
  */
 export function failingLanesFirst<L extends { unassigned: boolean; bars: ReadonlyArray<{ outcome: string }> }>(lanes: readonly L[]): L[] {
-  const rank = (l: L) => (l.unassigned ? 2 : laneFailed(l) ? 0 : 1)
+  const rank = (l: L) => (l.unassigned ? 3 : laneIsLive(l) ? 0 : laneFailed(l) ? 1 : 2)
   return lanes.map((l, i) => ({ l, i })).sort((a, b) => rank(a.l) - rank(b.l) || a.i - b.i).map((x) => x.l)
+}
+
+/**
+ * @internal Exported for tests. How many lanes at the top run (or wait on) a job right now:
+ * `failingLanesFirst` puts them first, so the count is the length of that leading run. The
+ * timeline labels that group "Running now (N)" and draws a divider before the rest, so live
+ * work reads as a group by its words, not only by its tint.
+ */
+export function leadingLiveLaneCount(lanes: ReadonlyArray<{ unassigned: boolean; bars: ReadonlyArray<{ outcome: string }> }>): number {
+  let n = 0
+  while (n < lanes.length && !lanes[n].unassigned && laneIsLive(lanes[n])) n++
+  return n
 }
 
 export function CiTimeline({ jobs }: { jobs: CiJob[] }) {
@@ -215,12 +237,14 @@ export function CiTimeline({ jobs }: { jobs: CiJob[] }) {
   const timeline = useMemo(() => buildCiTimeline(jobs, { now, windowMs: WINDOW_MS[win] }), [jobs, now, win])
   const { quiet } = useMemo(() => splitQuietLanes(timeline.lanes), [timeline.lanes])
   const quietIds = useMemo(() => new Set(quiet.map((l) => l.id)), [quiet])
-  // Machines with a failed job first: what went wrong reads before what went fine.
+  // Machines running a job now first, then those with a failed job: what is live and what
+  // went wrong read before what went fine.
   const visible = failingLanesFirst(showQuiet ? timeline.lanes : timeline.lanes.filter((l) => !quietIds.has(l.id)))
   // GitHub-hosted 2 to 10 read as near-identical rows (2026-11-18): clean ones fold into one row.
   const github = foldGithubLanes(visible)
   const lanes = showGithub ? visible : github.shown
   const githubJobs = github.rest.reduce((n, l) => n + l.bars.length, 0)
+  const liveCount = leadingLiveLaneCount(lanes)
   const ticks = useMemo(
     () => Array.from({ length: TICK_STEPS + 1 }, (_, i) => timeline.from + ((timeline.to - timeline.from) * i) / TICK_STEPS),
     [timeline.from, timeline.to],
@@ -293,8 +317,17 @@ export function CiTimeline({ jobs }: { jobs: CiJob[] }) {
               })}
             </div>
             <ul className="relative flex flex-col gap-1" aria-label="Jobs per runner">
-              {lanes.map((lane) => (
-                <Lane key={lane.id} lane={lane} timeline={timeline} onInspect={setInspect} />
+              {liveCount > 0 && (
+                <li className="sticky left-0 z-10 w-fit bg-surface-raised text-2xs font-semibold text-st-running-ink" data-testid="ci-timeline-live-label">
+                  Running now ({liveCount})
+                </li>
+              )}
+              {lanes.map((lane, i) => (
+                <Fragment key={lane.id}>
+                  {/* A quiet line between what runs now and the rest. */}
+                  {liveCount > 0 && i === liveCount && <li className="my-1 border-t border-edge-subtle" aria-hidden="true" data-testid="ci-timeline-live-divider" />}
+                  <Lane lane={lane} timeline={timeline} onInspect={setInspect} />
+                </Fragment>
               ))}
               {github.rest.length > 0 && (
                 <li className="flex items-center gap-2" data-testid="ci-timeline-github-fold">
@@ -304,7 +337,7 @@ export function CiTimeline({ jobs }: { jobs: CiJob[] }) {
                   </span>
                   <button
                     type="button"
-                    className="h-7 flex-1 rounded-sm bg-surface-overlay/50 px-2 text-left text-2xs whitespace-nowrap text-fg-secondary hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+                    className="h-7 flex-1 rounded-sm border border-neutral-edge bg-surface-overlay/50 px-2 text-left text-2xs whitespace-nowrap text-fg-secondary hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
                     aria-expanded={showGithub}
                     onClick={() => setShowGithub((v) => !v)}
                   >

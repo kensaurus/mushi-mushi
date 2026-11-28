@@ -30,7 +30,7 @@ import { RESOLVED_EXTERNAL_API_URL } from '../lib/env'
 import { docsUrl } from '../lib/docsUrl'
 import { describeActionError } from '../lib/actionError'
 import { sdkCiStatusMeta, type SdkDiagnosticsResult, type SdkDiagnosticStatus } from '../lib/sdkCiSecrets'
-import { bundlerKindForFramework, mushiEnvVarsForBundler, mushiEnvVarsForProjectSlug } from '../lib/projectMushiEnv'
+import { bundlerKindForFramework, mushiEnvVarsForBundler, mushiEnvVarsForProject } from '../lib/projectMushiEnv'
 import { CHIP_TONE, runStatusChipTone } from '../lib/chipTone'
 
 // ---------------------------------------------------------------------------
@@ -47,9 +47,9 @@ const STATUS_ICON: Record<SdkDiagnosticStatus, React.ReactNode> = {
 
 const STATUS_CHIP_CLASS: Record<SdkDiagnosticStatus, string> = {
   healthy: runStatusChipTone('healthy'),
-  'ci-secret-missing': CHIP_TONE.dangerSubtle,
-  'native-never-seen': CHIP_TONE.warnSubtle,
-  'banner-disabled': CHIP_TONE.warnSubtle,
+  'ci-secret-missing': CHIP_TONE.danger,
+  'native-never-seen': CHIP_TONE.warn,
+  'banner-disabled': CHIP_TONE.warn,
   unknown: CHIP_TONE.neutral,
 }
 
@@ -120,10 +120,10 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
   // The server read the repo's package.json: its stack beats the slug guess
   // (an Expo, Vite, or Nuxt app used to be told to add NEXT_PUBLIC_* names,
   // and a Next app used to be told to add bare MUSHI_* names). An unknown
-  // stack id stays on the slug table, whose default is NEXT_PUBLIC_.
+  // stack gets the NEXT_PUBLIC_ names (ADR 0072: never a guess from the app's name).
   const detectedKind = diag?.stackSource === 'repo' ? bundlerKindForFramework(diag.stack) : 'none'
   const envVars = detectedKind === 'none'
-    ? mushiEnvVarsForProjectSlug(projectSlug)
+    ? mushiEnvVarsForProject()
     : mushiEnvVarsForBundler(detectedKind)
   const status: SdkDiagnosticStatus = diag?.status ?? 'unknown'
   const meta = sdkCiStatusMeta(status, diag?.hasGithubToken ?? false, projectSlug, {
@@ -199,7 +199,7 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
             <ul className="space-y-0.5">
               {diag.missingVars.map((v) => (
                 <li key={v}>
-                  <code className="font-mono text-2xs text-danger-foreground bg-danger-muted/50 rounded px-1 py-px">
+                  <code className={`font-mono text-2xs ${CHIP_TONE.danger} rounded px-1 py-px`}>
                     {v}
                   </code>
                 </li>
@@ -231,7 +231,7 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
 
         {/* Healthy summary */}
         {!loading && diag && status === 'healthy' && (
-          <div className={`flex items-center gap-2 rounded-sm px-3 py-2 text-xs ${CHIP_TONE.okSubtle}`}>
+          <div className={`flex items-center gap-2 rounded-sm px-3 py-2 text-xs ${CHIP_TONE.ok}`}>
             <IconCheck className="h-3.5 w-3.5 shrink-0" aria-hidden />
             <span>{meta.subtitle}</span>
           </div>
@@ -239,7 +239,7 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
 
         {/* Sync result */}
         {syncDone && (
-          <div className={`rounded-sm px-3 py-2 text-xs space-y-1 ${CHIP_TONE.okSubtle}`}>
+          <div className={`rounded-sm px-3 py-2 text-xs space-y-1 ${CHIP_TONE.ok}`}>
             <p className="font-medium">
               {syncState.written && syncState.written.length > 0
                 ? `Written to GitHub: ${syncState.written.join(', ')}`
@@ -270,7 +270,7 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
 
         {/* Forbidden / no-repo result → show guided fallback */}
         {(syncFailed) && syncState.errorMessage && (
-          <div className={`rounded-sm px-3 py-2 text-xs ${CHIP_TONE.warnSubtle}`}>
+          <div className={`rounded-sm px-3 py-2 text-xs ${CHIP_TONE.warn}`}>
             <p className="font-medium">
               {syncState.errorCode === 'GH_SECRETS_FORBIDDEN'
                 ? 'GitHub returned 403 — write permission denied.'
@@ -308,14 +308,14 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
             </p>
             {showRawKey ? (
               <div className="flex items-center gap-2">
-                <code className="flex-1 min-w-0 truncate rounded bg-surface-overlay px-2 py-1 font-mono text-2xs text-fg">
+                <code className={`flex-1 min-w-0 truncate rounded ${CHIP_TONE.neutral} px-2 py-1 font-mono text-2xs`}>
                   {minted.rawKey}
                 </code>
                 <CopyButton value={minted.rawKey ?? ''} label="Copy API key" copiedLabel="Copied" size="sm" />
               </div>
             ) : (
               <div className="flex items-center gap-2">
-                <code className="flex-1 min-w-0 truncate rounded bg-surface-overlay px-2 py-1 font-mono text-2xs text-fg-muted">
+                <code className={`flex-1 min-w-0 truncate rounded ${CHIP_TONE.neutral} px-2 py-1 font-mono text-2xs`}>
                   {minted.prefix}…<span className="opacity-40">{'█'.repeat(24)}</span>
                 </code>
                 <Btn size="sm" variant="ghost" onClick={() => setShowRawKey(true)}>
@@ -360,7 +360,7 @@ export function SdkNativeConnectivityCard({ projectId, projectSlug }: SdkNativeC
                 <div className="space-y-1.5">
                   {fallback.commands.map((cmd) => (
                     <div key={cmd} className="flex items-center gap-2">
-                      <code className="flex-1 min-w-0 truncate rounded bg-surface-overlay px-2 py-1 font-mono text-2xs text-fg">
+                      <code className={`flex-1 min-w-0 truncate rounded ${CHIP_TONE.neutral} px-2 py-1 font-mono text-2xs`}>
                         {cmd}
                       </code>
                       <CopyButton value={cmd} label="Copy command" copiedLabel="Copied" size="sm" />
@@ -567,7 +567,7 @@ function FallbackCommandsFromDiag({
       <div className="space-y-1.5">
         {commands.map((cmd) => (
           <div key={cmd} className="flex items-center gap-2">
-            <code className="flex-1 min-w-0 truncate rounded bg-surface-overlay px-2 py-1 font-mono text-2xs text-fg">
+            <code className={`flex-1 min-w-0 truncate rounded ${CHIP_TONE.neutral} px-2 py-1 font-mono text-2xs`}>
               {cmd}
             </code>
             <CopyButton value={cmd} label="Copy" copiedLabel="Copied" size="sm" />

@@ -30,7 +30,7 @@ export function deployLiveTitle(d: ReportDeployLive): string {
 }
 
 export const DEPLOY_LIVE_TONE: Record<ReportDeployLive['state'], BadgeTone> = {
-  live: 'okSubtle',
-  not_live: 'warnSubtle',
+  live: 'ok',
+  not_live: 'warn',
   unknown: 'neutral',
 }

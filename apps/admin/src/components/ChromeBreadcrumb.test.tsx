@@ -44,13 +44,14 @@ describe('ChromeBreadcrumb', () => {
   })
 
   it('puts a sub-page under the page the sidebar lists it under', async () => {
-    expect(await trailAt('/dashboard?view=apps')).toBe('Home›Overview')
+    expect(await trailAt('/portfolio?view=apps')).toBe('Apps›Overview')
+    expect(await trailAt('/portfolio?view=users')).toBe('Apps›User activity')
     expect(await trailAt('/content')).toBe('Checks›Content checks')
     expect(await trailAt('/team?view=billing')).toBe('Team›Billing')
   })
 
   it('keeps the More pages group for pages outside the core list', async () => {
-    expect(await trailAt('/graph')).toBe('Bugs›Bug clusters')
+    expect(await trailAt('/graph')).toBe('Find & sort bugs›Bug clusters')
   })
 
   it('says Console once on a page it does not know', async () => {

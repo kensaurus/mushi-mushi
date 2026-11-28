@@ -301,9 +301,9 @@ export interface Station {
 
 /** The pipeline stages each station adds up, in the pipeline's own order. */
 const STATION_STAGES: Array<{ id: StationId; label: string; stages: string[] }> = [
-  { id: 'fix', label: 'Fix PRs', stages: ['pr', 'review'] },
+  { id: 'fix', label: 'Fixes', stages: ['pr', 'review'] },
   { id: 'ci', label: 'CI', stages: ['ci'] },
-  { id: 'train', label: 'In train', stages: ['train'] },
+  { id: 'train', label: 'Waiting to merge', stages: ['train'] },
   { id: 'merged', label: 'Merged', stages: ['merged'] },
   { id: 'deployed', label: 'Deployed', stages: ['deployed'] },
 ]
@@ -696,7 +696,7 @@ export function buildWeek(c: {
     { id: 'critical', label: 'Critical bugs', thisWeek: c.critical[0], lastWeek: c.critical[1], moreIsBetter: false, href: '/reports?days=7&severity=critical', ...series('critical') },
     { id: 'merged', label: 'Fixes merged', thisWeek: c.merged[0], lastWeek: c.merged[1], moreIsBetter: true, href: FIXES_MERGED_HREF, ...series('merged') },
   ]
-  if (c.sessions) rows.push({ id: 'sessions', label: 'User visits', thisWeek: c.sessions[0], lastWeek: c.sessions[1], moreIsBetter: true, href: '/dashboard?view=users', ...series('sessions') })
+  if (c.sessions) rows.push({ id: 'sessions', label: 'User visits', thisWeek: c.sessions[0], lastWeek: c.sessions[1], moreIsBetter: true, href: '/portfolio?view=users', ...series('sessions') })
   return rows
 }
 

@@ -18,7 +18,7 @@ import { CodeInline } from '../components/CodePanel'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { usePageData } from '../lib/usePageData'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
-import { mushiEnvVarsForProjectSlug, isExpoReporterProject } from '../lib/projectMushiEnv'
+import { isMushiSelfProject, mushiEnvVarsForProject } from '../lib/projectMushiEnv'
 import { SetupCopilotReadout } from '../components/setup-copilot/SetupCopilotReadout'
 import { ContainedBlock } from '../components/report-detail/ReportSurface'
 import { usePublishPageContext } from '../lib/pageContext'
@@ -110,8 +110,7 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
     [projectsPayload, projectId],
   )
 
-  const setupProject = setup.data?.projects.find((p) => p.project_id === projectId)
-  const env = mushiEnvVarsForProjectSlug(projectRow?.slug ?? setupProject?.project_slug)
+  const env = mushiEnvVarsForProject({ isSelf: isMushiSelfProject(projectId) })
 
   const connectCmd =
     'mushi connect --api-key <key> --project-id <uuid> --endpoint <url> --wait'
@@ -195,7 +194,7 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
 
       {projectId && !projectRow && !projectsPayload && !projectsError && (
         <Card className="p-5">
-          <p className="text-xs text-fg-muted">Loading project details…</p>
+          <p className="text-xs text-fg-muted">Loading app details…</p>
         </Card>
       )}
 
@@ -326,24 +325,9 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
                       API URL: <code className="font-mono">MUSHI_API_URL</code>
                     </li>
                     <li>Does not enable the in-app band — metrics POST /v1/ingest/metrics only.</li>
-                    {/* The secrets script lives in the yen-yen repo only (report fe489587). */}
-                    {isExpoReporterProject(projectRow.slug) ? (
-                      <li>
-                        Setup: <code className="font-mono">node scripts/setup-yen-yen-ingest-secrets.mjs</code>
-                      </li>
-                    ) : null}
                   </ul>
                 </ContainedBlock>
               </div>
-              {(env.ciVars && isExpoReporterProject(projectRow.slug)) ? (
-                <ContainedBlock tone="warn">
-                  <p className="text-2xs text-fg-muted">
-                    Automate reporter GitHub vars:{' '}
-                    <code className="font-mono">node scripts/setup-yen-yen-reporter-secrets.mjs</code>
-                    {' '}from the mushi-mushi repo (reads yen-yen <code className="font-mono">apps/mobile/.env.local</code>).
-                  </p>
-                </ContainedBlock>
-              ) : null}
             </div>
           </Step>
 

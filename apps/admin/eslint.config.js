@@ -58,7 +58,7 @@ export default [
             'ContentQualityDetailPage.tsx',
             'DocsBridgePage.tsx',
             // Page hubs (lib/pageHubs.ts): each view is a page with its own posture.
-            'HomePage.tsx',
+            'AppsPage.tsx',
             'TeamPage.tsx',
             'IntegrationsRouteGate.tsx',
             'LoginPage.tsx',

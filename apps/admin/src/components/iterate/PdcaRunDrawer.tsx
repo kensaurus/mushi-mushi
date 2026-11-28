@@ -4,11 +4,12 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { Badge, Btn, Card, RelativeTime } from '../ui'
+import { Btn, Card, RelativeTime } from '../ui'
 import { Drawer } from '../Drawer'
 import { ScoreBar } from './ScoreBar'
 import type { PdcaIteration, PdcaRun } from './types'
-import { STATUS_CLS, STATUS_LABEL, personaLabel, scoreBarClass } from './types'
+import { RUN_STATE, STATUS_LABEL, personaLabel, scoreBarClass } from './types'
+import { StatusPill } from '../signal/StatusMark'
 
 interface Props {
   run: PdcaRun
@@ -23,7 +24,7 @@ interface Props {
 }
 
 function statusBadge(status: PdcaRun['status']) {
-  return <Badge className={STATUS_CLS[status]}>{STATUS_LABEL[status]}</Badge>
+  return <StatusPill status={RUN_STATE[status]} label={STATUS_LABEL[status]} />
 }
 
 export function PdcaRunDrawer({ run, open, onClose, onAbort, onTrigger, onRefresh, busy = false }: Props) {
@@ -139,7 +140,7 @@ export function PdcaRunDrawer({ run, open, onClose, onAbort, onTrigger, onRefres
                     <div className="flex flex-wrap items-center gap-2">
                       <ScoreBar score={iter.score} />
                       <span className="font-mono text-3xs text-fg-faint">
-                        {(iter.ms_elapsed / 1000).toFixed(1)}s · ${iter.model_cost_usd.toFixed(4)}
+                        {(iter.ms_elapsed / 1000).toFixed(1)}s · {iter.model_cost_usd == null ? 'unpriced' : `$${Number(iter.model_cost_usd).toFixed(4)}`}
                       </span>
                     </div>
                     {iter.critique_text && (

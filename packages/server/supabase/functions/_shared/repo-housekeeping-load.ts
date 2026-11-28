@@ -133,7 +133,7 @@ export async function loadRecorded(db: Db, projectId: string): Promise<Recorded>
   return { branches, attempts, activeBranches }
 }
 
-/** Latest Opus reviews of the given fixes. */
+/** Latest AI reviews of the given fixes. */
 export async function loadReviews(db: Db, projectId: string, fixIds: string[]): Promise<ReviewRow[]> {
   const out: ReviewRow[] = []
   for (let i = 0; i < fixIds.length; i += 100) {

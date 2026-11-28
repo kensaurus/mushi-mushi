@@ -3,7 +3,7 @@
  * PURPOSE: Shared shapes and status styling for the Iterate (PDCA) page.
  */
 
-import { runStatusChipTone } from '../../lib/chipTone'
+import type { RunStatus } from '../signal/StatusMark'
 
 export interface PdcaRun {
   id: string
@@ -33,17 +33,19 @@ export interface PdcaIteration {
   critique_text: string | null
   score: number | null
   score_breakdown: Record<string, number>
-  model_cost_usd: number
+  /** null = the model call had no price in the price book. */
+  model_cost_usd: number | null
   ms_elapsed: number
   created_at: string
 }
 
-export const STATUS_CLS: Record<PdcaRun['status'], string> = {
-  queued: runStatusChipTone('queued'),
-  running: runStatusChipTone('running'),
-  succeeded: runStatusChipTone('succeeded'),
-  aborted: runStatusChipTone('aborted'),
-  failed: runStatusChipTone('failed'),
+/** Run state in the signal kit's words (StatusPill: glyph + colour + edge). */
+export const RUN_STATE: Record<PdcaRun['status'], RunStatus> = {
+  queued: 'waiting',
+  running: 'running',
+  succeeded: 'passed',
+  aborted: 'cancelled',
+  failed: 'failed',
 }
 
 export const STATUS_LABEL: Record<PdcaRun['status'], string> = {

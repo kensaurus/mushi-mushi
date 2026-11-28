@@ -116,8 +116,8 @@ function planBadgeTone(plan: string | null): {
   label: string
 } {
   if (!plan || plan === 'hobby' || plan === 'free_cloud') return { chipClass: CHIP_TONE.neutral, label: 'Free' }
-  if (plan === 'indie' || plan === 'starter') return { chipClass: CHIP_TONE.infoSubtle, label: 'Builder' }
-  if (plan === 'pro') return { chipClass: CHIP_TONE.brandSubtle, label: 'Studio' }
+  if (plan === 'indie' || plan === 'starter') return { chipClass: CHIP_TONE.info, label: 'Builder' }
+  if (plan === 'pro') return { chipClass: CHIP_TONE.brand, label: 'Studio' }
   if (plan === 'enterprise') return { chipClass: 'bg-editorial-vermillion-wash text-editorial-vermillion border border-editorial-vermillion/30', label: 'Enterprise' }
   return { chipClass: CHIP_TONE.neutral, label: plan }
 }
@@ -512,7 +512,7 @@ function UserDetailDrawer({ userId, onClose }: { userId: string; onClose: () => 
                       <li key={r.id} className="text-2xs flex justify-between border-b border-edge/30 pb-1.5">
                         <div className="flex items-center gap-2">
                           <Badge className="bg-surface-raised text-fg-muted">{r.category}</Badge>
-                          {r.severity && <Badge tone="warnSubtle">{r.severity}</Badge>}
+                          {r.severity && <Badge tone="warn">{r.severity}</Badge>}
                           <span className="text-fg-muted">{r.status}</span>
                         </div>
                         <RelativeTime value={r.created_at} />

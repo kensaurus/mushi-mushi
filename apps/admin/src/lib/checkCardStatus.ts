@@ -27,7 +27,7 @@ export interface CheckCardView {
   chip: string
   detail: string | null
   setupTo: string | null
-  tone: 'neutral' | 'okSubtle' | 'warnSubtle' | 'dangerSubtle'
+  tone: 'neutral' | 'ok' | 'warn' | 'danger'
   /** When the run behind this state finished (ISO), when one was stored: grades staleness. */
   lastRunAt?: string | null
   /** How many findings the state counts (findings only). */
@@ -158,7 +158,7 @@ const PLATFORM_JOB_ERROR: CheckCardView = {
   chip: "Couldn't run: platform job error",
   detail: null,
   setupTo: null,
-  tone: 'dangerSubtle',
+  tone: 'danger',
 }
 
 /** Health: a platform job is late. Not this app's failed run. */
@@ -167,7 +167,7 @@ const PLATFORM_JOB_LATE: CheckCardView = {
   chip: 'Platform job is late',
   detail: null,
   setupTo: null,
-  tone: 'warnSubtle',
+  tone: 'warn',
 }
 
 /** The check's data could not be read. This is not a failed run. */
@@ -184,7 +184,7 @@ const FAILED: CheckCardView = {
   chip: 'Failed',
   detail: null,
   setupTo: null,
-  tone: 'dangerSubtle',
+  tone: 'danger',
 }
 
 function ran(iso: string | null | undefined, now: number): string | null {
@@ -209,7 +209,7 @@ function findings(count: number, iso: string | null | undefined, now: number): C
       chip: `${n} finding${n === 1 ? '' : 's'}`,
       detail: null,
       setupTo: null,
-      tone: 'warnSubtle',
+      tone: 'warn',
       count: n,
     },
     iso,
@@ -220,7 +220,7 @@ function findings(count: number, iso: string | null | undefined, now: number): C
 function pass(iso: string, now: number): CheckCardView {
   const detail = ran(iso, now)
   if (!detail) return NOT_CHECKED
-  return { state: 'pass', chip: 'Pass', detail, setupTo: null, tone: 'okSubtle', lastRunAt: iso }
+  return { state: 'pass', chip: 'Pass', detail, setupTo: null, tone: 'ok', lastRunAt: iso }
 }
 
 function failed(iso: string | null | undefined, now: number): CheckCardView {

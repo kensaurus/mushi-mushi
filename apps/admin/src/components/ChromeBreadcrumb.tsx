@@ -4,7 +4,7 @@
  *          user sees (lib/sidebarTree.ts):
  *            - a core page is one crumb: "Bugs", "Settings";
  *            - a page listed under a core page is "Parent › Page":
- *              "Home › Overview", "Checks › Scheduled tests";
+ *              "Apps › Overview", "Checks › Scheduled tests";
  *            - a page under "More pages" keeps its group: "Bugs › Bug clusters".
  *          Routes outside the sidebar keep "Console".
  *
@@ -30,20 +30,27 @@ interface Trail {
   current: string
 }
 
+/** A view of a page with tabs (Apps › Overview, Team › Billing) is not a sidebar child: its own registry entry names it. */
+function hubViewEntry(pathname: string, search: string) {
+  return NAV_REGISTRY.find((e) => e.path.startsWith(`${pathname}?`) && isNavPathActive(pathname, search, e.path)) ?? null
+}
+
 function breadcrumbTrail(pathname: string, search: string): Trail {
   const parent = activeParent(pathname, search)
   if (parent) {
     const child = (NAV_CHILDREN[parent] ?? []).find((c) => isNavPathActive(pathname, search, c))
     const parentLabel = registryLabel(parent) ?? routeFallbackTitle(parent) ?? 'Console'
-    if (!child) return { parent: null, current: parentLabel }
+    if (!child) {
+      const view = parent === pathname ? hubViewEntry(pathname, search) : null
+      return view ? { parent: { label: parentLabel, to: parent }, current: view.label } : { parent: null, current: parentLabel }
+    }
     return { parent: { label: parentLabel, to: parent }, current: registryLabel(child) ?? routeFallbackTitle(pathname) ?? 'Console' }
   }
   const title = routeFallbackTitle(pathname)
   // A page the console does not know (the 404 page) read "Console › Console".
   if (!title) return { parent: null, current: 'Console' }
   if (CORE_NAV_PATHS.includes(pathname)) {
-    // A view of a page with tabs (Home › Overview, Team › Billing) is not a sidebar child: its own registry entry names it.
-    const view = NAV_REGISTRY.find((e) => e.path.startsWith(`${pathname}?`) && isNavPathActive(pathname, search, e.path))
+    const view = hubViewEntry(pathname, search)
     return view ? { parent: { label: registryLabel(pathname) ?? title, to: pathname }, current: view.label } : { parent: null, current: title }
   }
   const section = routeSection(pathname)

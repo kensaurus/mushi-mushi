@@ -1,12 +1,28 @@
 /**
  * FILE: packages/server/supabase/functions/_shared/connectors/app-store-connect.ts
- * PURPOSE: The App Store Connect connector (Plan 019 §2b, Plan 020 §5),
- *          read-only. A team API key (.p8) signs a 20-minute ES256 JWT
+ * PURPOSE: The App Store Connect connector (Plan 019 §2b, Plan 020 §5).
+ *          A team API key (.p8) signs a 20-minute ES256 JWT
  *          (iss = issuer id, aud = appstoreconnect-v1, kid = key id).
  *          Snapshot: app versions and their state, the latest build, and
  *          in-app purchase / subscription review states.
- *          No propose, no act (Plan 020 S-1: listings change through the
- *          host's own CI).
+ *
+ * Act (Plan 025 P6, ADR 0074, amending ADR 0017 decision 2.2 for store
+ * media only): `upload_screenshots` and `upload_app_preview` put release-kit
+ * media on the editable App Store version, and run ONLY through
+ * executeConnectorAction (_shared/connector-actions.ts) with the uploader
+ * injected (store-media-act.ts, from api-ext's release-kit execute route only,
+ * which keeps it out of the size-capped api bundle): a human-approved,
+ * hash-matched, single-use, unexpired connector_actions row, with a
+ * separate write key (App Manager role). Each asset is re-hashed after
+ * download against the approved payload before a byte leaves for Apple.
+ * Listing TEXT stays listing-as-code (S-1): the host's CI publishes it.
+ *
+ * Upload flow (developer.apple.com "Uploading Assets to App Store Connect",
+ * read 2026-11-27): reserve (POST /v1/appScreenshots | /v1/appPreviews),
+ * PUT each uploadOperations slice (unauthenticated URLs, no JWT sent),
+ * commit (PATCH uploaded=true, sourceFileChecksum = MD5 of the file).
+ * Apple marks the v1 asset objects deprecated as of API 4.5; the flow is
+ * still the documented one. Tested against fixtures only.
  *
  * Blocked, not broken: when Apple refuses because a required agreement
  * (the Program License Agreement or Paid Apps) is not accepted, App Store
@@ -16,22 +32,25 @@
  * 2026-10-02; the check matches the code and the message text both.
  *
  * readCredential: JSON { keyId, issuerId, privateKey } (the .p8 text).
+ * writeCredential (act): the same shape, a key with the App Manager role.
  */
 
-import { signJwt } from './jwt.ts'
+import { sha256Hex, signJwt } from './jwt.ts'
 import { failureOfStatus, fetchJson, statusReason, vendorError, type JsonResponse } from './http-util.ts'
-import { ConnectorError, notConnected, type ConnectorContext, type ProbeResult, type RecipeConnector } from './types.ts'
+import { canonicalJson } from './canonical.ts'
+import { ConnectorError, notConnected, USE_RELEASE_KIT_MESSAGE, type ApprovedConnectorAction, type ConnectorActionResult, type ConnectorContext, type ProbeResult, type RecipeConnector } from './types.ts'
 import type { StoreRead } from '../monetization/rules.ts'
 
-const API = 'https://api.appstoreconnect.apple.com'
+export const API = 'https://api.appstoreconnect.apple.com'
 const ASC_READ_SCOPE = 'a team API key with a read role (Developer or App Manager)'
+const ASC_WRITE_SCOPE = 'a separate team API key with the App Manager role (uploads screenshots and app previews)'
 
 export const AGREEMENT_BLOCKED_REASON =
   'Apple is refusing API access until the account holder accepts the current agreement in App Store Connect (Business → Agreements). Nothing is wrong with the key.'
 
-interface AscKey { keyId: string; issuerId: string; privateKey: string }
+export interface AscKey { keyId: string; issuerId: string; privateKey: string }
 
-function parseKey(raw: string | null): AscKey | null {
+export function parseKey(raw: string | null): AscKey | null {
   if (!raw) return null
   try {
     const k = JSON.parse(raw) as Partial<AscKey>
@@ -49,12 +68,12 @@ export function isAgreementBlock(status: number, body: unknown): boolean {
   return errors.some((e) => /AGREEMENT/i.test(e.code ?? '') || /agreement/i.test(`${e.title ?? ''} ${e.detail ?? ''}`))
 }
 
-async function token(ctx: ConnectorContext, key: AscKey): Promise<string> {
+export async function token(ctx: ConnectorContext, key: AscKey): Promise<string> {
   const iat = Math.floor(ctx.now().getTime() / 1000)
   return signJwt('ES256', key.privateKey, { kid: key.keyId }, { iss: key.issuerId, iat, exp: iat + 1200, aud: 'appstoreconnect-v1' })
 }
 
-async function asc(ctx: ConnectorContext, key: AscKey, path: string) {
+export async function asc(ctx: ConnectorContext, key: AscKey, path: string) {
   return fetchJson<any>(ctx, `${API}${path}`, { headers: { Authorization: `Bearer ${await token(ctx, key)}` } })
 }
 
@@ -93,9 +112,10 @@ async function iosProducts(ctx: ConnectorContext, key: AscKey, appleId: string):
 export const appStoreConnectConnector: RecipeConnector = {
   kind: 'app_store_connect',
   title: 'App Store Connect',
-  capabilities: ['snapshot', 'drift'],
-  requiredScopes: { snapshot: [ASC_READ_SCOPE] },
-  credentialNote: 'Apple team API keys cannot be limited to one app: the key can see every app on the team. Mushi only reads versions and builds with it. Listings are published by your own CI, never by Mushi.',
+  capabilities: ['snapshot', 'drift', 'act'],
+  requiredScopes: { snapshot: [ASC_READ_SCOPE], act: [ASC_WRITE_SCOPE] },
+  credentialNote: 'Apple team API keys cannot be limited to one app: the key can see every app on the team. Mushi reads versions and builds with the read key. Uploading screenshots or app previews needs a separate key with the App Manager role, and every upload is approved by a person first. Listing text is published by your own CI, never by Mushi.',
+  actions: ['upload_screenshots', 'upload_app_preview'],
   async probe(ctx): Promise<ProbeResult> {
     const key = parseKey(ctx.readCredential)
     if (!key) return notConnected('Add an App Store Connect API key (key id, issuer id and the .p8 file).')
@@ -143,5 +163,13 @@ export const appStoreConnectConnector: RecipeConnector = {
     return apps.flatMap((a) => a.versions
       .filter((v) => /IN_REVIEW|WAITING_FOR_REVIEW/.test(v.state) && v.createdDate && now - Date.parse(v.createdDate) > 7 * 86400_000)
       .map((v) => ({ gate: 'deploy_drift', ruleId: 'store_review_stuck', severity: 'warn' as const, message: `iOS version ${v.version} has waited in App Store review for more than 7 days.`, suggestedFix: { kind: 'prompt' as const, text: 'Check the Resolution Center in App Store Connect for a message from App Review.' } })))
+  },
+  async act(ctx, action: ApprovedConnectorAction): Promise<ConnectorActionResult> {
+    // The approved hash first, before any parsing or network call.
+    if (await sha256Hex(canonicalJson(action.payload)) !== action.payloadSha256) return { ok: false, detail: 'The payload does not match what was approved.' }
+    if (action.action !== 'upload_screenshots' && action.action !== 'upload_app_preview') return { ok: false, detail: `Unknown App Store Connect action ${action.action}.` }
+    // The uploader lives in store-media-act.ts and is injected by api-ext only (api's size budget).
+    if (!ctx.storeMedia) return { ok: false, code: 'USE_RELEASE_KIT', status: 409, detail: USE_RELEASE_KIT_MESSAGE }
+    return ctx.storeMedia.appStore(ctx, action)
   },
 }

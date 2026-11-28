@@ -106,7 +106,7 @@ export function GraphSidePanel({ node, blastRadius, blastLoading, onClear }: Pro
         <div className="flex items-center justify-between mb-1">
           <h4 className="text-xs font-medium text-fg-secondary">Blast radius</h4>
           {blastRadius.length > 0 && (
-            <Badge className="bg-surface-overlay text-fg-muted text-3xs">{blastRadius.length}</Badge>
+            <Badge tone="neutral" className="text-3xs">{blastRadius.length}</Badge>
           )}
         </div>
         {blastLoading ? (

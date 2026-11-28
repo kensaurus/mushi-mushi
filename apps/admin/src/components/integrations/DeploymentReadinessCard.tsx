@@ -270,12 +270,12 @@ export function DeploymentReadinessCard({ projectId, githubAppInstalled, vercelP
 const STATUS_TONE: Record<ChecklistItem['status'], { dot: string; pill: string; label: string }> = {
   ready: {
     dot: 'bg-ok',
-    pill: CHIP_TONE.okSubtle,
+    pill: CHIP_TONE.ok,
     label: 'Ready',
   },
   recommended: {
     dot: 'bg-brand',
-    pill: CHIP_TONE.brandSubtle,
+    pill: CHIP_TONE.brand,
     label: 'Recommended',
   },
   optional: {
@@ -323,7 +323,7 @@ function ReadinessItem({ item, onAnchorJump }: { item: ChecklistItem; onAnchorJu
             href={item.ctaHref}
             target="_blank"
             rel="noopener noreferrer"
-            className={`shrink-0 inline-flex items-center gap-1 px-2 py-1 text-2xs font-medium rounded-sm ${CHIP_TONE.brandSubtle} hover:bg-brand/20`}
+            className={`shrink-0 inline-flex items-center gap-1 px-2 py-1 text-2xs font-medium rounded-sm ${CHIP_TONE.brand} hover:bg-brand/20`}
           >
             {item.ctaLabel} <span aria-hidden="true">↗</span>
           </a>

@@ -39,6 +39,8 @@ export function freshEyesStdin(t: FreshEyesTarget): string {
     successText: t.successText,
     dryRun: t.dryRun,
     accounts: t.accounts,
+    // The persona the console picked (ADR 0073); mushi-ux checks it again.
+    ...(t.persona ? { persona: t.persona } : {}),
   })
 }
 

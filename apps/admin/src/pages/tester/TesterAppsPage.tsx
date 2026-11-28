@@ -76,11 +76,11 @@ function actionLabel(action: string) {
 }
 
 const ACTION_COLOR: Record<string, string> = {
-  bug_critical: CHIP_TONE.dangerSubtle,
-  bug_high:     CHIP_TONE.warnSubtle,
-  bug_medium:   CHIP_TONE.warnSubtle,
+  bug_critical: CHIP_TONE.danger,
+  bug_high:     CHIP_TONE.warn,
+  bug_medium:   CHIP_TONE.warn,
   bug_low:      'text-fg-muted bg-surface-overlay/40 border border-edge/30',
-  enhancement:  CHIP_TONE.infoSubtle,
+  enhancement:  CHIP_TONE.info,
 }
 
 function ActivityDot({ lastAcceptedAt }: { lastAcceptedAt: string | null }) {
@@ -106,15 +106,15 @@ function ActivityDot({ lastAcceptedAt }: { lastAcceptedAt: string | null }) {
 
 function FitPill({ app }: { app: TesterApp }) {
   if (app.reputationMin === 0 && (!app.targetCountries || app.targetCountries.length === 0)) {
-    return <Badge className={`${CHIP_TONE.okSubtle} text-2xs`}>Open to all</Badge>
+    return <Badge tone="ok" className="text-2xs">Open to all</Badge>
   }
   if (app.meetsReputationGate) {
-    return <Badge className={`${CHIP_TONE.okSubtle} text-2xs`}>✓ You qualify</Badge>
+    return <Badge tone="ok" className="text-2xs">✓ You qualify</Badge>
   }
   const needed = app.reputationMin - app.myReputationScore
   return (
     <Badge
-      className={`${CHIP_TONE.warnSubtle} text-2xs`}
+      tone="warn" className="text-2xs"
       title={`You need ${app.reputationMin} rep; you have ${app.myReputationScore}. Earn ${needed} more by getting reports accepted.`}
     >
       🔒 Needs {app.reputationMin} rep (you: {app.myReputationScore})
@@ -150,7 +150,7 @@ function AppCard({ app, onJoin, onLeave, acting }: {
           <div className="flex flex-wrap items-center gap-2">
             <p className="font-semibold">{app.name}</p>
             {app.joined && (
-              <Badge className={`${CHIP_TONE.accentSubtle} text-2xs`}>✓ Joined</Badge>
+              <Badge tone="accent" className="text-2xs">✓ Joined</Badge>
             )}
             <FitPill app={app} />
           </div>

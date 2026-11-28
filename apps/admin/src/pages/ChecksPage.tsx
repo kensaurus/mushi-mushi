@@ -171,6 +171,23 @@ function CountMarks({ counts, fallback }: { counts: ReturnType<typeof checkCount
 }
 
 /** Exported for tests; page modules are knip entries, so it carries no tag. One sentence (the page context summary): what needs you first, then what is fine. */
+/**
+ * The "not running" list's heading and groups (console polish 2026-11-22). With one kind of idle
+ * check the list read "Not running yet (2)" over "Not run yet 2": the same thing twice. One
+ * kind now names the list itself ("Not run yet (2)") with no group label under it; both kinds
+ * keep the umbrella heading and name each group once. Exported for tests.
+ */
+export function idleSection<C extends { view: { state: CheckCardState } | null }>(
+  idle: readonly C[],
+): { title: string; groups: Array<{ id: 'not_set_up' | 'not_checked'; word: string; cards: C[] }>; labelGroups: boolean } {
+  const groups = [
+    { id: 'not_set_up' as const, word: 'Not set up', cards: idle.filter((c) => c.view!.state === 'not_set_up') },
+    { id: 'not_checked' as const, word: 'Not run yet', cards: idle.filter((c) => c.view!.state !== 'not_set_up') },
+  ].filter((g) => g.cards.length > 0)
+  const labelGroups = groups.length > 1
+  return { title: labelGroups ? 'Not running yet' : (groups[0]?.word ?? 'Not running yet'), groups, labelGroups }
+}
+
 export function checksStatus(cards: readonly CheckCard[]): { tone: PageStatusTone; sentence: string } {
   const ready = cards.filter((c) => c.view)
   const failed = ready.filter((c) => c.view!.state === 'failed')
@@ -319,6 +336,7 @@ export function ChecksPage() {
   const alerted = new Set(alerts.map((a) => `/${a.id}`))
   const open = cards.filter((c) => (!c.view || (!FOLDED.has(c.view.state) && !IDLE.has(c.view.state))) && !alerted.has(c.path))
   const idle = cards.filter((c) => c.view && IDLE.has(c.view.state))
+  const idleList = idle.length > 0 ? idleSection(idle) : null
   const folded = cards.filter((c) => c.view && FOLDED.has(c.view.state))
   const passing = counts.pass
   const watching = counts.watching
@@ -376,27 +394,25 @@ export function ChecksPage() {
           </div>
         )}
 
-        {idle.length > 0 && (
+        {idleList && (
           <section className="rounded-md border border-edge bg-surface-raised" aria-labelledby="checks-idle-title" data-testid="checks-idle">
             <h2 id="checks-idle-title" className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-fg">
               <StatusGlyph tone="off" />
-              Not running yet
+              {idleList.title}
               <span className="font-mono font-extrabold tabular-nums" data-testid="checks-idle-count">
                 ({idle.length})
               </span>
             </h2>
             {/* Two groups named once, rows without a pill each: "Not set up" ×3 and "Not run yet" ×2
-                under one header said each state on every row (round 3). */}
-            {[
-              { id: 'not_set_up', word: 'Not set up', cards: idle.filter((c) => c.view!.state === 'not_set_up') },
-              { id: 'not_checked', word: 'Not run yet', cards: idle.filter((c) => c.view!.state !== 'not_set_up') },
-            ]
-              .filter((g) => g.cards.length > 0)
-              .map((g) => (
+                under one header said each state on every row (round 3). One group: the heading
+                already names it, so no second label (2026-11-22). */}
+            {idleList.groups.map((g) => (
                 <div key={g.id} className="border-t border-edge-subtle" data-testid={`checks-idle-${g.id}`}>
-                  <p className="px-3 pt-1.5 text-2xs font-semibold text-fg-secondary">
-                    {g.word} <span className="font-mono tabular-nums">{g.cards.length}</span>
-                  </p>
+                  {idleList.labelGroups && (
+                    <p className="px-3 pt-1.5 text-2xs font-semibold text-fg-secondary" data-testid="checks-idle-group-label">
+                      {g.word} <span className="font-mono tabular-nums">{g.cards.length}</span>
+                    </p>
+                  )}
                   <ul className="list-none divide-y divide-edge-subtle p-0" aria-label={`Checks ${g.word.toLowerCase()}`}>
                     {g.cards.map((card) => (
                       <FoldedCheck key={card.path} {...rowProps(card)} hidePill />
@@ -455,7 +471,9 @@ function OpenCheck({ card, gated, change, now }: RowProps) {
   return (
     <li {...link} className={`${link.className} min-w-0`} data-testid={`checks-card-${path.slice(1)}`} data-state={view?.state ?? 'loading'}>
       <Card interactive className={`relative flex h-full flex-col gap-1.5 p-3 ${gated ? 'opacity-80' : ''}`}>
-        <div className="flex min-w-0 items-center gap-2">
+        {/* Wraps: on a phone the state pill drops under the name instead of
+            cutting it ("Mushi Mushi hea…", 2026-11-22 design pass). */}
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1" data-testid="checks-card-head">
           {view ? <StatusMark status={STATE_STATUS[view.state]} /> : <Skeleton className="h-3 w-3 shrink-0 rounded-full" />}
           <Icon className="h-4 w-4 shrink-0 text-fg-secondary" />
           <Link to={path} className={LINK}>

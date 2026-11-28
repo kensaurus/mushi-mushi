@@ -85,6 +85,33 @@
   --color-info-fg: oklch(0.16 0.04 240);
   --color-info-muted: oklch(0.28 0.05 240);
 
+  /* ── Chip edges and intent fills (2026-11-27, owner: "bare background
+     colour text … really bad") ────────────────────────────────────────
+     A chip, tag or banner is a tinted fill *and* a 1px inset edge in its
+     own hue, so it reads as a component instead of a highlighter stroke.
+     Each edge is at least 3:1 on surface, raised and overlay (WCAG 1.4.11).
+     The ring is inset, so no chip grows (density, #1141).
+     `warn-fill` is the solid Triage button: dark ink on amber, never white
+     on yellow. `sev-medium-*` gives Medium severity the same tint + edge +
+     ink set as the other tones.
+     Contrast: packages/server/src/__tests__/console-tone-contrast.test.ts. */
+  --color-ok-edge: oklch(0.56 0.11 155);
+  --color-warn-edge: oklch(0.56 0.11 55);
+  --color-danger-edge: oklch(0.56 0.11 25);
+  --color-info-edge: oklch(0.56 0.11 240);
+  --color-accent-edge: oklch(0.56 0.11 280);
+  --color-brand-edge: oklch(0.56 0.11 80);
+  --color-neutral-edge: oklch(0.54 0.006 285);
+  --color-warn-fill: oklch(0.78 0.16 55);
+  --color-warn-fill-fg: oklch(0.18 0.04 55);
+  --color-sev-medium-muted: oklch(0.30 0.06 100);
+  --color-sev-medium-foreground: oklch(0.86 0.13 100);
+  --color-sev-medium-edge: oklch(0.56 0.11 100);
+  /* SegmentedControl: the selected segment is a raised tile on a sunken
+     track (surface + edge + accent ring), never a tinted word. */
+  --color-segment-track: oklch(0.155 0.005 285);
+  --color-segment-active: oklch(0.30 0.008 285);
+
   /* ── Run status (2026-11-18, owner: "a running runner could show as running
      colour and status and graphical, and show different when broken") ───
      One set per state: `st-<s>` the bright mark (dot, ring, bar), `-ink` the

@@ -67,8 +67,8 @@ export interface KnownHolesView {
 
 const SEVERITY: Record<Severity, { label: string; tone: BadgeTone }> = {
   critical: { label: 'Critical', tone: 'danger' },
-  high: { label: 'High', tone: 'dangerSubtle' },
-  medium: { label: 'Medium', tone: 'warnSubtle' },
+  high: { label: 'High', tone: 'danger' },
+  medium: { label: 'Medium', tone: 'warn' },
   low: { label: 'Low', tone: 'neutral' },
   info: { label: 'Dev only', tone: 'neutral' },
 }

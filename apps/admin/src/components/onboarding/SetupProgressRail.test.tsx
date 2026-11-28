@@ -11,7 +11,17 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SetupProject } from '../../lib/useSetupStatus'
 
-const state = vi.hoisted(() => ({ ttfd: null as unknown, stack: null as unknown }))
+const state = vi.hoisted(() => ({
+  ttfd: null as unknown,
+  stack: null as unknown,
+  // The fix preflight Set up reads once reports are wired up (the report page's list).
+  preflight: { loading: true, error: null, checks: [] } as { loading: boolean; error: string | null; checks: unknown[] },
+}))
+
+vi.mock('../../lib/useDispatchPreflight', () => ({
+  useDispatchPreflight: (projectId: string | null) =>
+    projectId ? { ...state.preflight, ready: false, failing: [], reload: vi.fn(), repoUrl: null } : { loading: false, ready: false, checks: [], failing: [], error: null, reload: vi.fn(), repoUrl: null },
+}))
 
 vi.mock('../../lib/usePageData', () => ({
   usePageData: (path: string | null) => ({
@@ -30,6 +40,7 @@ let root: Root
 beforeEach(() => {
   state.ttfd = null
   state.stack = null
+  state.preflight = { loading: true, error: null, checks: [] }
   host = document.createElement('div')
   document.body.appendChild(host)
   root = createRoot(host)
@@ -149,6 +160,32 @@ describe('SetupProgressRail', () => {
     render(project(true, true, true))
     expect(host.textContent).toContain('Your app is wired up')
     expect(host.textContent).toContain('Mushi Mushi has only seen a test bug so far')
+  })
+
+  it('once reports are wired up, names what is left before a fix can be sent (journey walk 2026-11-28)', () => {
+    state.ttfd = { keyMintedAt: null, firstDiagnosisAt: new Date().toISOString(), ms: 60_000, firstReportId: 'r-123' }
+    state.preflight = {
+      loading: false,
+      error: null,
+      checks: [
+        { key: 'github', ready: true, label: 'GitHub', hint: '', fixHref: '/connect' },
+        { key: 'codebase', ready: false, label: 'Codebase indexed', hint: '', fixHref: '/explore?tab=index' },
+      ],
+    }
+    render(project(true, true, true))
+    const line = host.querySelector('[data-testid="setup-fix-steps"]')!
+    expect(line.textContent).toContain('To get fixes too:')
+    expect(line.textContent).toContain('Index your code')
+    expect(line.textContent).toContain('(1 of 2 done)')
+    expect(line.querySelector('a')?.getAttribute('href')).toBe('/explore?tab=index')
+  })
+
+  it('says fixes are ready too when every fix check passes', () => {
+    state.ttfd = { keyMintedAt: null, firstDiagnosisAt: new Date().toISOString(), ms: 60_000, firstReportId: 'r-123' }
+    state.preflight = { loading: false, error: null, checks: [{ key: 'github', ready: true, label: 'GitHub', hint: '', fixHref: '/connect' }] }
+    render(project(true, true, true))
+    expect(host.textContent).toContain('Your app is wired up, and fixes are ready')
+    expect(host.querySelector('[data-testid="setup-fix-steps"]')).toBeNull()
   })
 
   it('done: opens the first report from the app', () => {

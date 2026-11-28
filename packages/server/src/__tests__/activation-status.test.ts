@@ -43,12 +43,12 @@ describe('activation onboarding builder', () => {
         mergedFixCount: 0,
       },
     })
-    // sdk_installed is recommended, not required (GTM Workstream B §2b): with
-    // a key minted and no report yet, the next required step is the first
-    // diagnosis, and the SDK step no longer gates setupDone.
-    expect(stats.nextStepId).toBe('first_report_received')
-    expect(stats.nextStepTo).toBe('/onboarding?tab=verify')
-    expect(stats.requiredTotal).toBe(3)
+    // One step list (_shared/setup-steps.ts): the SDK step is required, as
+    // /v1/admin/setup and the console count it. With a key minted and no SDK
+    // check-in yet, the next required step is installing the SDK.
+    expect(stats.nextStepId).toBe('sdk_installed')
+    expect(stats.nextStepTo).toBe('/onboarding?tab=sdk')
+    expect(stats.requiredTotal).toBe(4)
     expect(stats.setupDone).toBe(false)
     // CLI `mushi status` reads first_report_at; null until a real report lands.
     expect(stats.first_report_at).toBe(null)

@@ -10,7 +10,6 @@
 
 import { useState } from 'react'
 import { CodePanel } from '../CodePanel'
-import { SegmentedControl } from '../ui'
 import { HOST_LABEL, HOSTS, hostGuide, type Host } from '../../lib/hostingEnvHint'
 
 interface Props {
@@ -45,21 +44,29 @@ export function HostingGuide({ projectId, apiKey, bundler, askSetup = false, onU
     // A divider and a heading, not a bordered card holding a bordered chip group inside the
     // install card: three frames narrowed it to 300 px on a phone (round-3 review, 2026-11-19).
     <div className="space-y-2 border-t border-edge-subtle pt-3" data-testid="hosting-guide">
-      <p className="text-xs text-fg-muted">
-        <span className="font-semibold text-fg">Where does your app run?</span> Pick your host to see where the key goes.
-      </p>
-      <SegmentedControl<Host>
-        value={host ?? ('' as Host)}
-        options={HOSTS.map((h) => ({ id: h, label: HOST_LABEL[h] }))}
-        onChange={(h) => {
-          setHost(h)
-          setCopied(false)
-          if (h === 'lovable' || h === 'bolt') onUseScriptTag?.()
-        }}
-        ariaLabel="Where your app runs"
-        size="sm"
-        wrap
-      />
+      {/* One list, not six chips beside the framework tabs (ADR 0069). */}
+      <label className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-muted">
+        <span className="font-semibold text-fg">Where does your app run?</span>
+        <select
+          aria-label="Where your app runs"
+          className="h-7 min-w-0 rounded-sm border border-edge-subtle bg-surface-raised px-2 text-2xs text-fg"
+          value={host ?? ''}
+          onChange={(e) => {
+            const h = (e.target.value || null) as Host | null
+            setHost(h)
+            setCopied(false)
+            if (h === 'lovable' || h === 'bolt') onUseScriptTag?.()
+          }}
+          data-testid="hosting-guide-host"
+        >
+          <option value="">Pick your host</option>
+          {HOSTS.map((h) => (
+            <option key={h} value={h}>
+              {HOST_LABEL[h]}
+            </option>
+          ))}
+        </select>
+      </label>
       {guide && (
         <div className="space-y-2" data-testid={`hosting-guide-${host}`}>
           <p className="text-xs text-fg-secondary">{guide.lead}</p>

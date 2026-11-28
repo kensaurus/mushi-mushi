@@ -57,10 +57,10 @@ export function isScopePresetId(value: string | null | undefined): value is Scop
 }
 
 export function scopeBadgeTone(scope: string): string {
-  if (scope === 'mcp:write') return CHIP_TONE.dangerSubtle
-  if (scope === 'mcp:read') return CHIP_TONE.infoSubtle
+  if (scope === 'mcp:write') return CHIP_TONE.danger
+  if (scope === 'mcp:read') return CHIP_TONE.info
   // Narrow write-only keys (a phone, a CI machine) share one tone.
-  if (scope === 'voice:write' || scope === 'runner:write' || scope === 'worker:run' || scope === 'ops:write') return CHIP_TONE.warnSubtle
+  if (scope === 'voice:write' || scope === 'runner:write' || scope === 'worker:run' || scope === 'ops:write') return CHIP_TONE.warn
   return CHIP_TONE.neutral
 }
 

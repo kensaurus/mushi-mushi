@@ -92,7 +92,8 @@ describe('GeneralPanel stored secrets', () => {
   async function render(): Promise<void> {
     await act(async () => {
       // The Supabase row links to the AI keys tab, so it needs a router.
-      root.render(createElement(MemoryRouter, null, createElement(GeneralPanel)))
+      // Sentry and the webhook sit in the Advanced group (ADR 0069); a link into it opens it.
+      root.render(createElement(MemoryRouter, { initialEntries: ['/settings#error-tracking'] }, createElement(GeneralPanel)))
       await flush()
     })
   }

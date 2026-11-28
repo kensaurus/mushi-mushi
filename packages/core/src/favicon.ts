@@ -8,48 +8,17 @@ export interface ProjectFaviconSource {
   project_slug: string;
   /** Operator override — wins over inferred domain when set. */
   icon_url?: string | null;
-  /** e.g. https://kensaur.us — from SDK heartbeat or API key last_seen_origin */
+  /** e.g. https://app.example.com — from SDK heartbeat or API key last_seen_origin */
   sdk_origin?: string | null;
   /** Connected GitHub/GitLab repo — used when SDK has not heartbeated yet. */
   repo_url?: string | null;
+  /**
+   * Hosts that serve many apps under paths (the caller's own hosting origin),
+   * so their root favicon belongs to the parent site, not this app. Data from
+   * the caller's config, never a list of tenants here.
+   */
+  shared_hosts?: readonly string[] | null;
 }
-
-/**
- * Hosts that serve many dogfood apps under one favicon — skip for icon lookup
- * so we prefer slug/repo-specific domains or initials instead of one shared globe.
- */
-const MULTI_TENANT_PARENT_HOSTS = new Set(['kensaur.us', 'www.kensaur.us']);
-
-/**
- * Slug → canonical production domain. Use app-specific TLDs, not shared parents.
- * Native-only apps (yen-yen) intentionally omitted — initials fallback is clearer.
- */
-const SLUG_DOMAIN_HINTS: Record<string, string> = {
-  'glot-it': 'glot.it',
-  glotit: 'glot.it',
-  'solo-boss-cloud': 'solo-boss.kensaur.us',
-  'mushi-mushi': 'kensaur.us',
-  'how-to-talk-to-girls': 'talk.kensaur.us',
-  htttg: 'talk.kensaur.us',
-  tsumagoi: 'tsumagoi.kensaur.us',
-};
-
-/**
- * Verified absolute favicon URLs for dogfood projects whose TLD blocks /favicon.*
- * or serves a shared parent icon. Playwright-checked Jun 2026.
- */
-const SLUG_ICON_URL_HINTS: Record<string, string> = {
-  'mushi-mushi': 'https://kensaur.us/mushi-mushi/admin/favicon.svg',
-  'solo-boss-cloud': 'https://solo-boss.kensaur.us/favicon.svg',
-  'glot-it': 'https://kensaur.us/glot-it/apple-touch-icon.png',
-  glotit: 'https://kensaur.us/glot-it/apple-touch-icon.png',
-  'the-wanting-mind': 'https://kensaur.us/the-wanting-mind/pwa-512x512.png',
-  'how-to-talk-to-girls': 'https://talk.kensaur.us/pwa-192.png',
-  htttg: 'https://talk.kensaur.us/pwa-192.png',
-  tsumagoi: 'https://tsumagoi.kensaur.us/apple-touch-icon.png',
-  'help-her-take-photo': 'https://kensaur.us/help-her-take-photo/assets/apple-touch-icon.png',
-  'yen-yen': 'https://kensaur.us/yen-yen/icon.svg',
-};
 
 /** Third-party favicon CDNs — return HTTP 200 generic globes; never use as fallbacks. */
 const UNTRUSTED_FAVICON_HOSTS = [
@@ -87,10 +56,12 @@ export function resolveProjectFaviconDomains(source: ProjectFaviconSource): stri
   };
 
   add(githubRepoDomainHint(source.repo_url));
-  add(SLUG_DOMAIN_HINTS[source.project_slug.toLowerCase()]);
 
-  const fromOrigin = source.sdk_origin ? originToDomain(source.sdk_origin) : null;
-  if (fromOrigin && !MULTI_TENANT_PARENT_HOSTS.has(fromOrigin)) {
+  // An app mounted under a path (https://host/my-app/) shares its host's root
+  // favicon with every other app there: skip it, like a configured shared host.
+  const fromOrigin = source.sdk_origin && !mountedUnderPath(source.sdk_origin) ? originToDomain(source.sdk_origin) : null;
+  const shared = new Set((source.shared_hosts ?? []).map((h) => h.trim().toLowerCase()).filter(Boolean));
+  if (fromOrigin && !shared.has(fromOrigin) && !shared.has(fromOrigin.replace(/^www\./, ''))) {
     add(fromOrigin);
   }
 
@@ -108,15 +79,22 @@ export function projectFaviconUrlCandidates(source: ProjectFaviconSource, size =
     urls.push(url);
   };
 
-  const slugHint = SLUG_ICON_URL_HINTS[source.project_slug.toLowerCase()];
-  if (slugHint) push(slugHint);
-
   for (const domain of resolveProjectFaviconDomains(source)) {
     for (const url of faviconUrlCandidates(domain, size)) {
       push(url);
     }
   }
   return urls;
+}
+
+/** True when an SDK origin carries a non-root path: the app lives under a path of a shared host. */
+function mountedUnderPath(origin: string): boolean {
+  try {
+    const url = new URL(origin.includes('://') ? origin : `https://${origin}`);
+    return url.pathname.replace(/\/+$/, '') !== '';
+  } catch {
+    return false;
+  }
 }
 
 export function originToDomain(origin: string): string | null {

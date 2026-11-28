@@ -69,14 +69,14 @@ function PageRow({ page: p }: { page: SitemapNode }) {
           {p.views > 0 && <Badge tone="neutral">{p.views} {p.views === 1 ? 'visit' : 'visits'}</Badge>}
           {p.bugs > 0 && (
             <Link to="/reports?days=14" aria-label={`${p.bugs} bug reports on ${p.path}`}>
-              <Badge tone="warnSubtle">
+              <Badge tone="warn">
                 {p.bugs} {p.bugs === 1 ? 'bug' : 'bugs'}
               </Badge>
             </Link>
           )}
           {p.broken && (
             <Link to="/inventory?tab=discovery" aria-label={`${p.path} is broken`}>
-              <Badge tone="dangerSubtle">Broken</Badge>
+              <Badge tone="danger">Broken</Badge>
             </Link>
           )}
         </span>

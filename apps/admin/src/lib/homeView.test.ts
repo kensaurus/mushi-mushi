@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { dedupeHomeSections, groupHomeKeys, healthDisplayTone, splitWeekRows } from './homeView'
-import type { HealthSignal, HomeSection, ProjectHome, WeekRow } from './projectHome'
+import { ctaTarget, dedupeHomeSections, groupHomeKeys, healthDisplayTone, healthWithoutRepeatedConnects, homeCardsWithContent, splitWeekRows } from './homeView'
+import type { HealthSignal, HomeRelease, HomeSection, ProjectHome, WeekRow } from './projectHome'
 
 const ok = <T,>(data: T): HomeSection<T> => ({ status: 'ok', data, connect: null, error: null })
 const watch = { label: 'Turn on the live-site watch', to: '/inventory?tab=discovery' }
@@ -102,5 +102,62 @@ describe('groupHomeKeys', () => {
       ['web', 1],
     ])
     expect(unused.map((k) => k.label)).toEqual(['sdk-ingest', 'ops'])
+  })
+})
+
+// ADR 0069: one button per place, and a card only once it has something to show.
+describe('one button per place', () => {
+  const sdk = '/connect?project=p1#connect-sdk-health'
+  it('reads a button target without the project pin', () => {
+    expect(ctaTarget(sdk)).toBe('/connect#connect-sdk-health')
+    expect(ctaTarget('/reports?project=p1&status=open')).toBe('/reports?status=open')
+    expect(ctaTarget('/connect')).toBe('/connect')
+  })
+
+  it('drops a light connect that Needs you or the light that owns the page already carries', () => {
+    const health = ok([
+      light({ id: 'errors', href: '/reports?days=1', connect: { label: 'Install the SDK', to: sdk } }),
+      light({ id: 'sdk', href: sdk, connect: { label: 'Set up the SDK', to: sdk } }),
+      light({ id: 'ci', href: '/ci', connect: { label: 'Connect GitHub', to: '/connect' } }),
+    ])
+    const alone = healthWithoutRepeatedConnects(health, [])
+    // The SDK light owns its page's button; Bugs today keeps its status only.
+    expect(alone.data!.map((s) => s.connect?.label ?? null)).toEqual([null, 'Set up the SDK', 'Connect GitHub'])
+    const withNeeds = healthWithoutRepeatedConnects(health, [{ id: 'sdk_silent', impact: 65, text: 'x', action: { label: 'Set up the SDK', to: '/connect#connect-sdk-health' } }])
+    expect(withNeeds.data!.map((s) => s.connect?.label ?? null)).toEqual([null, null, 'Connect GitHub'])
+    // Nothing repeated: the same section back.
+    const plain = ok([light({ id: 'ci', href: '/ci', connect: { label: 'Connect GitHub', to: '/connect' } })])
+    expect(healthWithoutRepeatedConnects(plain, [])).toBe(plain)
+  })
+
+  it('hides a card with nothing to show, never one whose read failed', () => {
+    const emptyRelease: HomeRelease = {
+      stations: [{ id: 'fix', label: 'Fixes', count: 0, stuck: 0 }],
+      train: null,
+      lastDeploy: null,
+      waiting: { counts: { critical: 0, high: 0, medium: 0, low: 0, unrated: 0 }, total: 0 },
+      waitingError: null,
+    }
+    const zero = (id: WeekRow['id']): WeekRow => ({ id, label: id, thisWeek: 0, lastWeek: 0, moreIsBetter: false, href: '/' })
+    const quiet = homeCardsWithContent({
+      release: ok(emptyRelease),
+      sitemap: ok({ pages: [{ path: '/', label: 'Home', depth: 0, views: 0, bugs: 0, broken: false }], totalPages: 0, sampled: false }),
+      week: ok([zero('reports'), zero('merged')]),
+      activity: ok([]),
+    })
+    expect(quiet).toEqual({ release: false, sitemap: false, week: false, activity: false })
+    const notConnected = { status: 'not_connected' as const, data: null, connect: { label: 'Connect GitHub', to: '/connect' }, error: null }
+    expect(homeCardsWithContent({ release: notConnected, sitemap: notConnected, week: ok([]), activity: ok([]) }).release).toBe(false)
+    const failed = { status: 'error' as const, data: null, connect: null, error: 'timeout' }
+    expect(homeCardsWithContent({ release: failed, sitemap: failed, week: failed, activity: failed })).toEqual({ release: true, sitemap: true, week: true, activity: true })
+    const busy = homeCardsWithContent({
+      release: ok({ ...emptyRelease, waiting: { ...emptyRelease.waiting!, total: 2 } }),
+      sitemap: ok({ pages: [{ path: '/', label: 'Home', depth: 0, views: 3, bugs: 0, broken: false }], totalPages: 1, sampled: false }),
+      week: ok([{ ...zero('reports'), thisWeek: 1 }]),
+      activity: ok([{ id: 'a', text: '1 fix merged today', to: '/fixes' }]),
+    })
+    expect(busy).toEqual({ release: true, sitemap: true, week: true, activity: true })
+    // A bug count that could not be read is a problem to show.
+    expect(homeCardsWithContent({ release: ok({ ...emptyRelease, waiting: null, waitingError: 'timeout' }), sitemap: failed, week: failed, activity: failed }).release).toBe(true)
   })
 })

@@ -96,6 +96,10 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   propose_recipe_change: 'inventory',
   propose_portfolio_change: 'inventory',
   request_connector_action: 'inventory',
+  // Plan 025 P4-P6 (ADR 0074): a release's Security proof, its kit, store media requests.
+  get_security_proof: 'inventory',
+  export_release_kit: 'inventory',
+  request_store_media_upload: 'inventory',
   get_store_status: 'inventory',
   get_design_deviance: 'inventory',
   // Run-now triggers + the by-id finding explanation
@@ -118,6 +122,8 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   // setup
   diagnose_setup: 'setup',
   check_sdk_version: 'setup',
+  get_widget_settings: 'setup',
+  set_widget_settings: 'setup',
   activation_status: 'setup',
   get_two_way_comms_health: 'setup',
 
@@ -183,6 +189,10 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   list_qa_story_runs: 'qa',
   get_qa_story_run: 'qa',
   test_notification_channel: 'qa',
+  // Native UX captures and personas (ADR 0073)
+  upload_ux_captures: 'qa',
+  list_personas: 'qa',
+  start_fresh_eyes: 'qa',
 
   // skills
   list_skills: 'skills',
@@ -201,6 +211,10 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   run_fullstack_audit: 'audit',
   get_backend_health: 'audit',
   get_code_health: 'audit',
+  get_timeline: 'audit',
+  get_surface_history: 'audit',
+  get_ux_run: 'audit',
+  start_ux_run: 'audit',
 
   // codebase understand
   ask_codebase: 'codebase',

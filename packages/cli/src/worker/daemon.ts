@@ -336,7 +336,7 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
     return {
       // `takes`: the claim kinds beyond the lanes' modes this daemon runs (a closed list on the server).
       // `can`: what this daemon does when the console asks (a closed list on the server).
-      host: { ...deps.host, takes: deps.freshEyes ? ['fresh_eyes'] : [], can: deps.cursorLogin ? ['cursor_login'] : [] },
+      host: { ...deps.host, takes: deps.freshEyes ? ['fresh_eyes', 'fresh_eyes_persona'] : [], can: deps.cursorLogin ? ['cursor_login'] : [] },
       status: {
         state: hostState,
         // Which coding agent the lanes run, so the console names its account (not always Cursor).

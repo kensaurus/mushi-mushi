@@ -3,7 +3,7 @@
  * PURPOSE: The fix loop tells a stopped test machine from a broken fix
  *          (Plan 022, ADR 0033), on the glot.it OOM cancel of 2026-10-21:
  *            - fix-loop-status buckets it `ci_infra`, not `ci_failed`;
- *            - the Opus review prompt reads "did not finish", never failed;
+ *            - the AI review prompt reads "did not finish", never failed;
  *            - the timeline shows "Tests did not run", pending, and corrects
  *              a stored "CI cancelled" event;
  *            - review follow-ups drop findings that only restate CI;

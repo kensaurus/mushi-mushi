@@ -101,10 +101,10 @@ function listRows<T>(payload: T[] | { data: T[] } | null | undefined): T[] {
 function SeverityBadge({ severity }: { severity: string }) {
   const className =
     severity === 'critical'
-      ? CHIP_TONE.dangerSubtle
+      ? CHIP_TONE.danger
       : severity === 'warn'
-        ? CHIP_TONE.warnSubtle
-        : CHIP_TONE.infoSubtle
+        ? CHIP_TONE.warn
+        : CHIP_TONE.info
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${className}`}>
       {severity}
@@ -337,7 +337,7 @@ function ClustersTab({ onChanged, canEditProject }: { onChanged: () => void; can
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-1">
             <Badge
-              className={cluster.status === 'promoted' ? CHIP_TONE.okSubtle : canPromote(cluster) ? CHIP_TONE.warnSubtle : 'bg-surface-overlay text-fg-secondary'}
+              className={cluster.status === 'promoted' ? CHIP_TONE.ok : canPromote(cluster) ? CHIP_TONE.warn : 'bg-surface-overlay text-fg-secondary'}
             >
               {clusterStatusWord(cluster)}
             </Badge>

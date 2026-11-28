@@ -16,11 +16,17 @@ export interface AssistantPreviewState {
 
 export interface RemoteSdkConfig {
   enabled?: boolean
+  /** False for members: they can read the settings, only owners and admins save. */
+  canEdit?: boolean
   widget?: {
     position?: WidgetPosition
     theme?: WidgetTheme
     trigger?: WidgetTrigger
     triggerText?: string | null
+    /** `#rrggbb`, or absent/null for auto (match the site). PUT accepts null to clear. */
+    accent?: string | null
+    /** Black or white, chosen by the server for the accent (read only). */
+    accentText?: string
     attachToSelector?: string | null
     launcher?: WidgetTrigger
     bannerVariant?: BannerVariant

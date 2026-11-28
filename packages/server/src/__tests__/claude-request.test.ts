@@ -57,7 +57,6 @@ import {
   STAGE1_MODEL,
   STAGE2_MODEL,
 } from '../../supabase/functions/_shared/models.ts'
-import { estimateCallCostUsd } from '../../supabase/functions/_shared/pricing.ts'
 
 describe('model registry', () => {
   it('routes diagnosis, fixes and the judge to Sonnet 5.5', () => {
@@ -77,11 +76,6 @@ describe('model registry', () => {
     expect(STAGE1_MODEL).toBe('claude-haiku-4-5')
   })
 
-  it('prices Sonnet 5.5 and its server-side fallback model at $2 / $10 per MTok', () => {
-    expect(estimateCallCostUsd('claude-sonnet-5-5', 1_000_000, 1_000_000)).toBeCloseTo(12)
-    expect(estimateCallCostUsd('claude-sonnet-5', 1_000_000, 1_000_000)).toBeCloseTo(12)
-    expect(estimateCallCostUsd('anthropic/claude-sonnet-5-5', 1_000, 0)).toBeCloseTo(0.002)
-  })
 })
 
 describe('claudeModelTraits', () => {

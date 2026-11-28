@@ -6,7 +6,7 @@
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log as rootLog } from './logger.ts'
-import { estimateCallCostUsd } from './pricing.ts'
+import { priceLlmCall, type LlmCost } from './llm-cost.ts'
 import { otlpSpan, setGenAiAttributes, type GenAiProvider } from './otlp-exporter.ts'
 
 const log = rootLog.child('telemetry')
@@ -120,6 +120,12 @@ export interface LlmInvocationRecord {
    * decision, not a side effect of recording the spend.
    */
   skipHostedBilling?: boolean
+  /**
+   * The cost the provider itself reported for this call (OpenRouter's
+   * usage.cost). When set it is stored as the row's cost with price_source
+   * 'vendor_actual': an actual charge beats the catalog estimate.
+   */
+  vendorCostUsd?: number | null
 }
 
 /**
@@ -143,15 +149,60 @@ export function logLlmInvocation(
       stage: rec.stage ?? null,
     })
   }
-  // Compute cost at write time using the centralized pricing table so Health,
-  // Billing COGS, and Prompt Lab all read the same number from one column.
-  // See `_shared/pricing.ts` and migration `20260420000200_llm_cost_usd.sql`
-  // — both must mirror to keep historical and live data aligned.
-  const costUsd = estimateCallCostUsd(
-    rec.usedModel,
-    rec.inputTokens ?? 0,
-    rec.outputTokens ?? 0,
-  )
+  // Price at write time from the shared KENSAURUS price book (llm-cost.ts),
+  // so Health, Billing COGS and the Costs page read one column. The row
+  // stores which price was used (price_source / price_version / price_tier),
+  // or cost_usd NULL with unpriced_reason when the book has no price.
+  // priceLlmCall never rejects.
+  const vendor = rec.vendorCostUsd
+  const priced: Promise<LlmCost> = typeof vendor === 'number' && Number.isFinite(vendor) && vendor >= 0
+    ? Promise.resolve({
+        costUsd: vendor,
+        source: 'vendor_actual',
+        version: null,
+        tier: null,
+        unpricedReason: null,
+        provider: 'vendor',
+        model: rec.usedModel,
+      })
+    : priceLlmCall({
+        model: rec.usedModel,
+        inputTokens: rec.inputTokens,
+        outputTokens: rec.outputTokens,
+        cacheReadTokens: rec.cacheReadInputTokens,
+        cacheWriteTokens: rec.cacheCreationInputTokens,
+        units: rec.billableUnits,
+      })
+  const done = priced.then((cost) => recordInvocation(db, rec, cost))
+  // Most callers fire and forget (`void logLlmInvocation(...)`). The price
+  // lookup now sits before the insert, so keep the isolate alive until the
+  // row (and the hosted debit it schedules) is written.
+  const edge = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime
+  if (edge && typeof edge.waitUntil === 'function') edge.waitUntil(done)
+  return done
+}
+
+function recordInvocation(
+  db: SupabaseClient,
+  rec: LlmInvocationRecord,
+  cost: LlmCost,
+): Promise<{ error: string | null }> {
+  // Never rejects: a synchronous throw (a broken client) resolves an error.
+  try {
+    return writeInvocation(db, rec, cost)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    log.warn('llm_invocations insert threw', { error: message })
+    return Promise.resolve({ error: message })
+  }
+}
+
+function writeInvocation(
+  db: SupabaseClient,
+  rec: LlmInvocationRecord,
+  cost: LlmCost,
+): Promise<{ error: string | null }> {
+  const costUsd = cost.costUsd
 
   // Hosted-LLM billing: a call that ran on a platform key (`key_source='env'`)
   // spent kensaurus's provider budget, so the project owner's KENSAURUS wallet
@@ -234,7 +285,7 @@ export function logLlmInvocation(
       outputTokens: rec.outputTokens,
       cacheReadInputTokens: rec.cacheReadInputTokens,
       cacheCreationInputTokens: rec.cacheCreationInputTokens,
-      costUsd,
+      costUsd: costUsd ?? undefined,
     })
     span.setStatus(rec.status === 'success' ? 'ok' : 'error', rec.errorMessage ?? undefined)
     span.end().catch(() => {}) // non-fatal
@@ -255,6 +306,10 @@ export function logLlmInvocation(
     input_tokens: rec.inputTokens ?? null,
     output_tokens: rec.outputTokens ?? null,
     cost_usd: costUsd,
+    price_source: cost.source,
+    price_version: cost.version,
+    price_tier: cost.tier,
+    unpriced_reason: cost.unpricedReason,
     prompt_version: rec.promptVersion ?? null,
     key_source: rec.keySource ?? null,
     langfuse_trace_id: rec.langfuseTraceId ?? null,

@@ -15,7 +15,7 @@ import { ActionPill, ActionPillRow, ContainedBlock } from './report-detail/Repor
 import type { DispatchState } from '../lib/dispatchFix'
 import { CHIP_TONE } from '../lib/chipTone'
 import { readFixCi } from '../lib/ciInfra'
-import { agentFlaggedFix } from '../lib/pdcaAct'
+import { agentFlaggedFix, verdictFromError } from '../lib/pdcaAct'
 import type { CiInfraVerdict } from '../lib/ciTypes'
 
 interface FixAttempt {
@@ -39,6 +39,8 @@ interface FixAttempt {
   review_passed?: boolean
   review_reasoning?: string | null
   error?: string
+  /** The agent's no-PR answer (already_fixed, not_actionable, …) when it opened no PR. */
+  failure_category?: string | null
   started_at: string
   completed_at?: string
 }
@@ -54,11 +56,11 @@ const STAGE_LABEL: Record<string, string> = {
 
 const STAGE_TONE: Record<string, string> = {
   idle: 'bg-surface-overlay text-fg-muted',
-  queueing: CHIP_TONE.infoSubtle,
-  queued: CHIP_TONE.infoSubtle,
-  running: `${CHIP_TONE.infoSubtle} animate-pulse`,
-  completed: CHIP_TONE.okSubtle,
-  failed: CHIP_TONE.dangerSubtle,
+  queueing: CHIP_TONE.info,
+  queued: CHIP_TONE.info,
+  running: `${CHIP_TONE.info} animate-pulse`,
+  completed: CHIP_TONE.ok,
+  failed: CHIP_TONE.danger,
 }
 
 function totalTokens(a: FixAttempt | null): string | null {
@@ -154,12 +156,12 @@ export function FixProgressStream({ reportId, dispatchState, hasFixHistory = tru
           <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-2xs font-medium ${STAGE_TONE[stage] ?? STAGE_TONE.idle}`}>
             {STAGE_LABEL[stage] ?? stage}
           </span>
-          <abbr
-            title="PDCA — Plan · Do · Check · Act. The four-stage loop each autofix follows from planning through review."
-            className="text-2xs text-fg-secondary underline decoration-dotted decoration-fg-faint/50 underline-offset-2 cursor-help font-semibold"
+          <span
+            title="Each automatic fix goes through four steps: plan it, write it, check it, ship it."
+            className="text-2xs text-fg-secondary font-semibold"
           >
-            PDCA loop
-          </abbr>
+            Fix progress
+          </span>
         </div>
         <div className="flex items-center gap-3 text-2xs">
           {latest?.llm_model && <span className="font-mono text-fg-faint">{latest.llm_model}</span>}
@@ -203,14 +205,14 @@ export function FixProgressStream({ reportId, dispatchState, hasFixHistory = tru
             {latest.files_changed.slice(0, 6).map((file) => (
               <code
                 key={file}
-                className="inline-flex max-w-full truncate rounded-sm bg-surface-overlay/45 px-1.5 py-px font-mono text-3xs text-fg-secondary"
+                className={`inline-flex max-w-full truncate rounded-sm ${CHIP_TONE.neutral} px-1.5 py-px font-mono text-3xs`}
                 title={file}
               >
                 {file}
               </code>
             ))}
             {latest.files_changed.length > 6 && (
-              <span className="inline-flex items-center rounded-sm bg-surface-overlay/30 px-1.5 py-px text-3xs text-fg-faint">
+              <span className={`inline-flex items-center rounded-sm ${CHIP_TONE.neutral} px-1.5 py-px text-3xs`}>
                 +{latest.files_changed.length - 6} more
               </span>
             )}
@@ -248,11 +250,21 @@ export function FixProgressStream({ reportId, dispatchState, hasFixHistory = tru
         )}
       </ActionPillRow>
 
-      {latest?.error && stage !== 'failed' && (
+      {/* An agent's answer (already fixed, nothing to change, …) is not an
+          error: the recommendation above quotes it once. Printing it again
+          here in red said the same thing three times (journey walk 2026-11-28). */}
+      {latest?.error && stage !== 'failed' && !isAgentVerdict(latest) && (
         <ContainedBlock tone="warn" label="Attempt error" className="mt-1.5">
           <p className="font-mono text-2xs text-danger">{latest.error}</p>
         </ContainedBlock>
       )}
     </Card>
   )
+}
+
+const AGENT_VERDICTS = new Set(['already_fixed', 'not_actionable', 'wrong_repo', 'needs_human'])
+
+/** The attempt ended with the agent's answer rather than a breakage. */
+function isAgentVerdict(attempt: FixAttempt): boolean {
+  return AGENT_VERDICTS.has(attempt.failure_category ?? '') || verdictFromError(attempt.error) !== null
 }

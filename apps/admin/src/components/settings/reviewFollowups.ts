@@ -94,7 +94,7 @@ export function followupScoreLine(board: ReviewFollowupScoreboard | null | undef
   if (!board || board.dispatched === 0) return null
   const v = board.verdictsAfter
   const judged = v.merge + v.fix_first + v.hold
-  const after = judged > 0 ? ` → Opus after: ${v.merge} merge, ${v.fix_first} fix first, ${v.hold} hold` : ''
+  const after = judged > 0 ? ` → AI review after: ${v.merge} merge, ${v.fix_first} fix first, ${v.hold} hold` : ''
   const rate = board.conversionRate != null ? ` (${Math.round(board.conversionRate * 100)}% fix first → merge)` : ''
   const waiting = board.awaitingReview > 0 ? `, ${board.awaitingReview} awaiting review` : ''
   const screened = board.findingsDropped ? `; ${board.findingsDropped} unsafe finding${board.findingsDropped === 1 ? '' : 's'} not sent` : ''
@@ -135,7 +135,7 @@ export function followupRecentResult(r: ReviewFollowupRecent): string {
     case 'completed':
     case 'failed': {
       if (!pushedChange(r)) return `${r.status === 'failed' ? 'agent failed' : 'agent finished'}, no change pushed`
-      return `pushed ${String(r.head_sha_after).slice(0, 7)}${r.verdict_after ? `, Opus: ${VERDICT_WORDS[r.verdict_after]}` : ', awaiting review'}`
+      return `pushed ${String(r.head_sha_after).slice(0, 7)}${r.verdict_after ? `, AI review: ${VERDICT_WORDS[r.verdict_after]}` : ', awaiting review'}`
     }
   }
 }

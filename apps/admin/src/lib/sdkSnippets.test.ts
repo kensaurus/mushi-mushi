@@ -50,6 +50,9 @@ const tweakedConfig: SdkPreviewConfig = {
   capture: { ...DEFAULT_SDK_CONFIG.capture, console: false, screenshot: 'auto' },
 }
 
+/** Bake the configurator's choices into the snippet ("Lock these settings in my code"). */
+const LOCK = { lockInCode: true }
+
 describe('renderSnippet — Vue', () => {
   it('imports both the Vue plugin AND the mushi-mushi root export for the widget', () => {
     const out = renderSnippet('vue', PROJECT, KEY)
@@ -64,7 +67,7 @@ describe('renderSnippet — Vue', () => {
   })
 
   it('routes widget/capture tweaks to Mushi.init(), NEVER to MushiPlugin', () => {
-    const out = renderSnippet('vue', PROJECT, KEY, tweakedConfig)
+    const out = renderSnippet('vue', PROJECT, KEY, tweakedConfig, null, null, LOCK)
     // The configurator settings must appear AFTER the Mushi.init( call site,
     // not before it (where MushiPlugin lives). Splitting on Mushi.init lets
     // us assert that boundary without overfitting to whitespace.
@@ -112,7 +115,7 @@ describe('renderSnippet — Svelte', () => {
   })
 
   it('routes widget/capture tweaks to Mushi.init(), NEVER to initMushi', () => {
-    const out = renderSnippet('svelte', PROJECT, KEY, tweakedConfig)
+    const out = renderSnippet('svelte', PROJECT, KEY, tweakedConfig, null, null, LOCK)
     const beforeMushiInit = out.split('Mushi.init(')[0]
     const afterMushiInit = out.split('Mushi.init(')[1]
     expect(afterMushiInit).toContain("position: 'top-left'")
@@ -130,7 +133,7 @@ describe('renderSnippet — Svelte', () => {
 
 describe('renderSnippet — React', () => {
   it('uses MushiProvider from mushi-mushi/react which mounts the widget itself', () => {
-    const out = renderSnippet('react', PROJECT, KEY, tweakedConfig)
+    const out = renderSnippet('react', PROJECT, KEY, tweakedConfig, null, null, LOCK)
     expect(out).toContain("import { MushiProvider } from 'mushi-mushi/react'")
     // React's provider already calls Mushi.init under the hood
     // (packages/react/src/provider.tsx:31), so the snippet should NOT
@@ -144,7 +147,7 @@ describe('renderSnippet — React', () => {
 
 describe('renderSnippet — Vanilla', () => {
   it('uses a single Mushi.init() call carrying the entire config', () => {
-    const out = renderSnippet('vanilla', PROJECT, KEY, tweakedConfig)
+    const out = renderSnippet('vanilla', PROJECT, KEY, tweakedConfig, null, null, LOCK)
     expect(out).toContain("import { Mushi } from 'mushi-mushi'")
     expect(out).toMatch(/Mushi\.init\(\{/)
     expect(out).toContain("position: 'top-left'")
@@ -230,8 +233,8 @@ describe('renderSnippet — mobile / hybrid frameworks', () => {
     expect(out).not.toContain('enableShakeToReport')
   })
 
-  it('expo (yen-yen) uses EXPO_PUBLIC_* build-time env pattern', () => {
-    const out = renderSnippet('expo', PROJECT, KEY, DEFAULT_SDK_CONFIG, 'yen-yen')
+  it('expo uses the EXPO_PUBLIC_* build-time env pattern, whatever the app is called', () => {
+    const out = renderSnippet('expo', PROJECT, KEY, DEFAULT_SDK_CONFIG, 'any-app')
     expect(out).toContain('EXPO_PUBLIC_MUSHI_PROJECT_ID')
     expect(out).toContain('EXPO_PUBLIC_MUSHI_API_KEY')
     expect(out).toContain('process.env.EXPO_PUBLIC_MUSHI_PROJECT_ID')
@@ -240,10 +243,10 @@ describe('renderSnippet — mobile / hybrid frameworks', () => {
     expect(installCommand('expo')).toContain('npx expo install')
   })
 
-  it('expo without yen-yen slug still renders provider', () => {
+  it('expo without a slug renders the same provider (ADR 0072: no per-app branch)', () => {
     const out = renderSnippet('expo', PROJECT, KEY)
     expect(out).toContain('@mushi-mushi/react-native')
-    expect(out).toMatch(/<MushiProvider[\s\S]*projectId="proj_abc"/)
+    expect(out).toBe(renderSnippet('expo', PROJECT, KEY, DEFAULT_SDK_CONFIG, 'some-app'))
   })
 
   it('capacitor calls Mushi.configure (NEVER Mushi.init) and reminds users to cap sync', () => {
@@ -370,8 +373,11 @@ describe('renderSnippet — Script tag loader', () => {
     expect(out).not.toContain('cdn.mushi.dev')
   })
 
-  it('emits only data-* attributes that packages/web/src/loader.ts reads', () => {
-    const loaderSource = readFileSync(join(WEB_PACKAGE_DIR, 'src/loader.ts'), 'utf8')
+  it('emits only data-* attributes that the loader reads', () => {
+    // The loader parses its attributes in loader-config.ts (`ds.project`, `oneOf('trigger', …)`).
+    const loaderSource = ['src/loader.ts', 'src/loader-config.ts']
+      .map((f) => readFileSync(join(WEB_PACKAGE_DIR, f), 'utf8'))
+      .join('\n')
     const everyOption: SdkPreviewConfig = {
       ...DEFAULT_SDK_CONFIG,
       trigger: 'banner',
@@ -380,31 +386,103 @@ describe('renderSnippet — Script tag loader', () => {
       bannerVariant: 'neon',
       bannerPosition: 'bottom',
     }
-    const out = renderSnippet('loader', PROJECT, KEY, everyOption)
+    const out = renderSnippet('loader', PROJECT, KEY, everyOption, null, null, LOCK)
     const attrs = [...out.matchAll(/\bdata-([a-z-]+)="/g)].map((m) => m[1])
     expect(attrs).toEqual(['project', 'key', 'trigger', 'theme', 'position', 'banner-variant', 'banner-position'])
     for (const attr of attrs) {
       // data-banner-variant → dataset.bannerVariant, read as `ds.bannerVariant`.
       const prop = attr.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase())
-      expect(loaderSource).toMatch(new RegExp(`\\bds\\.${prop}\\b`))
+      expect(loaderSource).toMatch(new RegExp(`\\bds\\.${prop}\\b|\\b(?:read|oneOf|color)\\('${prop}'`))
     }
+  })
+})
+
+describe('renderSnippet — Script tag trigger text and colour', () => {
+  it('emits data-trigger-text (escaped) and data-accent only when set, with the code-wins note', () => {
+    // mushi-mushi-allowlist: widget colour values under test, not console UI colours.
+    const out = renderSnippet('loader', PROJECT, KEY, { ...DEFAULT_SDK_CONFIG, triggerText: 'Say "hi"', accent: '#3B5BDB' }, null, null, LOCK)
+    expect(out).toContain('data-trigger-text="Say &quot;hi&quot;"')
+    expect(out).toContain('data-accent="#3b5bdb"')
+    expect(out).toContain('win over the console')
+  })
+
+  it('leaves both out on the defaults, blank text or auto colour', () => {
+    for (const cfg of [DEFAULT_SDK_CONFIG, { ...DEFAULT_SDK_CONFIG, triggerText: '  ', accent: '' }]) {
+      const out = renderSnippet('loader', PROJECT, KEY, cfg)
+      expect(out).not.toContain('data-trigger-text')
+      expect(out).not.toContain('data-accent')
+      expect(out).not.toContain('win over the console')
+    }
+  })
+
+  it('bakes the colour into the framework snippets only when locked', () => {
+    for (const fw of ['react', 'vue', 'svelte', 'vanilla'] as const) {
+      // mushi-mushi-allowlist: widget colour values under test, not console UI colours.
+      expect(renderSnippet(fw, PROJECT, KEY, { ...DEFAULT_SDK_CONFIG, accent: '#3b5bdb' }), fw).not.toContain('accent')
+      expect(renderSnippet(fw, PROJECT, KEY, { ...DEFAULT_SDK_CONFIG, accent: '#3b5bdb' }, null, null, LOCK), fw).toContain("accent: '#3b5bdb'")
+    }
+  })
+})
+
+// Lead decision on ADR 0068 (2026-11-22): snippets leave console-served
+// settings to the console unless the person locks them in code.
+describe('renderSnippet — console-controlled by default', () => {
+  // mushi-mushi-allowlist: widget colour values under test, not console UI colours.
+  const chosen = {
+    ...DEFAULT_SDK_CONFIG,
+    position: 'top-left' as const,
+    theme: 'dark' as const,
+    trigger: 'banner' as const,
+    triggerText: 'Report',
+    accent: '#3b5bdb',
+    capture: { ...DEFAULT_SDK_CONFIG.capture, console: false, screenshot: 'off' as const },
+  }
+
+  it('web snippets carry only the project id and key, plus the note', () => {
+    for (const fw of ['loader', 'react', 'vue', 'svelte', 'vanilla'] as const) {
+      const out = renderSnippet(fw, PROJECT, KEY, chosen)
+      expect(out, fw).toContain(PROJECT)
+      expect(out, fw).toContain(KEY)
+      expect(out, fw).toContain('Look and position come from the Mushi console')
+      // mushi-mushi-allowlist: widget colour values under test, not console UI colours.
+      for (const leaked of ['top-left', 'dark', 'banner', 'Report', '#3b5bdb', "screenshot: 'off'", 'console: false', 'data-theme']) {
+        expect(out, `${fw} leaks ${leaked}`).not.toContain(leaked)
+      }
+    }
+  })
+
+  it('the same choices appear once locked', () => {
+    // mushi-mushi-allowlist: widget colour values under test, not console UI colours.
+    const react = renderSnippet('react', PROJECT, KEY, chosen, null, null, LOCK)
+    expect(react).toContain("position: 'top-left'")
+    expect(react).toContain("theme: 'dark'")
+    expect(react).toContain("screenshot: 'off'")
+    expect(react).not.toContain('Look and position come from')
+    const tag = renderSnippet('loader', PROJECT, KEY, chosen, null, null, LOCK)
+    expect(tag).toContain('data-theme="dark"')
+    expect(tag).toContain('data-accent="#3b5bdb"')
+  })
+
+  it('mobile snippets keep their options: those SDKs do not read the console', () => {
+    const cfg = { ...DEFAULT_SDK_CONFIG, native: { ...DEFAULT_SDK_CONFIG.native, triggerMode: 'shake' as const } }
+    expect(renderSnippet('react-native', PROJECT, KEY, cfg)).toContain("trigger: 'shake'")
   })
 })
 
 describe('renderSnippet — empty triggerText (WYSIWYG with the preview)', () => {
   for (const fw of ['react', 'vue', 'svelte', 'vanilla'] as const) {
     it(`omits triggerText entirely when the input is empty (${fw})`, () => {
-      const out = renderSnippet(fw, PROJECT, KEY, { ...DEFAULT_SDK_CONFIG, triggerText: '' })
+      const out = renderSnippet(fw, PROJECT, KEY, { ...DEFAULT_SDK_CONFIG, triggerText: '' }, null, null, LOCK)
       expect(out).not.toContain('triggerText')
     })
 
     it(`omits triggerText entirely when the input is whitespace-only (${fw})`, () => {
-      const out = renderSnippet(fw, PROJECT, KEY, { ...DEFAULT_SDK_CONFIG, triggerText: '   ' })
+      const out = renderSnippet(fw, PROJECT, KEY, { ...DEFAULT_SDK_CONFIG, triggerText: '   ' }, null, null, LOCK)
       expect(out).not.toContain('triggerText')
     })
 
     it(`still emits triggerText when the user typed a real override (${fw})`, () => {
-      const out = renderSnippet(fw, PROJECT, KEY, { ...DEFAULT_SDK_CONFIG, triggerText: 'Report' })
+      const out = renderSnippet(fw, PROJECT, KEY, { ...DEFAULT_SDK_CONFIG, triggerText: 'Report' }, null, null, LOCK)
       expect(out).toContain('triggerText: "Report"')
     })
   }

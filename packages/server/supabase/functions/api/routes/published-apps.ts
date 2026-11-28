@@ -41,7 +41,7 @@ const AppUpsertSchema = z.object({
   app_store_url:  z.string().url().optional().nullable(),
   play_store_url: z.string().url().optional().nullable(),
   web_url:        z.string().url().optional().nullable(),
-  platforms:      z.array(z.string()).optional(),
+  platforms:      z.array(z.string().max(40)).max(20).optional(),
   sentry_dsn:     z.string().optional().nullable(),
   auto_seer_analyze: z.boolean().optional(),
   slug:           z.string().regex(/^[a-z0-9][a-z0-9\-]{1,60}[a-z0-9]$/).optional(),
@@ -49,10 +49,10 @@ const AppUpsertSchema = z.object({
 
 const TargetingSchema = z.object({
   min_age:         z.number().int().min(13).max(100).optional().nullable(),
-  country_codes:   z.array(z.string().length(2)).optional(),
-  languages:       z.array(z.string()).optional(),
-  required_devices: z.array(z.record(z.unknown())).optional(),
-  expertise_tags:  z.array(z.string()).optional(),
+  country_codes:   z.array(z.string().length(2)).max(300).optional(),
+  languages:       z.array(z.string().max(40)).max(200).optional(),
+  required_devices: z.array(z.record(z.unknown())).max(50).optional(),
+  expertise_tags:  z.array(z.string().max(60)).max(50).optional(),
   reputation_min:  z.number().int().min(0).optional(),
 })
 

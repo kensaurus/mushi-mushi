@@ -18,10 +18,11 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod'
-import { readFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
-import { cropTop } from './image.js'
+import { cropTop, pixelDiff } from './image.js'
 import type { SurfaceState } from './state.js'
 import type { ProbeResult } from './types.js'
 
@@ -78,6 +79,21 @@ export interface JudgeVerdict {
   droppedClaims: number
   /** Set when the model declined or the call failed; no verdict then. */
   error?: string
+  /**
+   * ADR 0072 (P8): no model call was made. `unchanged`: the kept version
+   * looks the same as the original; `cache`: the same pair was reviewed
+   * before and that verdict is reused.
+   */
+  reused?: 'cache' | 'unchanged'
+  /** Tokens the call used (absent when reused or failed before an answer). */
+  usage?: JudgeUsage
+}
+
+interface JudgeUsage {
+  input_tokens: number
+  output_tokens: number
+  cache_read_input_tokens: number
+  cache_creation_input_tokens: number
 }
 
 const RUBRIC = `You review UI changes for a solo developer. You will see two screenshots of the same screen, labelled A and B, in random order. One is the original and one was edited by a coding agent. You are not told which is which.
@@ -103,6 +119,8 @@ export interface JudgeOptions {
   repoRoot: string
   designFiles: string[]
   model?: string
+  /** Folder of reviewed pairs (ADR 0072): the same two images, model and rules are not reviewed twice. */
+  cacheDir?: string
   client?: Anthropic
   /** Deterministic order for tests; defaults to Math.random. */
   random?: () => number
@@ -183,6 +201,12 @@ export async function judgeSurface(s: SurfaceState, viewport: string, opts: Judg
   const maxHeight = Math.round(width * (viewport === 'mobile' ? 2.5 : 1.25))
   const bImg = cropTop(beforePng, maxHeight)
   const aImg = cropTop(readFileSync(join(opts.dir, after.png)), maxHeight)
+  // ADR 0072 (P8): a pair that looks the same, or was reviewed already, costs no model call.
+  if (looksSame(bImg, aImg)) return unchangedVerdict(viewport, model)
+  const design = designContext(opts.repoRoot, opts.designFiles)
+  const cacheKey = judgeCacheKey(bImg, aImg, viewport, model, design)
+  const cached = opts.cacheDir ? readCachedVerdict(opts.cacheDir, cacheKey) : null
+  if (cached) return { ...cached, viewport, reused: 'cache', usage: undefined }
   const aIsBefore = (opts.random ?? Math.random)() < 0.5
   const [imgA, imgB] = aIsBefore ? [bImg, aImg] : [aImg, bImg]
   const [probeA, probeB] = aIsBefore ? [before.probes, after.probes] : [after.probes, before.probes]
@@ -203,7 +227,7 @@ export async function judgeSurface(s: SurfaceState, viewport: string, opts: Judg
         { type: 'text', text: RUBRIC },
         {
           type: 'text',
-          text: `Design system of this repository:\n${designContext(opts.repoRoot, opts.designFiles)}`,
+          text: `Design system of this repository:\n${design}`,
           // Same rubric + tokens for every screen in the run: cache the prefix.
           cache_control: { type: 'ephemeral' },
         },
@@ -227,7 +251,12 @@ export async function judgeSurface(s: SurfaceState, viewport: string, opts: Judg
     }
     const parsed = response.parsed_output
     if (!parsed) return failed(viewport, model, `No structured answer (stop reason ${response.stop_reason}).`)
-    return unshuffle(parsed, aIsBefore, { A: pngSize(imgA), B: pngSize(imgB) }, viewport, response.model)
+    const verdict: JudgeVerdict = {
+      ...unshuffle(parsed, aIsBefore, { A: pngSize(imgA), B: pngSize(imgB) }, viewport, response.model),
+      usage: usageOf(response.usage),
+    }
+    if (opts.cacheDir) writeCachedVerdict(opts.cacheDir, cacheKey, verdict)
+    return verdict
   } catch (err) {
     if (err instanceof Anthropic.AuthenticationError) {
       return failed(viewport, model, 'No valid Anthropic credentials. Set ANTHROPIC_API_KEY or run `ant auth login`.')
@@ -235,6 +264,83 @@ export async function judgeSurface(s: SurfaceState, viewport: string, opts: Judg
     if (err instanceof Anthropic.RateLimitError) return failed(viewport, model, 'Rate limited by the Anthropic API.')
     if (err instanceof Anthropic.APIError) return failed(viewport, model, `Anthropic API error ${err.status}: ${err.message}`)
     throw err
+  }
+}
+
+/** Bumped when the rubric or the answer's shape changes, so old reviews are not reused. */
+const JUDGE_CACHE_VERSION = 'judge-2026-11-27'
+
+/** Pure: the cache key of one reviewed pair: both images' bytes, viewport, model, rules and design files. */
+function judgeCacheKey(before: Buffer, after: Buffer, viewport: string, model: string, design: string): string {
+  return createHash('sha256')
+    .update(JUDGE_CACHE_VERSION)
+    .update('\0')
+    .update(RUBRIC)
+    .update('\0')
+    .update(design)
+    .update('\0')
+    .update(`${viewport}\0${model}\0`)
+    .update(before)
+    .update('\0')
+    .update(after)
+    .digest('hex')
+}
+
+/** Pure: identical bytes, or no pixel past the diff threshold. */
+function looksSame(before: Buffer, after: Buffer): boolean {
+  if (before.equals(after)) return true
+  try {
+    return pixelDiff(before, after).changedPixels === 0
+  } catch {
+    return false
+  }
+}
+
+function unchangedVerdict(viewport: string, model: string): JudgeVerdict {
+  return {
+    viewport,
+    model,
+    preferred: 'tie',
+    confidence: 'high',
+    summary: 'The kept version looks the same as the original here, so it was not reviewed.',
+    better: [],
+    worse: [],
+    designBreaks: [],
+    droppedClaims: 0,
+    reused: 'unchanged',
+  }
+}
+
+function readCachedVerdict(dir: string, key: string): JudgeVerdict | null {
+  const file = join(dir, `${key}.json`)
+  if (!existsSync(file)) return null
+  try {
+    const v = JSON.parse(readFileSync(file, 'utf8')) as JudgeVerdict
+    return v && typeof v.preferred === 'string' && !v.error ? v : null
+  } catch {
+    return null
+  }
+}
+
+function writeCachedVerdict(dir: string, key: string, v: JudgeVerdict): void {
+  if (v.error) return
+  try {
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, `${key}.json`), JSON.stringify({ ...v, usage: undefined }))
+  } catch {
+    /* a cache that cannot be written only costs a review next time */
+  }
+}
+
+function usageOf(u: unknown): JudgeUsage | undefined {
+  if (!u || typeof u !== 'object') return undefined
+  const o = u as Record<string, unknown>
+  const n = (k: string) => (typeof o[k] === 'number' && Number.isFinite(o[k]) ? Math.max(0, Math.round(o[k] as number)) : 0)
+  return {
+    input_tokens: n('input_tokens'),
+    output_tokens: n('output_tokens'),
+    cache_read_input_tokens: n('cache_read_input_tokens'),
+    cache_creation_input_tokens: n('cache_creation_input_tokens'),
   }
 }
 

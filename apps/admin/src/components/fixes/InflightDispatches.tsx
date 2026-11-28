@@ -17,6 +17,11 @@ import { fixRunStatus } from './fixRunStatus'
 
 interface Props {
   dispatches: DispatchJob[]
+  /**
+   * Which list to draw. /fixes shows the running requests above the list and
+   * the stopped ones inside its collapsed "Automation" section (ADR 0069).
+   */
+  show?: 'all' | 'active' | 'stopped'
 }
 
 import { stoppedDispatches } from '../../lib/fixesBannerReconcile'
@@ -47,13 +52,13 @@ function DispatchCard({ d, showReason }: { d: DispatchJob; showReason?: boolean 
   )
 }
 
-export function InflightDispatches({ dispatches }: Props) {
-  const active = dispatches.filter((d) => d.status === 'queued' || d.status === 'running')
+export function InflightDispatches({ dispatches, show = 'all' }: Props) {
+  const active = show === 'stopped' ? [] : dispatches.filter((d) => d.status === 'queued' || d.status === 'running')
   // Terminal-but-actionable: the user must see the stop reason to unblock.
   // One definition with the banner reconciliation (lib/fixesBannerReconcile.ts)
   // so the cards and the status banner never disagree; a stop that a newer
   // dispatch on the same report replaced is not listed. Cap at 5 newest.
-  const needsAttention = stoppedDispatches(dispatches).slice(0, 5)
+  const needsAttention = show === 'active' ? [] : stoppedDispatches(dispatches).slice(0, 5)
   if (active.length === 0 && needsAttention.length === 0) return null
 
   return (

@@ -9,6 +9,7 @@ import { Link } from 'react-router-dom'
 import type { SetupProject } from '../lib/useSetupStatus'
 import { summarizeProjectHeartbeat } from '../lib/resolveProjectDomain'
 import { MetricTooltipContent, Tooltip, type MetricTooltipData } from './ui'
+import { CHIP_TONE } from '../lib/chipTone'
 
 const TONE_DOT: Record<
   ReturnType<typeof summarizeProjectHeartbeat>['tone'],
@@ -148,7 +149,7 @@ export function ProjectHeartbeatStrip({
           </>
         )}
         {!isCorner && heartbeat.tone === 'mismatch' && (
-          <span className="shrink-0 rounded px-1 py-px text-3xs font-medium bg-warn-muted/50 text-warn-foreground">
+          <span className={`shrink-0 rounded px-1 py-px text-3xs font-medium ${CHIP_TONE.warn}`}>
             host mismatch
           </span>
         )}

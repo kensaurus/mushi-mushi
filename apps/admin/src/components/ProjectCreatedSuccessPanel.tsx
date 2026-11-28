@@ -23,6 +23,7 @@ import { CodeInline } from './CodePanel'
 import { useToast } from '../lib/toast'
 import { buildMushiInitCommand } from '../lib/cliSetupCommands'
 import { RotateKeyDialog } from './RotateKeyDialog'
+import { CHIP_TONE } from '../lib/chipTone'
 
 export interface CreatedProjectInfo {
   id: string
@@ -130,7 +131,7 @@ function ApiKeyRevealBlock({
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
         <p className="text-2xs font-semibold text-fg-secondary">SDK API Key</p>
-        <span className="rounded bg-warn-muted/50 px-1.5 py-0.5 text-2xs font-medium text-warn-foreground">
+        <span className={`rounded ${CHIP_TONE.warn} px-1.5 py-0.5 text-2xs font-medium`}>
           Shown once — copy now
         </span>
       </div>

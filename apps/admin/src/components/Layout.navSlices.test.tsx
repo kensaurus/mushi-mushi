@@ -5,7 +5,8 @@
 /**
  * FILE: apps/admin/src/components/Layout.navSlices.test.tsx
  * PURPOSE: Pin which nav-meta slices Layout asks `useNavCounts` for.
- *          The one sidebar (core pages plus enabled Labs) asks only for
+ *          The one sidebar (the five core pages plus enabled Labs, the
+ *          same for the owner, ADR 0069) asks only for
  *          the visible badges. The open page adds nothing when it is not
  *          in the sidebar — that union existed for `layoutHeroFromStats`,
  *          which has no caller.
@@ -16,10 +17,10 @@ import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { navSlicesForPaths } from '../lib/navBadges'
-import { BUILDER_CORE_NAV_PATHS, CORE_NAV_PATHS } from '../lib/navRegistry'
+import { BUILDER_CORE_NAV_PATHS } from '../lib/navRegistry'
 
 const state = vi.hoisted(() => ({
-  // The full sidebar is the operator's (navRegistry coreNavPathsFor).
+  // The owner's account; a builder test sets false. Both get the same sidebar (ADR 0069).
   isOperator: true,
   enabledLabs: new Set<string>(),
   sliceCalls: [] as Array<readonly string[] | null | undefined>,
@@ -126,43 +127,38 @@ function expectSlices(expected: readonly string[]): void {
 }
 
 describe('Layout nav-meta slices', () => {
-  it('asks only for the core sidebar badges, not the open page', () => {
+  it('asks only for the sidebar badges, not the open page', () => {
     renderAt('/releases')
-    const expected = navSlicesForPaths(CORE_NAV_PATHS)
+    const expected = navSlicesForPaths(BUILDER_CORE_NAV_PATHS)
     expectSlices(expected)
     expect(expected).not.toContain('releases')
-    expect(expected).toEqual([
-      'dashboard',
-      'fixes',
-      'integrations',
-      'onboarding',
-      'settings',
-      // Pipeline carries the local worker flags (ADR 0048 amendment 2026-10-28).
-      'workers',
-    ])
+    // Pipeline (worker flags) and Integrations are Labs now, off by default (ADR 0069).
+    expect(expected).toEqual(['dashboard', 'fixes', 'onboarding', 'settings'])
   })
 
   it('does not add /billing or /health when those pages are not in the sidebar', () => {
     renderAt('/billing')
-    expectSlices(navSlicesForPaths(CORE_NAV_PATHS))
+    expectSlices(navSlicesForPaths(BUILDER_CORE_NAV_PATHS))
     expect(state.sliceCalls.at(-1)).not.toContain('billing')
 
     state.sliceCalls = []
     renderAt('/health')
-    expectSlices(navSlicesForPaths(CORE_NAV_PATHS))
+    expectSlices(navSlicesForPaths(BUILDER_CORE_NAV_PATHS))
     expect(state.sliceCalls.at(-1)).not.toContain('health')
   })
 
   it('asks a builder only for the badges of the short sidebar (audit 2026-11-11)', () => {
     state.isOperator = false
+    state.enabledLabs = new Set()
     renderAt('/reports')
     expectSlices(navSlicesForPaths(BUILDER_CORE_NAV_PATHS))
+    expect(state.sliceCalls.at(-1)).toEqual(['dashboard', 'fixes', 'onboarding', 'settings'])
   })
 
   it('adds a Lab’s slice only when that Lab is in the sidebar', () => {
     state.enabledLabs = new Set(['releases'])
     renderAt('/billing')
-    const expected = navSlicesForPaths([...CORE_NAV_PATHS, '/releases'])
+    const expected = navSlicesForPaths([...BUILDER_CORE_NAV_PATHS, '/releases'])
     expectSlices(expected)
     expect(expected).toContain('releases')
     expect(expected).not.toContain('billing')

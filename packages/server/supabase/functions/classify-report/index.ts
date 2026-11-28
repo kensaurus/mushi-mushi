@@ -21,6 +21,7 @@ import { GENERIC_ERROR_MESSAGE } from '../_shared/safe-error.ts';
 import { projectHasOwnLlmKey } from '../_shared/byok.ts';
 import { withAnthropicOrOpenAi } from '../_shared/llm-failover.ts';
 import { LlmBudgetExceededError } from '../_shared/llm-budget.ts';
+import { QuotaCheckUnavailableError, quotaDeferralBody } from '../_shared/quota-deferral.ts';
 import { awardPointsForEndUser } from '../_shared/reputation.ts';
 import { dispatchPluginEventDetached } from '../_shared/plugins.ts';
 import { createExternalIssue } from '../_shared/integrations.ts';
@@ -32,7 +33,7 @@ import { claudeGenerateObject, claudeStreamObject } from '../_shared/claude-mess
 import { resolveClaudeModel } from '../_shared/claude-request.ts';
 import { childTraceparent } from '../_shared/trace.ts';
 import { otlpSpan, setGenAiAttributes } from '../_shared/otlp-exporter.ts';
-import { estimateCallCostUsd } from '../_shared/pricing.ts';
+import { priceLlmCall } from '../_shared/llm-cost.ts';
 import { byokLiftsFreeCap, checkDiagnosisQuota, invalidateDiagnosisCache } from '../_shared/quota.ts';
 import { emitProductEvent } from '../_shared/product-events.ts';
 import { keepAlive } from '../_shared/background.ts';
@@ -328,12 +329,11 @@ Deno.serve(
       if (!diagnosisVerdict.allowed) {
         // Transient quota-check failure (DB count error) is NOT a billing quota
         // breach: never mark the report quota_exceeded and never call the LLM.
-        // Throw so the report is preserved for retry via the catch (HTTP 500),
+        // Throw so the report is preserved for retry via the catch (HTTP 503,
+        // warn: checkDiagnosisQuota already logged the cause as an error),
         // keeping spend safely capped without permanently failing the report.
         if (diagnosisVerdict.reason === 'QUOTA_CHECK_UNAVAILABLE') {
-          throw new Error(
-            'Diagnosis quota check unavailable (transient DB error) — deferring classification for retry',
-          );
+          throw new QuotaCheckUnavailableError();
         }
         log.warn('Diagnosis quota gate: denying Stage-2 classification', {
           projectId,
@@ -722,7 +722,7 @@ ${ontologyContext}${inventoryContext}${mcpContextSection}`;
       if (_otlpSpanCtx) {
         const inputTokens = tokenUsage.promptTokens ?? null;
         const outputTokens = tokenUsage.completionTokens ?? null;
-        const costUsd = estimateCallCostUsd(usedModel, inputTokens ?? 0, outputTokens ?? 0);
+        const costUsd = (await priceLlmCall({ model: usedModel, inputTokens, outputTokens })).costUsd;
         setGenAiAttributes(_otlpSpanCtx, {
           operationName: 'chat',
           requestModel: modelId,
@@ -1579,7 +1579,12 @@ CRITICAL SECURITY RULES (immutable):
           { status: 200, headers: { 'Content-Type': 'application/json' } },
         );
       }
-      rootLog.child('classify-report').error('Unhandled error', { err: String(err) });
+      const quotaDeferred = err instanceof QuotaCheckUnavailableError;
+      if (quotaDeferred) {
+        rootLog.child('classify-report').warn('Stage 2 deferred: diagnosis quota check unavailable; recovery retries it', { err: String(err) });
+      } else {
+        rootLog.child('classify-report').error('Unhandled error', { err: String(err) });
+      }
 
       try {
         const body = (await new Response(req.body).json().catch(() => ({}))) as Record<
@@ -1608,6 +1613,12 @@ CRITICAL SECURITY RULES (immutable):
         // best-effort
       }
 
+      if (err instanceof QuotaCheckUnavailableError) {
+        return new Response(quotaDeferralBody(err), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json', 'Retry-After': '300' },
+        });
+      }
       return new Response(JSON.stringify({ error: GENERIC_ERROR_MESSAGE }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' },

@@ -19,9 +19,9 @@ const LEVEL_CLASS: Record<OperatorTraceLevel, string> = {
 
 const LEVEL_BADGE: Record<OperatorTraceLevel, string> = {
   debug: 'bg-surface-overlay text-fg-faint',
-  info: CHIP_TONE.infoSubtle,
-  warn: CHIP_TONE.warnSubtle,
-  error: 'bg-danger-muted/50 text-danger-foreground',
+  info: CHIP_TONE.info,
+  warn: CHIP_TONE.warn,
+  error: `${CHIP_TONE.danger}`,
 }
 
 const LEVEL_ROW_BG: Record<OperatorTraceLevel, string> = {
@@ -92,7 +92,7 @@ export function OperatorTraceLog({ lines, variant = 'full' }: OperatorTraceLogPr
             Operator trace
           </span>
           {summary.errorCount > 0 && (
-            <span className="rounded bg-danger-muted/50 px-1 py-px text-3xs font-bold text-danger-foreground">
+            <span className={`rounded ${CHIP_TONE.danger} px-1 py-px text-3xs font-bold`}>
               {summary.errorCount} error{summary.errorCount === 1 ? '' : 's'}
             </span>
           )}

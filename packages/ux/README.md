@@ -77,6 +77,7 @@ With `--steps` (on by default in the studio) the agent first plans 2–5 small c
 | `mushi-ux scorecard --url <live url> --profile-dir <dir>` | Score every page 1–10 on a written UX rubric and file the root causes (below) |
 | `mushi-ux explore --url <live url> --profile-dir <dir>` | Let a model use the signed-in app like a careless user; file the errors a replay confirms (below) |
 | `mushi-ux fresh-eyes --url <landing> --goal "<text>"` | Try one goal as a first-time visitor; time the path and file what stops them (below) |
+| `mushi-ux clips --url <url> --release <id> --flow "name:/a,/b"` | Record short clips of your top flows into a release kit for a product video (below) |
 | `mushi-ux login --url <url>` | Sign in once, in a visible browser |
 | `mushi-ux models` / `mushi-ux skills` | What `--model` and `--skill` accept |
 | `mushi-ux open <runId>` | The local dashboard for a past run |
@@ -160,6 +161,19 @@ mushi-ux fresh-eyes --url https://example.com --goal "get my first report" \
 - **Terminal setup:** `--terminal` runs a CLI setup step itself when a screen asks for a terminal: a sample app in a temp folder, the setup command (`--setup-command`, `{projectId}` and `{apiKey}` filled from the screen), one report through the widget, each phase timed.
 - What the model reads: the page's main content first, then its navigation, never a control a mouse user cannot see. A window a click opens on the app (a sign-in popup) is followed. A wait that hits its 20 s cap is marked on its step and never counted as the app's time. `--steps` defaults to 30, or 60 with a test account; the minted account's user id is in the log and timeline (never its password).
 - Output: `timeline.md` (each step, its screenshot, app wait and reading time, where it stalled), `result.json` and `shots/`. `--out <dir>` chooses the folder. `--sync` mirrors the run to the console's First-time user test page (a `--dry-run` too, marked "look around only"). `--request-stdin` reads the run (its id, start page, goal, visitors and test accounts) as JSON on stdin: how a local worker runs a test the console queued, so nothing it was given sits in argv.
+
+## Release-kit clips
+
+`mushi-ux clips` records each flow you name as one short Playwright video (WebM), read-only through the same write guard, and uploads it into a release's kit, where a product-video tool picks it up (Releases → the release → Release kit).
+
+```bash
+mushi-ux clips --url https://staging.example.com --release <releaseId> \
+  --flow "signup:/,/signup" --flow "pricing:/pricing" --viewport 390x844
+```
+
+- **Opt-in:** the app turns on "Record clips for release kits" in the kit first; until then the upload is refused and the clips stay in `--out` (default `.mushi-ux/clips`).
+- **Capped:** at most 5 flows of 6 screens, each clip stops before `--max-seconds` (default 30, at most 60) and is dropped above `--max-mb` (default 25, at most 100, and the app's own cap).
+- A clip is source footage, not an App Store preview: Mushi does not transcode. `--no-upload` records only. Needs `MUSHI_API_KEY` / `MUSHI_PROJECT_ID` to upload; `--profile-dir` records signed in.
 
 ## On GitHub Actions
 

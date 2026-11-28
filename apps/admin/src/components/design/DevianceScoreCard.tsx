@@ -13,28 +13,28 @@ function RunStatusBadge({ status }: { status: unknown }) {
   switch (status) {
     case 'pass':
       return (
-        <Badge tone="okSubtle" className="gap-1">
+        <Badge tone="ok" className="gap-1">
           <RecipeStateGlyph glyph="check" />
           Pass
         </Badge>
       )
     case 'warn':
       return (
-        <Badge tone="warnSubtle" className="gap-1">
+        <Badge tone="warn" className="gap-1">
           <RecipeStateGlyph glyph="triangle" />
           Warn
         </Badge>
       )
     case 'fail':
       return (
-        <Badge tone="dangerSubtle" className="gap-1">
+        <Badge tone="danger" className="gap-1">
           <RecipeStateGlyph glyph="cross" />
           Fail
         </Badge>
       )
     case 'error':
       return (
-        <Badge tone="dangerSubtle" className="gap-1">
+        <Badge tone="danger" className="gap-1">
           <RecipeStateGlyph glyph="cross" />
           Scan error
         </Badge>

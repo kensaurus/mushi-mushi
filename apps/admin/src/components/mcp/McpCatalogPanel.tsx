@@ -10,6 +10,7 @@ import {
 } from '../../lib/mcpCatalog'
 import { MCP_USE_CASE_GROUPS } from '../../lib/mcpPageHelpers'
 import type { CatalogTabId } from './types'
+import { CHIP_TONE } from '../../lib/chipTone'
 
 /**
  * @internal Exported for tests. Tools whose name, title or description has
@@ -84,7 +85,7 @@ export function McpCatalogPanel({
                     {groupTools.map((t) => (
                       <span
                         key={t.name}
-                        className="font-mono text-2xs rounded-sm bg-surface-overlay px-1.5 py-px text-fg-secondary"
+                        className={`font-mono text-2xs rounded-sm ${CHIP_TONE.neutral} px-1.5 py-px`}
                         title={t.useCase}
                       >
                         {t.name}
