@@ -46,7 +46,7 @@ describe('localFollowupGate', () => {
   it('refuses other verdicts, a running review and no review, saying which', () => {
     expect(localFollowupGate(input({ review: { status: 'completed', verdict: 'merge', head_sha: HEAD } }))).toMatchObject({ ok: false, code: 'NOT_FIX_FIRST' })
     expect(localFollowupGate(input({ review: { status: 'running', verdict: 'fix_first', head_sha: HEAD } }))).toMatchObject({ ok: false, code: 'REVIEW_PENDING' })
-    expect(localFollowupGate(input({ review: null }))).toMatchObject({ ok: false, code: 'REVIEW_PENDING', message: expect.stringContaining('no Opus review') })
+    expect(localFollowupGate(input({ review: null }))).toMatchObject({ ok: false, code: 'REVIEW_PENDING', message: expect.stringContaining('no AI review') })
   })
 
   it('waits when the PR moved past the reviewed commit', () => {

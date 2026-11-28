@@ -106,7 +106,7 @@ export function conflictRowAfterRun(run: { outcome: string; failureKind: string 
       state: 'waiting',
       head_sha: run.headAfter,
       local_claim_id: null,
-      detail: `A local worker (${run.laneName}) merged the base branch in (${run.headAfter.slice(0, 7)}); the queue checks it and Opus reviews the new head.`,
+      detail: `A local worker (${run.laneName}) merged the base branch in (${run.headAfter.slice(0, 7)}); the queue checks it and AI reviews the new head.`,
     }
   }
   const why = (run.detail ?? '').replace(/\s+/g, ' ').trim().slice(0, 240) || run.outcome

@@ -6,7 +6,7 @@
  *          a project with the App installed and no stored token answered 409
  *          "Connect GitHub" (lets-talk, 2026-10-14). The merge keeps its
  *          CI-skip stripping and its viewer and connected-repo refusals.
- *          A PR that is a Mushi fix goes through the Opus review gate
+ *          A PR that is a Mushi fix goes through the AI review gate
  *          (ADR 0030), and the list shows its review.
  */
 
@@ -216,7 +216,7 @@ describe('a Mushi fix PR on the Pull requests page (ADR 0030)', () => {
     stubGithub()
     const res = await app.call('GET', LIST)
     const pr = (res.body.data?.pullRequests as Array<{ review?: unknown }>)[0]
-    expect(pr.review).toEqual({ state: 'hold', label: 'Opus review: hold', fixId: 'fa-7', verdict: 'hold', pending: false })
+    expect(pr.review).toEqual({ state: 'hold', label: 'AI review: hold', fixId: 'fa-7', verdict: 'hold', pending: false })
   })
 
   it('refuses to merge a held fix PR, and never reaches GitHub', async () => {

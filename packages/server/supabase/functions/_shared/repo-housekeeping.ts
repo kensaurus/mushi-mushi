@@ -17,9 +17,9 @@
  *   - it is not already in a clean-up waiting for a decision.
  *
  * Pull requests. Only open PRs of Mushi's fix attempts (they have a report to
- * keep the reason on, and an Opus review). A candidate when any of:
+ * keep the reason on, and an AI review). A candidate when any of:
  *   - superseded: a newer attempt for the same report has an open or merged PR;
- *   - hold: the latest Opus review said hold about the PR's current head
+ *   - hold: the latest AI review said hold about the PR's current head
  *     (a hold about an older head is stale and does not count);
  *   - stale: its newest commit is older than `staleDays` (the commit date,
  *     not the push date: GitHub does not list pushes).
@@ -280,7 +280,7 @@ export function prCandidates(
     const review = latestReview.get(a.id)
     if (review?.verdict === 'hold' && review.headSha && review.headSha === pull.headSha) {
       why.push('hold')
-      words.push(`the Opus review said hold about this commit${review.summary ? ` (${review.summary.slice(0, 160)})` : ''}`)
+      words.push(`the AI review said hold about this commit${review.summary ? ` (${review.summary.slice(0, 160)})` : ''}`)
     }
     const at = facts.headCommitAt.get(a.prNumber) ?? null
     if (at && Date.parse(at) < staleBefore) {

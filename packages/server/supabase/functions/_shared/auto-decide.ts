@@ -1,7 +1,7 @@
 /**
  * FILE: packages/server/supabase/functions/_shared/auto-decide.ts
  * PURPOSE: "Decide for me" (ADR 0055): what Mushi does with an open agent fix
- *          PR when no person will, from what the Opus review (ADR 0030)
+ *          PR when no person will, from what the AI review (ADR 0030)
  *          already stored and what GitHub says now. No model is asked again:
  *          Opus judges the code, this file only maps its verdict to an action.
  *
@@ -96,7 +96,7 @@ export function decideFix(input: DecideInput): Decision {
   if (input.superseded) return { do: 'close_superseded', reason: 'Another open pull request for the same report is further along.' }
 
   if (!review) return { do: 'wait', reason: 'No review yet.' }
-  if (review.status === 'queued' || review.status === 'running') return { do: 'wait', reason: 'Opus is reviewing it.' }
+  if (review.status === 'queued' || review.status === 'running') return { do: 'wait', reason: 'The AI review is running.' }
   if (review.status === 'skipped') return { do: 'wait', reason: `The review was skipped (${review.skipReason ?? 'no reason'}); it runs again when it can.` }
   if (review.status === 'failed' || !review.verdict) return { do: 'wait', reason: 'The review did not finish.' }
   if (review.headSha && pr.headSha && review.headSha !== pr.headSha) {
@@ -105,18 +105,18 @@ export function decideFix(input: DecideInput): Decision {
 
   const reviewAge = age(review.completedAt, now)
   if (review.verdict === 'merge') {
-    if (input.ci !== 'red') return { do: 'queue', reason: 'Opus says merge on its current commit.' }
+    if (input.ci !== 'red') return { do: 'queue', reason: 'The AI review says merge on its current commit.' }
     if (input.repairActive || reviewAge < REPAIR_GRACE_MS) return { do: 'wait', reason: 'CI is red; a CI-repair agent gets its turn first.' }
-    return closeOrPark('Opus approved it, but its CI stayed red after the repair window.', input.prAttempts)
+    return closeOrPark('The AI review approved it, but its CI stayed red after the repair window.', input.prAttempts)
   }
   if (review.verdict === 'fix_first') {
-    if (input.repairActive || reviewAge < REPAIR_GRACE_MS) return { do: 'wait', reason: 'Opus asked for changes; a follow-up agent gets its turn first.' }
-    return closeOrPark('Opus still asks for changes after the follow-up window.', input.prAttempts)
+    if (input.repairActive || reviewAge < REPAIR_GRACE_MS) return { do: 'wait', reason: 'The AI review asked for changes; a follow-up agent gets its turn first.' }
+    return closeOrPark('The AI review still asks for changes after the follow-up window.', input.prAttempts)
   }
   // hold
-  if (reviewAge < HOLD_GRACE_MS) return { do: 'wait', reason: 'Opus says do not merge; Mushi acts on it a few hours after the review.' }
+  if (reviewAge < HOLD_GRACE_MS) return { do: 'wait', reason: 'The AI review says do not merge; Mushi acts on it a few hours after the review.' }
   return closeOrPark(
-    review.fixesReport === false ? 'Opus says this pull request does not fix the report.' : 'Opus says do not merge this pull request as it is.',
+    review.fixesReport === false ? 'The AI review says this pull request does not fix the report.' : 'The AI review says do not merge this pull request as it is.',
     input.prAttempts,
   )
 }

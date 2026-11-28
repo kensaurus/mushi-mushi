@@ -46,7 +46,7 @@ export interface OpenPullRequest {
   baseRef: string
   updatedAt: string
   checks: PrChecks
-  /** The Opus review when this PR is a Mushi fix (ADR 0030); absent otherwise. */
+  /** The AI review when this PR is a Mushi fix (ADR 0030); absent otherwise. */
   review?: {
     state: ReviewState
     label: string

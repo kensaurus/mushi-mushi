@@ -29,7 +29,7 @@
  *          (budgeted by `buildReviewDiff`) go to Claude Opus 5.5 with
  *          structured output; the verdict is made consistent with its own
  *          findings (`normalizeReview`), stored with the reviewed head SHA,
- *          model, tokens and cost, added to the fix timeline ("Opus review:
+ *          model, tokens and cost, added to the fix timeline ("AI review:
  *          hold"), and posted as one PR comment (no report text; a link to
  *          the console) that later reviews edit in place. A "fix_first"
  *          verdict also queues one review follow-up (ADR 0032,
@@ -462,7 +462,7 @@ async function recoverStale(db: SupabaseClient, now: Date): Promise<{ requeued: 
   for (const row of (gaveUp ?? []) as Array<{ id: string; fix_attempt_id: string; project_id: string; attempts: number | null }>) {
     await insertReviewEvent(db, row, {
       status: 'pending',
-      label: 'Opus review failed',
+      label: 'AI review failed',
       detail: message,
       dedupe: `review-fail:${row.id}:${row.attempts ?? REVIEW_MAX_TRIES}`,
       payload: { reviewId: row.id, gaveUp: true },
@@ -633,7 +633,7 @@ export function pickFairBatch<T extends { project_id: string }>(rows: T[], batch
 const EVENT_STATUS: Record<ReviewVerdict, 'ok' | 'pending' | 'fail'> = { merge: 'ok', fix_first: 'pending', hold: 'fail' }
 
 export const READY_AFTER_REVIEW_LABEL = 'Marked ready after review; CI runs now'
-export const READY_WITHOUT_REVIEW_LABEL = 'Marked ready without an Opus review; CI runs now'
+export const READY_WITHOUT_REVIEW_LABEL = 'Marked ready without an AI review; CI runs now'
 
 /** Skips after which a never-reviewed fix-worker PR falls back to the model's own check (ADR 0047). */
 export const NO_REVIEW_FALLBACK_REASONS: ReadonlySet<ReviewSkipReason> = new Set(['review_off', 'no_anthropic_key', 'llm_budget_exceeded'])
@@ -727,7 +727,7 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
     if (attempt && reason !== 'review_off') {
       await insertReviewEvent(db, row, {
         status: 'pending',
-        label: 'Opus review skipped',
+        label: 'AI review skipped',
         detail: REVIEW_SKIP_REASONS[reason],
         dedupe: `review-skip:${row.id}:${reason}:${tries}`,
         payload: { reviewId: row.id, skipReason: reason },
@@ -850,7 +850,7 @@ export async function reviewOne(db: SupabaseClient, row: QueueRow, deps: ReviewD
     if (final) {
       await insertReviewEvent(db, row, {
         status: 'pending',
-        label: 'Opus review failed',
+        label: 'AI review failed',
         detail: message,
         dedupe: `review-fail:${row.id}:${tries}`,
         payload: { reviewId: row.id },

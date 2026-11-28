@@ -72,7 +72,7 @@ function seed(tables: Record<string, Row[]> = {}) {
         fix_attempt_id: FIX,
         head_sha: HEAD,
         base_sha: null,
-        gates: [{ id: 'review', status: 'pass', label: 'Opus review: merge', detail: 'x' }],
+        gates: [{ id: 'review', status: 'pass', label: 'AI review: merge', detail: 'x' }],
         passed: false,
         second_judge: null,
         auto_merge_state: 'none',

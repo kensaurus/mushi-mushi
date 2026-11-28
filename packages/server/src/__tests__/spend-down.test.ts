@@ -739,7 +739,7 @@ describe('spendDownStopLoss: entry', () => {
 
   it('hold: 11 of 20 pauses (lower bound over 35%), 10 of 20 does not', () => {
     const d = spendDownStopLoss({ runs: sample({ merge: 6, hold: 11, fixFirst: 3 }) }, undefined, AT)
-    expect(d.reason).toBe('Paused: Opus said hold on 11 of the last 20 reviewed fixes (55%)')
+    expect(d.reason).toBe('Paused: The AI review said hold on 11 of the last 20 reviewed fixes (55%)')
     expect(spendDownStopLoss({ runs: sample({ merge: 6, hold: 10, fixFirst: 4 }) }, undefined, AT).paused).toBe(false)
   })
 

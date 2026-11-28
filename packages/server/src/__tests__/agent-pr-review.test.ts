@@ -263,7 +263,7 @@ describe('skips, with the reason stored', () => {
     expect(skip.payload).not.toHaveProperty('verdict')
     expect(skip.filters).toEqual(expect.arrayContaining([{ method: 'eq', args: ['run_id', RUN] }, { method: 'eq', args: ['status', 'running'] }]))
     const ev = findQueries(queries, 'fix_events', 'insert')[0]?.payload as Record<string, unknown>
-    expect(ev).toMatchObject({ kind: 'reviewed', status: 'pending', label: 'Opus review skipped' })
+    expect(ev).toMatchObject({ kind: 'reviewed', status: 'pending', label: 'AI review skipped' })
   })
 
   it('does not spend the platform key: an env key is "no Anthropic key" too', async () => {
@@ -349,6 +349,7 @@ describe('a completed review', () => {
       project_id: PROJECT,
       kind: 'reviewed',
       status: 'fail',
+      // Named after the model that ran: a Claude review reads "Opus review", a GPT one "GPT review".
       label: 'Opus review: hold',
       dedupe_key: 'review:rev-1:abcdef1234567:1',
     })
@@ -591,7 +592,7 @@ describe('failures, retries and races', () => {
     const a = await runAgentPrReview(last.db, {}, deps({ callModel: async () => { throw new Error('timeout') } }))
     expect(a.results[0]).toMatchObject({ outcome: 'failed' })
     const ev = findQueries(last.queries, 'fix_events', 'insert')[0]?.payload as Record<string, unknown>
-    expect(ev).toMatchObject({ label: 'Opus review failed', dedupe_key: `review-fail:rev-1:${REVIEW_MAX_TRIES}` })
+    expect(ev).toMatchObject({ label: 'AI review failed', dedupe_key: `review-fail:rev-1:${REVIEW_MAX_TRIES}` })
 
     const refused = scripted()
     const b = await runAgentPrReview(refused.db, {}, deps({ callModel: async () => { throw new ClaudeRefusalError('claude-opus-5-5', 'cyber') } }))
@@ -619,7 +620,7 @@ describe('failures, retries and races', () => {
     const failed = stale.find((q) => (q.payload as { status: string }).status === 'failed')!
     expect(failed.payload).toMatchObject({ completed_at: NOW.toISOString(), run_id: null })
     const ev = findQueries(queries, 'fix_events', 'insert')[0]?.payload as Record<string, unknown>
-    expect(ev).toMatchObject({ fix_attempt_id: ATTEMPT_ID, label: 'Opus review failed', dedupe_key: 'review-fail:rev-9:3' })
+    expect(ev).toMatchObject({ fix_attempt_id: ATTEMPT_ID, label: 'AI review failed', dedupe_key: 'review-fail:rev-9:3' })
   })
 })
 

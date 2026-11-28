@@ -171,7 +171,7 @@ test('a stale "merge" verdict after an update waits for the re-review instead of
 test('a hold blocks; failed CI blocks with the check names', async () => {
   const held = setup(row())
   const out = await processRow(held.db, row(), deps({
-    merge: (() => Promise.resolve({ ok: false, status: 409, code: 'REVIEW_HOLD', message: 'Opus said hold.', review: { verdict: 'hold', stale: false, rerunning: false } })) as never,
+    merge: (() => Promise.resolve({ ok: false, status: 409, code: 'REVIEW_HOLD', message: 'The AI review said hold.', review: { verdict: 'hold', stale: false, rerunning: false } })) as never,
   }))
   assertEquals(out, 'blocked')
   assertEquals(String(lastState(held.writes)?.detail).includes('only you can override it'), true)
@@ -341,7 +341,7 @@ test('a row a local lane holds waits for it: no cloud agent starts, even when th
   assertEquals(lastState(writes), undefined)
 })
 
-test("a local lane's pushed merge moves the row on and re-queues the Opus review of the new head", async () => {
+test("a local lane's pushed merge moves the row on and re-queues the AI review of the new head", async () => {
   const r = localRow()
   const { db, writes } = fakeDb({ fix_attempts: [{ ...attempt }], fix_merge_queue: [{ ...r }], fix_events: [], work_claims: [claim()] })
   const asked: unknown[] = []

@@ -983,7 +983,7 @@ export async function applyCloudAgentOutcome(
     })
 
     // ADR 0030: every cloud agent PR accepted as a fix gets an independent
-    // Opus review (agent-pr-review drains the queue). Best-effort: a failed
+    // AI review (agent-pr-review drains the queue). Best-effort: a failed
     // enqueue never fails the PR bookkeeping, and the merge gate treats a
     // missing review as "not reviewed".
     const queued = await enqueueFixReview(db, {

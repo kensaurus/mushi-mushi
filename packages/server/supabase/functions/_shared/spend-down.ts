@@ -29,7 +29,7 @@
  *
  *          Stop-loss and scoreboard (ADR 0028 amendment, 2026-10-21): an app
  *          whose recent spend-down PRs are reliably rarely mergeable, often
- *          held by the Opus review (ADR 0030), or whose runs mostly end without
+ *          held by the AI review (ADR 0030), or whose runs mostly end without
  *          a PR is paused (one probe dispatch a day keeps evidence coming; it
  *          resumes on recovered rates, two merged-verdict probes, samples aging
  *          out after 14 days, or a Resume); and every key gets a rollup of
@@ -153,7 +153,7 @@ export const HELD_RETRY_AFTER_MS = 12 * 3_600_000
 export const HELD_MAX_ATTEMPTS = 3
 
 /**
- * Reports whose newest attempt opened a PR that the Opus review held, at
+ * Reports whose newest attempt opened a PR that the AI review held, at
  * least 12 hours ago, with fewer than HELD_MAX_ATTEMPTS attempts: spend-down
  * may run a new agent on them although the report is still `fixing` and
  * inside the 7-day cooldown. The new agent's prompt carries what the held
@@ -736,7 +736,7 @@ export function spendDownStopLoss(
   const noPrLower = enoughRuns ? wilsonInterval(noPrVerdicts, finished.length).lower : null
 
   const mergeLine = `${mergeVerdicts} of the last ${reviewed} reviewed fixes were mergeable (${pct(mergeRate ?? 0)})`
-  const holdLine = `Opus said hold on ${holdVerdicts} of the last ${reviewed} reviewed fixes (${pct(holdRate ?? 0)})`
+  const holdLine = `The AI review said hold on ${holdVerdicts} of the last ${reviewed} reviewed fixes (${pct(holdRate ?? 0)})`
   const noPrLine = `the agent opened no PR on ${noPrVerdicts} of the last ${finished.length} runs (${pct(noPrShare ?? 0)}): ${NO_PR_WORDS}`
 
   const stats = {

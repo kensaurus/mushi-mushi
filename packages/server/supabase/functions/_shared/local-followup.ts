@@ -66,7 +66,7 @@ export interface LocalFollowupInput {
   ciCodeRed?: boolean
 }
 
-/** What a local round does: fix the Opus findings, or make CI green (ADR 0032 amendment 2026-10-22). */
+/** What a local round does: fix the AI review findings, or make CI green (ADR 0032 amendment 2026-10-22). */
 export type LocalFollowupKind = 'findings' | 'ci_repair'
 
 export type LocalFollowupGate =
@@ -96,10 +96,10 @@ export function localFollowupGate(input: LocalFollowupInput): LocalFollowupGate 
       ok: false,
       status: 409,
       code: 'REVIEW_PENDING',
-      message: review ? 'The AI review of this pull request is still running; try again when it finishes.' : 'This pull request has no Opus review yet.',
+      message: review ? 'The AI review of this pull request is still running; try again when it finishes.' : 'This pull request has no AI review yet.',
     }
   }
-  // A CI repair: Opus said merge, CI fails on the code, and a person asked for it.
+  // A CI repair: The AI review said merge, CI fails on the code, and a person asked for it.
   const ciRepair = review.status === 'completed' && review.verdict === 'merge' && input.ciRepairRequested === true
   if (ciRepair && input.ciCodeRed === false) {
     return { ok: false, status: 409, code: 'CI_NOT_FAILING', message: 'CI on the reviewed commit is not failing on the code any more: nothing to repair.' }
@@ -110,8 +110,8 @@ export function localFollowupGate(input: LocalFollowupInput): LocalFollowupGate 
       status: 409,
       code: 'NOT_FIX_FIRST',
       message: review.status === 'completed'
-        ? `The latest Opus review says "${review.verdict ?? 'no verdict'}", not "fix first": nothing to follow up.`
-        : `The latest Opus review did not finish (${review.status}): nothing to follow up.`,
+        ? `The latest AI review says "${review.verdict ?? 'no verdict'}", not "fix first": nothing to follow up.`
+        : `The latest AI review did not finish (${review.status}): nothing to follow up.`,
     }
   }
   if (!livePr) return { ok: false, status: 503, code: 'PR_UNREADABLE', message: 'GitHub could not be read for this pull request; try again in a minute.' }
@@ -165,12 +165,12 @@ export function localHandoff(input: LocalHandoffInput): { ok: true; headSha: str
   if (!attempt.pr_url || attempt.merged_at || attempt.pr_state === 'merged' || attempt.pr_state === 'closed') {
     return { ok: false, message: 'The pull request is not open.' }
   }
-  if (!review || review.status !== 'completed' || !review.head_sha) return { ok: false, message: 'Its Opus review has not finished yet.' }
+  if (!review || review.status !== 'completed' || !review.head_sha) return { ok: false, message: 'Its AI review has not finished yet.' }
   if (attempt.commit_sha && attempt.commit_sha !== review.head_sha) {
     return { ok: false, message: 'The pull request has a newer commit than its review; wait for that review.' }
   }
   if (input.kind === 'findings') {
-    if (review.verdict !== 'fix_first') return { ok: false, message: `The latest Opus review says "${review.verdict ?? 'no verdict'}", not "fix first".` }
+    if (review.verdict !== 'fix_first') return { ok: false, message: `The latest AI review says "${review.verdict ?? 'no verdict'}", not "fix first".` }
     if (review.findings === 0) return { ok: false, message: 'The "fix first" review lists no findings to fix.' }
   } else {
     if (review.verdict !== 'merge') return { ok: false, message: `CI repair follows a "merge" review; this one says "${review.verdict ?? 'no verdict'}".` }

@@ -173,6 +173,13 @@ describe('release', () => {
     ])
   })
 
+  it('names the stations for what they count (journey walk 2026-11-28)', () => {
+    // "Fix PRs" counted reports with no PR (running agents, failed attempts),
+    // and "In train" was internal jargon.
+    const labels = buildStations([stage('pr', 1, 0)]).map((s) => s.label)
+    expect(labels).toEqual(['Fixes', 'CI', 'Waiting to merge', 'Merged', 'Deployed'])
+  })
+
   it('prefers the train on the tracks, else the latest', () => {
     const t = (state: string, createdAt: string) => ({ state, prNumber: 1, members: 3, createdAt, repo: 'o/r' })
     expect(currentTrain([t('merged', ago(H)), t('testing', ago(3 * H))])).toMatchObject({ state: 'testing', active: true })
@@ -246,7 +253,7 @@ describe('buildNeedsYou', () => {
     expect(items[0]).toMatchObject({ text: 'Local worker: glot: a run has held an agent space for 4 h.', action: { label: 'Open Workers', to: '/pipeline?tab=workers&project=p1' } })
     expect(items[1]!.text).toBe('Local worker: 6 lanes on alienware have waited 3 h for an agent space. (1 more worker problem on Workers)')
     // A stuck worker outranks a held PR: the PRs wait on it.
-    const ranked = buildNeedsYou({ projectId: 'p1', health: [], criticalWaiting: 0, pipeline: [stage('review', 4, 4, [group('hold', '4 PRs: Opus says hold; a person decides', 4)])], sdk: null, workers: workers.slice(0, 1) })
+    const ranked = buildNeedsYou({ projectId: 'p1', health: [], criticalWaiting: 0, pipeline: [stage('review', 4, 4, [group('hold', '4 PRs: The AI review says hold; a person decides', 4)])], sdk: null, workers: workers.slice(0, 1) })
     expect(ranked.map((i) => i.id)).toEqual(['worker_run_stuck:c1', 'pipeline_hold'])
   })
 })

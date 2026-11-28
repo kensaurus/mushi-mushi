@@ -299,7 +299,7 @@ export function decidePrGate(found: PrReviews, currentHead: string | null, calle
       ok: false,
       status: 503,
       code: 'REVIEW_UNAVAILABLE',
-      message: 'Mushi could not read the Opus review of this pull request, so it will not merge it now. Try again in a minute.',
+      message: 'Mushi could not read the AI review of this pull request, so it will not merge it now. Try again in a minute.',
       review: null,
     }
   }
@@ -327,7 +327,7 @@ export function decidePrGate(found: PrReviews, currentHead: string | null, calle
         ok: false,
         status: 409,
         code: 'REVIEW_PENDING',
-        message: 'The Opus review of this pull request is still running, so Mushi will not merge it from an API key. Wait a few minutes, or merge it from the Mushi console.',
+        message: 'The AI review of this pull request is still running, so Mushi will not merge it from an API key. Wait a few minutes, or merge it from the Mushi console.',
         review,
       }
     }
@@ -336,7 +336,7 @@ export function decidePrGate(found: PrReviews, currentHead: string | null, calle
         ok: false,
         status: 409,
         code: 'REVIEW_PENDING',
-        message: 'The Opus review of this pull request is still running. Confirm that you want to merge before it finishes.',
+        message: 'The AI review of this pull request is still running. Confirm that you want to merge before it finishes.',
         review,
       }
     }

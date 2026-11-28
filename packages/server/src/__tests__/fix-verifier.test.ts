@@ -236,9 +236,9 @@ describe('a fix whose every gate passes', () => {
   })
 
   it('records a refused merge as failed', async () => {
-    const { d } = deps({ merge: async () => ({ ok: false, status: 409, code: 'REVIEW_HOLD', message: 'The Opus review of this pull request says hold.', review: null }) })
+    const { d } = deps({ merge: async () => ({ ok: false, status: 409, code: 'REVIEW_HOLD', message: 'The AI review of this pull request says hold.', review: null }) })
     await worker.runFixVerifier(db as never, {}, d)
-    expect(db.table('fix_merge_gates')[0]).toMatchObject({ auto_merge_state: 'failed', auto_merge_detail: 'The Opus review of this pull request says hold.' })
+    expect(db.table('fix_merge_gates')[0]).toMatchObject({ auto_merge_state: 'failed', auto_merge_detail: 'The AI review of this pull request says hold.' })
   })
 })
 

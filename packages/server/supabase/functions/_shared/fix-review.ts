@@ -8,7 +8,7 @@
  *          vitest) and the pure ci-infra.ts.
  *
  * WHY (2026-10-20): spend-down sends dozens of reports a day to Cursor Cloud
- * (Grok 4.7 xhigh), and nothing graded the patches. A human-run Opus review
+ * (Grok 4.7 xhigh), and nothing graded the patches. A human-run AI review
  * of about 45 of those PRs found roughly 65–70% mergeable as-is; the rest
  * included a blank page from a chunk-miss reload guard, a removed "resume
  * lesson" feature, React private hooks, dead code and design-guardrail CI
@@ -715,7 +715,7 @@ export interface PublicFixReview {
   /** The fix attempt the review belongs to (null when there is no review). */
   fixAttemptId: string | null
   state: ReviewState
-  /** One line for chips, timelines and MCP: "Opus review: hold", "Not reviewed". */
+  /** One line for chips, timelines and MCP: "AI review: hold", "Not reviewed". */
   label: string
   /** The latest completed verdict, also when it is stale or a re-run is going. */
   verdict: ReviewVerdict | null
@@ -787,9 +787,9 @@ export function reviewLabel(state: ReviewState, verdict?: ReviewVerdict | null):
     case 'failed':
       return 'Review failed'
     case 'stale':
-      return `Opus review: ${verdict ? VERDICT_LABEL[verdict] : 'unknown'} (older commit)`
+      return `AI review: ${verdict ? VERDICT_LABEL[verdict] : 'unknown'} (older commit)`
     default:
-      return `Opus review: ${VERDICT_LABEL[state]}`
+      return `AI review: ${VERDICT_LABEL[state]}`
   }
 }
 
@@ -867,8 +867,8 @@ export function mergeGate(
     state: state === 'stale' ? 'stale' : 'hold',
     code: 'REVIEW_HOLD',
     message: state === 'stale'
-      ? 'The last Opus review of this pull request said hold, and no review of its newer commits has finished yet, so Mushi will not merge it. Re-run the review, or have a project member override the hold in the Mushi console with a reason.'
-      : 'The Opus review of this pull request says hold, so Mushi will not merge it. Fix the findings and re-run the review, or have a project member override the hold in the Mushi console with a reason.',
+      ? 'The last AI review of this pull request said hold, and no review of its newer commits has finished yet, so Mushi will not merge it. Re-run the review, or have a project member override the hold in the Mushi console with a reason.'
+      : 'The AI review of this pull request says hold, so Mushi will not merge it. Fix the findings and re-run the review, or have a project member override the hold in the Mushi console with a reason.',
   }
 }
 

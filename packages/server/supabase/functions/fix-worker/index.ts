@@ -25,10 +25,10 @@
  *      project_settings.github_repo_url).
  *   7. Creates a draft PR via direct GitHub REST API. It stays a draft, so
  *      the host's CI does not run (ADR 0047): agent-pr-review marks it ready
- *      once the Opus review says "merge" on its head (or, when no review can
+ *      once the AI review says "merge" on its head (or, when no review can
  *      run, when the model's own check passed). Nothing auto-merges here.
  *   8. Updates fix_attempts and fix_dispatch_jobs with the result, and
- *      queues the Opus review (ADR 0030).
+ *      queues the AI review (ADR 0030).
  *
  * Security:
  *   - JWT-verified at the edge (verify_jwt=false because the dispatch
@@ -1373,7 +1373,7 @@ ${
           body: buildPrBody({ ...fix, files: prFiles }, dispatch.report_id),
           files: prFiles,
           labels: fixReviewPassed(fix) ? ['mushi-autofix'] : ['mushi-autofix', 'needs-review'],
-          // Always a draft: host CI runs only once the Opus review says
+          // Always a draft: host CI runs only once the AI review says
           // "merge" (agent-pr-review readies it; ADR 0047). A fix the model
           // flagged stays a draft even then: CI and merge wait for a person.
           markReady: false,
@@ -1421,7 +1421,7 @@ ${
         prUrl,
       });
       if (!reviewQueued.queued) {
-        log.warn('Opus review not queued for the fix PR (non-fatal)', { fixAttemptId, err: reviewQueued.error });
+        log.warn('AI review not queued for the fix PR (non-fatal)', { fixAttemptId, err: reviewQueued.error });
       }
 
       await db
@@ -2241,7 +2241,7 @@ async function dispatchToCloudAgent(
 }
 
 /**
- * What earlier attempts on this report did (their Opus reviews, or why the
+ * What earlier attempts on this report did (their AI reviews, or why the
  * agent stopped), so a re-dispatch does not repeat a rejected theory.
  * Best-effort: a read failure dispatches without it.
  */

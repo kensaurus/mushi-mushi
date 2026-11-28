@@ -39,7 +39,7 @@ export type VerifyGateStatus = 'pass' | 'fail' | 'pending' | 'unavailable' | 'no
 export interface VerifyGate {
   id: VerifyGateId
   status: VerifyGateStatus
-  /** Plain words: "Opus review: merge", "Test proves the fix", "Small change (2 files, 48 lines)". */
+  /** Plain words: "AI review: merge", "Test proves the fix", "Small change (2 files, 48 lines)". */
   label: string
   /** One sentence; when the gate is not `pass`, it says what to do. */
   detail: string
@@ -894,35 +894,35 @@ const VERDICT_WORDS: Record<ReviewVerdict, string> = { merge: 'merge', fix_first
 export function reviewGate(review: ReviewGateInput | null, headSha: string): VerifyGate {
   const id = 'review' as const
   if (!review || (!review.verdict && (review.status === 'queued' || review.status === 'running' || !review.status))) {
-    return { id, status: 'pending', label: 'Waiting for the Opus review', detail: 'The Opus review of this pull request has not finished yet.' }
+    return { id, status: 'pending', label: 'Waiting for the AI review', detail: 'The AI review of this pull request has not finished yet.' }
   }
   if (!review.verdict) {
     return {
       id,
       status: 'unavailable',
-      label: review.status === 'skipped' ? 'Opus review skipped' : 'Opus review failed',
-      detail: `${review.reason ? `${review.reason.replace(/\.$/, '')}. ` : ''}Without an Opus review Mushi does not merge on its own; re-run the review from the fix.`,
+      label: review.status === 'skipped' ? 'AI review skipped' : 'AI review failed',
+      detail: `${review.reason ? `${review.reason.replace(/\.$/, '')}. ` : ''}Without an AI review Mushi does not merge on its own; re-run the review from the fix.`,
     }
   }
   if (review.headSha && review.headSha !== headSha) {
     return {
       id,
       status: 'pending',
-      label: `Opus review: ${VERDICT_WORDS[review.verdict]} (older commit)`,
+      label: `AI review: ${VERDICT_WORDS[review.verdict]} (older commit)`,
       detail: 'The review is about an older commit; Mushi waits for the review of the latest one.',
       evidence: { reviewedHeadSha: review.headSha },
     }
   }
   if (review.verdict === 'merge') {
-    return { id, status: 'pass', label: 'Opus review: merge', detail: 'The Opus review found nothing that blocks a merge.' }
+    return { id, status: 'pass', label: 'AI review: merge', detail: 'The AI review found nothing that blocks a merge.' }
   }
   return {
     id,
     status: 'fail',
-    label: `Opus review: ${VERDICT_WORDS[review.verdict]}`,
+    label: `AI review: ${VERDICT_WORDS[review.verdict]}`,
     detail: review.verdict === 'hold'
-      ? 'The Opus review says hold. Read its findings; only a person can override a hold.'
-      : 'Fix the Opus review\'s findings and push; the new commit is reviewed again.',
+      ? 'The AI review says hold. Read its findings; only a person can override a hold.'
+      : 'Fix the AI review\'s findings and push; the new commit is reviewed again.',
   }
 }
 
@@ -989,7 +989,7 @@ export function secondReviewGate(state: SecondJudgeState, othersPass: boolean): 
       id,
       status: 'pending',
       label: 'Second review waits for the other checks',
-      detail: 'It runs once the Opus review, CI, the test proof, protected paths and the size check pass.',
+      detail: 'It runs once the AI review, CI, the test proof, protected paths and the size check pass.',
     }
   }
   if (!state) return { id, status: 'pending', label: 'Second review running', detail: 'A second model family is reviewing this commit.' }

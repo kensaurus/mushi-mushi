@@ -325,7 +325,7 @@ test('a member that failed alone at its head is not put back into the next train
   const a = tables.fix_merge_queue.find((r) => r.id === 'a')!
   assertEquals([a.state, String(a.detail).startsWith('It failed CI alone in release train #800 at this commit (Lint & Build)')], ['blocked', true])
 
-  // A CI-repair agent pushed h1b and Opus approved it: it rides again.
+  // A CI-repair agent pushed h1b and The AI review approved it: it rides again.
   const again = setup([qrow('a', 1, { state: 'blocked' })], {
     release_trains: [{ ...failedAlone }],
     fix_reviews: [{ fix_attempt_id: 'fa-a', verdict: 'merge', head_sha: 'h1b', status: 'completed' }],

@@ -74,7 +74,7 @@ const VERIFICATION = {
   headSha: 'abcdef1234567890',
   passed: false,
   gates: [
-    { id: 'review', status: 'pass', label: 'Opus review: merge', detail: '' },
+    { id: 'review', status: 'pass', label: 'AI review: merge', detail: '' },
     { id: 'ci', status: 'pass', label: 'CI green', detail: '' },
     { id: 'fail_to_pass', status: 'not_set_up', label: 'Test proves the fix', detail: 'Add the mushi-verify workflow: mushi verify workflow.' },
     { id: 'protected', status: 'fail', label: 'No tests weakened', detail: 'src/a.test.ts removes 2 assertions.' },
@@ -93,7 +93,7 @@ describe('mushi fixes verify', () => {
     const run = await runCli(registerFixCommands, ['fixes', 'verify', FIX], () => okReply(VERIFICATION))
     expect(run.calls).toEqual([expect.objectContaining({ method: 'GET', path: `/v1/admin/fixes/${FIX}/verification` })])
     expect(run.stdout).toContain('Head abcdef1: not verified yet')
-    expect(run.stdout).toMatch(/✓ pass\s+Opus review: merge/)
+    expect(run.stdout).toMatch(/✓ pass\s+AI review: merge/)
     expect(run.stdout).toMatch(/○ not set up\s+Test proves the fix\n\s+Add the mushi-verify workflow/)
     expect(run.stdout).toMatch(/✗ fail\s+No tests weakened\n\s+src\/a.test.ts removes 2 assertions./)
     expect(run.stdout).toMatch(/… pending\s+Second review/)

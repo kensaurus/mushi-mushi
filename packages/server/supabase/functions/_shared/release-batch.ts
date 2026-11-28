@@ -342,9 +342,9 @@ function whyText(c: TrainCandidate, ci: MemberCi, failing: string[], mode: Batch
   if (riding) return 'Riding this train.'
   if (mode === 'each') return 'This app merges each fix on its own (release mode "each"), not in trains.'
   if (!c.prOpen) return 'Its pull request is closed.'
-  if (c.held) return 'Opus said hold. It does not ride until a person decides.'
-  if (c.verdict !== 'merge') return c.verdict ? `Opus said ${c.verdict.replace(/_/g, ' ')}. It rides once Opus says merge.` : 'Waiting for the Opus review.'
-  if (c.verdictHead !== c.headSha) return `Opus approved an older commit (${short(c.verdictHead)}); it is reviewed again at ${short(c.headSha)} first.`
+  if (c.held) return 'The AI review said hold. It does not ride until a person decides.'
+  if (c.verdict !== 'merge') return c.verdict ? `The AI review said ${c.verdict.replace(/_/g, ' ')}. It rides once the AI review says merge.` : 'Waiting for the AI review.'
+  if (c.verdictHead !== c.headSha) return `The AI review approved an older commit (${short(c.verdictHead)}); it is reviewed again at ${short(c.headSha)} first.`
   if (isExpress(c)) return 'Urgent (a security advisory or a critical bug): it merges on its own, without waiting for a train.'
   if (c.draft) return 'A draft runs no CI. Mushi marks it ready; it rides once its CI is green.'
   if (c.benched) return c.benched
@@ -443,7 +443,7 @@ export function buildRepoBatch(input: RepoBatchInput): RepoBatch {
 
   const cs = built.map((b) => b.c)
   const gates: BatchGate[] = [
-    { id: 'approved_at_head', label: 'Opus said merge at its current commit, and nothing holds it', passed: cs.filter(isApprovedAtHead).length, total: cs.length },
+    { id: 'approved_at_head', label: 'The AI review said merge at its current commit, and nothing holds it', passed: cs.filter(isApprovedAtHead).length, total: cs.length },
     { id: 'not_draft', label: 'Not a draft (a draft runs no CI)', passed: cs.filter((c) => !c.draft).length, total: cs.length },
     { id: 'ci_green', label: 'Its own CI is green', passed: cs.filter((c) => c.ci === 'green').length, total: cs.length },
     { id: 'not_benched', label: 'Not benched: it did not fail alone, or ride 5 red trains, at this commit', passed: cs.filter((c) => !c.benched).length, total: cs.length },

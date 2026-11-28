@@ -256,7 +256,7 @@ export async function runAutoDecide(
             repo,
             pr_number: a.pr_number,
             state: 'queued',
-            detail: 'Queued by "Decide for me": Opus says merge.',
+            detail: 'Queued by "Decide for me": The AI review says merge.',
             queued_by: null,
             queued_at: now.toISOString(),
             updated_at: now.toISOString(),

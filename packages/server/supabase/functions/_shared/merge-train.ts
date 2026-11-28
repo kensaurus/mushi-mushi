@@ -87,7 +87,7 @@ export function isExpress(c: Pick<TrainCandidate, 'severity' | 'source'>): boole
   return c.source === 'security_scan' && severity === 'high'
 }
 
-/** Opus says merge on its exact head and nothing holds it. */
+/** The AI review says merge on its exact head and nothing holds it. */
 export function isApprovedAtHead(c: TrainCandidate): boolean {
   return c.prOpen && !c.held && c.verdict === 'merge' && !!c.headSha && c.headSha === c.verdictHead
 }
@@ -248,7 +248,7 @@ export function trainPullRequest(args: { members: TrainMemberLine[]; attempt: nu
     // rejected "release:", so every train there failed on its title).
     title: `fix: release train, ${n} fix${n === 1 ? '' : 'es'} (${date})${args.attempt > 1 ? `, retry ${args.attempt}` : ''}`,
     body: [
-      `Mushi release train: ${n} pull request${n === 1 ? '' : 's'} Opus approved, merged together so they ship as one deploy and one release (ADR 0044).`,
+      `Mushi release train: ${n} pull request${n === 1 ? '' : 's'} the AI review approved, merged together so they ship as one deploy and one release (ADR 0044).`,
       '',
       ...lines,
       '',

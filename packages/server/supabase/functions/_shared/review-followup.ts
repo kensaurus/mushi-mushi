@@ -1,7 +1,7 @@
 /**
  * FILE: packages/server/supabase/functions/_shared/review-followup.ts
  * PURPOSE: The rules of the review follow-up loop (ADR 0032), as pure
- *          functions: when a "fix_first" Opus review (ADR 0030) earns one
+ *          functions: when a "fix_first" AI review (ADR 0030) earns one
  *          follow-up, whether a queued follow-up may be dispatched now,
  *          whether the configured Cursor model is one the key can use, the
  *          prompt, the Cursor create request, how a finished run is read,
@@ -174,7 +174,7 @@ export interface PriorFollowup {
 }
 
 /**
- * What a follow-up asks the agent to do: act on the Opus findings of a
+ * What a follow-up asks the agent to do: act on the AI review findings of a
  * "fix_first" review (ADR 0032), or make CI green on a "merge" review whose
  * head fails CI on the code (the 2026-10-22 amendment).
  */
@@ -785,7 +785,7 @@ export function buildFollowupPrompt(input: FollowupPromptInput): { text: string;
 
   const head = [
     'You are following up on an existing pull request that a coding agent opened to fix a bug a real user reported.',
-    'An independent reviewer (Claude Opus) read the pull request and said "fix first": it is close, but the findings below must be addressed before it can merge.',
+    'An independent AI reviewer read the pull request and said "fix first": it is close, but the findings below must be addressed before it can merge.',
     '',
     `Pull request: ${input.prUrl}`,
     `Branch: ${input.branch ? fenceFollowupText(input.branch.slice(0, 200)) : '(the pull request head branch)'}`,
@@ -942,7 +942,7 @@ export function buildCiRepairPrompt(input: CiRepairPromptInput): { text: string;
   const checks = input.checks.slice(0, CI_REPAIR_MAX_CHECKS)
   const head = [
     'You are following up on an existing pull request that a coding agent opened to fix a bug a real user reported.',
-    'An independent reviewer (Claude Opus) read the pull request and said it can merge, but CI on the reviewed commit fails on the code. Your job is to make CI green without weakening any test.',
+    'An independent AI reviewer read the pull request and said it can merge, but CI on the reviewed commit fails on the code. Your job is to make CI green without weakening any test.',
     '',
     `Pull request: ${input.prUrl}`,
     `Branch: ${input.branch ? fenceFollowupText(input.branch.slice(0, 200)) : '(the pull request head branch)'}`,
