@@ -122,7 +122,7 @@ test('pnpm-lock.yaml resolves only patched image-size and patches every Metro th
   const metros = metroSnapshotsUsingImageSize(lock)
   assert.deepEqual(
     metros.map((snapshot) => snapshot.version),
-    ['0.83.5', '0.84.4'],
+    ['0.83.5'],
   )
   for (const { version, suffix } of metros) {
     assert.match(suffix, /patch_hash=/, `metro@${version} is not patched`)

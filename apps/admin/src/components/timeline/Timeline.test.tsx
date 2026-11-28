@@ -118,12 +118,13 @@ describe('timeline controls', () => {
     const input = host.querySelector('input[type="range"]') as HTMLInputElement
     expect(input.getAttribute('aria-label')).toContain('1.0.0 on the left, 1.1.0 on the right')
     const after = host.querySelectorAll('img')[1] as HTMLImageElement
-    expect(after.style.clipPath).toBe('inset(0 0 0 50%)')
+    // jsdom 31 serialises lengths with units (`inset(0px 0px 0px 50%)`).
+    expect(after.style.clipPath.replaceAll('0px', '0')).toBe('inset(0 0 0 50%)')
     await act(async () => {
       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', shiftKey: true, bubbles: true }))
     })
     expect(input.value).toBe('40')
-    expect(after.style.clipPath).toBe('inset(0 0 0 40%)')
+    expect(after.style.clipPath.replaceAll('0px', '0')).toBe('inset(0 0 0 40%)')
     await act(async () => {
       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }))
     })
