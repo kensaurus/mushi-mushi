@@ -171,7 +171,7 @@ async function readCiInfra(
 async function syncOne(
   db: ReturnType<typeof getServiceClient>,
   attempt: FixAttemptRow,
-): Promise<{ ok: boolean; reason?: string; snapshot?: CheckRunSnapshot; prState?: PrLifecycle | null }> {
+): Promise<{ ok: boolean; reason?: string; snapshot?: CheckRunSnapshot; prState?: PrLifecycle | null; stamped?: boolean }> {
   if (!attempt.pr_url) return { ok: false, reason: 'no_pr_url' }
 
   const ref = parseGithubRepoUrl(attempt.pr_url.split('/pull/')[0])
@@ -204,13 +204,15 @@ async function syncOne(
     const snapshot = await fetchLatestCheckRun(token, ref, sha)
     if (!snapshot) return { ok: prState != null, reason: 'check_runs_404', prState }
     const ciInfra = await readCiInfra(db, token, `${ref.owner}/${ref.repo}`, attempt, sha, snapshot)
-    await db.from('fix_attempts').update({
+    const { error: writeErr } = await db.from('fix_attempts').update({
       check_run_status: snapshot.status,
       check_run_conclusion: snapshot.conclusion,
       check_run_updated_at: new Date().toISOString(),
       ...(ciInfra !== undefined ? { ci_infra: ciInfra } : {}),
     }).eq('id', attempt.id)
-    return { ok: true, snapshot, prState }
+    // trg_fix_attempts_updated_at stamps updated_at on this write, which is
+    // what moves the row to the back of the sweep queue.
+    return { ok: true, snapshot, prState, stamped: !writeErr }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     log.warn('check-runs fetch failed', { attemptId: attempt.id, error: msg })
@@ -269,7 +271,10 @@ app.post('/ci-sync', async (c) => {
   const results: Array<{ id: string; ok: boolean; reason?: string; conclusion?: string | null; prState?: PrLifecycle | null }> = []
   for (const attempt of rows) {
     const r = await syncOne(db, attempt)
-    await db.from('fix_attempts').update({ updated_at: new Date().toISOString() }).eq('id', attempt.id)
+    // A row the sync did not write is stamped here, so it still moves back.
+    // A row it wrote was stamped by the trigger; a second PATCH per attempt
+    // was about 1.4k no-op writes a day (2026-11-28).
+    if (!r.stamped) await db.from('fix_attempts').update({ updated_at: new Date().toISOString() }).eq('id', attempt.id)
     results.push({
       id: attempt.id,
       ok: r.ok,

@@ -16,6 +16,7 @@ import {
   type SdkReleaseJob,
 } from '../../supabase/functions/_shared/sdk-release-sync.ts'
 import { syncSdkReleaseJobRetryingPersist } from '../../supabase/functions/sdk-release-sync/persist.ts'
+import { isDueForReleaseSync, RELEASE_SYNC_MERGED_WINDOW_DAYS } from '../../supabase/functions/sdk-release-sync/due.ts'
 
 const P = '1000000a-0000-4000-8000-000000000000'
 const J = '2000000a-0000-4000-8000-000000000000'
@@ -360,5 +361,28 @@ describe('describeGithubReadFailure', () => {
     expect(describeGithubReadFailure(new Error('pull fetch 502'))).toBe('HTTP 502')
     expect(describeGithubReadFailure(Object.assign(new Error('x'), { name: 'TimeoutError' }))).toBe('timed out')
     expect(describeGithubReadFailure(new TypeError('fetch failed'))).toBe('no answer')
+  })
+})
+
+// 2026-11-28: 19 jobs merged weeks earlier, in repos without GitHub
+// deployments, were read every 5 minutes for good (about 5.5k PostgREST calls
+// and 16k GitHub calls a day). The cron stops after the merge window.
+describe('isDueForReleaseSync', () => {
+  const now = Date.parse('2026-11-28T12:00:00Z')
+  const daysAgo = (d: number) => new Date(now - d * 86_400_000).toISOString()
+
+  it('always polls a job that has not merged', () => {
+    expect(isDueForReleaseSync({ merged_at: null }, now)).toBe(true)
+  })
+
+  it('polls a merged job until the window ends, then stops', () => {
+    expect(isDueForReleaseSync({ merged_at: daysAgo(1) }, now)).toBe(true)
+    expect(isDueForReleaseSync({ merged_at: daysAgo(RELEASE_SYNC_MERGED_WINDOW_DAYS) }, now)).toBe(true)
+    expect(isDueForReleaseSync({ merged_at: daysAgo(RELEASE_SYNC_MERGED_WINDOW_DAYS + 0.01) }, now)).toBe(false)
+    expect(isDueForReleaseSync({ merged_at: daysAgo(56) }, now)).toBe(false)
+  })
+
+  it('keeps polling when the stored merge time is unreadable', () => {
+    expect(isDueForReleaseSync({ merged_at: 'not a date' }, now)).toBe(true)
   })
 })

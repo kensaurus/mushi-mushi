@@ -28,6 +28,7 @@
 
 import { agentCreditsSummary, agentCreditsTitle, CLAUDE_FOLLOWUPS_COMMAND, CLAUDE_WORK_COMMAND, shortDay, type AgentCreditsState } from './agent-credits.ts'
 import type { OffKey } from './pipeline-view.ts'
+import { createTtlCache } from './ttl-cache.ts'
 
 export type GapAudience = 'app_owner' | 'platform'
 export type GapStatus = 'ok' | 'gap' | 'unknown'
@@ -476,31 +477,6 @@ export function countByStatus(gaps: Array<Pick<SetupGap, 'status'>>): Record<Gap
   const out: Record<GapStatus, number> = { ok: 0, gap: 0, unknown: 0 }
   for (const g of gaps) out[g.status]++
   return out
-}
-
-// ── Cache ───────────────────────────────────────────────────────────────────
-
-/** A small time-limited map, per isolate. Callers check access before reading it. */
-export function createTtlCache<T>(ttlMs: number, max = 500) {
-  const entries = new Map<string, { at: number; value: T }>()
-  return {
-    get(key: string, now: number): { value: T; at: number } | null {
-      const e = entries.get(key)
-      if (!e) return null
-      if (now - e.at >= ttlMs) {
-        entries.delete(key)
-        return null
-      }
-      return e
-    },
-    set(key: string, value: T, now: number): void {
-      if (entries.size >= max) entries.delete(entries.keys().next().value as string)
-      entries.set(key, { at: now, value })
-    },
-    clear(): void {
-      entries.clear()
-    },
-  }
 }
 
 // ── What each repo's access can do, as last probed ──────────────────────────

@@ -251,18 +251,25 @@ export async function resolveEffectivePlatformSettings(
  * vault://<uuid> refs in the settings. Use this when you need the actual
  * plaintext values (e.g. fix-worker, probes). The UI should use the non-deref'd
  * version and only show presence/source.
+ *
+ * `only` names the secret fields the caller will use: just those are read
+ * from Vault, and every other vault ref comes back null (never as the raw
+ * ref). The Sentry callers need one token but read every secret the project
+ * has, about 3k Vault reads a day from the 15-minute poll alone (2026-11-28).
  */
 export async function resolveAndDereferencePlatformSettings(
   db: SupabaseClient,
   projectId: string,
+  only?: readonly PlatformField[],
 ): Promise<EffectivePlatformSettings> {
   const result = await resolveEffectivePlatformSettings(db, projectId)
   const { dereferenceMaybeVault } = await import('./integration-probes.ts')
+  const wanted = only ? new Set<string>(only) : null
 
   const derefed: Record<string, string | null> = {}
   for (const [field, val] of Object.entries(result.settings as Record<string, string | null>)) {
     if (val && val.startsWith('vault://')) {
-      derefed[field] = await dereferenceMaybeVault(db, val)
+      derefed[field] = wanted && !wanted.has(field) ? null : await dereferenceMaybeVault(db, val)
     } else {
       derefed[field] = val
     }

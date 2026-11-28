@@ -13,6 +13,7 @@
 import { fetchWithTimeout } from './http.ts'
 import type { getServiceClient } from './db.ts'
 import { isOperatorProject } from './operator-gate.ts'
+import { createTtlCache } from './ttl-cache.ts'
 
 async function importPkcs8(pem: string): Promise<CryptoKey> {
   const stripped = pem
@@ -72,10 +73,50 @@ const INSTALLATION_TOKEN_REUSE_MARGIN_MS = 5 * 60_000
 const installationTokenCache = new Map<number, { access: InstallationAccess; expiresMs: number }>()
 const installationTokenInflight = new Map<number, Promise<InstallationAccess>>()
 
-/** Forget cached installation tokens (tests). */
+/** Forget cached installation tokens, stored tokens and repo rows (tests). */
 export function clearInstallationTokenCache(): void {
   installationTokenCache.clear()
   installationTokenInflight.clear()
+  storedTokenCache.clear()
+  projectReposCache.clear()
+}
+
+/**
+ * Per-worker reuse of two reads every GitHub caller repeats, for
+ * GITHUB_LOOKUP_CACHE_MS. On 2026-11-28 the crons and the GitHub webhook
+ * resolved the same few projects' tokens over and over: about 5.5k
+ * project_settings reads, as many Vault reads and 4.2k project_repos reads a
+ * day. A cron run touches up to 50 rows of a handful of projects.
+ *
+ * Security cost: a stored token that is replaced or removed (Vault upserts it
+ * in place under the same name) may be used for up to 60 s more by a worker
+ * that already read it. The decrypted token stays in this worker's memory
+ * only, like the minted installation tokens above, and is never logged.
+ */
+const GITHUB_LOOKUP_CACHE_MS = 60_000
+/**
+ * By `projectId:env|noenv`: the token from settings / org default / platform.
+ * "No token" is not kept: a failed read falls through to null, and a token
+ * connected a moment ago must work at once.
+ */
+const storedTokenCache = createTtlCache<string>(GITHUB_LOOKUP_CACHE_MS, 1_000)
+type ProjectRepoRow = { repo_url: string | null; is_primary: boolean | null; github_app_installation_id: unknown }
+const projectReposCache = createTtlCache<ProjectRepoRow[]>(GITHUB_LOOKUP_CACHE_MS, 1_000)
+
+/** The project's repos with their App installation. A failed read is not kept. */
+async function projectReposWithInstallation(
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+): Promise<ProjectRepoRow[]> {
+  const hit = projectReposCache.get(projectId)
+  if (hit) return hit.value
+  const { data, error } = await db
+    .from('project_repos')
+    .select('repo_url, is_primary, github_app_installation_id')
+    .eq('project_id', projectId)
+  const rows = (data ?? []) as ProjectRepoRow[]
+  if (!error) projectReposCache.set(projectId, rows)
+  return rows
 }
 
 async function mintInstallationAccessUncached(installationId: number): Promise<{ access: InstallationAccess; expiresMs: number }> {
@@ -149,11 +190,7 @@ export async function installationIdForAttempt(
     return toId(data?.github_app_installation_id)
   }
   const prRepo = attempt.pr_url ? parseGithubRepoUrl(attempt.pr_url.split('/pull/')[0]) : null
-  const { data: repos } = await db
-    .from('project_repos')
-    .select('repo_url, is_primary, github_app_installation_id')
-    .eq('project_id', attempt.project_id)
-  const rows = (repos ?? []) as Array<{ repo_url: string | null; is_primary: boolean | null; github_app_installation_id: unknown }>
+  const rows = await projectReposWithInstallation(db, attempt.project_id)
   const match = prRepo
     ? rows.find((r) => {
         const ref = parseGithubRepoUrl(r.repo_url ?? '')
@@ -170,11 +207,7 @@ export async function installationIdForRepo(
   projectId: string,
   repoFullName?: string | null,
 ): Promise<number | null> {
-  const { data } = await db
-    .from('project_repos')
-    .select('repo_url, is_primary, github_app_installation_id')
-    .eq('project_id', projectId)
-  const rows = (data ?? []) as Array<{ repo_url: string | null; is_primary: boolean | null; github_app_installation_id: unknown }>
+  const rows = await projectReposWithInstallation(db, projectId)
   const want = repoFullName?.toLowerCase() ?? null
   const match = want
     ? rows.find((r) => {
@@ -231,6 +264,20 @@ export async function resolveProjectGithubToken(
     }
   }
 
+  const cacheKey = `${projectId}:${opts.allowEnvFallback === false ? 'noenv' : 'env'}`
+  const hit = storedTokenCache.get(cacheKey)
+  if (hit) return hit.value
+  const token = await resolveStoredGithubToken(db, projectId, opts.allowEnvFallback !== false)
+  if (token) storedTokenCache.set(cacheKey, token)
+  return token
+}
+
+/** Steps 2–4 of resolveProjectGithubToken, uncached. */
+async function resolveStoredGithubToken(
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+  allowEnvFallback: boolean,
+): Promise<string | null> {
   const resolveRef = async (ref: string): Promise<string | null> => {
     if (ref.startsWith('vault://')) {
       const id = ref.slice('vault://'.length)
@@ -272,7 +319,7 @@ export async function resolveProjectGithubToken(
   }
 
   // Step 3: the platform token, for the operator's own apps only.
-  if (opts.allowEnvFallback === false) return null
+  if (!allowEnvFallback) return null
   return platformGithubTokenFor(db, projectId)
 }
 

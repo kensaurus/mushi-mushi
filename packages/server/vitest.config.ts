@@ -37,6 +37,8 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['src/**/*.test.ts'],
+    // Per-isolate TTL caches (_shared/ttl-cache.ts) start each test empty.
+    setupFiles: ['src/__tests__/__stubs__/reset-ttl-caches.ts'],
     // Vitest defaults to 5s per test. Every test in this package is a pure
     // unit test against stubs — 45 of them run in 3.7s when the package runs
     // alone, about 80ms each. But `turbo run test` starts a vitest instance

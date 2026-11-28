@@ -45,7 +45,7 @@ export async function loadSentryCredentials(
   projectId: string,
 ): Promise<SentryCredentials | null> {
   const { resolveAndDereferencePlatformSettings } = await import('./integration-settings.ts');
-  const { settings } = await resolveAndDereferencePlatformSettings(db, projectId);
+  const { settings } = await resolveAndDereferencePlatformSettings(db, projectId, ['sentry_auth_token_ref']);
   const token = settings.sentry_auth_token_ref ?? null;
   const orgSlug = settings.sentry_org_slug ?? null;
   return token && orgSlug ? { token, orgSlug } : null;

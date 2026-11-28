@@ -181,7 +181,7 @@ async function autoImportProject(
   const projectSlugs = allowedSentryProjectSlugs(row.sentry_project_slug, row.sentry_extra_project_slugs)
   if (projectSlugs.length === 0) return { created: 0, reopened: 0, seen: 0, skipped: 'no_project_slug' }
   // Token and org may be inherited from the organization's defaults.
-  const { settings } = await resolveAndDereferencePlatformSettings(db, row.project_id)
+  const { settings } = await resolveAndDereferencePlatformSettings(db, row.project_id, ['sentry_auth_token_ref'])
   const token = settings.sentry_auth_token_ref ?? null
   const orgSlug = settings.sentry_org_slug ?? null
   if (!token || !orgSlug) return { created: 0, reopened: 0, seen: 0, skipped: 'no_token_or_org' }
