@@ -2,7 +2,8 @@
  * FILE: apps/admin/src/components/integrations/PlatformIntegrationCard.tsx
  * PURPOSE: One Sentry/Langfuse/GitHub/Cursor card. Pure presentation: shows
  *          service icon, status-coded left border, last probe + sparkline,
- *          external link to the service, and the edit form. Mutations bubble
+ *          external link to the service, and the edit form. The Cursor
+ *          default model uses the shared model picker. Mutations bubble
  *          up to the page via callbacks. The title shares a row with the
  *          icon buttons; status text and the description sit on a full-width
  *          row under that, so a 390px card does not squeeze them into the
@@ -26,6 +27,7 @@ import { SentryImportPanel } from './SentryImportPanel'
 import { IntegrationSetupGuide } from './IntegrationSetupGuide'
 import { IntegrationCredentialChips } from './IntegrationCredentialChips'
 import type { FieldSource, HealthRow, PlatformDef } from './types'
+import { CursorModelPicker } from '../settings/CursorModelPicker'
 import { ConnectionStatus } from '../ui/ConnectionStatus'
 import { connectionFromProbe, isMissingSentrySecret, sentryConnection, type ConnectionView } from '../../lib/integrationConnection'
 import { SentrySecretMissingPanel } from './SentrySecretMissingPanel'
@@ -547,6 +549,10 @@ export function PlatformIntegrationCard({
             </p>
           )}
           {def.fields.map((field) => {
+            // The catalog belongs to the saved Cursor key; an unsaved key may not offer it.
+            const cursorKeyChanged =
+              def.kind === 'cursor_cloud' &&
+              (draft.cursor_api_key_ref ?? '') !== String(config.cursor_api_key_ref ?? '')
             const fieldSource = sourceByField?.[field.name]
             const isDraftEmpty = !(draft[field.name] ?? '').trim()
             return (
@@ -561,7 +567,35 @@ export function PlatformIntegrationCard({
                 {/* Secrets use SecretInput (type="text", CSS-masked, reveal
                     toggle) so password managers never offer to save an API
                     token as the site login. */}
-                {(() => {
+                {field.name === 'cursor_default_model' && cursorKeyChanged ? (
+                  <div>
+                    <Input
+                      aria-label={field.label}
+                      value={draft[field.name] ?? ''}
+                      placeholder="e.g. grok-4.7?reasoning_effort=xhigh"
+                      onChange={(e) => onChangeField(field.name, e.target.value)}
+                      autoComplete="off"
+                    />
+                    <p className="mt-1 text-2xs text-fg-muted" data-testid="cursor-model-after-save">
+                      The model list is for the saved key. Save the new key to pick from its models, or type a model id now.
+                    </p>
+                  </div>
+                ) : field.name === 'cursor_default_model' ? (
+                  <CursorModelPicker
+                    value={draft[field.name] ?? ''}
+                    onChange={(spec) => onChangeField(field.name, spec)}
+                    label={field.label}
+                    labelled={false}
+                    emptyLabel={
+                      isDraftEmpty && fieldSource === 'env'
+                        ? 'Environment variable'
+                        : isDraftEmpty && fieldSource === 'org'
+                          ? 'Organization default'
+                          : 'Cursor account default'
+                    }
+                  />
+                ) : (
+                (() => {
                   const FieldInput = field.type === 'password' ? SecretInput : Input
                   return (
                 <FieldInput
@@ -579,7 +613,8 @@ export function PlatformIntegrationCard({
                   autoComplete="off"
                 />
                   )
-                })()}
+                })()
+                )}
                 {/* Source coverage hint — shown when the draft is empty but covered */}
                 {isDraftEmpty && fieldSource === 'env' && (
                   <p className="mt-0.5 text-2xs text-fg-faint leading-snug">

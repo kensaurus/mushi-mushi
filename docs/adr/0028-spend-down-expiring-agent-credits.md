@@ -67,8 +67,9 @@ how much is left.
   Instead a report is skipped for 7 days after any dispatch, and for good
   once its latest attempt carries an agent verdict (`already_fixed`,
   `wrong_repo`, `not_actionable`, `needs_human`).
-- **A model picker fed by Cursor's model list** for now: the model is a
-  validated free-text spec (BL-090).
+- **A model picker fed by Cursor's model list** at acceptance. The stored
+  model stayed a validated free-text spec (BL-090). The console picker
+  shipped in the 2026-11-16 amendment and still stores that spec.
 
 ## Consequences
 
@@ -243,4 +244,14 @@ every Cursor key idled on "No open report to fix": spend-down only picked
   account run to 100% hands over instead of idling the next one. Runs a key
   already started are polled and cancelled with that key
   (`external_agent_ref.key_id`).
+
+## Amendment 2026-11-16: model picker (BL-090)
+
+The acceptance parked a picker and kept the model as a validated spec.
+Spend-down and the Cursor card on Integrations now write that same spec
+from the account's model list (`CursorModelPicker`,
+`GET /v1/admin/byok/cursor/models`; spend-down passes the key, Integrations
+uses the key the app would use). A model the list does not have stays a
+typed spec (Other). A list that fails to load, or comes back empty, is the
+text field. The API and CLI still take the spec directly.
 

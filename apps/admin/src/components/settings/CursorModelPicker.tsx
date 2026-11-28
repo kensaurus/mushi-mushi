@@ -1,13 +1,15 @@
 /**
  * FILE: apps/admin/src/components/settings/CursorModelPicker.tsx
- * PURPOSE: Cursor model picker (review follow-ups, ADR 0032; written so
- *          spend-down and Integrations can adopt it, BL-090). Loads
+ * PURPOSE: Cursor model picker (review follow-ups ADR 0032, spend-down and
+ *          the Cursor card on Integrations, BL-090). Loads
  *          GET /v1/admin/byok/cursor/models and writes a spec string
  *          (`id` or `id?param=value&…`). keyId asks for that Cursor account;
  *          omit it to use the key the app would use. A failed or empty list
- *          falls back to the text field.
+ *          falls back to the text field. "Other" keeps a typed spec for an
+ *          id the list does not have.
  */
 
+import { useState } from 'react'
 import { Input, SelectField } from '../ui'
 import { usePageData } from '../../lib/usePageData'
 import {
@@ -55,8 +57,18 @@ export function CursorModelPicker({
   const list = models.data?.models ?? []
   const listReady = !models.loading && !models.error && models.data != null
   const selection = cursorModelSelection(value, list, listReady)
-  const chosen = list.find((m) => m.id === selection.modelId)
+  // Empty means the account default, so "Other" is local until an id is typed.
+  // A new key starts over: an id the previous account lacked may be in this list.
+  const [trackedKey, setTrackedKey] = useState(keyId)
+  const [otherOpen, setOtherOpen] = useState(false)
+  if (trackedKey !== keyId) {
+    setTrackedKey(keyId)
+    setOtherOpen(false)
+  }
+  const inOther = otherOpen || selection.modelId === CURSOR_MODEL_OTHER
+  const chosen = inOther ? undefined : list.find((m) => m.id === selection.modelId)
   const visibleLabel = labelled ? label : undefined
+  const customText = selection.modelId === CURSOR_MODEL_OTHER ? selection.custom : value
 
   if (models.error || (listReady && list.length === 0)) {
     return (
@@ -86,12 +98,17 @@ export function CursorModelPicker({
         aria-label={label}
         tooltip={tooltip}
         helpId={helpId}
-        value={selection.modelId}
+        value={inOther ? CURSOR_MODEL_OTHER : selection.modelId}
         onChange={(e) => {
           const id = e.target.value
-          if (id === CURSOR_MODEL_OTHER)
-            onChange(selection.modelId === CURSOR_MODEL_OTHER ? value : '')
-          else onChange(id)
+          if (id === CURSOR_MODEL_OTHER) {
+            setOtherOpen(true)
+            return
+          }
+          setOtherOpen(false)
+          // Leaving Other for the model the spec already names keeps its settings.
+          if (id !== '' && id === selection.modelId) return
+          onChange(id)
         }}
       >
         <option value="">{emptyLabel}</option>
@@ -107,11 +124,11 @@ export function CursorModelPicker({
           )}
         <option value={CURSOR_MODEL_OTHER}>Other model id…</option>
       </SelectField>
-      {selection.modelId === CURSOR_MODEL_OTHER && (
+      {inOther && (
         <Input
           label="Model id"
           aria-label="Model id"
-          value={selection.custom}
+          value={customText}
           placeholder="e.g. grok-4.7?reasoning_effort=xhigh"
           onChange={(e) => onChange(e.target.value)}
         />

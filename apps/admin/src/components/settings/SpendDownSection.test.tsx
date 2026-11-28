@@ -36,10 +36,36 @@ const mocks = vi.hoisted(() => ({
   reload: vi.fn(),
   keys: [] as unknown[],
   followups: null as unknown,
+  paths: [] as string[],
+  modelsError: null as string | null,
+  models: {
+    models: [
+      {
+        id: 'grok-4.7',
+        displayName: 'Grok 4.7',
+        parameters: [
+          { id: 'reasoning_effort', displayName: 'Reasoning effort', values: [{ value: 'high' }, { value: 'xhigh' }] },
+          { id: 'context', displayName: 'Context', values: [{ value: '500k' }, { value: '200k' }] },
+        ],
+      },
+      { id: 'composer-2.5' },
+    ],
+  },
 }))
 vi.mock('../../lib/supabase', () => ({ apiFetch: mocks.apiFetch }))
 vi.mock('../../lib/usePageData', () => ({
-  usePageData: () => ({ data: { projectId: 'p', keys: mocks.keys, reviewFollowups: mocks.followups }, loading: false, error: null, reload: mocks.reload }),
+  usePageData: (path: string) => {
+    mocks.paths.push(path)
+    if (path.startsWith('/v1/admin/byok/cursor/models')) {
+      return {
+        data: mocks.modelsError ? null : mocks.models,
+        loading: false,
+        error: mocks.modelsError,
+        reload: vi.fn(),
+      }
+    }
+    return { data: { projectId: 'p', keys: mocks.keys, reviewFollowups: mocks.followups }, loading: false, error: null, reload: mocks.reload }
+  },
 }))
 
 import { SpendDownSection } from './SpendDownSection'
@@ -57,6 +83,16 @@ function setInput(label: string, value: string) {
   setter.call(input, value)
   input.dispatchEvent(new Event('input', { bubbles: true }))
 }
+function selectByLabel(label: string): HTMLSelectElement {
+  const lab = Array.from(document.body.querySelectorAll('label')).find((l) => l.textContent?.includes(label) && l.querySelector('select'))
+  const sel = lab?.querySelector('select') as HTMLSelectElement | null
+  if (!sel) throw new Error(`no select "${label}"`)
+  return sel
+}
+function changeSelect(el: HTMLSelectElement, value: string) {
+  Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(el, value)
+  el.dispatchEvent(new Event('change', { bubbles: true }))
+}
 
 describe('SpendDownSection', () => {
   let container: HTMLDivElement
@@ -71,6 +107,8 @@ describe('SpendDownSection', () => {
   beforeEach(() => {
     mocks.apiFetch.mockReset()
     mocks.apiFetch.mockResolvedValue({ ok: true, data: {} })
+    mocks.paths = []
+    mocks.modelsError = null
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -86,11 +124,14 @@ describe('SpendDownSection', () => {
     await render(true)
     expect(document.body.textContent).toContain('Spend-down is off.')
     await act(async () => button('Set up spend-down').click())
+    expect(mocks.paths).toContain('/v1/admin/byok/cursor/models?keyId=key-1')
     await act(async () => {
       setInput('Credits expire on', '2026-10-31')
-      setInput('Model', 'grok-4.7?reasoning_effort=xhigh&context=500k')
-      setInput('Fixes per day', '20')
+      changeSelect(selectByLabel('Model'), 'grok-4.7')
     })
+    await act(async () => changeSelect(selectByLabel('Reasoning effort'), 'xhigh'))
+    await act(async () => changeSelect(selectByLabel('Context'), '500k'))
+    await act(async () => setInput('Fixes per day', '20'))
     const box = document.body.querySelector('input[type="checkbox"]') as HTMLInputElement
     await act(async () => box.click())
     await act(async () => button('Save').click())
@@ -105,6 +146,35 @@ describe('SpendDownSection', () => {
     })
     expect(mocks.reload).toHaveBeenCalled()
     expect(document.body.textContent).toContain('Spend-down saved and on.')
+  })
+
+  it('reopens a saved spec on the same controls and keeps it when nothing changes', async () => {
+    mocks.keys = [{ ...KEY, model: 'grok-4.7?reasoning_effort=xhigh&context=500k' }]
+    await render(true)
+    await act(async () => button('Set up spend-down').click())
+    expect(selectByLabel('Model').value).toBe('grok-4.7')
+    expect(selectByLabel('Reasoning effort').value).toBe('xhigh')
+    expect(selectByLabel('Context').value).toBe('500k')
+    await act(async () => button('Save').click())
+    const call = mocks.apiFetch.mock.calls.find(([url]) => url === '/v1/admin/byok/keys/key-1/spend-down')!
+    expect(JSON.parse(String((call[1] as RequestInit).body)).model).toBe(
+      'grok-4.7?reasoning_effort=xhigh&context=500k',
+    )
+  })
+
+  it('types a spec when the model list does not load', async () => {
+    mocks.keys = [KEY]
+    mocks.modelsError = 'Cursor did not return its models'
+    await render(true)
+    await act(async () => button('Set up spend-down').click())
+    expect(document.body.textContent).toContain("Cursor's model list did not load")
+    await act(async () => {
+      setInput('Credits expire on', '2026-10-31')
+      setInput('Model', 'composer-2.5')
+    })
+    await act(async () => button('Save').click())
+    const call = mocks.apiFetch.mock.calls.find(([url]) => url === '/v1/admin/byok/keys/key-1/spend-down')!
+    expect(JSON.parse(String((call[1] as RequestInit).body)).model).toBe('composer-2.5')
   })
 
   it('shows what it is doing, and a member cannot change a shared key', async () => {

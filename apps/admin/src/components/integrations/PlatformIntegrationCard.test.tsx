@@ -12,7 +12,7 @@
  *          sits beside the icon buttons.
  */
 
-import { act, createElement } from 'react'
+import { act, createElement, useState, type ComponentProps } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -21,8 +21,33 @@ const pageData = vi.hoisted(() => ({
   current: { data: null as { deliveries: unknown[] } | null, error: null as string | null, loading: false, reload: () => {} },
 }))
 
+const modelsPage = vi.hoisted(() => ({
+  paths: [] as string[],
+  current: {
+    data: {
+      models: [
+        {
+          id: 'grok-4.7',
+          displayName: 'Grok 4.7',
+          parameters: [{ id: 'reasoning_effort', displayName: 'Reasoning effort', values: [{ value: 'xhigh' }] }],
+        },
+        { id: 'composer-2.5' },
+      ],
+    } as { models: unknown[] } | null,
+    error: null as string | null,
+    loading: false,
+    reload: () => {},
+  },
+}))
+
 vi.mock('../../lib/usePageData', () => ({
-  usePageData: () => pageData.current,
+  usePageData: (path: string | null) => {
+    if (typeof path === 'string' && path.startsWith('/v1/admin/byok/cursor/models')) {
+      modelsPage.paths.push(path)
+      return modelsPage.current
+    }
+    return pageData.current
+  },
 }))
 vi.mock('../ProjectSwitcher', () => ({ useActiveProjectId: () => 'p1' }))
 
@@ -31,7 +56,9 @@ const { PLATFORM_DEFS } = await import('./types')
 
 const CURSOR = PLATFORM_DEFS.find((d) => d.kind === 'cursor_cloud')!
 
-function baseProps(over: Record<string, unknown> = {}) {
+type CardProps = ComponentProps<typeof PlatformIntegrationCard>
+
+function baseProps(over: Partial<CardProps> = {}): CardProps {
   return {
     def: CURSOR,
     config: { cursor_api_key_ref: '…abcd' },
@@ -57,6 +84,7 @@ describe('PlatformIntegrationCard — Remove key', () => {
 
   beforeEach(() => {
     pageData.current = { data: null, error: null, loading: false, reload: () => {} }
+    modelsPage.paths = []
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -67,9 +95,9 @@ describe('PlatformIntegrationCard — Remove key', () => {
     container.remove()
   })
 
-  const render = async (props: Record<string, unknown>) => {
+  const render = async (props: Partial<CardProps>) => {
     await act(async () => {
-      root.render(createElement(PlatformIntegrationCard, baseProps(props) as never))
+      root.render(createElement(PlatformIntegrationCard, baseProps(props)))
     })
   }
   const moreActions = () => container.querySelector<HTMLButtonElement>('button[aria-label="More actions"]')
@@ -181,5 +209,135 @@ describe('PlatformIntegrationCard — Sentry summary width', () => {
     const actions = container.querySelector('[aria-label="Test connection"]')?.parentElement?.parentElement
     expect(actions?.contains(openSentry!)).toBe(false)
     expect(actions?.contains(summary)).toBe(false)
+  })
+})
+
+describe('PlatformIntegrationCard — Cursor model', () => {
+  let container: HTMLDivElement
+  let root: Root
+
+  // What the page saves: the draft at the moment Save is pressed.
+  const saved: Array<Record<string, string>> = []
+
+  function Editor({ initial }: { initial: string }) {
+    const [model, setModel] = useState(initial)
+    const [key, setKey] = useState('…abcd')
+    const draft = { cursor_api_key_ref: key, cursor_default_model: model }
+    return createElement(PlatformIntegrationCard, baseProps({
+      isEditing: true,
+      draft,
+      onChangeField: (name: string, value: string) => {
+        if (name === 'cursor_default_model') setModel(value)
+        if (name === 'cursor_api_key_ref') setKey(value)
+      },
+      onSave: () => saved.push(draft),
+    }))
+  }
+  function saveButton(): HTMLButtonElement {
+    const btn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Save')
+    if (!btn) throw new Error('no Save button')
+    return btn
+  }
+
+  function modelSelect(): HTMLSelectElement {
+    const sel = container.querySelector<HTMLSelectElement>('select[aria-label="Default model"]')
+    if (!sel) throw new Error('no model select')
+    return sel
+  }
+  function change(el: HTMLSelectElement | HTMLInputElement, value: string) {
+    const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype
+    Object.getOwnPropertyDescriptor(proto, 'value')!.set!.call(el, value)
+    el.dispatchEvent(new Event(el instanceof HTMLSelectElement ? 'change' : 'input', { bubbles: true }))
+  }
+
+  beforeEach(() => {
+    saved.length = 0
+    modelsPage.paths = []
+    modelsPage.current = {
+      data: {
+        models: [
+          {
+            id: 'grok-4.7',
+            displayName: 'Grok 4.7',
+            parameters: [{ id: 'reasoning_effort', displayName: 'Reasoning effort', values: [{ value: 'xhigh' }] }],
+          },
+          { id: 'composer-2.5' },
+        ],
+      },
+      error: null,
+      loading: false,
+      reload: () => {},
+    }
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+
+  afterEach(() => {
+    act(() => root.unmount())
+    container.remove()
+    document.body.innerHTML = ''
+  })
+
+  it('picks a model and a setting from the app key, with no key id', async () => {
+    await act(async () => {
+      root.render(createElement(Editor, { initial: '' }))
+    })
+    expect(modelsPage.paths).toContain('/v1/admin/byok/cursor/models')
+    expect(modelsPage.paths.some((p) => p.includes('keyId='))).toBe(false)
+    await act(async () => change(modelSelect(), 'grok-4.7'))
+    const effort = () =>
+      Array.from(container.querySelectorAll('label'))
+        .find((l) => l.textContent?.includes('Reasoning effort'))
+        ?.querySelector('select') as HTMLSelectElement | undefined
+    if (!effort()) throw new Error('no reasoning select')
+    await act(async () => change(effort()!, 'xhigh'))
+    expect(modelSelect().value).toBe('grok-4.7')
+    expect(effort()?.value).toBe('xhigh')
+    // Review of PR #1140: the save gets the whole spec, setting included.
+    await act(async () => saveButton().click())
+    expect(saved).toEqual([{ cursor_api_key_ref: '…abcd', cursor_default_model: 'grok-4.7?reasoning_effort=xhigh' }])
+  })
+
+  it('reopens a saved spec', async () => {
+    await act(async () => {
+      root.render(createElement(Editor, { initial: 'grok-4.7?reasoning_effort=xhigh' }))
+    })
+    expect(modelSelect().value).toBe('grok-4.7')
+    const effortSelect = Array.from(container.querySelectorAll('label'))
+      .find((label) => label.textContent?.includes('Reasoning effort'))
+      ?.querySelector('select') as HTMLSelectElement | undefined
+    expect(effortSelect?.value).toBe('xhigh')
+  })
+
+  // Review of PR #1140: the list is the saved key's, so a key being replaced
+  // in the same form must not offer the old account's models.
+  it('stops offering the saved key models while a new key is typed', async () => {
+    await act(async () => {
+      root.render(createElement(Editor, { initial: 'grok-4.7?reasoning_effort=xhigh' }))
+    })
+    expect(modelSelect().value).toBe('grok-4.7')
+    const keyInput = Array.from(container.querySelectorAll('input')).find((i) => i.value === '…abcd')
+    if (!keyInput) throw new Error('no key input')
+    await act(async () => change(keyInput, 'crsr_new'))
+    expect(container.querySelector('select[aria-label="Default model"]')).toBeNull()
+    expect(container.textContent).not.toContain('Reasoning effort')
+    expect(container.querySelector('[data-testid="cursor-model-after-save"]')).not.toBeNull()
+    const manual = container.querySelector<HTMLInputElement>('input[aria-label="Default model"]')
+    expect(manual?.value).toBe('grok-4.7?reasoning_effort=xhigh')
+    await act(async () => change(manual!, 'composer-2.5'))
+    expect(container.querySelector<HTMLInputElement>('input[aria-label="Default model"]')?.value).toBe('composer-2.5')
+  })
+
+  it('types a spec when the model list does not load', async () => {
+    modelsPage.current = { data: null, error: 'down', loading: false, reload: () => {} }
+    await act(async () => {
+      root.render(createElement(Editor, { initial: '' }))
+    })
+    expect(container.textContent).toContain("Cursor's model list did not load")
+    const input = container.querySelector<HTMLInputElement>('input[aria-label="Default model"]')
+    if (!input) throw new Error('no fallback input')
+    await act(async () => change(input, 'custom-1'))
+    expect(container.querySelector<HTMLInputElement>('input[aria-label="Default model"]')?.value).toBe('custom-1')
   })
 })

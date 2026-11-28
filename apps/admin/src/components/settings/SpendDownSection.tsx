@@ -2,7 +2,8 @@
  * FILE: apps/admin/src/components/settings/SpendDownSection.tsx
  * PURPOSE: Settings → AI keys → Cursor: "Spend down expiring credits"
  *          (ADR 0028). For each Cursor key: what spend-down is doing now, and
- *          a small form for the credit expiry date, the model, fixes per day
+ *          a small form for the credit expiry date, the model (this key's
+ *          Cursor list, or a typed spec when that list fails), fixes per day
  *          and how many days ahead to start. The spend-down worker does the
  *          dispatching, inside each app's auto-fix caps; fixes open draft PRs.
  *          Each key also shows what its last 7 days produced (runs → PRs →
@@ -21,6 +22,7 @@ import { apiFetch } from '../../lib/supabase';
 import { usePageData } from '../../lib/usePageData';
 import { describeByokError } from '../../lib/byokErrors';
 import { Btn, Checkbox, InfoHint, Input, ResultChip } from '../ui';
+import { CursorModelPicker } from './CursorModelPicker';
 import {
   spendDownLine,
   spendDownOutOfWork,
@@ -232,12 +234,12 @@ export function SpendDownSection({ canManageShared, keysToken }: Props) {
                       onChange={(e) => setDraft({ ...draft, creditsExpireAt: e.target.value })}
                       tooltip="From the credits card on the Cursor dashboard."
                     />
-                    <Input
-                      label="Model (optional)"
-                      type="text"
+                    <CursorModelPicker
                       value={draft.model}
-                      onChange={(e) => setDraft({ ...draft, model: e.target.value })}
-                      placeholder="e.g. grok-4.7?reasoning_effort=xhigh"
+                      onChange={(model) => setDraft({ ...draft, model })}
+                      keyId={k.id}
+                      label="Model (optional)"
+                      emptyLabel="Each app's Cursor model"
                       tooltip="Empty uses each app's Cursor model."
                     />
                     <Input
