@@ -75,7 +75,7 @@ const pending = files.filter((f) => !ledgerVersions.has(f.slice(0, 14)) && !rena
 
 for (const { row, file } of renamed) {
   console.log(`RENAMED  ledger ${row.version} (${row.name}) is file ${file}.sql`)
-  console.log(`         fix: supabase migration repair --status applied ${file.slice(0, 14)} && supabase migration repair --status reverted ${row.version}`)
+  console.log(`         fix: supabase migration repair --remote --status applied ${file.slice(0, 14)} && supabase migration repair --remote --status reverted ${row.version}`)
 }
 for (const row of ledgerOnly) console.log(`NO FILE  ledger ${row.version} ${row.name}: add a forward migration that replays it, then repair it as reverted`)
 for (const f of pending) console.log(`PENDING  ${f}.sql (not applied yet)`)

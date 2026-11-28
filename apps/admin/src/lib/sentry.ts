@@ -98,7 +98,23 @@ export function initSentry(): void {
     dsn,
     environment: import.meta.env.MODE,
     release: import.meta.env.VITE_RELEASE,
-    sendDefaultPii: false,
+    // Sentry 11 removed `sendDefaultPii` and now collects user info, cookies,
+    // headers, bodies and query strings unless `dataCollection` says otherwise.
+    // Keep the v10 `sendDefaultPii: false` posture: none of it is sent.
+    dataCollection: {
+      userInfo: false,
+      cookies: false,
+      httpHeaders: false,
+      httpBodies: [],
+      urlQueryParams: false,
+      graphQL: { document: false, variables: false },
+      genAI: { inputs: false, outputs: false },
+      mcp: { inputs: false, outputs: false },
+      databaseQueryData: false,
+      queues: false,
+    },
+    // v11 turned this on by default; v10 did not attach stacks to captureMessage.
+    attachStacktrace: false,
     tracesSampleRate: 0.05,
     transport: makeCircuitBreakingTransport,
     integrations: [

@@ -13,7 +13,7 @@
     "deploy:api": "cd supabase && supabase functions deploy api",
     "deploy:classify": "cd supabase && supabase functions deploy classify-report",
     "smoke": "node ../../scripts/smoke-admin-endpoints.mjs",
-    "db:push": "cd supabase && supabase db push",
+    "db:push": "cd supabase && supabase db push --remote",
     "db:reset": "cd supabase && supabase db reset",
     "test": "vitest run",
     "clean": "rm -rf dist .turbo"
@@ -28,9 +28,9 @@
     "@mushi-mushi/tsconfig": "workspace:*",
     "@supabase/supabase-js": "^2.108.2",
     "hono": "^4.13.11",
-    "supabase": "^2.108.0",
+    "supabase": "^3.2.0",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.9",
+    "vitest": "^5.1.1",
     "yaml": "^2.9.0",
     "zod": "^3.25.76"
   },

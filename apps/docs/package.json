@@ -29,7 +29,7 @@
     "nextra-theme-docs": "^4.6.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "three": "^0.185.1"
+    "three": "^0.187.0"
   },
   "devDependencies": {
     "@mushi-mushi/eslint-config": "workspace:*",
@@ -37,13 +37,13 @@
     "@types/node": "^22.20.0",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
-    "@types/three": "^0.185.0",
+    "@types/three": "^0.187.0",
     "eslint": "^10.6.0",
     "eslint-plugin-mushi-mushi": "workspace:*",
     "pagefind": "^1.5.2",
     "postcss": "^8.5.15",
     "tailwindcss": "^4.3.1",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.9"
+    "vitest": "^5.1.1"
   }
 }

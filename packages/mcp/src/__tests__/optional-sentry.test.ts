@@ -32,6 +32,15 @@ describe('initOptionalSentry', () => {
       dsn: 'https://k@o1.ingest.sentry.io/1',
       environment: 'staging',
       tracesSampleRate: 0,
+      sendDefaultPii: false,
+      attachStacktrace: false,
+      dataCollection: expect.objectContaining({
+        userInfo: false,
+        cookies: false,
+        httpHeaders: false,
+        httpBodies: [],
+        mcp: { inputs: false, outputs: false },
+      }),
     })
   })
 

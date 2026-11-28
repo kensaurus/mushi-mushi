@@ -98,12 +98,12 @@
     "@capacitor/core": "^8.4.1",
     "@mushi-mushi/eslint-config": "workspace:*",
     "@mushi-mushi/tsconfig": "workspace:*",
-    "@size-limit/file": "^12.1.0",
+    "@size-limit/file": "^14.3.0",
     "eslint": "^10.6.0",
-    "size-limit": "^12.1.0",
-    "tsup": "^8.5.1",
+    "size-limit": "^14.3.0",
+    "tsup": "^9.0.0",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.9"
+    "vitest": "^5.1.1"
   },
   "capacitor": {
     "ios": {
