@@ -73,13 +73,23 @@ interface Trace {
   end(): Promise<void>
 }
 
+/**
+ * Secrets pasted with a trailing newline or space produce a Basic auth header
+ * Langfuse rejects with 401 "Invalid credentials", and an empty
+ * LANGFUSE_BASE_URL must fall through to LANGFUSE_HOST / the default host
+ * instead of posting to a relative path. Values are trimmed; empty = unset.
+ */
+function envValue(name: string): string | undefined {
+  return Deno.env.get(name)?.trim() || undefined
+}
+
 function getLangfuseConfig() {
   return {
-    secretKey: Deno.env.get('LANGFUSE_SECRET_KEY'),
-    publicKey: Deno.env.get('LANGFUSE_PUBLIC_KEY'),
+    secretKey: envValue('LANGFUSE_SECRET_KEY'),
+    publicKey: envValue('LANGFUSE_PUBLIC_KEY'),
     baseUrl:
-      Deno.env.get('LANGFUSE_BASE_URL') ??
-      Deno.env.get('LANGFUSE_HOST') ??
+      envValue('LANGFUSE_BASE_URL') ??
+      envValue('LANGFUSE_HOST') ??
       'https://cloud.langfuse.com',
   }
 }

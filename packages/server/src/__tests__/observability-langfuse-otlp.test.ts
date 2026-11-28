@@ -111,4 +111,20 @@ describe('Langfuse over OTLP (v4)', () => {
     expect(String(reportError.mock.calls[0][0])).toContain('Langfuse HTTP 410')
     expect(String(reportError.mock.calls[1][0])).toContain('1 span(s) rejected')
   })
+
+  it('trims pasted keys and falls through an empty base URL (401 Invalid credentials)', async () => {
+    const saved = { ...env }
+    try {
+      env.LANGFUSE_PUBLIC_KEY = ' pk\n'
+      env.LANGFUSE_SECRET_KEY = 'sk\r\n'
+      env.LANGFUSE_BASE_URL = ''
+      env.LANGFUSE_HOST = ' https://eu.lf.example \n'
+      await createTrace('a').end()
+      expect(calls[0].url).toBe('https://eu.lf.example/api/public/otel/v1/traces')
+      expect(calls[0].headers.Authorization).toBe(`Basic ${btoa('pk:sk')}`)
+    } finally {
+      for (const k of Object.keys(env)) delete env[k]
+      Object.assign(env, saved)
+    }
+  })
 })
