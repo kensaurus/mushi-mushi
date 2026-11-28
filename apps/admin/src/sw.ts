@@ -226,7 +226,10 @@ self.addEventListener('push', (event) => {
     body: payload.body ?? '',
     tag: payload.tag,
     icon: payload.icon ?? `${base}icons/icon-192.png`,
-    badge: `${base}icons/icon-192.png`,
+    // Android draws the badge (status bar, notification header) from its alpha
+    // only. The colour app icon there rendered as a filled square, so the
+    // badge is the mark as a white silhouette on transparent.
+    badge: `${base}icons/badge-96.png`,
     data: { url: resolveNotificationUrl(payload.url) },
     renotify: Boolean(payload.tag),
   }
