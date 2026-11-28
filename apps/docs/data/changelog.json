@@ -1,13 +1,5 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "Unreleased",
-    "pending": true,
-    "versions": [],
-    "highlights": [],
-    "packages": []
-  },
-  {
     "majorMinor": "1.40",
     "headline": null,
     "pending": false,
@@ -1507,6 +1499,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.43.2",
       "0.43.1",
       "0.43.0"
     ],
@@ -1514,7 +1507,7 @@
     "packages": [
       {
         "name": "@mushi-mushi/cli",
-        "version": "0.43.1"
+        "version": "0.43.2"
       }
     ]
   },
