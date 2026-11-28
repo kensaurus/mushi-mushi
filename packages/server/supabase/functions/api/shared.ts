@@ -19,6 +19,7 @@ import { fanoutMemo } from '../_shared/request-memo.ts';
 import { NEW_BUCKET_STATUSES } from '../_shared/report-list-filters.ts';
 import { boundKeyTargetsOtherProject } from '../_shared/bound-key.ts';
 import { keyAllowsProject } from '../_shared/key-project-scope.ts';
+import { createTtlCache } from '../_shared/ttl-cache.ts';
 import {
   type ApiErrorCode,
   SAFE_DB_MESSAGE,
@@ -312,14 +313,46 @@ export async function enumerateAccessibleProjectIds(
  *
  * A failed read throws `ProjectAccessReadError` (app.onError answers 500)
  * rather than reading as "no access", so a DB outage is not a 403.
+ *
+ * An allowed answer is kept per worker for PROJECT_ACCESS_CACHE_MS (see
+ * projectAccessCache). A refusal and a failed read are never kept.
  */
 export async function userCanAccessProject(
   db: ReturnType<typeof getServiceClient>,
   userId: string,
   projectId: string,
-): Promise<{ allowed: boolean; role: 'owner' | 'admin' | 'member' | 'viewer' | null }> {
+): Promise<ProjectAccess> {
   // An account key limited to some projects reaches only those (ADR 0026).
+  // Checked on every call, before the cache: the limit belongs to the request.
   if (!keyAllowsProject(userId, projectId)) return { allowed: false, role: null };
+  const cacheKey = `${userId}:${projectId}`;
+  const hit = projectAccessCache.get(cacheKey);
+  if (hit) return { ...hit.value };
+  const answer = await readProjectAccess(db, userId, projectId);
+  if (answer.allowed) projectAccessCache.set(cacheKey, { ...answer });
+  return answer;
+}
+
+type ProjectAccess = { allowed: boolean; role: 'owner' | 'admin' | 'member' | 'viewer' | null };
+
+/**
+ * Allowed project-access answers by `userId:projectId`, per worker.
+ *
+ * The check read projects + organization_members (and sometimes
+ * project_members) on every console and worker request: about 12.6k of each
+ * a day on 2026-11-28. Security cost, on purpose: removing a member or
+ * lowering a role reaches a worker that already answered "allowed" within
+ * 30 s (a worker lives at most 400 s). A refusal is not kept, so a new
+ * member gets in at once.
+ */
+const PROJECT_ACCESS_CACHE_MS = 30_000;
+const projectAccessCache = createTtlCache<ProjectAccess>(PROJECT_ACCESS_CACHE_MS, 2_000);
+
+async function readProjectAccess(
+  db: ReturnType<typeof getServiceClient>,
+  userId: string,
+  projectId: string,
+): Promise<ProjectAccess> {
   const { data: project, error: projectErr } = await db
     .from('projects')
     .select('id, owner_id, organization_id')

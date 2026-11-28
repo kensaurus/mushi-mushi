@@ -17,7 +17,6 @@ import {
   abilitiesFromReadProbes,
   autofixKeyGap,
   countByStatus,
-  createTtlCache,
   deployGap,
   DEPLOY_SILENCE_DAYS,
   followupKeyGap,
@@ -30,6 +29,7 @@ import {
   sortGaps,
   type SetupGap,
 } from '../../supabase/functions/_shared/setup-gaps.ts'
+import { createTtlCache } from '../../supabase/functions/_shared/ttl-cache.ts'
 import { platformGaps } from '../../supabase/functions/_shared/platform-setup-checks.ts'
 
 const P = 'p1'

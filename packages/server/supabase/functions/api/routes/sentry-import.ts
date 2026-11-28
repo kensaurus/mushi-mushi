@@ -80,7 +80,7 @@ export function registerSentryImportRoutes(app: Hono<{ Variables: Variables }>):
     if (!parsed.ok) return c.json({ ok: false, error: parsed.error }, 400);
 
     const [{ settings }, projectSettings] = await Promise.all([
-      resolveAndDereferencePlatformSettings(db, projectId),
+      resolveAndDereferencePlatformSettings(db, projectId, ['sentry_auth_token_ref']),
       loadSentryProjectSlugs(db, projectId),
     ]);
     const orgSlug = settings.sentry_org_slug ?? null;

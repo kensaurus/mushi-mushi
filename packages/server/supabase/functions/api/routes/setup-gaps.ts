@@ -41,7 +41,6 @@ import {
   withFollowupCredits,
   clearRepoAbilities,
   countByStatus,
-  createTtlCache,
   deployGap,
   forAudience,
   githubAccessGap,
@@ -55,6 +54,7 @@ import {
   type SetupGap,
   type TokenAbilities,
 } from '../../_shared/setup-gaps.ts'
+import { createTtlCache } from '../../_shared/ttl-cache.ts'
 import { readDispatchers, type DispatcherProject } from './pipeline.ts'
 import { enumerateAccessibleProjectIds, userCanAccessProject } from '../shared.ts'
 

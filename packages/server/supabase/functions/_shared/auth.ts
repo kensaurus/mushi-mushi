@@ -11,6 +11,7 @@ import { hashApiKey } from './api-key-mint.ts'
 import { keepAlive } from './background.ts'
 import { classifySdkOrigin, funnelStepForOriginKind, OriginWriteThrottle } from './sdk-origin.ts'
 import { emitFunnelStep, funnelStepMemo } from './funnel-steps.ts'
+import { createTtlCache } from './ttl-cache.ts'
 
 export interface ProjectContext {
   projectId: string
@@ -279,9 +280,20 @@ const MAX_HEARTBEAT_UA_LEN = 512
 export const MUSHI_SDK_PACKAGE_HEADER = 'X-Mushi-SDK-Package'
 export const MUSHI_SDK_VERSION_HEADER = 'X-Mushi-SDK-Version'
 
+/**
+ * Keys this worker sent a heartbeat write for in the last throttle window.
+ * The conditional UPDATE below already refuses a second write inside the
+ * window, but it was still sent on every SDK request: about 7k no-op PATCHes
+ * a day on 2026-11-28. Skipping here keeps the server-side guard for writes
+ * from other workers.
+ */
+const heartbeatSent = createTtlCache<true>(SDK_HEARTBEAT_THROTTLE_MS, 5_000)
+
 function recordSdkHeartbeat(opts: {
   db: ReturnType<typeof getServiceClient>
   keyHash: string
+  /** The key row read (or cached) for this request; browser_seen_at is set on it once written. */
+  keyRow: Pick<ApiKeyRow, 'browser_seen_at'>
   projectId: string | null
   origin: string | null
   userAgent: string | null
@@ -289,7 +301,26 @@ function recordSdkHeartbeat(opts: {
   sdkPackage?: string | null
   sdkVersion?: string | null
 }): void {
-  const { db, keyHash, projectId, origin, userAgent, endpointHost, sdkPackage, sdkVersion } = opts
+  const { db, keyHash, keyRow, projectId, origin, userAgent, endpointHost, sdkPackage, sdkVersion } = opts
+
+  // Sticky: once a page has sent this key it is public, and a later
+  // origin-less call must not clear that (last_seen_origin below would).
+  // Read by mcpKeyBrowserExposure. Sent only while the row read has it unset:
+  // it fired on every browser request before (4.7k no-op PATCHes a day).
+  if (origin && !keyRow.browser_seen_at) {
+    const seenAt = new Date().toISOString()
+    keyRow.browser_seen_at = seenAt
+    void db
+      .from('project_api_keys')
+      .update({ browser_seen_at: seenAt })
+      .eq('key_hash', keyHash)
+      .is('browser_seen_at', null)
+      .then(() => {}, () => {})
+  }
+
+  if (heartbeatSent.get(keyHash)) return
+  heartbeatSent.set(keyHash, true)
+
   const cutoffIso = new Date(Date.now() - SDK_HEARTBEAT_THROTTLE_MS).toISOString()
   const truncatedUa =
     userAgent && userAgent.length > MAX_HEARTBEAT_UA_LEN
@@ -311,7 +342,10 @@ function recordSdkHeartbeat(opts: {
     .or(`last_seen_at.is.null,last_seen_at.lt.${cutoffIso}`)
     .select('id, owner_user_id, last_seen_at')
     .then((result) => {
-      if (projectId && sdkPackage && sdkVersion) {
+      const row = result.data?.[0]
+      // Only when this write landed (once per key per window): the
+      // observation read + upsert ran on every SDK request before.
+      if (row && projectId && sdkPackage && sdkVersion) {
         upsertProjectSdkObservationAsync(db, {
           projectId,
           sdkPackage,
@@ -321,7 +355,6 @@ function recordSdkHeartbeat(opts: {
       }
       // Emit sdk_first_heartbeat once per project — the UNIQUE constraint in
       // setup_funnel_events absorbs any concurrent or duplicate emits.
-      const row = result.data?.[0]
       if (projectId && row) {
         void emitFunnelEvent(db, {
           userId: row.owner_user_id ?? null,
@@ -335,18 +368,6 @@ function recordSdkHeartbeat(opts: {
     }, () => {
       // Swallow — never fail the auth path on a heartbeat write.
     })
-
-  // Sticky: once a page has sent this key it is public, and a later
-  // origin-less call must not clear that (last_seen_origin above would).
-  // Read by mcpKeyBrowserExposure.
-  if (origin) {
-    void db
-      .from('project_api_keys')
-      .update({ browser_seen_at: new Date().toISOString() })
-      .eq('key_hash', keyHash)
-      .is('browser_seen_at', null)
-      .then(() => {}, () => {})
-  }
 }
 
 /**
@@ -501,22 +522,44 @@ function recordOrgMemberActivity(opts: {
     })
 }
 
-async function lookupActiveApiKey(apiKey: string): Promise<ApiKeyRow | null | 'unavailable'> {
-  const db = getServiceClient()
-  const keyHash = await hashApiKey(apiKey)
-  // Use a left-join (`projects(name)` not `projects!inner(name)`) so org-scoped
-  // keys (project_id = NULL) are not excluded by the inner-join filter.
-  const { data, error } = await db
+/**
+ * Active key rows by key hash, per worker, for API_KEY_CACHE_MS.
+ *
+ * Every SDK, CLI, MCP and worker request read its key row: about 12.7k
+ * PostgREST reads a day on 2026-11-28, about 8 requests per `api` worker.
+ * Security cost, on purpose: revoking a key, or changing its scopes or
+ * project limit, reaches a worker that already read it within 30 s (a worker
+ * lives at most 400 s). Only an active row is kept. A miss and a failed read
+ * are never cached, so a new key works at once and an outage is not
+ * remembered.
+ */
+const API_KEY_CACHE_MS = 30_000
+const apiKeyRows = createTtlCache<ApiKeyRow>(API_KEY_CACHE_MS, 2_000)
+
+// One select for both middlewares, so one cached row serves either. A
+// left-join (`projects(name)` not `projects!inner(name)`) keeps org-scoped
+// keys (project_id = NULL).
+const API_KEY_COLUMNS =
+  'id, key_prefix, project_id, is_org_scoped, allowed_project_ids, is_active, scopes, owner_user_id, last_seen_origin, browser_seen_at, projects(name)'
+
+async function lookupActiveKeyRow(keyHash: string): Promise<ApiKeyRow | null | 'unavailable'> {
+  const hit = apiKeyRows.get(keyHash)
+  if (hit) return hit.value
+  const { data, error } = await getServiceClient()
     .from('project_api_keys')
-    .select(
-      'id, key_prefix, project_id, is_org_scoped, allowed_project_ids, is_active, scopes, owner_user_id, last_seen_origin, browser_seen_at, projects(name)',
-    )
+    .select(API_KEY_COLUMNS)
     .eq('key_hash', keyHash)
     .eq('is_active', true)
     .single()
   if (error && !isNoRow(error)) return 'unavailable'
   if (!data) return null
-  return data as unknown as ApiKeyRow
+  const row = data as unknown as ApiKeyRow
+  apiKeyRows.set(keyHash, row)
+  return row
+}
+
+async function lookupActiveApiKey(apiKey: string): Promise<ApiKeyRow | null | 'unavailable'> {
+  return lookupActiveKeyRow(await hashApiKey(apiKey))
 }
 
 const isAgentScope = (scope: McpScope): boolean => scope === 'mcp:read' || scope === 'mcp:write'
@@ -621,26 +664,8 @@ export async function apiKeyAuth(c: Context, next: Next) {
   const db = getServiceClient()
   const keyHash = await hashApiKey(apiKey)
 
-  const { data, error } = await db
-    .from('project_api_keys')
-    .select('id, key_prefix, project_id, is_org_scoped, is_active, scopes, last_seen_origin, browser_seen_at, projects(name)')
-    .eq('key_hash', keyHash)
-    .eq('is_active', true)
-    .single()
-
-  const keyRow = data as Pick<
-    ApiKeyRow,
-    | 'id'
-    | 'key_prefix'
-    | 'project_id'
-    | 'is_org_scoped'
-    | 'is_active'
-    | 'scopes'
-    | 'projects'
-    | 'last_seen_origin'
-    | 'browser_seen_at'
-  > | null
-  if (error && !isNoRow(error)) return authError(c, 'AUTH_UNAVAILABLE', KEY_CHECK_UNAVAILABLE, 503)
+  const keyRow = await lookupActiveKeyRow(keyHash)
+  if (keyRow === 'unavailable') return authError(c, 'AUTH_UNAVAILABLE', KEY_CHECK_UNAVAILABLE, 503)
   if (!keyRow) {
     return authError(c, 'INVALID_API_KEY', 'Invalid or revoked API key')
   }
@@ -673,6 +698,7 @@ export async function apiKeyAuth(c: Context, next: Next) {
     recordSdkHeartbeat({
       db,
       keyHash,
+      keyRow,
       projectId: keyRow.project_id,
       origin,
       userAgent,

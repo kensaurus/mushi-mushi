@@ -6,6 +6,7 @@
  * blocked | merged | deploying` states, polls GitHub for current check-run +
  * deployment status, and upserts results into sdk_upgrade_jobs
  * (_shared/sdk-release-sync.ts). A failed GitHub read writes nothing.
+ * A job merged more than 7 days ago is no longer polled (./due.ts).
  * A Cloudflare 502/503/504 on the write is retried in persist.ts; the
  * gateway page is not logged or returned.
  *
@@ -24,6 +25,7 @@ import { logDbFailure } from '../_shared/error-codes.ts'
 import { resolveProjectGithubToken } from '../_shared/github.ts'
 import { type SdkReleaseJob } from '../_shared/sdk-release-sync.ts'
 import { syncSdkReleaseJobRetryingPersist } from './persist.ts'
+import { isDueForReleaseSync } from './due.ts'
 import { syncAwaitingLockfileJobs } from '../_shared/sdk-upgrade-lockfile.ts'
 
 const log = rootLog.child('sdk-release-sync')
@@ -61,7 +63,10 @@ app.post('/sdk-release-sync', async (c) => {
 
   const results: Array<{ jobId: string; releaseStatus: string; error?: string }> = []
 
-  for (const rawJob of (jobs ?? []) as unknown as SyncJob[]) {
+  const nowMs = Date.now()
+  const due = ((jobs ?? []) as unknown as SyncJob[]).filter((j) => isDueForReleaseSync(j, nowMs))
+
+  for (const rawJob of due) {
     try {
       const token = await resolveProjectGithubToken(db, rawJob.project_id)
       if (!token) {
@@ -92,7 +97,7 @@ app.post('/sdk-release-sync', async (c) => {
     }
   }
 
-  log.info('sync complete', { synced: results.length, awaiting: awaiting.length })
+  log.info('sync complete', { synced: results.length, skippedStale: (jobs?.length ?? 0) - due.length, awaiting: awaiting.length })
   return c.json({ ok: true, data: { synced: results.length, results, awaiting } })
 })
 

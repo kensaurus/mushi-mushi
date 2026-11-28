@@ -25,7 +25,8 @@ import { log } from '../../_shared/logger.ts'
 import { fetchPullRequestFiles, parseGithubRepoUrl, resolveProjectGithubToken } from '../../_shared/github.ts'
 import { ciJobsForHeads } from '../../_shared/review-followup-db.ts'
 import { ciHeadStateWithChecks } from '../../_shared/review-followup.ts'
-import { createTtlCache, SETUP_GAPS_CACHE_MS } from '../../_shared/setup-gaps.ts'
+import { SETUP_GAPS_CACHE_MS } from '../../_shared/setup-gaps.ts'
+import { createTtlCache } from '../../_shared/ttl-cache.ts'
 import {
   batchSettingsFrom,
   buildRepoBatch,
