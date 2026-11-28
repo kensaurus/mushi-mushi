@@ -290,7 +290,13 @@ describe('ci-sync sweep queue', () => {
   it('is one round-robin queue on updated_at, stamped on every visit', () => {
     expect(src.match(/\.or\('pr_state\.is\.null,pr_state\.in\.\(open,draft\)'\)/g)?.length).toBe(1)
     expect(src).toMatch(/\.lt\('updated_at', cutoff\)\s*\.order\('updated_at', \{ ascending: true \}\)/)
-    expect(src).toMatch(/await syncOne\(db, attempt\)\s*await db\.from\('fix_attempts'\)\.update\(\{ updated_at: /)
+    // Every visit moves the row back: the check-run write stamps updated_at
+    // through trg_fix_attempts_updated_at, and a visit that wrote nothing is
+    // stamped explicitly (one PATCH per visit, not two).
+    expect(src).toMatch(/return \{ ok: true, snapshot, prState, stamped: !writeErr \}/)
+    expect(src).toMatch(/const r = await syncOne\(db, attempt\)\s*(?:\/\/[^\n]*\n\s*)*if \(!r\.stamped\) await db\.from\('fix_attempts'\)\.update\(\{ updated_at: /)
+    const trigger = readFileSync(resolve(__dirname, '../../supabase/migrations/20260416700000_schema_hardening.sql'), 'utf8')
+    expect(trigger).toMatch(/create trigger trg_fix_attempts_updated_at\s+before update on fix_attempts\s+for each row execute function update_updated_at_column\(\)/i)
     // The starving "never synced first" query is gone.
     expect(src).not.toMatch(/\.is\('check_run_updated_at', null\)/)
   })
