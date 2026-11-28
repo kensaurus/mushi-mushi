@@ -106,8 +106,9 @@ patchedDependencies:
   # useFSRoute maps the /mushi-mushi/ landing alias to the docs root (see the patch).
   'nextra@4.6.1': 'patches/nextra@4.6.1.patch'
   # image-size >=2 accepts a buffer only. Metro's getAssetData passed a filename.
+  # Only expo's metro 0.83 still needs this: react-native 0.88 uses metro 0.87,
+  # which reads image dimensions itself and no longer depends on image-size.
   'metro@0.83.5': 'patches/metro@0.83.5.patch'
-  'metro@0.84.4': 'patches/metro@0.84.4.patch'
 
 auditConfig:
   ignoreGhsas:
